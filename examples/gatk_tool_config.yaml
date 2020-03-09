@@ -1,0 +1,39 @@
+---
+tool: gatk
+tool_version: 3.8
+ref_type: hg38
+reference: /cluster/tools/data/genomes/human/hg38/iGenomes/Sequence/WholeGenomeFasta/genome.fa
+output_dir: /cluster/projects/pughlab/projects/PROJECTNAME/GATK/
+#resume_dir: /cluster/projects/pughlab/projects/PROJECTNAME/GATK/2020-03-01_GATK_3.8/
+resume_dir:
+HPC_driver: Slurm
+samtools_version: 1.9
+picard_version: 2.6.0
+intervals_bed: /path/to/SureSelect_Human_All_Exon_V5plusUTRs_hg19toHg38.bed
+dbsnp:
+del_intermediate: Y 
+dry_run: Y
+# and indicate some parameters for job submission
+# NOTE: many of these depend on the number of input/output files
+# ie, for realign, 6hrs is sufficient for 2 samples (T/N), but not for 3 (PRE/POST/Normal)
+parameters:
+    target_creator:
+        java_mem: '4g'
+        mem: '6G'
+        time: '06:00:00'
+    realign:
+        java_mem: '4g'
+        mem: '6G'
+        time: '12:00:00'
+    bqsr:
+        java_mem: '4g'
+        mem: '6G'
+        time:
+            normal: '04:00:00'
+            tumour: '08:00:00'
+    recalibrate:
+        java_mem: '4g'
+        mem: '6G'
+        time:
+            normal: '06:00:00'
+            tumour: '12:00:00'

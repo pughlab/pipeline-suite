@@ -1,0 +1,52 @@
+---
+tool: bwa
+tool_version: 0.7.15
+aligner: bwamem
+ref_type: hg38
+reference: /cluster/projects/pughlab/references/bwa_index/hg38/genome.fa
+output_dir: /cluster/projects/pughlab/projects/PROJECTNAME/BWA/
+resume_dir:
+#resume_dir: /cluster/projects/pughlab/projects/PROJECTNAME/BWA/2020-02-28_bwa_0.7.15/
+seq_center: PMGC
+platform: Illumina
+HPC_driver: Slurm
+samtools_version: 1.9
+picard_version: 2.6.0
+mark_dup: Y
+del_intermediate: Y
+dry_run: Y
+# and indicate some parameters for job submission
+parameters:
+    bwa:
+        mem:
+            normal: 6G
+            tumour: 8G
+        time:
+            normal: '06:00:00'
+            tumour: '12:00:00'
+    sort:
+        mem:
+            normal: 4G
+            tumour: 4G
+        time:
+            normal: '06:00:00'
+            tumour: '08:00:00'
+    index:
+        mem:
+            normal: 2G
+            tumour: 2G
+        time:
+            normal: '01:00:00'
+            tumour: '01:00:00'
+# merge or markdup, depending on mark_dup: Y/N above
+# default for mark_dup: N = 8g + 10G; default for mark_dup: Y = 12g + 16G
+    merge:
+        java_mem:
+            normal: 8g
+            tumour: 12g
+        mem:
+            normal: 10G
+            tumour: 16G
+        time:
+            normal: '06:00:00'
+            tumour: '08:00:00'

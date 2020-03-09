@@ -1,0 +1,13 @@
+---
+PATIENT_1:
+    normal:
+        SAMPLE_ID: /cluster/projects/pughlab/projects/PROJECTNAME/BWA/2020-02-27_bwa_0.7.15/PATIENT_1/SAMPLE_ID_bwamem_aligned_sorted_merged_markdup.bam
+    tumour:
+        SAMPLE_ID1: /cluster/projects/pughlab/projects/PROJECTNAME/BWA/2020-02-27_bwa_0.7.15/PATIENT_1/SAMPLE_ID1_bwamem_aligned_sorted_merged_markdup.bam
+        SAMPLE_ID2: /cluster/projects/pughlab/projects/PROJECTNAME/BWA/2020-02-27_bwa_0.7.15/PATIENT_1/SAMPLE_ID2_bwamem_aligned_sorted_merged_markdup.bam
+PATIENT_2:
+    normal:
+        SAMPLE_ID: /cluster/projects/pughlab/projects/PROJECTNAME/BWA/2020-02-27_bwa_0.7.15/PATIENT_2/SAMPLE_ID_bwamem_aligned_sorted_merged_markdup.bam
+    tumour:
+        SAMPLE_ID1: /cluster/projects/pughlab/projects/PROJECTNAME/BWA/2020-02-27_bwa_0.7.15/PATIENT_2/SAMPLE_ID1_bwamem_aligned_sorted_merged_markdup.bam
+        SAMPLE_ID2: /cluster/projects/pughlab/projects/PROJECTNAME/BWA/2020-02-27_bwa_0.7.15/PATIENT_2/SAMPLE_ID2_bwamem_aligned_sorted_merged_markdup.bam

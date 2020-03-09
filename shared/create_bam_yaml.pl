@@ -5,10 +5,21 @@ use warnings;
 use Carp;
 use Getopt::Std;
 use Getopt::Long;
-use Time::HiRes qw(gettimeofday tv_interval);
 use File::Basename;
 use File::Path qw(make_path);
-require "./utilities.pl";
+
+###################################################################################################
+# version       author          comment
+# 1.0           sprokopec       create config file in yaml format
+
+### USAGE ##########################################################################################
+# create_final_yaml.pl -d DATA_DIR -o /path/to/OUTPUT_CONFIG.yaml -p PATTERN
+#
+# where:
+# 	DATA_DIR indicates top directory (ie, DATE_bwa_version)
+# 	PATTERN indicates grep pattern (ie, markdup.bam$) for use with bwa output
+#
+# Tumour/Normal are identified based on pattern matching (where any SK/BC/A = Normal)
 
 ### GETOPTS PLUS ERROR CHECKING AND DEFAULT VALUES #################################################
 # declare variables
@@ -17,14 +28,12 @@ my $output_config;
 
 # identify pattern to use
 my $pattern = '.bam$';
-my $data_type = 'dna';
 
 # read in command line arguments
 GetOptions(
 	'd|data_dir=s'		=> \$data_directory,
 	'p|pattern=s'		=> \$pattern,
-	'o|output_config=s'	=> \$output_config,
-	't|data_type=s'		=> \$data_type
+	'o|output_config=s'	=> \$output_config
 	);
 
 # check for and remove trailing / from data dir
