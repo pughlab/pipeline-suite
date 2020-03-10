@@ -1,0 +1,26 @@
+---
+tool: STAR
+tool_version: 2.7.2b
+ref_type: hg38
+reference_dir: /cluster/projects/ovgroup/projects/OV_Superset/PHL093/RNASeq/STAR/reference/STAR_2.7.2b_hg38_gencode_v26/
+output_dir: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/STAR/
+#resume_dir: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/STAR/DATE_STAR_version/
+resume_dir:
+seq_center: PMGC
+platform: Illumina
+HPC_driver: Slurm
+samtools_version: 1.9
+picard_version: 2.6.0
+mark_dup: Y
+del_intermediate: Y
+create_output_yaml: Y
+dry_run: Y
+# and indicate some parameters for job submission
+parameters:
+    star:
+        mem: 24G
+        time: '24:00:00'
+    markdup:
+        jmem: 6g
+        mem: 8G
+        time: '08:00:00'
