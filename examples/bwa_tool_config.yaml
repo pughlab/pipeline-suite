@@ -13,6 +13,7 @@ HPC_driver: Slurm
 samtools_version: 1.9
 picard_version: 2.6.0
 mark_dup: Y
+create_output_yaml: Y
 del_intermediate: Y
 dry_run: Y
 # and indicate some parameters for job submission

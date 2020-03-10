@@ -12,6 +12,7 @@ picard_version: 2.6.0
 intervals_bed: /path/to/SureSelect_Human_All_Exon_V5plusUTRs_hg19toHg38.bed
 dbsnp:
 del_intermediate: Y 
+create_output_yaml: Y
 dry_run: Y
 # and indicate some parameters for job submission
 # NOTE: many of these depend on the number of input/output files

@@ -34,19 +34,46 @@ There are example config files located in the "examples" folder:
 ## Running a pipeline
 If you are running these pipelines on the cluster, be sure to first load perl!
 
-For your initial run, make sure **output_dir:** is defined, and **resume_dir:** is empty (undefined)
-    
+### Prepare a config file containing paths to FASTQ files:
 <pre><code>cd /path/to/some/directory/pipeline-suite/
 
 module load perl
-perl create_fastq_yaml.pl -d /path/to/fastq/directory/ -o /path/to/fastq_config.yaml
+perl create_fastq_yaml.pl -i /path/to/sampleInfo.txt -d /path/to/fastq/directory/ -o /path/to/fastq_config.yaml -t dna
+</code></pre>
 
+Where sampleInfo.txt is a tab-separate table containing two columms, and each row represents a single sample:
+
+| Patient.ID | Sample.ID  |
+| ---------- | ---------- |
+| Patient1   | Patient1-N |
+| Patient1   | Patient1-T |
+| Patient2   | Patient2-T |
+
+The assumption is that each FASTQ file will follow a similar naming convention, with Sample.ID used to identify files
+for this sample, and lane information is pulled from the file name 
+(for example: Patient1-N_135546_D00355_0270_AATCCGTC_L001.R1.fastq.gz, is a normal, library Patient1-N, lane 135546_D00355_0270_AATCCGTC_L001, R1).
+
+### DNA pipeline:
+For your initial run, make sure **output_dir:** is defined, and **resume_dir:** is empty (undefined).
+
+<pre><code>cd /path/to/some/directory/pipeline-suite/
+
+module load perl
 perl bwa.pl -t /path/to/bwa_tool_config.yaml -c /path/to/fastq_config.yaml > /path/to/output/bwa_submission_out.log
 
 perl gatk.pl -t /path/to/gatk_tool_config.yaml -c /path/to/bam_config.yaml > /path/to/output/gatk_submission_out.log
 </code></pre>
 
-If the initial run is unsuccessful or incomplete, check the logs to identify the problem - it is most likely due to insufficient memory or runtime allocation. 
+### RNA pipeline:
+<pre><code>cd /path/to/some/directory/pipeline-suite/
+
+module load perl
+perl star.pl -t /path/to/star_tool_config.yaml -c /path/to/fastq_config.yaml > /path/to/output/star_submission_out.log
+</code></pre>
+
+### Resuming a run:
+If the initial run is unsuccessful or incomplete, check the logs to identify the problem - it is most likely due to insufficient memory or 
+runtime allocation. 
 In this case, update the necessary parameters for the affected stage in the tool_config.yaml. 
 Next update the "resume_dir" option to point to the run directory, for example
 **resume_dir:** /path/to/output_dir/DATE_BWA_VERSION
@@ -54,35 +81,35 @@ Next update the "resume_dir" option to point to the run directory, for example
 Now, rerun as above! In the event of another failure, increase the memory or time requirements and try again.
 
 ## Output
-bwa.pl and gatk.pl will produce the following directory structure and output files in output_dir:
+bwa.pl, gatk.pl and star.pl will produce the following directory structure and output files in output_dir:
 
 ```
 .
 └── DATE_TOOL_VERSION
     ├── bam_config.yaml
     ├── logs
-    │   ├── stage1_patient1_sample1
+    │   ├── stage1_Patient1-N
     │   │   ├── script.sh
     │   │   └── slurm
     │   │       └── slurm-jobid.out
-    │   └── stage1_patient1_sample2
+    │   └── stage1_Patient1-T
     │       ├── script.sh
     │       └── slurm
     ├── PATIENT1
-    │   ├── Patient1_sample1
+    │   ├── Patient1-N
     │   │   ├── fastq_links
     │   │   └── lane
-    │   ├── patient1_sample1_output.bam
-    │   ├── Patient1_sample2
+    │   ├── Patient1-N_output.bam
+    │   ├── Patient1-T
     │   │   ├── fastq_links
     │   │   └── lane
-    │   └── patient1_sample2_output.bam
+    │   └── Patient1-T_output.bam
     └── PATIENT2
-        ├── Patient2_sample1
+        ├── Patient2-T
         │   ├── fastq_links
         │   └── lane
-        └── patient2_sample1_output.bam
+        └── Patient2-T_output.bam
 ```
 Note, in addition to .bam, there will also be .bai and .bam.md5 files, as well as other, tool specific output.
-bam_config.yaml is created by create_bam_yaml.pl - it lists the final output BAMs and can be used for downstream steps.
+bam_config.yaml is created by create_final_yaml.pl - it lists the final output BAMs and can be used for downstream steps.
 

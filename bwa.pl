@@ -15,8 +15,8 @@ my $cwd = dirname($0);
 require "$cwd/shared/utilities.pl";
 
 ####################################################################################################
-## version       author		comment
-## 1.0           sprokopec	run BWA-MEM on raw FASTQ files (paired end only!)
+# version       author		comment
+# 1.0           sprokopec	run BWA-MEM on raw FASTQ files (paired end only!)
 
 #### USAGE ##########################################################################################
 # bwa.pl -t tool_config.yaml -c data_config.yaml
@@ -52,7 +52,6 @@ sub set_readgroup {
 # format command to run bwa then sort and index the output and remove tmp files
 sub get_bwa_command {
 	my %args = (
-		reference	=> undef,
 		r1		=> undef,
 		r2		=> undef,
 		stem		=> undef,
@@ -63,7 +62,7 @@ sub get_bwa_command {
 	my $bwa_command = join(' ',
 		'bwa mem -M -t4',  # 4 threads
 		'-R', $args{readgroup},
-		$args{reference},
+		$tool_data->{reference},
 		$args{r1}, $args{r2},
 		'>', $args{stem} . '.sam'
 		);
@@ -171,37 +170,14 @@ sub main {
 	if (!defined($data_config)) { die("No data config file defined; please provide -c | --config (ie, sample_config.yaml)"); }
 
 	# load tool config
-	my $tool_data = LoadFile($tool_config);
-
-	# do some quick checks for required info
-	if ('bwamem' ne $tool_data->{aligner}) {
-		die("This pipeline is currently only compatible with BWA-MEM!");
-		}
-
-	# check for a reference genome
-	my $reference;
-	if (!defined($tool_data->{reference}))  {
-		die("Must supply path to reference genome!");
-		} else {
-		$reference = $tool_data->{reference};
-		}
-
-	# for mark_dup, if not Y or N, then die
-	if (('Y' ne $tool_data->{mark_dup}) & ('N' ne $tool_data->{mark_dup})) {
-		die("Option mark_dup must be either Y or N !");
-		}
-
-	# for del_intermediates, if not Y then default to N
-	if (('Y' ne $tool_data->{del_intermediate}) & ('N' ne $tool_data->{del_intermediate})) {
-		print "Option del_intermediate is neither Y or N, defaulting to N\n";
-		$tool_data->{del_intermediate} = 'N';
-		}
+	my $tool_data_orig = LoadFile($tool_config);
+	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'bwa');
 
 	# start logging
 	print "---\n";
 	print "Running BWA-MEM alignment pipeline for NGS data.\n";
 	print "\n  Tool config used: $tool_config";
-	print "\n    Reference: $reference";
+	print "\n    Reference: $tool_data->{reference}";
 	print "\n    Output directory: $tool_data->{output_dir}";
 	print "\n  Sample config used: $data_config\n";
 	print "\n---";
@@ -211,33 +187,18 @@ sub main {
 	my $samtools = 'samtools/' . $tool_data->{samtools_version};
 	my $picard = 'picard/' . $tool_data->{picard_version};
 
-	# check if this is a dry run or not
-	if ((!defined($tool_data->{dry_run})) || ('Y' ne $tool_data->{dry_run})) {
-		$tool_data->{dry_run} = 'N';
-		}
+	# check for resume and confirm output directories
+	my ($resume, $output_directory, $log_directory) = set_output_path(tool_data => $tool_data);
 
-	### CREATE DIRECTORY STRUCTURE ####################################################################
-	my $output_directory;
-	my $resume = 'N';
+	# initiate a file to hold job metrics (ensures that an existing file isn't overwritten by concurrent jobs)
+	opendir(LOGFILES, $log_directory) or die "Cannot open $log_directory";
+	my @files = grep { /slurm_job_metrics/ } readdir(LOGFILES);
+	my $run_count = scalar(@files) + 1;
+	closedir(LOGFILES);
 
-	# check for RESUME directory
-	if (defined ($tool_data->{resume_dir})) {
-		$resume = 'Y';
-		$tool_data->{resume_dir} =~ s/\/$//;
-		$output_directory = $tool_data->{resume_dir};
-		} else {
-		# otherwise, make a directory for this batch
-		# make sure output directory exists
-		unless(-e $tool_data->{output_dir}) { make_path($tool_data->{output_dir}); }
-
-		$tool_data->{output_dir} =~ s/\/$//;
-		$output_directory = join('/', $tool_data->{output_dir},  join('_', $date, $tool_data->{tool}, $tool_data->{tool_version}));
-		unless(-e $output_directory) { make_path($output_directory); }
-		}
-
-	# and directory for log files
-	my $log_directory = join('/', $output_directory, 'logs');
-	unless(-e $log_directory) { make_path($log_directory); }
+	my $outfile = $log_directory . '/slurm_job_metrics_' . $run_count . '.out';
+	my $touch_exit_status = system("touch $outfile");
+	if (0 != $touch_exit_status) { Carp::croak("Cannot touch file $outfile"); }
 
 	### HANDLING FILES #################################################################################
 	# get sample data
@@ -317,7 +278,6 @@ sub main {
 						);
 
 					my $bwa = get_bwa_command(
-						reference	=> $tool_data->{reference},
 						r1		=> $r1,
 						r2		=> $r2,
 						stem		=> $filestem,
@@ -370,7 +330,8 @@ sub main {
 					if ( ('N' eq $resume) ||
 						(
 							('Y' eq missing_file(join('/', $lane_directory, $filestem . '.bam'))) &&
-							# if the index is missing, then this has been run before and the resulting sam deleted (so don't do it again)
+							# if the index is missing, then this has been run before and
+							# the resulting sam deleted (so don't do it again)
 							('Y' eq missing_file(join('/', $lane_directory, $filestem . '.bam.bai')))
 							)
 						) {
@@ -389,7 +350,6 @@ sub main {
 							dependencies	=> $run_id,
 							max_time	=> $tool_data->{parameters}->{sort}->{time}->{$type},
 							mem		=> $tool_data->{parameters}->{sort}->{mem}->{$type},
-							cpus_per_task 	=> 1,
 							dry_run		=> $tool_data->{dry_run}
 							);
 
@@ -431,7 +391,6 @@ sub main {
 							dependencies	=> $run_id,
 							max_time	=> $tool_data->{parameters}->{index}->{time}->{$type},
 							mem		=> $tool_data->{parameters}->{index}->{mem}->{$type},
-							cpus_per_task	=> 1,
 							dry_run		=> $tool_data->{dry_run}
 							);
 
@@ -498,7 +457,6 @@ sub main {
 					dependencies	=> join(',', @lane_holds),
 					mem 		=> $tool_data->{parameters}->{merge}->{mem}->{$type},
 					max_time 	=> $tool_data->{parameters}->{merge}->{time}->{$type},
-					cpus_per_task	=> 1,
 					dry_run		=> $tool_data->{dry_run}
 					);
 
@@ -516,21 +474,14 @@ sub main {
 		}
 
 	# collect job stats
-	opendir(LOGFILES, $log_directory) or die "Cannot open $log_directory";
-	my @files = grep { /slurm_job_metrics/ } readdir(LOGFILES);
-	my $count = scalar(@files) + 1;
-	closedir(LOGFILES);
-
-	my $outfile = $log_directory . '/slurm_job_metrics_' . $count . '.out';
-
 	my $collect_metrics = collect_job_stats(
 		job_ids	=> join(',', @all_jobs),
-		outfile	=> $outfile
+		outfile => $outfile
 		);
 
 	$run_script = write_script(
 		log_dir	=> $log_directory,
-		name	=> 'output_job_metrics',
+		name	=> 'output_job_metrics_' . $run_count,
 		cmd	=> $collect_metrics
 		);
 
@@ -540,15 +491,15 @@ sub main {
 		dependencies	=> join(',', @all_jobs),
 		max_time	=> '0:10:00',
 		mem		=> '1G',
-		cpus_per_task	=> 1,
 		dry_run		=> $tool_data->{dry_run}
 		);
 
 	# final job to output a BAM config for downstream stuff
 	my $output_yaml_cmd = join(' ',
-		"perl $cwd/shared/create_bam_yaml.pl",
+		"perl $cwd/shared/create_final_yaml.pl",
 		'-d', $output_directory,
-		'-o', $output_directory . '/bam_config.yaml'
+		'-o', $output_directory . '/bam_config.yaml',
+		'-p', '.bam$'
 		);
 
 	$run_script = write_script(
@@ -564,7 +515,6 @@ sub main {
 		dependencies	=> join(',', @all_jobs),
 		max_time	=> '0:10:00',
 		mem		=> '1G',
-		cpus_per_tasks	=> 1,
 		dry_run		=> $tool_data->{dry_run}
 		);
 
@@ -573,7 +523,7 @@ sub main {
 
 	}
 
-### GETOPTS PLUS ERROR CHECKING AND DEFAULT VALUES #################################################
+### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
 my $tool_config;
 my $data_config;

@@ -69,20 +69,20 @@ foreach my $subject (sort(@subject_dirs)) {
 	my @tumours = ();
 
 	# find sample directories
-	opendir(BAMFILES, $subject_directory) or die "Cannot open '$subject_directory' !";
-	my @bam_files = grep {/$pattern/} readdir(BAMFILES);
-	closedir(BAMFILES);
+	opendir(OUTFILES, $subject_directory) or die "Cannot open '$subject_directory' !";
+	my @out_files = grep {/$pattern/} readdir(OUTFILES);
+	closedir(OUTFILES);
 
 	my $sample;
-	foreach my $bam (sort(@bam_files)) {
+	foreach my $file (sort(@out_files)) {
 
-		my @sample_parts = split(/\_/, $bam);
+		my @sample_parts = split(/\_/, $file);
 		$sample = $sample_parts[0];
 
 		if ($sample =~ m/BC|SK|A/) {
-			push @normals, $sample . ": " . $subject_directory . "/" . $bam;
+			push @normals, $sample . ": " . $subject_directory . "/" . $file;
 			} else {
-			push @tumours, $sample . ": " . $subject_directory . "/" . $bam;
+			push @tumours, $sample . ": " . $subject_directory . "/" . $file;
 			}
 		}
 
@@ -102,4 +102,5 @@ foreach my $subject (sort(@subject_dirs)) {
 	}
 
 close $fh;
+
 exit;
