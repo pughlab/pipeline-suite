@@ -6,6 +6,7 @@ use warnings;
 use Carp;
 use File::Basename;
 use File::Path qw(make_path);
+use List::Util 'any';
 
 ### SHARED SUBROUTINES #############################################################################
 # function to do standard error checking on input config files
@@ -32,13 +33,21 @@ sub error_checking {
 		}
 
 	# is ref_type either hg38 or hg19?
-	if ( ('hg38' ne $tool_data->{ref_type}) || ('hg19' ne $tool_data->{ref_type}) ) {
+	if ( ('hg38' ne $tool_data->{ref_type}) && ('hg19' ne $tool_data->{ref_type}) ) {
 		die("Unrecognized ref_type; must be one of hg19 or hg38.");
 		}
 	
 	# check if this is a dry run or not
 	if ((!defined($tool_data->{dry_run})) || ('Y' ne $tool_data->{dry_run})) {
 		$tool_data->{dry_run} = 'N';
+		}
+
+	# check for compatible HPC driver; if not found, change dry_run to Y
+	$tool_data->{HPC_driver} = lc $tool_data->{HPC_driver};
+	my @compatible_drivers = qw(slurm);
+	if ((!any { /$tool_data->{HPC_driver}/ } @compatible_drivers ) && ('N' eq $tool_data->{dry_run})) {
+		print "Unrecognized HPC driver requested: setting dry_run to Y, jobs will not be submitted but commands will be written to file.\n";
+		$tool_data->{dry_run} = 'Y';
 		}
 
 	my $is_ref_valid;
@@ -55,21 +64,21 @@ sub error_checking {
 		$is_ref_valid = validate_ref(
 			reference	=> $tool_data->{reference},
 			pipeline	=> $pipeline,
-			exts		=> qw(.fa .fa.amb .fa.ann .fa.bwt .fa.fai .fa.pac .fa.sa)
+			exts		=> [qw(.fa .fa.amb .fa.ann .fa.bwt .fa.fai .fa.pac .fa.sa)]
 			);
 		}
 
 	if ('gatk' eq $pipeline) {
 
-		if (!defined($tool_data->{intervals})) {
-			die("Must supply path to target intervals (if whole-genome, supply picard intervals list)");
+		if (!defined($tool_data->{intervals_bed})) {
+			print "WARNING: no target intervals provided; if this is exome data, please provide the target regions!\n";
 			}
 
 		if (!defined($tool_data->{reference})) { die("Must supply path to reference genome!"); }
 		$is_ref_valid = validate_ref(
 			reference	=> $tool_data->{reference},
 			pipeline	=> $pipeline,
-			exts		=> qw(.fa .dict .fa.fai)
+			exts		=> [qw(.fa .dict .fa.fai)]
 			);
 		}
 
@@ -82,6 +91,25 @@ sub error_checking {
 			}
 		}
 
+	if ('star-fusion' eq $pipeline) {
+		if (!defined($tool_data->{reference_dir}))  { die("Must supply path to reference genome directory!"); }
+		}
+
+	if ('rsem' eq $pipeline) {
+		if (!defined($tool_data->{reference_dir}))  { die("Must supply path to reference genome directory!"); }
+
+		my @strand_options = qw(none forward reverse);
+		if (!defined($tool_data->{strandedness})) {
+			print "No option provided for 'strandedness'; setting to default: none.\n";
+			$tool_data->{strandedness} = 'none';
+			}
+
+		if ( !any /$tool_data->{strandedness}/ } @strand_options ) {
+			print "Unrecognized 'strandedness' option: must be one of none, forward or reverse! Setting to default: none.\n";
+			$tool_data->{strandedness} = 'none';
+			}
+		}
+
 	return($tool_data);
 	}
 
@@ -90,14 +118,14 @@ sub validate_ref {
 	my %args = (
 		reference	=> undef,
 		pipeline	=> undef,
-		exts		=> [],
+		exts		=> undef,
 		@_
 		);
 
 	my $ref_file_base;
 
 	if ( ('bwa' eq $args{pipeline}) || ('gatk' eq $args{pipeline}) ) {
-		$ref_file_base = ($args{reference} =~ s/.fa$//r);
+		$ref_file_base = ($args{reference} =~ s/\.fa$//r);
 		}
 
 	foreach my $ext (@{$args{exts}}) {
@@ -117,7 +145,7 @@ sub set_output_path {
 
 	my $tool_data = $args{tool_data};
 
-	my $path = $tool_data->{resume_dir}
+	my $path = $tool_data->{resume_dir};
 	my $resume = 'N';
 
 	if (defined($path)) {
@@ -125,12 +153,12 @@ sub set_output_path {
 		$path =~ s/\/$//;
 		} else {
 		$tool_data->{output_dir} =~ s/\/$//;
-		$path = join('/', $tool_data->{output_dir}, join('_', $date, $tool_data->{tool}, $tool_data->{tool_version}));
+		$path = join('/', $tool_data->{output_dir}, join('_', $tool_data->{date}, $tool_data->{tool}, $tool_data->{tool_version}));
 		unless(-e $path) { make_path($path); }
 		}
 
 	my $log = join('/', $path, 'logs');
-	unless(-e $log) { make_path($log) }
+	unless(-e $log) { make_path($log); }
 
 	return($resume, $path, $log);
 	}
@@ -190,30 +218,36 @@ sub submit_job {
 		mem		=> undef,
 		cpus_per_task	=> 1,
 		dry_run		=> 'N',
+		hpc_driver	=> 'slurm',
 		@_
 		);
 
 	my $jobdir = $args{shell_command};
 	$jobdir =~ s/\/script.sh//;
 
-	# make a 
-	my $job_log_dir = join('/', $jobdir, 'slurm');
+	# make a directory for error/log output 
+	my $job_log_dir = join('/', $jobdir, $args{hpc_driver});
 	unless(-e $job_log_dir) { make_path($job_log_dir); }
 
-	my $job_command = join(' ',
-		'sbatch',
-		'--job-name', $args{jobname},
-		#'--mail-type=BEGIN,END,FAIL', # doesn't seem to work?
-		'-p all',
-		'-t', $args{max_time},
-		'--mem', $args{mem},
-		'-D', $job_log_dir,
-		'-c', $args{cpus_per_task}
-		);
+	my $job_command;
+	if ('slurm' eq $args{hpc_driver}) {
+		$job_command = join(' ',
+			'sbatch',
+			'--job-name', $args{jobname},
+			#'--mail-type=BEGIN,END,FAIL', # doesn't seem to work?
+			'-p all',
+			'-t', $args{max_time},
+			'--mem', $args{mem},
+			'-D', $job_log_dir,
+			'-c', $args{cpus_per_task}
+			);
 
-	if ('' ne $args{dependencies}) {
-		$job_command = $job_command . ' --dependency=afterok:' . $args{dependencies};
-		$job_command .= ' --kill-on-invalid-dep=yes';
+		if ('' ne $args{dependencies}) {
+			$job_command = $job_command . ' --dependency=afterok:' . $args{dependencies};
+			$job_command .= ' --kill-on-invalid-dep=yes';
+			}
+		} else {
+		die("Unrecognized HPC driver: currently only compatible with slurm");
 		}
 
 	$job_command = join(' ', $job_command, $args{shell_command});
@@ -229,8 +263,11 @@ sub submit_job {
 			die("Failed to submit job with command $job_command");
 			}
 
-		print "Job number $job_id submitted.\n\n";
+		print "Job number $job_id submitted.\n";
 		}
+
+	# print 1 extra blank line in the log to separate steps
+	print "\n";
 
 	return($job_id);
 	}

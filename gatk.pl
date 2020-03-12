@@ -14,12 +14,15 @@ use YAML qw(LoadFile);
 my $cwd = dirname($0);
 require "$cwd/shared/utilities.pl";
 
+# define some global variables
+our ($reference, $known_1000g, $known_mills, $dbsnp);
+
 ####################################################################################################
 # version       author	  	comment
-# 1.0		sprokopec	run GATKs indel realignment and recalibration on BWA aligned bams
+# 1.1		sprokopec	run GATKs indel realignment and recalibration on BWA aligned bams
 
 ### USAGE ##########################################################################################
-# run_gatk_processing.pl -t tool_config.yaml -c data_config.yaml
+# gatk.pl -t tool_config.yaml -c data_config.yaml
 #
 # where:
 #	- tool_config.yaml contains tool versions and parameters, output directory,
@@ -45,14 +48,14 @@ sub get_target_intervals_command {
 		'-D' . $args{tmp_dir},
 		'-jar $gatk_dir/GenomeAnalysisTK.jar -T RealignerTargetCreator',
 		'--disable_auto_index_creation_and_locking_when_reading_rods -nt', $args{n_samples},
-		'-R', $tool_data->{reference},
+		'-R', $reference,
 		'-I', $args{input},
 		'-o', $args{output},
 		'-known', $known_1000g,
 		'-known', $known_mills
 		);
 
-	if ('' ne $intervals) {
+	if ('' ne $args{intervals}) {
 		$target_command = join(' ',
 			$target_command,
 			'--intervals', $args{intervals},
@@ -80,7 +83,7 @@ sub get_indelrealign_command {
 		'--disable_auto_index_creation_and_locking_when_reading_rods',
 		'-I', $args{input},
 		'-nWayOut _realigned.bam',
-		'-R', $tool_data->{reference},
+		'-R', $reference,
 		'-targetIntervals', $args{intervals},
 		'-known', $known_1000g,
 		'-known', $known_mills,
@@ -107,7 +110,7 @@ sub create_recalibration_table {
 		'-jar $gatk_dir/GenomeAnalysisTK.jar -T BaseRecalibrator',
 		'--disable_auto_index_creation_and_locking_when_reading_rods -nct 8',
 		'-I', $args{input},
-		'-R', $tool_data->{reference},
+		'-R', $reference,
 		'-knownSites', $known_1000g,
 		'-knownSites', $known_mills,
 		'-o', $args{output},
@@ -118,7 +121,7 @@ sub create_recalibration_table {
 		'--covariate ContextCovariate'
 		);
 
-	if ('' ne $intervals) {
+	if ('' ne $args{intervals}) {
 		$gatk_command = join(' ',
 			$gatk_command,
 			'--intervals', $args{intervals},
@@ -146,7 +149,7 @@ sub create_recalibrated_bam {
 		'-jar $gatk_dir/GenomeAnalysisTK.jar -T PrintReads',
 		'--disable_auto_index_creation_and_locking_when_reading_rods -nct 8',
 		'-I', $args{input},
-		'-R', $tool_data->{reference},
+		'-R', $reference,
 		'-BQSR', $args{bqsr},
 		'-o', $args{output},
 		'-rf BadCigar',
@@ -164,8 +167,6 @@ sub main {
 	my $tool_config = $args{tool_config};
 	my $data_config = $args{data_config};
 
-	my $date = strftime "%F", localtime;
-
 	### PREAMBLE ######################################################################################
 
 	if (!defined($tool_config)) { die("No tool config file defined; please provide -t | --tool (ie, tool_config.yaml)"); }
@@ -174,6 +175,10 @@ sub main {
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'gatk');
+	$tool_data->{date} = strftime "%F", localtime;
+
+	# check for resume and confirm output directories
+	my ($resume, $output_directory, $log_directory) = set_output_path(tool_data => $tool_data);
 
 	# start logging
 	print "---\n";
@@ -181,7 +186,7 @@ sub main {
 	print "\n  Tool config used: $tool_config";
 	print "\n    Reference: $tool_data->{reference}";
 
-	my ($known_1000g, $known_mills, $dbsnp);
+	$reference = $tool_data->{reference};
 	if ('hg38' eq $tool_data->{ref_type}) {
 
 		print "\n      Using GATK's hg38bundle files: /cluster/tools/data/genomes/human/hg38/hg38bundle/";
@@ -209,7 +214,7 @@ sub main {
 		print "\n    Target intervals (exome): $tool_data->{intervals_bed}";
 		}
 
-	print "\n    Output directory: $tool_data->{output_dir}";
+	print "\n    Output directory: $output_directory";
 	print "\n  Sample config used: $data_config";
 	print "\n---";
 
@@ -218,18 +223,19 @@ sub main {
 	my $samtools = 'samtools/' . $tool_data->{samtools_version};
 	my $picard = 'picard/' . $tool_data->{picard_version};
 
-	# check for resume and confirm output directories
-	my ($resume, $output_directory, $log_directory) = set_output_path(tool_data => $tool_data);
+	# create a file to hold job metrics
+	my (@files, $run_count, $outfile, $touch_exit_status);
+	if ('N' eq $tool_data->{dry_run}) {
+		# initiate a file to hold job metrics (ensures that an existing file isn't overwritten by concurrent jobs)
+		opendir(LOGFILES, $log_directory) or die "Cannot open $log_directory";
+		@files = grep { /slurm_job_metrics/ } readdir(LOGFILES);
+		$run_count = scalar(@files) + 1;
+		closedir(LOGFILES);
 
-	# initiate a file to hold job metrics (ensures that an existing file isn't overwritten by concurrent jobs)
-	opendir(LOGFILES, $log_directory) or die "Cannot open $log_directory";
-	my @files = grep { /slurm_job_metrics/ } readdir(LOGFILES);
-	my $run_count = scalar(@files) + 1;
-	closedir(LOGFILES);
-
-	my $outfile = $log_directory . '/slurm_job_metrics_' . $run_count . '.out';
-	my $touch_exit_status = system("touch $outfile");
-	if (0 != $touch_exit_status) { Carp::croak("Cannot touch file $outfile"); }
+		$outfile = $log_directory . '/slurm_job_metrics_' . $run_count . '.out';
+		$touch_exit_status = system("touch $outfile");
+		if (0 != $touch_exit_status) { Carp::croak("Cannot touch file $outfile"); }
+		}
 
 	### HANDLING FILES #################################################################################
 	# get sample data
@@ -315,7 +321,7 @@ sub main {
 		# check if this should be run
 		if ( ('N' eq $resume) || ('Y' eq missing_file($target_intervals . '.md5'))) {
 			# record command (in log directory) and then run job
-			print "\nSubmitting job for RealignerTargetCreator...";
+			print "Submitting job for RealignerTargetCreator...\n";
 			$run_script = write_script(
 				log_dir	=> $log_directory,
 				name	=> 'run_indel_realigner_target_creator_' . $patient,
@@ -330,6 +336,7 @@ sub main {
 				max_time	=> $tool_data->{parameters}->{target_creator}->{time},
 				mem		=> $tool_data->{parameters}->{target_creator}->{mem},
 				cpus_per_task	=> scalar(@input_bams),
+				hpc_driver	=> $tool_data->{HPC_driver},
 				dry_run		=> $tool_data->{dry_run}
 				);
 
@@ -337,7 +344,7 @@ sub main {
 			push @all_jobs, $run_id;
 			}
 		else {
-			print "\nSkipping RealignerTargetCreator because this has already been completed!\n";
+			print "Skipping RealignerTargetCreator because this has already been completed!\n";
 			}
 
 		## IndelRealigner
@@ -361,7 +368,7 @@ sub main {
 		# check if this should be run
 		if ( ('N' eq $resume) || ('Y' eq missing_file($realign_bams[-1] . '.md5'))) {
 			# record command (in log directory) and then run job
-			print "\nSubmitting job for IndelRealigner...";
+			print "Submitting job for IndelRealigner...\n";
 			$run_script = write_script(
 				log_dir	=> $log_directory,
 				name	=> 'run_indel_realigner_' . $patient,
@@ -375,6 +382,7 @@ sub main {
 				dependencies	=> $run_id,
 				max_time	=> $tool_data->{parameters}->{realign}->{time},
 				mem		=> $tool_data->{parameters}->{realign}->{mem},
+				hpc_driver	=> $tool_data->{HPC_driver},
 				dry_run		=> $tool_data->{dry_run}
 				);
 
@@ -382,13 +390,13 @@ sub main {
 			push @all_jobs, $run_id;
 			}
 		else {
-			print "\nSkipping IndelRealigner because this has already been completed!\n";
+			print "Skipping IndelRealigner because this has already been completed!\n";
 			}
 
 		# Looks like these two steps are run per sample?
 		foreach my $sample (@samples) {
 
-			print "\nPerforming base recalibration steps for: $sample\n";
+			print "Performing base recalibration steps for: $sample\n";
 
 			my $type;
 			if ($sample =~ m/BC|SK|A/) { $type = 'normal'; } else { $type = 'tumour'; }
@@ -421,9 +429,10 @@ sub main {
 					jobname		=> 'run_base_quality_score_recalibrator_' . $sample,
 					shell_command	=> $run_script,
 					dependencies	=> $run_id,
-					max_time	=> $tool_data->{parameters}->{bqsr}->{time},
+					max_time	=> $tool_data->{parameters}->{bqsr}->{time}->{$type},
 					mem		=> $tool_data->{parameters}->{bqsr}->{mem},
 					cpus_per_task	=> 8,
+					hpc_driver	=> $tool_data->{HPC_driver},
 					dry_run		=> $tool_data->{dry_run}
 					);
 
@@ -431,7 +440,7 @@ sub main {
 				push @all_jobs, $run_id2;
 				}
 			else {
-				print "\nSkipping BaseRecalibrator because this has already been completed!\n";
+				print "Skipping BaseRecalibrator because this has already been completed!\n";
 				}
 
 			## PrintReads
@@ -448,7 +457,7 @@ sub main {
 			# check if this should be run
 			if ( ('N' eq $resume) || ('Y' eq missing_file($recal_bam . '.md5'))) {
 				# record command (in log directory) and then run job
-				print "\nSubmitting job for PrintReads (applying base recalibration)...";
+				print "Submitting job for PrintReads (applying base recalibration)...\n";
 				$run_script = write_script(
 					log_dir	=> $log_directory,
 					name	=> 'run_apply_base_recalibration_' . $sample,
@@ -460,9 +469,10 @@ sub main {
 					jobname		=> 'run_apply_base_recalibration_' . $sample,
 					shell_command	=> $run_script,
 					dependencies	=> $run_id2,
-					max_time	=> $tool_data->{parameters}->{recalibrate}->{time},
+					max_time	=> $tool_data->{parameters}->{recalibrate}->{time}->{$type},
 					mem		=> $tool_data->{parameters}->{recalibrate}->{mem},
 					cpus_per_task	=> 8,
+					hpc_driver	=> $tool_data->{HPC_driver},
 					dry_run		=> $tool_data->{dry_run}
 					);
 
@@ -470,7 +480,7 @@ sub main {
 				push @all_jobs, $run_id2;
 				}
 			else {
-				print "\nSkipping PrintReads (apply base recalibration) because this has already been completed!\n";
+				print "Skipping PrintReads (apply base recalibration) because this has already been completed!\n";
 				}
 
 			push @final_outputs, $recal_bam;
@@ -485,6 +495,7 @@ sub main {
 
 			$cleanup_cmd .= ";\nrm -rf $tmp_directory";
 
+			print "Submitting job to clean up temporary/intermediate files...\n";
 			$run_script = write_script(
 				log_dir	=> $log_directory,
 				name	=> 'run_cleanup_' . $patient,
@@ -497,58 +508,72 @@ sub main {
 				dependencies	=> join(',', @patient_jobs),
 				max_time	=> '00:05:00',
 				mem		=> '256M',
+				hpc_driver	=> $tool_data->{HPC_driver},
 				dry_run		=> $tool_data->{dry_run}
 				);
 			}
 
-		print "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
+		print "FINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
 		print "---\n";
 		}
 
-	# collect job metrics
-	my $collect_metrics = collect_job_stats(
-		job_ids	=> join(',', @all_jobs),
-		outfile	=> $outfile
-		);
+	if ('N' eq $tool_data->{dry_run}) {
 
-	$run_script = write_script(
-		log_dir	=> $log_directory,
-		name	=> 'output_job_metrics_' . $run_count,
-		cmd	=> $collect_metrics
-		);
+		# collect job metrics
+		my $collect_metrics = collect_job_stats(
+			job_ids	=> join(',', @all_jobs),
+			outfile	=> $outfile
+			);
 
-	$run_id = submit_job(
-		jobname		=> 'output_job_metrics',
-		shell_command	=> $run_script,
-		dependencies	=> join(',', @all_jobs),
-		max_time	=> '0:10:00',
-		mem		=> '1G',
-		dry_run		=> $tool_data->{dry_run}
-		);
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'output_job_metrics_' . $run_count,
+			cmd	=> $collect_metrics
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'output_job_metrics',
+			shell_command	=> $run_script,
+			dependencies	=> join(',', @all_jobs),
+			max_time	=> '0:10:00',
+			mem		=> '1G',
+			hpc_driver	=> $tool_data->{HPC_driver},
+			dry_run		=> $tool_data->{dry_run}
+			);
+		}
 
 	# final job to output a BAM config for downstream stuff
-	my $output_yaml_cmd = join(' ',
-		"perl $cwd/shared/create_final_yaml.pl",
-		'-d', $output_directory,
-		'-o', $output_directory . '/bam_config.yaml',
-		'-p', '.bam$'
-		);
+	if ('Y' eq $tool_data->{create_output_yaml}) {
 
-	$run_script = write_script(
-		log_dir	=> $log_directory,
-		name	=> 'output_final_yaml',
-		cmd	=> $output_yaml_cmd,
-		modules	=> ['perl']
-		);
+		print "Creating config yaml for GATK-processed BAM files...\n";
 
-	$run_id = submit_job(
-		jobname		=> 'output_final_yaml',
-		shell_command	=> $run_script,
-		dependencies	=> join(',', @all_jobs),
-		max_time	=> '0:10:00',
-		mem		=> '1G',
-		dry_run		=> $tool_data->{dry_run}
-		);
+		my $output_yaml_cmd = join(' ',
+			"perl $cwd/shared/create_final_yaml.pl",
+			'-d', $output_directory,
+			'-o', $output_directory . '/bam_config.yaml',
+			'-p', '.bam$'
+			);
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'output_final_yaml',
+			cmd	=> $output_yaml_cmd,
+			modules	=> ['perl']
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'output_final_yaml',
+			shell_command	=> $run_script,
+			dependencies	=> join(',', @all_jobs),
+			max_time	=> '0:10:00',
+			mem		=> '1G',
+			hpc_driver	=> $tool_data->{HPC_driver},
+			dry_run		=> $tool_data->{dry_run}
+			);
+
+		} else {
+			print "Not creating output config yaml as requested...\n";
+		}
 
 	# finish up
 	print "\nProgramming terminated successfully.\n\n";

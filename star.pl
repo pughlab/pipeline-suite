@@ -16,7 +16,7 @@ require "$cwd/shared/utilities.pl";
 
 ####################################################################################################
 # version       author	  	comment
-# 1.0		sprokopec       script to run STAR alignment on RNASeq data
+# 1.1		sprokopec       script to run STAR alignment on RNASeq data
 
 ### USAGE ##########################################################################################
 # star.pl -t tool_config.yaml -c data_config.yaml
@@ -33,13 +33,14 @@ sub get_star_command {
 	my %args = (
 		r1		=> undef,
 		r2		=> undef,
+		reference_dir	=> undef,
 		tmp_dir		=> undef,
 		@_
 		);
 
 	my $star_command = join(' ',
 		'STAR --runMode alignReads',
-		'--genomeDir', $tool_data->{reference},
+		'--genomeDir', $args{reference_dir},
 		'--readFilesCommand zcat',
 		'--readFilesIn', $args{r1}, $args{r2},
 		'--runThreadN 1',
@@ -65,6 +66,7 @@ sub get_star_command_devel {
 	my %args = (
 		r1		=> undef,
 		r2		=> undef,
+		reference_dir	=> undef,
 		readgroup	=> undef,
 		tmp_dir		=> undef,
 		@_
@@ -73,7 +75,7 @@ sub get_star_command_devel {
 	my $star_command = join(' ',
 		'STAR --runMode alignReads',
 		# basic options
-		'--genomeDir', $tool_data->{reference},
+		'--genomeDir', $args{reference_dir},
 		'--runThreadN 1',
 		'--readFilesCommand zcat',
 		'--readFilesIn', $args{r1}, $args{r2},
@@ -168,23 +170,25 @@ sub main {
 	my $tool_config = $args{tool_config};
 	my $data_config = $args{data_config};
 
-	my $date = strftime "%F", localtime;
-
 	### PREAMBLE ######################################################################################
-	# do some quick error checks
+
 	if (!defined($tool_config)) { die("No tool config file defined; please provide -t | --tool (ie, tool_config.yaml)"); }
 	if (!defined($data_config)) { die("No data config file defined; please provide -c | --config (ie, sample_config.yaml)"); }
 
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'star');
+	$tool_data->{date} = strftime "%F", localtime;
+
+	# check for resume and confirm output directories
+	my ($resume, $output_directory, $log_directory) = set_output_path(tool_data => $tool_data);
 
 	# start logging
 	print "---\n";
 	print "Running STAR alignment pipeline.\n";
 	print "\n  Tool config used: $tool_config";
 	print "\n    STAR reference directory: $tool_data->{reference_dir}";
-	print "\n    Output directory: $tool_data->{output_dir}";
+	print "\n    Output directory: $output_directory";
 	print "\n  Sample config used: $data_config";
 	print "\n---";
 
@@ -192,20 +196,20 @@ sub main {
 	my $star_version	= 'STAR/' . $tool_data->{tool_version};
 	my $samtools		= 'samtools/' . $tool_data->{samtools_version};
 	my $picard		= 'picard/' . $tool_data->{picard_version};
-	my $perl		= 'perl/5.30.0';
 
-	# check for resume and confirm output directories
-	my ($resume, $output_directory, $log_directory) = set_output_path(tool_data => $tool_data);
+	# create a file to hold job metrics
+	my (@files, $run_count, $outfile, $touch_exit_status);
+	if ('N' eq $tool_data->{dry_run}) {
+		# initiate a file to hold job metrics (ensures that an existing file isn't overwritten by concurrent jobs)
+		opendir(LOGFILES, $log_directory) or die "Cannot open $log_directory";
+		@files = grep { /slurm_job_metrics/ } readdir(LOGFILES);
+		$run_count = scalar(@files) + 1;
+		closedir(LOGFILES);
 
-	# initiate a file to hold job metrics (ensures that an existing file isn't overwritten by concurrent jobs)
-	opendir(LOGFILES, $log_directory) or die "Cannot open $log_directory";
-	my @files = grep { /slurm_job_metrics/ } readdir(LOGFILES);
-	my $run_count = scalar(@files) + 1;
-	closedir(LOGFILES);
-
-	my $outfile = $log_directory . '/slurm_job_metrics_' . $run_count . '.out';
-	my $touch_exit_status = system("touch $outfile");
-	if (0 != $touch_exit_status) { Carp::croak("Cannot touch file $outfile"); }
+		$outfile = $log_directory . '/slurm_job_metrics_' . $run_count . '.out';
+		$touch_exit_status = system("touch $outfile");
+		if (0 != $touch_exit_status) { Carp::croak("Cannot touch file $outfile"); }
+		}
 
 	### MAIN ###########################################################################################
 	# get sample data
@@ -258,7 +262,7 @@ sub main {
 				my $r2 = $smp_data->{$patient}->{$sample}->{runlanes}->{$lane}->{R2};
 
 				print "      R1: $r1\n";
-				print "      R2: $r2\n";
+				print "      R2: $r2\n\n";
 
 				my @tmp = split /\//, $r1;
 				my $link = join('/', $raw_directory, $tmp[-1]);
@@ -271,7 +275,7 @@ sub main {
 
 				## run STAR on these fastqs
 				my $readgroup = format_readgroup(
-					patient		=> $patient,
+					subject		=> $patient,
 					sample		=> $sample,
 					lane		=> $lane,
 					lib		=> $sample,
@@ -281,6 +285,7 @@ sub main {
 				my $star = get_star_command_devel(
 					r1		=> $r1,
 					r2		=> $r2,
+					reference_dir	=> $tool_data->{reference_dir},
 					readgroup	=> $readgroup,
 					tmp_dir		=> $temp_star
 					);
@@ -310,7 +315,9 @@ sub main {
 						shell_command	=> $run_script,
 						dependencies	=> $run_id,
 						max_time	=> $tool_data->{parameters}->{star}->{time},
-						mem		=> $tool_data->{parameters}->{star}->{mem}
+						mem		=> $tool_data->{parameters}->{star}->{mem},
+						hpc_driver	=> $tool_data->{HPC_driver},
+						dry_run		=> $tool_data->{dry_run}
 						);
 
 					push @all_jobs, $run_id;
@@ -359,7 +366,9 @@ sub main {
 					shell_command	=> $run_script,
 					dependencies	=> join(',', @lane_holds),
 					max_time	=> $tool_data->{parameters}->{markdup}->{time},
-					mem		=> $tool_data->{parameters}->{markdup}->{mem}
+					mem		=> $tool_data->{parameters}->{markdup}->{mem},
+					hpc_driver	=> $tool_data->{HPC_driver},
+					dry_run		=> $tool_data->{dry_run}
 					);
 
 				push @lane_holds, $run_id;
@@ -373,6 +382,8 @@ sub main {
 	
 			if ('Y' eq $tool_data->{del_intermediate}) {
 
+				print "Submitting job to clean up temporary/intermediate files...\n";
+
 				# if all lane alignments + mark dup are successful, clean up tmp directories
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -385,7 +396,9 @@ sub main {
 					shell_command	=> $run_script,
 					dependencies	=> join(',', @lane_holds),
 					max_time	=> '00:05:00',
-					mem		=> '256M'
+					mem		=> '256M',
+					hpc_driver	=> $tool_data->{HPC_driver},
+					dry_run		=> $tool_data->{dry_run}
 					);
 				}
 			}
@@ -394,51 +407,63 @@ sub main {
 		print "---\n";
 		}
 
-	# collect job metrics
-	my $collect_metrics = collect_job_stats(
-		job_ids => join(',', @all_jobs),
-		outfile => $outfile
-		);
+	if ('N' eq $tool_data->{dry_run}) {
 
-	$run_script = write_script(
-		log_dir => $log_directory,
-		name    => 'output_job_metrics_' . $run_count,
-		cmd     => $collect_metrics
-		);
+		# collect job metrics
+		my $collect_metrics = collect_job_stats(
+			job_ids => join(',', @all_jobs),
+			outfile => $outfile
+			);
 
-	$run_id = submit_job(
-		jobname	 => 'output_job_metrics',
-		shell_command   => $run_script,
-		dependencies    => join(',', @all_jobs),
-		max_time	=> '0:10:00',
-		mem	     => '1G',
-		dry_run	 => $tool_data->{dry_run}
-		);
+		$run_script = write_script(
+			log_dir => $log_directory,
+			name    => 'output_job_metrics_' . $run_count,
+			cmd     => $collect_metrics
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'output_job_metrics',
+			shell_command	=> $run_script,
+			dependencies	=> join(',', @all_jobs),
+			max_time	=> '0:10:00',
+			mem		=> '1G',
+			hpc_driver	=> $tool_data->{HPC_driver},
+			dry_run		=> $tool_data->{dry_run}
+			);
+		}
 
 	# final job to output a BAM config for downstream stuff
-	my $output_yaml_cmd = join(' ',
-		#'perl /cluster/projects/ovgroup/projects/OV_Superset/PHL093/RNASeq/code/create_bam_yaml.pl',
-		"perl $cwd/shared/create_final_yaml.pl",
-		'-d', $output_directory,
-		'-o', $output_directory . '/bam_config.yaml',
-		'-p', '.bam$'
-		);
+	if ('Y' eq $tool_data->{create_output_yaml}) {
 
-	$run_script = write_script(
-		log_dir => $log_directory,
-		name    => 'output_final_yaml',
-		cmd     => $output_yaml_cmd,
-		modules => ['perl']
-		);
+		print "Creating config yaml for output BAM files...\n";
 
-	$run_id = submit_job(
-		jobname	 => 'output_final_yaml',
-		shell_command   => $run_script,
-		dependencies    => join(',', @all_jobs),
-		max_time	=> '0:10:00',
-		mem	     => '1G',
-		dry_run	 => $tool_data->{dry_run}
-		);
+		my $output_yaml_cmd = join(' ',
+			"perl $cwd/shared/create_final_yaml.pl",
+			'-d', $output_directory,
+			'-o', $output_directory . '/bam_config.yaml',
+			'-p', '.bam$'
+			);
+
+		$run_script = write_script(
+			log_dir => $log_directory,
+			name    => 'output_final_yaml',
+			cmd     => $output_yaml_cmd,
+			modules => ['perl']
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'output_final_yaml',
+			shell_command	=> $run_script,
+			dependencies	=> join(',', @all_jobs),
+			max_time	=> '0:10:00',
+			mem		=> '1G',
+			hpc_driver	=> $tool_data->{HPC_driver},
+			dry_run		=> $tool_data->{dry_run}
+			);
+
+		} else {
+			print "Not creating output config yaml as requested...\n";
+		}
 
 	# finish up
 	print "\nProgramming terminated successfully.\n\n";

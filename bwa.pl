@@ -16,7 +16,7 @@ require "$cwd/shared/utilities.pl";
 
 ####################################################################################################
 # version       author		comment
-# 1.0           sprokopec	run BWA-MEM on raw FASTQ files (paired end only!)
+# 1.1           sprokopec	run BWA-MEM on raw FASTQ files (paired end only!)
 
 #### USAGE ##########################################################################################
 # bwa.pl -t tool_config.yaml -c data_config.yaml
@@ -56,13 +56,14 @@ sub get_bwa_command {
 		r2		=> undef,
 		stem		=> undef,
 		readgroup	=> undef,
+		reference	=> undef,
 		@_
 		);
 
 	my $bwa_command = join(' ',
 		'bwa mem -M -t4',  # 4 threads
 		'-R', $args{readgroup},
-		$tool_data->{reference},
+		$args{reference},
 		$args{r1}, $args{r2},
 		'>', $args{stem} . '.sam'
 		);
@@ -162,8 +163,6 @@ sub main {
 	my $tool_config = $args{tool_config};
 	my $data_config = $args{data_config};
 
-	my $date = strftime "%F", localtime;
-
 	### PREAMBLE ######################################################################################
 
 	if (!defined($tool_config)) { die("No tool config file defined; please provide -t | --tool (ie, tool_config.yaml)"); }
@@ -172,13 +171,17 @@ sub main {
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'bwa');
+	$tool_data->{date} = strftime "%F", localtime;
+
+	# check for resume and confirm output directories
+	my ($resume, $output_directory, $log_directory) = set_output_path(tool_data => $tool_data);
 
 	# start logging
 	print "---\n";
 	print "Running BWA-MEM alignment pipeline for NGS data.\n";
 	print "\n  Tool config used: $tool_config";
 	print "\n    Reference: $tool_data->{reference}";
-	print "\n    Output directory: $tool_data->{output_dir}";
+	print "\n    Output directory: $output_directory";
 	print "\n  Sample config used: $data_config\n";
 	print "\n---";
 
@@ -187,26 +190,26 @@ sub main {
 	my $samtools = 'samtools/' . $tool_data->{samtools_version};
 	my $picard = 'picard/' . $tool_data->{picard_version};
 
-	# check for resume and confirm output directories
-	my ($resume, $output_directory, $log_directory) = set_output_path(tool_data => $tool_data);
+	# create a file to hold job metrics
+	my (@files, $run_count, $outfile, $touch_exit_status);
+	if ('N' eq $tool_data->{dry_run}) {
+		# initiate a file to hold job metrics (ensures that an existing file isn't overwritten by concurrent jobs)
+		opendir(LOGFILES, $log_directory) or die "Cannot open $log_directory";
+		@files = grep { /slurm_job_metrics/ } readdir(LOGFILES);
+		$run_count = scalar(@files) + 1;
+		closedir(LOGFILES);
 
-	# initiate a file to hold job metrics (ensures that an existing file isn't overwritten by concurrent jobs)
-	opendir(LOGFILES, $log_directory) or die "Cannot open $log_directory";
-	my @files = grep { /slurm_job_metrics/ } readdir(LOGFILES);
-	my $run_count = scalar(@files) + 1;
-	closedir(LOGFILES);
-
-	my $outfile = $log_directory . '/slurm_job_metrics_' . $run_count . '.out';
-	my $touch_exit_status = system("touch $outfile");
-	if (0 != $touch_exit_status) { Carp::croak("Cannot touch file $outfile"); }
+		$outfile = $log_directory . '/slurm_job_metrics_' . $run_count . '.out';
+		$touch_exit_status = system("touch $outfile");
+		if (0 != $touch_exit_status) { Carp::croak("Cannot touch file $outfile"); }
+		}
 
 	### HANDLING FILES #################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
 
 	my ($run_script, $run_id, $link);
-
-	my (@all_jobs);
+	my @all_jobs;
 
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
@@ -257,7 +260,7 @@ sub main {
 					my $r2 = $smp_data->{$patient}->{$sample}->{libraries}->{$lib}->{runlanes}->{$lane}->{fastq}->{R2};
 
 					print "	R1: $r1\n";
-					print "	R2: $r2\n";
+					print "	R2: $r2\n\n";
 
 					my @tmp = split /\//, $r1;
 					$link = join('/', $raw_directory, $tmp[-1]);
@@ -281,7 +284,8 @@ sub main {
 						r1		=> $r1,
 						r2		=> $r2,
 						stem		=> $filestem,
-						readgroup	=> $readgroup
+						readgroup	=> $readgroup,
+						reference	=> $tool_data->{reference}
 						);
 
 					$bwa = 'cd ' . $lane_directory . ";\n" . $bwa ;
@@ -311,6 +315,7 @@ sub main {
 							max_time	=> $tool_data->{parameters}->{bwa}->{time}->{$type},
 							mem		=> $tool_data->{parameters}->{bwa}->{mem}->{$type},
 							cpus_per_task	=> 4,
+							hpc_driver	=> $tool_data->{HPC_driver},
 							dry_run		=> $tool_data->{dry_run}
 							);
 
@@ -350,6 +355,7 @@ sub main {
 							dependencies	=> $run_id,
 							max_time	=> $tool_data->{parameters}->{sort}->{time}->{$type},
 							mem		=> $tool_data->{parameters}->{sort}->{mem}->{$type},
+							hpc_driver	=> $tool_data->{HPC_driver},
 							dry_run		=> $tool_data->{dry_run}
 							);
 
@@ -391,6 +397,7 @@ sub main {
 							dependencies	=> $run_id,
 							max_time	=> $tool_data->{parameters}->{index}->{time}->{$type},
 							mem		=> $tool_data->{parameters}->{index}->{mem}->{$type},
+							hpc_driver	=> $tool_data->{HPC_driver},
 							dry_run		=> $tool_data->{dry_run}
 							);
 
@@ -457,6 +464,7 @@ sub main {
 					dependencies	=> join(',', @lane_holds),
 					mem 		=> $tool_data->{parameters}->{merge}->{mem}->{$type},
 					max_time 	=> $tool_data->{parameters}->{merge}->{time}->{$type},
+					hpc_driver	=> $tool_data->{HPC_driver},
 					dry_run		=> $tool_data->{dry_run}
 					);
 
@@ -469,54 +477,66 @@ sub main {
 			push @final_outputs, $smp_output;
 			}
 
-		print "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
+		print "FINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
 		print "---\n";
 		}
 
-	# collect job stats
-	my $collect_metrics = collect_job_stats(
-		job_ids	=> join(',', @all_jobs),
-		outfile => $outfile
-		);
+	if ('N' eq $tool_data->{dry_run}) {
+		# collect job stats
+		my $collect_metrics = collect_job_stats(
+			job_ids	=> join(',', @all_jobs),
+			outfile => $outfile
+			);
 
-	$run_script = write_script(
-		log_dir	=> $log_directory,
-		name	=> 'output_job_metrics_' . $run_count,
-		cmd	=> $collect_metrics
-		);
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'output_job_metrics_' . $run_count,
+			cmd	=> $collect_metrics
+			);
 
-	$run_id = submit_job(
-		jobname		=> 'output_job_metrics',
-		shell_command	=> $run_script,
-		dependencies	=> join(',', @all_jobs),
-		max_time	=> '0:10:00',
-		mem		=> '1G',
-		dry_run		=> $tool_data->{dry_run}
-		);
+		$run_id = submit_job(
+			jobname		=> 'output_job_metrics',
+			shell_command	=> $run_script,
+			dependencies	=> join(',', @all_jobs),
+			max_time	=> '0:10:00',
+			mem		=> '1G',
+			hpc_driver	=> $tool_data->{HPC_driver},
+			dry_run		=> $tool_data->{dry_run}
+			);
+		}
 
 	# final job to output a BAM config for downstream stuff
-	my $output_yaml_cmd = join(' ',
-		"perl $cwd/shared/create_final_yaml.pl",
-		'-d', $output_directory,
-		'-o', $output_directory . '/bam_config.yaml',
-		'-p', '.bam$'
-		);
+	if ('Y' eq $tool_data->{create_output_yaml}) {
 
-	$run_script = write_script(
-		log_dir	=> $log_directory,
-		name	=> 'output_final_yaml',
-		cmd	=> $output_yaml_cmd,
-		modules	=> ['perl']
-		);
+		print "Creating config yaml for output BAM files...\n";
 
-	$run_id = submit_job(
-		jobname		=> 'output_final_yaml',
-		shell_command	=> $run_script,
-		dependencies	=> join(',', @all_jobs),
-		max_time	=> '0:10:00',
-		mem		=> '1G',
-		dry_run		=> $tool_data->{dry_run}
-		);
+		my $output_yaml_cmd = join(' ',
+			"perl $cwd/shared/create_final_yaml.pl",
+			'-d', $output_directory,
+			'-o', $output_directory . '/bam_config.yaml',
+			'-p', '.bam$'
+			);
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'output_final_yaml',
+			cmd	=> $output_yaml_cmd,
+			modules	=> ['perl']
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'output_final_yaml',
+			shell_command	=> $run_script,
+			dependencies	=> join(',', @all_jobs),
+			max_time	=> '0:10:00',
+			mem		=> '1G',
+			hpc_driver	=> $tool_data->{HPC_driver},
+			dry_run		=> $tool_data->{dry_run}
+			);
+
+		} else {
+			print "Not creating output config yaml as requested...\n";
+		}
 
 	# finish up
 	print "\nProgramming terminated successfully.\n\n";

@@ -18,9 +18,9 @@ dry_run: Y
 # and indicate some parameters for job submission
 parameters:
     star:
-        mem: 24G
+        mem: 22G
         time: '24:00:00'
     markdup:
-        jmem: 6g
+        java_mem: 6g
         mem: 8G
         time: '08:00:00'

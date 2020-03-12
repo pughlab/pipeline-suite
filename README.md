@@ -1,4 +1,5 @@
-# PughLab pipeline-suite
+# PughLab pipeline-suite (version 1.1)
+
 ## Introduction
 This is a collection of pipelines to be used for NGS analyses, from alignment to variant calling.
 
@@ -15,21 +16,30 @@ There are example config files located in the "examples" folder:
   - gatk_input_config.yaml, can be generated using shared/create_bam_yaml.pl
 
 - tool configs:
-  - bwa_tool_config.yaml, specifies:
-    - desired versions of tools (bwa, samtools, picard)
-    - path to bwa-indexed reference
+  - all tool configs must specify:
+    - desired versions of tools
+    - reference (file or directory) and ref_type (hg19 or hg38)
     - path to desired output directory (initial run or resumed run)
-    - sequencing centre and platform
-    - optional steps (mark_dup; del_intermediate; dry_run), either Y or N
-    - memory and run time parameters for each step (separate for tumour/normal)
-  - gatk_tool_config.yaml, specifies:
-    - desired versions of tools (gatk, samtools, picard)
-    - path to reference genome
-    - path to desired output directory (initial run or resumed run)
-    - path to target intervals (exome capture kit, if defined)
-    - sequencing centre and platform
-    - optional steps (del_intermediate; dry_run), either Y or N
+    - optional steps (mark_dup; del_intermediate; create_output_yaml; dry_run), either Y or N
+    - HPC driver (for job submission)
     - memory and run time parameters for each step
+
+  - bwa_tool_config.yaml, specifies:
+    - path to bwa-indexed reference
+    - sequencing centre and platform
+    - optional steps: mark_dup (either Y or N)
+  - gatk_tool_config.yaml, specifies:
+    - path to reference genome (requires .fa, .dict and .fai files)
+    - path to target intervals (exome capture kit, if defined)
+    - path to dbSNP file (if undefined, a default will be used)
+
+  - star_tool_config.yaml, specifies:
+    - path to STAR reference directory
+    - sequencing centre and platform
+    - optional steps: mark_dup (either Y or N)
+  - rna_variantcall_config.yaml, specifies:
+    - path to reference genome (DNA; requires .fa, .dict and .fai files)
+    - path to funcotator_db
     
 ## Running a pipeline
 If you are running these pipelines on the cluster, be sure to first load perl!
@@ -59,16 +69,24 @@ For your initial run, make sure **output_dir:** is defined, and **resume_dir:** 
 <pre><code>cd /path/to/some/directory/pipeline-suite/
 
 module load perl
+
+\# run BWA to align to a reference genome
 perl bwa.pl -t /path/to/bwa_tool_config.yaml -c /path/to/fastq_config.yaml > /path/to/output/bwa_submission_out.log
 
-perl gatk.pl -t /path/to/gatk_tool_config.yaml -c /path/to/bam_config.yaml > /path/to/output/gatk_submission_out.log
+\# run GATK indel realignment and base quality score recalibration
+perl gatk.pl -t /path/to/gatk_tool_config_dna.yaml -c /path/to/bam_config.yaml > /path/to/output/gatk_submission_out.log
 </code></pre>
 
 ### RNA pipeline:
 <pre><code>cd /path/to/some/directory/pipeline-suite/
 
 module load perl
+
+\# run STAR to align to a reference genome
 perl star.pl -t /path/to/star_tool_config.yaml -c /path/to/fastq_config.yaml > /path/to/output/star_submission_out.log
+
+\# run GATK indel realignment and base quality score recalibration, HaplotypeCaller, variant filtration and annotataion
+perl rna_variantcall.pl -t /path/to/rna_variantcall_config.yaml -c /path/to/bam_config.yaml > /path/to/output/rna_variantcall_submission_out.log
 </code></pre>
 
 ### Resuming a run:
