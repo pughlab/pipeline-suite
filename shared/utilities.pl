@@ -13,6 +13,7 @@ use List::Util 'any';
 sub error_checking {
 	my %args = (
 		tool_data	=> undef,
+		data_type	=> 'dna',
 		pipeline	=> undef,
 		@_
 		);
@@ -70,7 +71,7 @@ sub error_checking {
 
 	if ('gatk' eq $pipeline) {
 
-		if (!defined($tool_data->{intervals_bed})) {
+		if ( ('dna' eq $args{data_type}) && (!defined($tool_data->{intervals_bed})) ) {
 			print "WARNING: no target intervals provided; if this is exome data, please provide the target regions!\n";
 			}
 
@@ -104,7 +105,7 @@ sub error_checking {
 			$tool_data->{strandedness} = 'none';
 			}
 
-		if ( !any /$tool_data->{strandedness}/ } @strand_options ) {
+		if ( !any { /$tool_data->{strandedness}/ } @strand_options ) {
 			print "Unrecognized 'strandedness' option: must be one of none, forward or reverse! Setting to default: none.\n";
 			$tool_data->{strandedness} = 'none';
 			}
