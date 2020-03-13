@@ -28,19 +28,17 @@ There are example config files located in the "examples" folder:
     - path to bwa-indexed reference
     - sequencing centre and platform
     - optional steps: mark_dup (either Y or N)
-  - gatk_tool_config.yaml, specifies:
-    - path to reference genome (requires .fa, .dict and .fai files)
-    - path to target intervals (exome capture kit, if defined)
-    - path to dbSNP file (if undefined, a default will be used)
 
   - star_tool_config.yaml, specifies:
     - path to STAR reference directory
     - sequencing centre and platform
     - optional steps: mark_dup (either Y or N)
-  - rna_variantcall_config.yaml, specifies:
-    - path to reference genome (DNA; requires .fa, .dict and .fai files)
-    - path to funcotator_db
-    
+
+  - gatk_tool_config.yaml, works for both DNA- and RNA-Seq data, specifies:
+    - path to reference genome (requires .fa, .dict and .fai files)
+    - path to target intervals (exome capture kit, if defined)
+    - path to dbSNP file (if undefined, a default will be used)
+
 ## Running a pipeline
 If you are running these pipelines on the cluster, be sure to first load perl!
 
@@ -74,7 +72,7 @@ module load perl
 perl bwa.pl -t /path/to/bwa_tool_config.yaml -c /path/to/fastq_config.yaml > /path/to/output/bwa_submission_out.log
 
 \# run GATK indel realignment and base quality score recalibration
-perl gatk.pl -t /path/to/gatk_tool_config_dna.yaml -c /path/to/bam_config.yaml > /path/to/output/gatk_submission_out.log
+perl gatk.pl -t /path/to/gatk_tool_config.yaml -c /path/to/bam_config.yaml --dna > /path/to/output/gatk_submission_out.log
 </code></pre>
 
 ### RNA pipeline:
@@ -85,13 +83,15 @@ module load perl
 \# run STAR to align to a reference genome
 perl star.pl -t /path/to/star_tool_config.yaml -c /path/to/fastq_config.yaml > /path/to/output/star_submission_out.log
 
-\# run GATK indel realignment and base quality score recalibration, HaplotypeCaller, variant filtration and annotataion
-perl rna_variantcall.pl -t /path/to/rna_variantcall_config.yaml -c /path/to/bam_config.yaml > /path/to/output/rna_variantcall_submission_out.log
+\# run GATK split CIGAR,  indel realignment and base quality score recalibration
+perl gatk.pl -t /path/to/gatk_tool_config.yaml -c /path/to/bam_config.yaml --rna > /path/to/output/rna_gatk_submission_out.log
+
+\# run GATK HaplotypeCaller, variant filtration and annotataion
+perl variant_call.pl -t /path/to/variant_call_config.yaml -c /path/to/gatk_bam_config.yaml > /path/to/output/variant_call_submission_out.log
 </code></pre>
 
 ### Resuming a run:
-If the initial run is unsuccessful or incomplete, check the logs to identify the problem - it is most likely due to insufficient memory or 
-runtime allocation. 
+If the initial run is unsuccessful or incomplete, check the logs to identify the problem - it is most likely due to insufficient memory or runtime allocation. 
 In this case, update the necessary parameters for the affected stage in the tool_config.yaml. 
 Next update the "resume_dir" option to point to the run directory, for example
 **resume_dir:** /path/to/output_dir/DATE_BWA_VERSION

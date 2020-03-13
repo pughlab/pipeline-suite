@@ -15,26 +15,31 @@ del_intermediate: Y
 create_output_yaml: Y
 dry_run: Y
 # and indicate some parameters for job submission
-# NOTE: many of these depend on the number of input/output files
+# NOTE: for DNA, many of these depend on the number of input/output files
 # ie, for realign, 6hrs is sufficient for 2 samples (T/N), but not for 3 (PRE/POST/Normal)
 parameters:
     target_creator:
-        java_mem: '4g'
-        mem: '6G'
-        time: '06:00:00'
+        java_mem: 4g
+        mem: 6G
+        time: '06:00:00'  # 12:00:00 for RNA-Seq
     realign:
-        java_mem: '4g'
-        mem: '6G'
+        java_mem: 4g
+        mem: 6G
         time: '12:00:00'
     bqsr:
-        java_mem: '4g'
-        mem: '6G'
+        java_mem: 4g
+        mem: 6G
         time:
-            normal: '04:00:00'
+            normal: '04:00:00' # 12:00:00 for RNA-Seq
             tumour: '08:00:00'
     recalibrate:
-        java_mem: '4g'
-        mem: '6G'
+        java_mem: 4g
+        mem: 6G
         time:
             normal: '06:00:00'
             tumour: '12:00:00'
+# additional split step for RNA-Seq
+    split_cigar:
+        java_mem: 8g
+        mem: 12G
+        time: '24:00:00'
