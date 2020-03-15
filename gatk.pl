@@ -323,7 +323,7 @@ sub main {
 	# get sample data
 	my $smp_data = LoadFile($data_config);
 
-	my ($run_script, $run_id, $run_id2, $link);
+	my ($run_script, $run_id_patient, $run_id_sample, $link);
 	my @all_jobs;
 
 	# process each patient in $smp_data
@@ -346,7 +346,7 @@ sub main {
 
 		# initiate some variables
 		my (@final_outputs, @patient_jobs);
-		$run_id = '';
+		$run_id_patient = '';
 
 		# make a directory for intermediate files
 		my $intermediate_directory = join('/', $patient_directory, 'intermediate_files');
@@ -420,10 +420,10 @@ sub main {
 					modules	=> [$gatk]
 					);
 
-				$run_id = submit_job(
+				$run_id_patient = submit_job(
 					jobname		=> 'run_indel_realigner_target_creator_' . $patient,
 					shell_command	=> $run_script,
-					dependencies	=> $run_id,
+					dependencies	=> $run_id_patient,
 					max_time	=> $tool_data->{parameters}->{target_creator}->{time},
 					mem		=> $tool_data->{parameters}->{target_creator}->{mem},
 					cpus_per_task	=> scalar(@input_bams),
@@ -431,8 +431,8 @@ sub main {
 					dry_run		=> $tool_data->{dry_run}
 					);
 
-				push @patient_jobs, $run_id;
-				push @all_jobs, $run_id;
+				push @patient_jobs, $run_id_patient;
+				push @all_jobs, $run_id_patient;
 				}
 			else {
 				print "Skipping RealignerTargetCreator because this has already been completed!\n";
@@ -474,18 +474,18 @@ sub main {
 					modules	=> [$gatk]
 					);
 
-				$run_id = submit_job(
+				$run_id_patient = submit_job(
 					jobname		=> 'run_indel_realigner_' . $patient,
 					shell_command	=> $run_script,
-					dependencies	=> $run_id,
+					dependencies	=> $run_id_patient,
 					max_time	=> $tool_data->{parameters}->{realign}->{time},
 					mem		=> $tool_data->{parameters}->{realign}->{mem},
 					hpc_driver	=> $tool_data->{HPC_driver},
 					dry_run		=> $tool_data->{dry_run}
 					);
 
-				push @patient_jobs, $run_id;
-				push @all_jobs, $run_id;
+				push @patient_jobs, $run_id_patient;
+				push @all_jobs, $run_id_patient;
 				}
 			else {
 				print "Skipping IndelRealigner because this has already been completed!\n";
@@ -494,6 +494,8 @@ sub main {
 
 		# Run per-sample steps (BQSR for DNA, all for RNA)
 		foreach my $sample (@samples) {
+
+			$run_id_sample = '';
 
 			# determine sample type
 			my $type;
@@ -535,18 +537,18 @@ sub main {
 						modules	=> [$gatk]
 						);
 
-					$run_id = submit_job(
+					$run_id_sample = submit_job(
 						jobname		=> 'run_split_cigar_' . $sample,
 						shell_command	=> $run_script,
-						dependencies	=> $run_id,
+						dependencies	=> $run_id_sample,
 						max_time	=> $tool_data->{parameters}->{split_cigar}->{time},
 						mem		=> $tool_data->{parameters}->{split_cigar}->{mem},
 						hpc_driver	=> $tool_data->{HPC_driver},
 						dry_run		=> $tool_data->{dry_run}
 						);
 
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
+					push @patient_jobs, $run_id_sample;
+					push @all_jobs, $run_id_sample;
 					}
 				else {
 					print "Skipping SplitNCigarReads because this has already been completed!\n";
@@ -577,18 +579,18 @@ sub main {
 						modules	=> [$gatk]
 						);
 
-					$run_id = submit_job(
+					$run_id_sample = submit_job(
 						jobname		=> 'run_indel_realigner_target_creator_' . $sample,
 						shell_command	=> $run_script,
-						dependencies	=> $run_id,
+						dependencies	=> $run_id_sample,
 						max_time	=> $tool_data->{parameters}->{target_creator}->{time},
 						mem		=> $tool_data->{parameters}->{target_creator}->{mem},
 						hpc_driver	=> $tool_data->{HPC_driver},
 						dry_run		=> $tool_data->{dry_run}
 						);
 
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
+					push @patient_jobs, $run_id_sample;
+					push @all_jobs, $run_id_sample;
 					}
 				else {
 					print "Skipping RealignerTargetCreator because this has already been completed!\n";
@@ -622,18 +624,18 @@ sub main {
 						modules	=> [$gatk]
 						);
 
-					$run_id = submit_job(
+					$run_id_sample = submit_job(
 						jobname		=> 'run_indel_realigner_' . $sample,
 						shell_command	=> $run_script,
-						dependencies	=> $run_id,
+						dependencies	=> $run_id_sample,
 						max_time	=> $tool_data->{parameters}->{realign}->{time},
 						mem		=> $tool_data->{parameters}->{realign}->{mem},
 						hpc_driver	=> $tool_data->{HPC_driver},
 						dry_run		=> $tool_data->{dry_run}
 						);
 
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
+					push @patient_jobs, $run_id_sample;
+					push @all_jobs, $run_id_sample;
 					}
 				else {
 					print "Skipping IndelRealigner because this has already been completed!\n";
@@ -673,10 +675,10 @@ sub main {
 
 				if ('dna' eq $data_type) {
 
-					$run_id2 = submit_job(
+					$run_id_sample = submit_job(
 						jobname		=> 'run_base_quality_score_recalibrator_' . $sample,
 						shell_command	=> $run_script,
-						dependencies	=> $run_id,
+						dependencies	=> $run_id_patient,
 						max_time	=> $tool_data->{parameters}->{bqsr}->{time}->{$type},
 						mem		=> $tool_data->{parameters}->{bqsr}->{mem},
 						cpus_per_task	=> 8,
@@ -684,25 +686,25 @@ sub main {
 						dry_run		=> $tool_data->{dry_run}
 						);
 
-					push @patient_jobs, $run_id2;
-					push @all_jobs, $run_id2;
+					push @patient_jobs, $run_id_sample;
+					push @all_jobs, $run_id_sample;
 
 					}
 
 				elsif ('rna' eq $data_type) {
 
-					$run_id = submit_job(
+					$run_id_sample = submit_job(
 						jobname		=> 'run_base_quality_score_recalibrator_' . $sample,
 						shell_command	=> $run_script,
-						dependencies	=> $run_id,
+						dependencies	=> $run_id_sample,
 						max_time	=> $tool_data->{parameters}->{bqsr}->{time}->{$type},
 						mem		=> $tool_data->{parameters}->{bqsr}->{mem},
 						hpc_driver	=> $tool_data->{HPC_driver},
 						dry_run		=> $tool_data->{dry_run}
 						);
 
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
+					push @patient_jobs, $run_id_sample;
+					push @all_jobs, $run_id_sample;
 					}
 				}
 			else {
@@ -735,10 +737,10 @@ sub main {
 
 				if ('dna' eq $data_type) {
 
-					$run_id2 = submit_job(
+					$run_id_sample = submit_job(
 						jobname		=> 'run_apply_base_recalibration_' . $sample,
 						shell_command	=> $run_script,
-						dependencies	=> $run_id2,
+						dependencies	=> $run_id_sample,
 						max_time	=> $tool_data->{parameters}->{recalibrate}->{time}->{$type},
 						mem		=> $tool_data->{parameters}->{recalibrate}->{mem},
 						cpus_per_task	=> 8,
@@ -746,25 +748,25 @@ sub main {
 						dry_run		=> $tool_data->{dry_run}
 						);
 
-					push @patient_jobs, $run_id2;
-					push @all_jobs, $run_id2;
+					push @patient_jobs, $run_id_sample;
+					push @all_jobs, $run_id_sample;
 
 					}
 
 				elsif ('rna' eq $data_type) {
 
-					$run_id = submit_job(
+					$run_id_sample = submit_job(
 						jobname		=> 'run_apply_base_recalibration_' . $sample,
 						shell_command	=> $run_script,
-						dependencies	=> $run_id,
+						dependencies	=> $run_id_sample,
 						max_time	=> $tool_data->{parameters}->{recalibrate}->{time}->{$type},
 						mem		=> $tool_data->{parameters}->{recalibrate}->{mem},
 						hpc_driver	=> $tool_data->{HPC_driver},
 						dry_run		=> $tool_data->{dry_run}
 						);
 
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
+					push @patient_jobs, $run_id_sample;
+					push @all_jobs, $run_id_sample;
 					}
 				}
 			else {
@@ -785,7 +787,7 @@ sub main {
 				cmd	=> $cleanup_cmd
 				);
 
-			$run_id = submit_job(
+			$run_id_patient = submit_job(
 				jobname		=> 'run_cleanup_' . $patient,
 				shell_command	=> $run_script,
 				dependencies	=> join(',', @patient_jobs),
@@ -815,7 +817,7 @@ sub main {
 			cmd	=> $collect_metrics
 			);
 
-		$run_id = submit_job(
+		$run_id_patient = submit_job(
 			jobname		=> 'output_job_metrics',
 			shell_command	=> $run_script,
 			dependencies	=> join(',', @all_jobs),
@@ -845,7 +847,7 @@ sub main {
 			modules	=> ['perl']
 			);
 
-		$run_id = submit_job(
+		$run_id_patient = submit_job(
 			jobname		=> 'output_final_yaml',
 			shell_command	=> $run_script,
 			dependencies	=> join(',', @all_jobs),
