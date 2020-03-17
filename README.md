@@ -39,6 +39,9 @@ There are example config files located in the "examples" folder:
     - path to target intervals (exome capture kit, if defined)
     - path to dbSNP file (if undefined, a default will be used)
 
+   - rsem_tool_config.yaml, specifies:
+    - path/stem to RSEM reference directory
+
 ## Running a pipeline
 If you are running these pipelines on the cluster, be sure to first load perl!
 
@@ -68,10 +71,10 @@ For your initial run, make sure **output_dir:** is defined, and **resume_dir:** 
 
 module load perl
 
-\# run BWA to align to a reference genome
+# run BWA to align to a reference genome
 perl bwa.pl -t /path/to/bwa_tool_config.yaml -c /path/to/fastq_config.yaml > /path/to/output/bwa_submission_out.log
 
-\# run GATK indel realignment and base quality score recalibration
+# run GATK indel realignment and base quality score recalibration
 perl gatk.pl -t /path/to/gatk_tool_config.yaml -c /path/to/bam_config.yaml --dna > /path/to/output/gatk_submission_out.log
 </code></pre>
 
@@ -80,14 +83,17 @@ perl gatk.pl -t /path/to/gatk_tool_config.yaml -c /path/to/bam_config.yaml --dna
 
 module load perl
 
-\# run STAR to align to a reference genome
+# run STAR to align to a reference genome
 perl star.pl -t /path/to/star_tool_config.yaml -c /path/to/fastq_config.yaml > /path/to/output/star_submission_out.log
 
-\# run GATK split CIGAR,  indel realignment and base quality score recalibration
+# run RSEM on STAR-aligned BAMs
+perl rsem.pl -t /path/to/rsem_tool_config.yaml -c /path/to/bam_config.yaml > /path/to/output/rsem_submission_out.log
+
+# run GATK split CIGAR, indel realignment and base quality score recalibration on MarkDup BAMs
 perl gatk.pl -t /path/to/gatk_tool_config.yaml -c /path/to/bam_config.yaml --rna > /path/to/output/rna_gatk_submission_out.log
 
-\# run GATK HaplotypeCaller, variant filtration and annotataion
-perl variant_call.pl -t /path/to/variant_call_config.yaml -c /path/to/gatk_bam_config.yaml > /path/to/output/variant_call_submission_out.log
+# run GATK HaplotypeCaller, variant filtration and annotataion
+perl variant_call.pl -t /path/to/variant_call_config.yaml -c /path/to/gatk_bam_config.yaml --rna > /path/to/output/variant_call_submission_out.log
 </code></pre>
 
 ### Resuming a run:
@@ -99,7 +105,7 @@ Next update the "resume_dir" option to point to the run directory, for example
 Now, rerun as above! In the event of another failure, increase the memory or time requirements and try again.
 
 ## Output
-bwa.pl, gatk.pl and star.pl will produce the following directory structure and output files in output_dir:
+bwa.pl will produce the following directory structure and output files in output_dir, with gatk.pl, star.pl, etc. having similar structures:
 
 ```
 .
