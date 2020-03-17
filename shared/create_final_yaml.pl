@@ -79,6 +79,10 @@ foreach my $subject (sort(@subject_dirs)) {
 		my @sample_parts = split(/\_/, $file);
 		$sample = $sample_parts[0];
 
+		# if output comes from RSEM, trim off the file suffix
+		$sample =~ s/.genes.results//;
+		$sample =~ s/.isoforms.results//;
+
 		if ($sample =~ m/BC|SK|A/) {
 			push @normals, $sample . ": " . $subject_directory . "/" . $file;
 			} else {

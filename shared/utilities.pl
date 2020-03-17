@@ -83,6 +83,16 @@ sub error_checking {
 			);
 		}
 
+	if (('variant_call' eq $pipeline) && ('Y' eq $tool_data->{parameters}->{haplotype_call}->{run})) {
+
+		if (!defined($tool_data->{reference})) { die("Must supply path to reference genome!"); }
+		$is_ref_valid = validate_ref(
+			reference	=> $tool_data->{reference},
+			pipeline	=> 'gatk',
+			exts		=> [qw(.fa .dict .fa.fai)]
+			);
+		}
+
 	if ('star' eq $pipeline) {
 		if (!defined($tool_data->{reference_dir}))  { die("Must supply path to reference genome directory!"); }
 
@@ -97,7 +107,12 @@ sub error_checking {
 		}
 
 	if ('rsem' eq $pipeline) {
-		if (!defined($tool_data->{reference_dir}))  { die("Must supply path to reference genome directory!"); }
+		if (!defined($tool_data->{reference}))  { die("Must supply path/to/reference/stem !"); }
+		$is_ref_valid = validate_ref(
+			reference	=> $tool_data->{reference},
+			pipeline	=> 'rsem',
+			exts		=> [qw(.idx.fa .grp .transcripts.fa .seq .chrlist)]
+			);
 
 		my @strand_options = qw(none forward reverse);
 		if (!defined($tool_data->{strandedness})) {
@@ -127,6 +142,8 @@ sub validate_ref {
 
 	if ( ('bwa' eq $args{pipeline}) || ('gatk' eq $args{pipeline}) ) {
 		$ref_file_base = ($args{reference} =~ s/\.fa$//r);
+		} else {
+		$ref_file_base = $args{reference};
 		}
 
 	foreach my $ext (@{$args{exts}}) {
@@ -140,7 +157,8 @@ sub validate_ref {
 # function to set output/resume directory
 sub set_output_path {
 	my %args = (
-		tool_data => undef,
+		tool_data	=> undef,
+		pipeline	=> '',
 		@_
 		);
 
@@ -148,13 +166,22 @@ sub set_output_path {
 
 	my $path = $tool_data->{resume_dir};
 	my $resume = 'N';
+	my $new_path;
 
 	if (defined($path)) {
 		$resume = 'Y';
 		$path =~ s/\/$//;
 		} else {
 		$tool_data->{output_dir} =~ s/\/$//;
-		$path = join('/', $tool_data->{output_dir}, join('_', $tool_data->{date}, $tool_data->{tool}, $tool_data->{tool_version}));
+
+		if ('variant_call' eq $args{pipeline}) {
+			$new_path = join('_', $tool_data->{date}, 'Call_Variants');
+			} else {
+			# new output path will be tool dependent
+			$new_path = join('_', $tool_data->{date}, $tool_data->{tool}, $tool_data->{tool_version});
+			}
+
+		$path = join('/', $tool_data->{output_dir}, $new_path);
 		unless(-e $path) { make_path($path); }
 		}
 
@@ -194,7 +221,9 @@ sub write_script {
 
 	my @modules_list;
 	for (my $i=0; $i < scalar (@{$args{modules}}); $i++) {
-		$modules_list[$i] = "module load $args{modules}->[$i]";
+		unless('' eq $args{modules}->[$i]) {
+			$modules_list[$i] = "module load $args{modules}->[$i]";
+			}
 		}
 
 	my $modules_to_load = join("\n", @modules_list);
