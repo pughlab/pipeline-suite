@@ -5,8 +5,8 @@ aligner: bwamem
 ref_type: hg38
 reference: /cluster/projects/pughlab/references/bwa_index/hg38/genome.fa
 output_dir: /cluster/projects/pughlab/projects/PROJECTNAME/BWA/
+#resume_dir: /cluster/projects/pughlab/projects/PROJECTNAME/BWA/DATE_bwa_version/
 resume_dir:
-#resume_dir: /cluster/projects/pughlab/projects/PROJECTNAME/BWA/2020-02-28_bwa_0.7.15/
 seq_center: PMGC
 platform: Illumina
 HPC_driver: Slurm

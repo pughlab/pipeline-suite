@@ -4,13 +4,13 @@ tool_version: 3.8
 ref_type: hg38
 reference: /cluster/tools/data/genomes/human/hg38/iGenomes/Sequence/WholeGenomeFasta/genome.fa
 output_dir: /cluster/projects/pughlab/projects/PROJECTNAME/GATK/
-#resume_dir: /cluster/projects/pughlab/projects/PROJECTNAME/GATK/DATE_gatk_3.8/
+#resume_dir: /cluster/projects/pughlab/projects/PROJECTNAME/GATK/DATE_gatk_version/
 resume_dir:
 HPC_driver: Slurm
 samtools_version: 1.9
 picard_version: 2.6.0
 intervals_bed: /cluster/tools/data/genomes/human/hg38/SureSelect_Human_All_Exon_V5+UTRs_S04380219_Covered_for_bamqc_liftover_hg38.bed
-dbsnp:
+dbsnp: /path/to/dbSNP.vcf # this is optional
 del_intermediate: Y 
 create_output_yaml: Y
 dry_run: Y
