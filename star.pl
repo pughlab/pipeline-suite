@@ -172,9 +172,6 @@ sub main {
 
 	### PREAMBLE ######################################################################################
 
-	if (!defined($tool_config)) { die("No tool config file defined; please provide -t | --tool (ie, tool_config.yaml)"); }
-	if (!defined($data_config)) { die("No data config file defined; please provide -c | --config (ie, sample_config.yaml)"); }
-
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'star');
@@ -226,7 +223,8 @@ sub main {
 		my $patient_directory = join('/', $output_directory, $patient);
 		unless(-e $patient_directory) { make_path($patient_directory); }
 
-		my @final_outputs;
+		my $cleanup_cmd;
+		my (@final_outputs, @patient_jobs);
 
 		foreach my $sample (sort keys %{$smp_data->{$patient}}) {
 
@@ -235,27 +233,27 @@ sub main {
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
 
+			my $raw_directory = join('/', $sample_directory, 'fastq_links');
+			unless(-e $raw_directory) { make_path($raw_directory); }
+
+			my $temp_star = join('/', $sample_directory, 'intermediate_files');
+			$cleanup_cmd .= "rm -rf $temp_star";
+
 			my $tmp_directory = join('/', $sample_directory, 'TEMP');
 			unless(-e $tmp_directory) { make_path($tmp_directory); }
+			$cleanup_cmd .= "; rm -rf $tmp_directory";
 
 			my @lanes = keys %{$smp_data->{$patient}->{$sample}->{runlanes}};
-			my (@lane_intermediates, @lane_holds);
-
-			my $cleanup_cmd;
-			my @smp_jobs;
+#			my (@lane_intermediates, @lane_holds);
+			my (@r1_fastqs, @r2_fastqs);
 
 			foreach my $lane ( @lanes ) {
 
 				print "    LANE: $lane\n";
 
 				# make some directories
-				my $lane_directory = join('/', $sample_directory, $lane);
-				unless(-e $lane_directory) { make_path($lane_directory); }
-
-				my $raw_directory = join('/', $lane_directory, 'fastq_links');
-				unless(-e $raw_directory) { make_path($raw_directory); }
-
-				my $temp_star = join('/', $lane_directory, 'intermediate_files');
+#				my $lane_directory = join('/', $sample_directory, $lane);
+#				unless(-e $lane_directory) { make_path($lane_directory); }
 
 				# collect input files
 				my $r1 = $smp_data->{$patient}->{$sample}->{runlanes}->{$lane}->{R1};
@@ -265,89 +263,87 @@ sub main {
 				print "      R2: $r2\n\n";
 
 				my @tmp = split /\//, $r1;
-				my $link = join('/', $raw_directory, $tmp[-1]);
-				symlink($r1, $link);
-				$link =~ s/R1/R2/;
-				symlink($r2, $link);
+				my $raw_link = join('/', $raw_directory, $tmp[-1]);
+				symlink($r1, $raw_link);
+				$raw_link =~ s/R1/R2/;
+				symlink($r2, $raw_link);
 
-				my $filestem = join('_', $sample, $lane);
-				$run_id = '';
-
-				## run STAR on these fastqs
-				my $readgroup = format_readgroup(
-					subject		=> $patient,
-					sample		=> $sample,
-					lane		=> $lane,
-					lib		=> $sample,
-					platform	=> $tool_data->{platform}
-					);
-
-				my $star = get_star_command_devel(
-					r1		=> $r1,
-					r2		=> $r2,
-					reference_dir	=> $tool_data->{reference_dir},
-					readgroup	=> $readgroup,
-					tmp_dir		=> $temp_star
-					);
-
-				$star = 'cd ' . $lane_directory . ";\n" . $star ;
-				$cleanup_cmd .= "rm -rf $temp_star;\n";
-
-				# check if this should be run
-				if ( ('N' eq $resume) ||
-					(
-						('Y' eq missing_file(join('/', $lane_directory, 'Aligned.sortedByCoord.out.bam'))) || 
-						('Y' eq missing_file(join('/', $lane_directory, 'Aligned.toTranscriptome.out.bam')))
-						)
-					) {
-					# record command (in log directory) and then run job
-					print "Submitting job to run STAR...\n";
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> 'run_STAR_' . $filestem,
-						cmd	=> $star,
-						modules	=> [$star_version]
-						);
-
-					# initial test took 15 hours with 22G and 1 node
-					$run_id = submit_job(
-						jobname		=>'run_STAR_' . $filestem,
-						shell_command	=> $run_script,
-						dependencies	=> $run_id,
-						max_time	=> $tool_data->{parameters}->{star}->{time},
-						mem		=> $tool_data->{parameters}->{star}->{mem},
-						hpc_driver	=> $tool_data->{HPC_driver},
-						dry_run		=> $tool_data->{dry_run}
-						);
-
-					push @all_jobs, $run_id;
-					}
-				else {
-					print "Skipping alignment step because this was performed previously and output already exists...\n";
-					}
-
-				push @lane_intermediates, $lane_directory . '/Aligned.sortedByCoord.out.bam';
-				push @lane_holds, $run_id;
-		
+				# add to respective lists
+				push @r1_fastqs, $r1;
+				push @r2_fastqs, $r2;
 				}
 
+			# clear out run_id for this sample
+			$run_id = '';
+
+			## run STAR on these fastqs
+			my $readgroup = format_readgroup(
+				subject		=> $patient,
+				sample		=> $sample,
+				lane		=> join(',', @lanes),
+				lib		=> $sample,
+				platform	=> $tool_data->{platform}
+				);
+
+			
+			my $star = get_star_command_devel(
+				r1		=> join(',', @r1_fastqs),
+				r2		=> join(',', @r2_fastqs),
+				reference_dir	=> $tool_data->{reference_dir},
+				readgroup	=> $readgroup,
+				tmp_dir		=> $temp_star
+				);
+
+			$star = 'cd ' . $sample_directory . ";\n" . $star ;
+
+			# check if this should be run
+			if ( ('N' eq $resume) ||
+				(
+					('Y' eq missing_file(join('/', $sample_directory, 'Aligned.sortedByCoord.out.bam'))) || 
+					('Y' eq missing_file(join('/', $sample_directory, 'Aligned.toTranscriptome.out.bam')))
+					)
+				) {
+				# record command (in log directory) and then run job
+				print "Submitting job to run STAR...\n";
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_STAR_' . $sample,
+					cmd	=> $star,
+					modules	=> [$star_version]
+					);
+
+				# initial test took 15 hours with 22G and 1 node
+				$run_id = submit_job(
+					jobname		=>'run_STAR_' . $sample,
+					shell_command	=> $run_script,
+					dependencies	=> $run_id,
+					max_time	=> $tool_data->{parameters}->{star}->{time},
+					mem		=> $tool_data->{parameters}->{star}->{mem},
+					hpc_driver	=> $tool_data->{HPC_driver},
+					dry_run		=> $tool_data->{dry_run}
+					);
+
+			#	push @lane_holds, $run_id;
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
+				}
+			else {
+				print "Skipping alignment step because output already exists...\n";
+				}
+
+		#	push @lane_intermediates, $lane_directory . '/Aligned.sortedByCoord.out.bam';
+		
 			## mark duplicates
-			my $input_files = join(' INPUT=', @lane_intermediates);
+			my $input_file = join('/', $sample_directory, '/Aligned.sortedByCoord.out.bam');
 			my $dedup_bam = join('/', $patient_directory, $sample . '_sorted_markdup.bam');
 
 			my $markdup_cmd = get_markdup_command(
-				input		=> $input_files,
+				input		=> $input_file,
 				output		=> $dedup_bam,
 				java_mem	=> $tool_data->{parameters}->{markdup}->{java_mem},
 				tmp_dir		=> $tmp_directory
 				);
 
-			#if ('Y' eq $tool_data->{del_intermediate}) {
-			#	$cleanup_cmd .= "rm " . join(";\nrm ", @lane_intermediates) . "\n";
-			#	}
-
-			$cleanup_cmd .= "rm -rf $tmp_directory";
-			
 			# check if this should be run
 			if ( ('N' eq $resume) || ('Y' eq missing_file($dedup_bam . '.md5')) ) {
 
@@ -364,49 +360,74 @@ sub main {
 				$run_id = submit_job(
 					jobname		=> 'run_MarkDups_' . $sample,
 					shell_command	=> $run_script,
-					dependencies	=> join(',', @lane_holds),
+					dependencies	=> $run_id,
 					max_time	=> $tool_data->{parameters}->{markdup}->{time},
 					mem		=> $tool_data->{parameters}->{markdup}->{mem},
 					hpc_driver	=> $tool_data->{HPC_driver},
 					dry_run		=> $tool_data->{dry_run}
 					);
 
-				push @lane_holds, $run_id;
+				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
+
+				# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
+				# create a symlink for the final output in the TOP directory
+				my @final = split /\//, $dedup_bam;
+                                my $final_link = join('/', $tool_data->{output_dir}, $final[-1]);
+
+                                $run_script = write_script(
+                                        log_dir => $tmp_directory,
+                                        name    => 'create_symlink_' . $sample,
+                                        cmd     => "ln -s $dedup_bam $final_link"
+                                        );
+
+                                $run_id = submit_job(
+                                        jobname         => 'create_symlink_' . $sample,
+                                        shell_command   => $run_script,
+                                        dependencies    => $run_id,
+                                        mem             => '256M',
+                                        max_time        => '00:05:00',
+                                        hpc_driver      => $tool_data->{HPC_driver},
+                                        dry_run         => $tool_data->{dry_run}
+                                        );
+
+				push @patient_jobs, $run_id;
 				}
 			else {
-				print "Skipping mark dupicate step because this was performed previously and output already exists...\n";
+				print "Skipping mark duplicate step because output already exists...\n";
 				}
 
 			push @final_outputs, $dedup_bam;
-	
-			if ('Y' eq $tool_data->{del_intermediate}) {
+			}
 
-				print "Submitting job to clean up temporary/intermediate files...\n";
+		# once per patient, run cleanup
+		if ('Y' eq $tool_data->{del_intermediate}) {
 
-				# if all lane alignments + mark dup are successful, clean up tmp directories
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_cleanup_' . $sample,
-					cmd	=> $cleanup_cmd
-					);
+			print "Submitting job to clean up temporary/intermediate files...\n";
 
-				$run_id = submit_job(
-					jobname		=> 'run_cleanup_' . $sample,
-					shell_command	=> $run_script,
-					dependencies	=> join(',', @lane_holds),
-					max_time	=> '00:05:00',
-					mem		=> '256M',
-					hpc_driver	=> $tool_data->{HPC_driver},
-					dry_run		=> $tool_data->{dry_run}
-					);
-				}
+			# if all lane alignments + mark dup are successful, clean up tmp directories
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'run_cleanup_' . $patient,
+				cmd	=> $cleanup_cmd
+				);
+
+			$run_id = submit_job(
+				jobname		=> 'run_cleanup_' . $patient,
+				shell_command	=> $run_script,
+				dependencies	=> join(',', @patient_jobs),
+				max_time	=> '00:05:00',
+				mem		=> '256M',
+				hpc_driver	=> $tool_data->{HPC_driver},
+				dry_run		=> $tool_data->{dry_run}
+				);
 			}
 
 		print "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
 		print "---\n";
 		}
 
+	# if this is not a dry run, collect job metrics (exit status, mem, run time)
 	if ('N' eq $tool_data->{dry_run}) {
 
 		# collect job metrics
@@ -425,8 +446,8 @@ sub main {
 			jobname		=> 'output_job_metrics',
 			shell_command	=> $run_script,
 			dependencies	=> join(',', @all_jobs),
-			max_time	=> '0:10:00',
-			mem		=> '1G',
+			max_time	=> '0:05:00',
+			mem		=> '256M',
 			hpc_driver	=> $tool_data->{HPC_driver},
 			dry_run		=> $tool_data->{dry_run}
 			);
@@ -441,7 +462,7 @@ sub main {
 			"perl $cwd/shared/create_final_yaml.pl",
 			'-d', $output_directory,
 			'-o', $output_directory . '/bam_config.yaml',
-			'-p', '.bam$'
+			'-p', 'markdup.bam$'
 			);
 
 		$run_script = write_script(
@@ -480,5 +501,8 @@ GetOptions(
 	't|tool=s'      => \$tool_config,
 	'c|config=s'    => \$data_config
 	 );
+
+if (!defined($tool_config)) { die("No tool config file defined; please provide -t | --tool (ie, tool_config.yaml)"); }
+if (!defined($data_config)) { die("No data config file defined; please provide -c | --config (ie, sample_config.yaml)"); }
 
 main(tool_config => $tool_config, data_config => $data_config);

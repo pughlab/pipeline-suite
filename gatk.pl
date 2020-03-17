@@ -323,7 +323,7 @@ sub main {
 	# get sample data
 	my $smp_data = LoadFile($data_config);
 
-	my ($run_script, $run_id_patient, $run_id_sample, $link);
+	my ($run_script, $run_id_patient, $run_id_sample, $run_id_extra, $raw_link, $final_link);
 	my @all_jobs;
 
 	# process each patient in $smp_data
@@ -365,15 +365,15 @@ sub main {
 		my @input_bams;
 		foreach my $bam (@normal_paths) {
 			my @tmp = split /\//, $bam;
-			$link = join('/', $raw_directory, $tmp[-1]);
-			symlink($bam, $link);
+			$raw_link = join('/', $raw_directory, $tmp[-1]);
+			symlink($bam, $raw_link);
 			push @input_bams, $tmp[-1];
 			}
 
 		foreach my $bam (@tumour_paths) {
 			my @tmp = split /\//, $bam;
-			$link = join('/', $raw_directory, $tmp[-1]);
-			symlink($bam, $link);
+			$raw_link = join('/', $raw_directory, $tmp[-1]);
+			symlink($bam, $raw_link);
 			push @input_bams, $tmp[-1];
 			}
 
@@ -735,39 +735,50 @@ sub main {
 					modules	=> [$gatk]
 					);
 
+				my $n_cpus;
 				if ('dna' eq $data_type) {
-
-					$run_id_sample = submit_job(
-						jobname		=> 'run_apply_base_recalibration_' . $sample,
-						shell_command	=> $run_script,
-						dependencies	=> $run_id_sample,
-						max_time	=> $tool_data->{parameters}->{recalibrate}->{time}->{$type},
-						mem		=> $tool_data->{parameters}->{recalibrate}->{mem},
-						cpus_per_task	=> 8,
-						hpc_driver	=> $tool_data->{HPC_driver},
-						dry_run		=> $tool_data->{dry_run}
-						);
-
-					push @patient_jobs, $run_id_sample;
-					push @all_jobs, $run_id_sample;
-
+					$n_cpus = 8;
+					} elsif ('rna' eq $data_type) {
+					$n_cpus = 1;
 					}
 
-				elsif ('rna' eq $data_type) {
+				$run_id_sample = submit_job(
+					jobname		=> 'run_apply_base_recalibration_' . $sample,
+					shell_command	=> $run_script,
+					dependencies	=> $run_id_sample,
+					max_time	=> $tool_data->{parameters}->{recalibrate}->{time}->{$type},
+					mem		=> $tool_data->{parameters}->{recalibrate}->{mem},
+					cpus_per_task	=> $n_cpus,
+					hpc_driver	=> $tool_data->{HPC_driver},
+					dry_run		=> $tool_data->{dry_run}
+					);
 
-					$run_id_sample = submit_job(
-						jobname		=> 'run_apply_base_recalibration_' . $sample,
-						shell_command	=> $run_script,
-						dependencies	=> $run_id_sample,
-						max_time	=> $tool_data->{parameters}->{recalibrate}->{time}->{$type},
-						mem		=> $tool_data->{parameters}->{recalibrate}->{mem},
-						hpc_driver	=> $tool_data->{HPC_driver},
-						dry_run		=> $tool_data->{dry_run}
-						);
+				push @patient_jobs, $run_id_sample;
+				push @all_jobs, $run_id_sample;
 
-					push @patient_jobs, $run_id_sample;
-					push @all_jobs, $run_id_sample;
-					}
+				# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
+				# create a symlink for the final output in the TOP directory
+				my @final = split /\//, $recal_bam;
+				$final_link = join('/', $tool_data->{output_dir}, $final[-1]);
+
+				$run_script = write_script(
+					log_dir	=> $tmp_directory,
+					name	=> 'create_symlink_' . $sample,
+					cmd	=> "ln -s $recal_bam $final_link"
+					);
+
+				$run_id_sample = submit_job(
+					jobname		=> 'create_symlink_' . $sample,
+					shell_command	=> $run_script,
+					dependencies	=> $run_id_sample,
+					mem		=> '256M',
+					max_time	=> '00:05:00',
+					hpc_driver	=> $tool_data->{HPC_driver},
+					dry_run		=> $tool_data->{dry_run}
+					);
+
+				push @patient_jobs, $run_id_sample;
+				push @all_jobs, $run_id_sample;
 				}
 			else {
 				print "Skipping PrintReads (apply base recalibration) because this has already been completed!\n";
@@ -817,12 +828,12 @@ sub main {
 			cmd	=> $collect_metrics
 			);
 
-		$run_id_patient = submit_job(
+		$run_id_extra = submit_job(
 			jobname		=> 'output_job_metrics',
 			shell_command	=> $run_script,
 			dependencies	=> join(',', @all_jobs),
-			max_time	=> '0:10:00',
-			mem		=> '1G',
+			max_time	=> '0:05:00',
+			mem		=> '256M',
 			hpc_driver	=> $tool_data->{HPC_driver},
 			dry_run		=> $tool_data->{dry_run}
 			);
@@ -847,7 +858,7 @@ sub main {
 			modules	=> ['perl']
 			);
 
-		$run_id_patient = submit_job(
+		$run_id_extra = submit_job(
 			jobname		=> 'output_final_yaml',
 			shell_command	=> $run_script,
 			dependencies	=> join(',', @all_jobs),

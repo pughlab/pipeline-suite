@@ -208,7 +208,7 @@ sub main {
 	# get sample data
 	my $smp_data = LoadFile($data_config);
 
-	my ($run_script, $run_id, $link);
+	my ($run_script, $run_id, $run_id_extra, $raw_link, $final_link);
 	my @all_jobs;
 
 	# process each sample in $smp_data
@@ -232,9 +232,10 @@ sub main {
 
 			my $tmp_directory = join('/', $sample_directory, 'TEMP');
 			unless(-e $tmp_directory) { make_path($tmp_directory); }
+			my $cleanup_cmd = "rm -rf $tmp_directory";
 
 			my @libraries = keys %{$smp_data->{$patient}->{$sample}->{libraries}};
-			my (@lane_intermediates, @lane_holds);
+			my (@lane_intermediates, @lane_holds, @smp_jobs);
 
 			# determine sample type
 			$type = $smp_data->{$patient}->{$sample}->{type};
@@ -243,12 +244,16 @@ sub main {
 
 				print "    LIBRARY: $lib\n";
 
+			#	my $lib_directory = join('/', $sample_directory, $lib);
+			#	unless(-e $lib_directory) { make_path($lib_directory); }
+
 				my @lanes = keys %{$smp_data->{$patient}->{$sample}->{libraries}->{$lib}->{runlanes}};
 
 				foreach my $lane ( @lanes ) {
 
 					print "      LANE: $lane\n";
 
+				#	my $lane_directory = join('/', $lib_directory, $lane);
 					my $lane_directory = join('/', $sample_directory, $lane);
 					unless(-e $lane_directory) { make_path($lane_directory); }
 
@@ -263,13 +268,13 @@ sub main {
 					print "	R2: $r2\n\n";
 
 					my @tmp = split /\//, $r1;
-					$link = join('/', $raw_directory, $tmp[-1]);
-					symlink($r1, $link);
-					$link =~ s/R1/R2/;
-					symlink($r2, $link);
+					$raw_link = join('/', $raw_directory, $tmp[-1]);
+					symlink($r1, $raw_link);
+					$raw_link =~ s/R1/R2/;
+					symlink($r2, $raw_link);
 
 					my $filestem = join('_', $sample, $lane);
-					$run_id = '';
+					($run_id, $run_id_extra) = '';
 
 					# run BWA-MEM on these fastqs
 					my $readgroup = set_readgroup(
@@ -319,6 +324,7 @@ sub main {
 							dry_run		=> $tool_data->{dry_run}
 							);
 
+						push @smp_jobs, $run_id;
 						push @all_jobs, $run_id;
 						}
 					else {
@@ -359,6 +365,7 @@ sub main {
 							dry_run		=> $tool_data->{dry_run}
 							);
 
+						push @smp_jobs, $run_id;
 						push @all_jobs, $run_id;
 						}
 					else {
@@ -372,7 +379,7 @@ sub main {
 					$index_lane_cmd = 'cd ' . $lane_directory . ";\n" . $index_lane_cmd;
 
 					if ('Y' eq $tool_data->{del_intermediate}) {
-						$index_lane_cmd = $index_lane_cmd . ";\nrm $filestem.sam";
+						$cleanup_cmd .= ";\nrm $lane_directory/$filestem.sam";
 						}
 
 					# check if this should be run
@@ -401,6 +408,7 @@ sub main {
 							dry_run		=> $tool_data->{dry_run}
 							);
 
+						push @smp_jobs, $run_id;
 						push @all_jobs, $run_id;
 						}
 					else {
@@ -409,6 +417,8 @@ sub main {
 
 					push @lane_intermediates, $lane_directory . '/' . $filestem . '.bam';
 					push @lane_holds, $run_id;
+					push @smp_jobs, $run_id;
+					push @all_jobs, $run_id;
 					}
 				}
 
@@ -443,7 +453,7 @@ sub main {
 				}
 
 			if ('Y' eq $tool_data->{del_intermediate}) {
-				$merge_cmd .= ";\nrm " . join(";\nrm ", @lane_intermediates) . "\n";
+				$cleanup_cmd .= ";\nrm " . join(";\nrm ", @lane_intermediates) . "\n";
 				}
 
 			# check if this should be run
@@ -468,10 +478,54 @@ sub main {
 					dry_run		=> $tool_data->{dry_run}
 					);
 
+				push @smp_jobs, $run_id;
 				push @all_jobs, $run_id;
+
+				# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
+				# create a symlink for the final output in the TOP directory
+				my @final = split /\//, $smp_output;
+				$final_link = join('/', $tool_data->{output_dir}, $final[-1]);
+
+				$run_script = write_script(
+					log_dir => $tmp_directory,
+					name	=> 'create_symlink_' . $sample,
+					cmd	=> "ln -s $smp_output $final_link"
+					);
+
+				$run_id_extra = submit_job(
+					jobname		=> 'create_symlink_' . $sample,
+					shell_command	=> $run_script,
+					dependencies	=> $run_id,
+					mem		=> '256M',
+					max_time	=> '00:05:00',
+					hpc_driver	=> $tool_data->{HPC_driver},
+					dry_run		=> $tool_data->{dry_run}	
+					);
 				}
 			else {
 				print "Skipping mark dupicate step because this was performed previously...\n";	
+				}
+
+			# clean up/remove intermediate files (once per sample)
+			if ('Y' eq $tool_data->{del_intermediate}) {
+
+				print "Submitting job to clean up temporary/intermediate files...\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_cleanup_' . $sample,
+					cmd	=> $cleanup_cmd
+					);
+
+				$run_id_extra = submit_job(
+					jobname		=> 'run_cleanup_' . $sample,
+					shell_command	=> $run_script,
+					dependencies	=> join(',', @smp_jobs),
+					max_time	=> '00:05:00',
+					mem		=> '256M',
+					hpc_driver	=> $tool_data->{HPC_driver},
+					dry_run		=> $tool_data->{dry_run}
+					);
 				}
 
 			push @final_outputs, $smp_output;
@@ -481,7 +535,9 @@ sub main {
 		print "---\n";
 		}
 
+	# if this is not a dry run, collect job metrics (exit status, mem, run time)
 	if ('N' eq $tool_data->{dry_run}) {
+
 		# collect job stats
 		my $collect_metrics = collect_job_stats(
 			job_ids	=> join(',', @all_jobs),
@@ -498,8 +554,8 @@ sub main {
 			jobname		=> 'output_job_metrics',
 			shell_command	=> $run_script,
 			dependencies	=> join(',', @all_jobs),
-			max_time	=> '0:10:00',
-			mem		=> '1G',
+			max_time	=> '0:05:00',
+			mem		=> '256M',
 			hpc_driver	=> $tool_data->{HPC_driver},
 			dry_run		=> $tool_data->{dry_run}
 			);
@@ -514,7 +570,7 @@ sub main {
 			"perl $cwd/shared/create_final_yaml.pl",
 			'-d', $output_directory,
 			'-o', $output_directory . '/bam_config.yaml',
-			'-p', '.bam$'
+			'-p', '.bam$' # *merged.bam|*markdup.bam
 			);
 
 		$run_script = write_script(
