@@ -197,30 +197,46 @@ sub main{
 					log_dir	=> $log_directory,
 					name	=> 'run_RSEM_' . $sample,
 					cmd	=> $rsem_cmd,
-					modules	=> [$rsem]
+					modules	=> [$rsem],
+					dependencies	=> $run_id,
+					max_time	=> $tool_data->{parameters}->{rsem}->{time},
+					mem		=> $tool_data->{parameters}->{rsem}->{mem},
+					hpc_driver	=> $tool_data->{HPC_driver}
 					);
 
 				$run_id = submit_job(
 					jobname		=> 'run_RSEM_' . $sample,
 					shell_command	=> $run_script,
-					dependencies	=> $run_id,
-					max_time	=> $tool_data->{parameters}->{rsem}->{time},
-					mem		=> $tool_data->{parameters}->{rsem}->{mem},
 					hpc_driver	=> $tool_data->{HPC_driver},
 					dry_run		=> $tool_data->{dry_run}
 					);
 
-			#	push @smp_jobs, $run_id;
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 
 				# IF THIS STEP IS SUCCESSFULLY RUN,	
 				# create a symlink for the final output in the TOP directory
+				my @final = split /\//, $genes_file;
+				my $link_genes = $final[-1];
+				my $link_isoforms = $final[-1];
+				$link_isoforms =~ s/genes/isoforms/;
+
 				my $links_cmd = join("\n",
 					"cd $patient_directory",
 					"ln -s $genes_file .",
 					"ln -s $isoforms_file .",
-					"cd $tool_data->{output_dir}",
+					"cd $tool_data->{output_dir}"
+					);
+
+				if (-l $link_genes) {
+					unlink $link_genes or die "Failed to remove previous symlink: $link_genes;\n";
+					}
+				if (-l $link_isoforms) {
+					unlink $link_isoforms or die "Failed to remove previous symlink: $link_isoforms;";
+					}
+
+				$links_cmd .= "\n";
+				$links_cmd .= join("\n",
 					"ln -s $genes_file .",
 					"ln -s $isoforms_file ."
 					);
@@ -228,15 +244,16 @@ sub main{
 				$run_script = write_script(
 					log_dir	=> $log_directory,
 					name	=> 'create_symlink_' . $sample,
-					cmd	=> $links_cmd
+					cmd	=> $links_cmd,
+					dependencies	=> $run_id,
+					mem		=> '256M',
+					max_time	=> '00:05:00',
+					hpc_driver	=> $tool_data->{HPC_driver}					
 					);
 
 				$run_id = submit_job(
 					jobname		=> 'create_symlinks_' . $sample,
 					shell_command	=> $run_script,
-					dependencies	=> $run_id,
-					mem		=> '256M',
-					max_time	=> '00:05:00',
 					hpc_driver	=> $tool_data->{HPC_driver},
 					dry_run		=> $tool_data->{dry_run}
 					);
@@ -254,18 +271,30 @@ sub main{
 		# run cleanup, once per patient
 		if ('Y' eq $tool_data->{del_intermediate}) {
 
+			print "Submitting job to clean up temporary/intermediate files...\n";
+
+			# make sure final output exists before removing intermediate files!
+			$cleanup_cmd = join("\n",
+				"if [ -s " . join(" ] && [ -s ", @final_outputs) . " ]; then",
+				$cleanup_cmd,
+				"else",
+				'echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
+				"fi"
+				);
+
 			$run_script = write_script(
 				log_dir	=> $log_directory,
 				name	=> 'run_cleanup_' . $patient,
-				cmd	=> $cleanup_cmd
+				cmd	=> $cleanup_cmd,
+				dependencies	=> join(',', @patient_jobs),
+				max_time	=> '00:05:00',
+				mem		=> '256M',
+				hpc_driver	=> $tool_data->{HPC_driver}
 				);
 
 			$run_id = submit_job(
 				jobname		=> 'run_cleanup_' . $patient,
 				shell_command	=> $run_script,
-				dependencies	=> join(',', @patient_jobs),
-				max_time	=> '00:05:00',
-				mem		=> '256M',
 				hpc_driver	=> $tool_data->{HPC_driver},
 				dry_run		=> $tool_data->{dry_run}
 				);
@@ -287,15 +316,16 @@ sub main{
 		$run_script = write_script(
 			log_dir	=> $log_directory,
 			name	=> 'output_job_metrics_' . $run_count,
-			cmd	=> $collect_metrics
+			cmd	=> $collect_metrics,
+			dependencies	=> join(',', @all_jobs),
+			max_time	=> '0:05:00',
+			mem		=> '256M',
+			hpc_driver	=> $tool_data->{HPC_driver}
 			);
 
 		$run_id = submit_job(
 			jobname		=> 'output_job_metrics',
 			shell_command	=> $run_script,
-			dependencies	=> join(',', @all_jobs),
-			max_time	=> '0:05:00',
-			mem		=> '256M',
 			hpc_driver	=> $tool_data->{HPC_driver},
 			dry_run		=> $tool_data->{dry_run}
 			);
@@ -324,15 +354,16 @@ sub main{
 			log_dir	=> $log_directory,
 			name	=> 'output_final_yaml',
 			cmd	=> $output_yaml_cmd,
-			modules	=> ['perl']
+			modules	=> ['perl'],
+			dependencies	=> join(',', @all_jobs),
+			max_time	=> '00:10:00',
+			mem		=> '1G',
+			hpc_driver	=> $tool_data->{HPC_driver}
 			);
 
 		$run_id = submit_job(
 			jobname		=> 'output_final_yaml',
 			shell_command	=> $run_script,
-			dependencies	=> join(',', @all_jobs),
-			max_time	=> '00:10:00',
-			mem		=> '1G',
 			hpc_driver	=> $tool_data->{HPC_driver},
 			dry_run		=> $tool_data->{dry_run}
 			);

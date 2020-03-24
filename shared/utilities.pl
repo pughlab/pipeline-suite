@@ -69,11 +69,7 @@ sub error_checking {
 			);
 		}
 
-	if ('gatk' eq $pipeline) {
-
-		if ( ('dna' eq $args{data_type}) && (!defined($tool_data->{intervals_bed})) ) {
-			print "WARNING: no target intervals provided; if this is exome data, please provide the target regions!\n";
-			}
+	if ( ('gatk' eq $pipeline) || ('variant_call' eq $pipeline) ) {
 
 		if (!defined($tool_data->{reference})) { die("Must supply path to reference genome!"); }
 		$is_ref_valid = validate_ref(
@@ -81,16 +77,13 @@ sub error_checking {
 			pipeline	=> $pipeline,
 			exts		=> [qw(.fa .dict .fa.fai)]
 			);
-		}
 
-	if (('variant_call' eq $pipeline) && ('Y' eq $tool_data->{parameters}->{haplotype_call}->{run})) {
-
-		if (!defined($tool_data->{reference})) { die("Must supply path to reference genome!"); }
-		$is_ref_valid = validate_ref(
-			reference	=> $tool_data->{reference},
-			pipeline	=> 'gatk',
-			exts		=> [qw(.fa .dict .fa.fai)]
-			);
+		if ('gatk' eq $pipeline) {
+			if ( ('dna' eq $args{data_type}) && (!defined($tool_data->{intervals_bed})) ) {
+				print "WARNING: no target intervals provided.\n";
+				print ">>If this is exome data, please provide the target regions!\n";
+				}
+			}
 		}
 
 	if ('star' eq $pipeline) {
@@ -166,7 +159,7 @@ sub set_output_path {
 
 	my $path = $tool_data->{resume_dir};
 	my $resume = 'N';
-	my $new_path;
+	my $new_dir;
 
 	if (defined($path)) {
 		$resume = 'Y';
@@ -174,14 +167,10 @@ sub set_output_path {
 		} else {
 		$tool_data->{output_dir} =~ s/\/$//;
 
-		if ('variant_call' eq $args{pipeline}) {
-			$new_path = join('_', $tool_data->{date}, 'Call_Variants');
-			} else {
-			# new output path will be tool dependent
-			$new_path = join('_', $tool_data->{date}, $tool_data->{tool}, $tool_data->{tool_version});
-			}
-
-		$path = join('/', $tool_data->{output_dir}, $new_path);
+		# new output path will be tool dependent
+		$new_dir = join('_', $tool_data->{date}, $tool_data->{tool}, $tool_data->{tool_version});
+		
+		$path = join('/', $tool_data->{output_dir}, $new_dir);
 		unless(-e $path) { make_path($path); }
 		}
 
@@ -209,15 +198,24 @@ sub missing_file {
 # save commands to shell script in log directory
 sub write_script {
 	my %args = (
-		log_dir	=> undef,
-		name	=> undef,
-		cmd	=> undef,
-		modules => [],
+		log_dir		=> undef,
+		name		=> undef,
+		cmd		=> undef,
+		modules 	=> [],
+		dependencies	=> '',
+		max_time	=> undef,
+		mem		=> undef,
+		cpus_per_task	=> 1,
+		hpc_driver	=> 'slurm',
 		@_
 		);
 
 	my $cmd_log_dir = join('/', $args{log_dir}, $args{name});
 	unless(-e $cmd_log_dir) { make_path($cmd_log_dir); }
+
+	# make a directory for error/log output
+	my $job_log_dir = join('/', $cmd_log_dir, $args{hpc_driver});
+	unless(-e $job_log_dir) { make_path($job_log_dir); }
 
 	my @modules_list;
 	for (my $i=0; $i < scalar (@{$args{modules}}); $i++) {
@@ -226,11 +224,31 @@ sub write_script {
 			}
 		}
 
-	my $modules_to_load = join("\n", @modules_list);
+	my $modules_to_load = join(";\n", @modules_list);
 
 	my $script = join('/', $cmd_log_dir, 'script.sh');
 	open (my $fh_script, '>', $script) or Carp::croak("Cannot open file $script: $!");
-	print $fh_script "#!/bin/bash\n"; 
+	print $fh_script "#!/bin/bash\n";
+
+	# add in SBATCH parameters
+	if ('slurm' eq $args{hpc_driver}) {
+
+		my $sbatch_params = "#SBATCH " . join("\n#SBATCH ",
+			'--job-name="' . $args{name} . '"',
+			'-D ' . $job_log_dir,
+			'-t ' . $args{max_time},
+			'--mem ' . $args{mem},
+			'-c ' . $args{cpus_per_task}
+			);
+
+		if ('' ne $args{dependencies}) {
+			$sbatch_params .= "\n#SBATCH --dependency=afterok:" . $args{dependencies};
+			$sbatch_params .= "\n#SBATCH --kill-on-invalid-dep=yes";
+			}
+
+		print $fh_script $sbatch_params . "\n\n";
+		}
+
 	print $fh_script $modules_to_load . "\n";
 	print $fh_script $args{cmd};
 	close($fh_script);
@@ -243,44 +261,17 @@ sub submit_job {
 	my %args = (
 		jobname		=> undef,
 		shell_command	=> undef,
-		dependencies	=> undef,
-		max_time	=> undef,
-		mem		=> undef,
-		cpus_per_task	=> 1,
 		dry_run		=> 'N',
 		hpc_driver	=> 'slurm',
 		@_
 		);
 
-	my $jobdir = $args{shell_command};
-	$jobdir =~ s/\/script.sh//;
-
-	# make a directory for error/log output 
-	my $job_log_dir = join('/', $jobdir, $args{hpc_driver});
-	unless(-e $job_log_dir) { make_path($job_log_dir); }
-
 	my $job_command;
-	if ('slurm' eq $args{hpc_driver}) {
-		$job_command = join(' ',
-			'sbatch',
-			'--job-name', $args{jobname},
-			#'--mail-type=BEGIN,END,FAIL', # doesn't seem to work?
-			'-p all',
-			'-t', $args{max_time},
-			'--mem', $args{mem},
-			'-D', $job_log_dir,
-			'-c', $args{cpus_per_task}
-			);
-
-		if ('' ne $args{dependencies}) {
-			$job_command = $job_command . ' --dependency=afterok:' . $args{dependencies};
-			$job_command .= ' --kill-on-invalid-dep=yes';
-			}
-		} else {
+	unless('slurm' eq $args{hpc_driver}) {
 		die("Unrecognized HPC driver: currently only compatible with slurm");
 		}
 
-	$job_command = join(' ', $job_command, $args{shell_command});
+	$job_command = "sbatch " . $args{shell_command};
 	print "\nCOMMAND IS: " . $job_command . "\n";
 
 	my $job_id = $args{jobname};

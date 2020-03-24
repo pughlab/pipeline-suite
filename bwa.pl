@@ -165,9 +165,6 @@ sub main {
 
 	### PREAMBLE ######################################################################################
 
-	if (!defined($tool_config)) { die("No tool config file defined; please provide -t | --tool (ie, tool_config.yaml)"); }
-	if (!defined($data_config)) { die("No data config file defined; please provide -c | --config (ie, sample_config.yaml)"); }
-
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'bwa');
@@ -310,16 +307,16 @@ sub main {
 							log_dir => $log_directory,
 							name	=> 'run_bwa_mem_' . $filestem,
 							cmd	=> $bwa,
-							modules => [$bwa_version, $samtools]
+							modules => [$bwa_version, $samtools],
+							max_time	=> $tool_data->{parameters}->{bwa}->{time}->{$type},
+							mem		=> $tool_data->{parameters}->{bwa}->{mem}->{$type},
+							cpus_per_task	=> 4,
+							hpc_driver	=> $tool_data->{HPC_driver}
 							);
 
 						$run_id = submit_job(
 							jobname		=> 'run_bwa_mem_' . $filestem,
 							shell_command	=> $run_script,
-							dependencies	=> $run_id,
-							max_time	=> $tool_data->{parameters}->{bwa}->{time}->{$type},
-							mem		=> $tool_data->{parameters}->{bwa}->{mem}->{$type},
-							cpus_per_task	=> 4,
 							hpc_driver	=> $tool_data->{HPC_driver},
 							dry_run		=> $tool_data->{dry_run}
 							);
@@ -347,20 +344,22 @@ sub main {
 							)
 						) {
 						# record command (in log directory) and then run job
-						print "Submitting job to sort bam...\n";
+						print "Submitting job to sort bam...\n"
+;
 						$run_script = write_script(
 							log_dir	=> $log_directory,
 							name	=> 'run_sort_sam_' . $filestem,
 							cmd	=> $sort_cmd,
-							modules	=> [$samtools]
+							modules	=> [$samtools],
+							dependencies	=> $run_id,
+							max_time	=> $tool_data->{parameters}->{sort}->{time}->{$type},
+							mem		=> $tool_data->{parameters}->{sort}->{mem}->{$type},
+							hpc_driver	=> $tool_data->{HPC_driver}
 							);
 
 						$run_id = submit_job(
 							jobname		=> 'run_sort_sam_' . $filestem,
 							shell_command	=> $run_script,
-							dependencies	=> $run_id,
-							max_time	=> $tool_data->{parameters}->{sort}->{time}->{$type},
-							mem		=> $tool_data->{parameters}->{sort}->{mem}->{$type},
 							hpc_driver	=> $tool_data->{HPC_driver},
 							dry_run		=> $tool_data->{dry_run}
 							);
@@ -391,19 +390,21 @@ sub main {
 						) {
 						# record command (in log directory) and then run job
 						print "Submitting job to index bam...\n";
+
 						$run_script = write_script(
 							log_dir	=> $log_directory,
 							name	=> 'run_bam_index_' . $filestem,
 							cmd	=> $index_lane_cmd,
-							modules	=> [$samtools]
+							modules	=> [$samtools],
+							dependencies	=> $run_id,
+							max_time	=> $tool_data->{parameters}->{index}->{time}->{$type},
+							mem		=> $tool_data->{parameters}->{index}->{mem}->{$type},
+							hpc_driver	=> $tool_data->{HPC_driver}
 							);
 
 						$run_id = submit_job(
 							jobname		=> 'run_bam_index_' . $filestem,
 							shell_command	=> $run_script,
-							dependencies	=> $run_id,
-							max_time	=> $tool_data->{parameters}->{index}->{time}->{$type},
-							mem		=> $tool_data->{parameters}->{index}->{mem}->{$type},
 							hpc_driver	=> $tool_data->{HPC_driver},
 							dry_run		=> $tool_data->{dry_run}
 							);
@@ -458,6 +459,21 @@ sub main {
 
 			# check if this should be run
 			if ( ('N' eq $resume) || ('Y' eq missing_file($smp_output)) ) {
+
+				# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
+				# create a symlink for the final output in the TOP directory
+				my @final = split /\//, $smp_output;
+				$final_link = join('/', $tool_data->{output_dir}, $final[-1]);
+
+				if (-l $final_link) {
+					unlink $final_link or die "Failed to remove previous symlink: $final_link;\n";
+					}
+
+				my $link_cmd = "echo Creating new symlink...";
+				$link_cmd .= "\nln -s $smp_output $final_link";
+
+				$merge_cmd .= "\n" . $link_cmd;
+
 				# record command (in log directory) and then run job
 				print "Submitting job to merge lanes and mark dupilcates...\n";
 
@@ -465,70 +481,60 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> $jobname,
 					cmd	=> $merge_cmd,
-					modules	=> [$picard]
+					modules	=> [$picard],
+					dependencies	=> join(',', @lane_holds),
+					mem 		=> $tool_data->{parameters}->{merge}->{mem}->{$type},
+					max_time 	=> $tool_data->{parameters}->{merge}->{time}->{$type},
+					hpc_driver	=> $tool_data->{HPC_driver}
 					);
 
 				$run_id = submit_job(
 					jobname		=> $jobname,
 					shell_command	=> $run_script,
-					dependencies	=> join(',', @lane_holds),
-					mem 		=> $tool_data->{parameters}->{merge}->{mem}->{$type},
-					max_time 	=> $tool_data->{parameters}->{merge}->{time}->{$type},
 					hpc_driver	=> $tool_data->{HPC_driver},
 					dry_run		=> $tool_data->{dry_run}
 					);
 
 				push @smp_jobs, $run_id;
 				push @all_jobs, $run_id;
-
-				# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
-				# create a symlink for the final output in the TOP directory
-				my @final = split /\//, $smp_output;
-				$final_link = join('/', $tool_data->{output_dir}, $final[-1]);
-
-				$run_script = write_script(
-					log_dir => $tmp_directory,
-					name	=> 'create_symlink_' . $sample,
-					cmd	=> "ln -s $smp_output $final_link"
-					);
-
-				$run_id_extra = submit_job(
-					jobname		=> 'create_symlink_' . $sample,
-					shell_command	=> $run_script,
-					dependencies	=> $run_id,
-					mem		=> '256M',
-					max_time	=> '00:05:00',
-					hpc_driver	=> $tool_data->{HPC_driver},
-					dry_run		=> $tool_data->{dry_run}	
-					);
 				}
 			else {
 				print "Skipping mark dupicate step because this was performed previously...\n";	
 				}
+
+			push @final_outputs, $smp_output;
 
 			# clean up/remove intermediate files (once per sample)
 			if ('Y' eq $tool_data->{del_intermediate}) {
 
 				print "Submitting job to clean up temporary/intermediate files...\n";
 
+				# make sure final output exists before removing intermediate files!
+				$cleanup_cmd = join("\n",
+					"if [ -s $smp_output ]; then",
+					$cleanup_cmd,
+					"else",
+					'echo "FINAL OUTPUT: $smp_output is missing; not removing intermediates"',
+					"fi"
+					);
+
 				$run_script = write_script(
 					log_dir	=> $log_directory,
 					name	=> 'run_cleanup_' . $sample,
-					cmd	=> $cleanup_cmd
+					cmd	=> $cleanup_cmd,
+					dependencies	=> join(',', @smp_jobs),
+					max_time	=> '00:05:00',
+					mem		=> '256M',
+					hpc_driver	=> $tool_data->{HPC_driver}
 					);
 
 				$run_id_extra = submit_job(
 					jobname		=> 'run_cleanup_' . $sample,
 					shell_command	=> $run_script,
-					dependencies	=> join(',', @smp_jobs),
-					max_time	=> '00:05:00',
-					mem		=> '256M',
 					hpc_driver	=> $tool_data->{HPC_driver},
 					dry_run		=> $tool_data->{dry_run}
 					);
 				}
-
-			push @final_outputs, $smp_output;
 			}
 
 		print "FINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
@@ -547,15 +553,16 @@ sub main {
 		$run_script = write_script(
 			log_dir	=> $log_directory,
 			name	=> 'output_job_metrics_' . $run_count,
-			cmd	=> $collect_metrics
+			cmd	=> $collect_metrics,
+			dependencies	=> join(',', @all_jobs),
+			max_time	=> '0:05:00',
+			mem		=> '256M',
+			hpc_driver	=> $tool_data->{HPC_driver}
 			);
 
 		$run_id = submit_job(
 			jobname		=> 'output_job_metrics',
 			shell_command	=> $run_script,
-			dependencies	=> join(',', @all_jobs),
-			max_time	=> '0:05:00',
-			mem		=> '256M',
 			hpc_driver	=> $tool_data->{HPC_driver},
 			dry_run		=> $tool_data->{dry_run}
 			);
@@ -577,15 +584,16 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'output_final_yaml',
 			cmd	=> $output_yaml_cmd,
-			modules	=> ['perl']
+			modules	=> ['perl'],
+			dependencies	=> join(',', @all_jobs),
+			max_time	=> '0:10:00',
+			mem		=> '1G',
+			hpc_driver	=> $tool_data->{HPC_driver}
 			);
 
 		$run_id = submit_job(
 			jobname		=> 'output_final_yaml',
 			shell_command	=> $run_script,
-			dependencies	=> join(',', @all_jobs),
-			max_time	=> '0:10:00',
-			mem		=> '1G',
 			hpc_driver	=> $tool_data->{HPC_driver},
 			dry_run		=> $tool_data->{dry_run}
 			);
@@ -609,5 +617,8 @@ GetOptions(
 	't|tool=s'	=> \$tool_config,
 	'c|config=s'    => \$data_config
 	);
+
+if (!defined($tool_config)) { die("No tool config file defined; please provide -t | --tool (ie, tool_config.yaml)"); }
+if (!defined($data_config)) { die("No data config file defined; please provide -c | --config (ie, sample_config.yaml)"); }
 
 main(tool_config => $tool_config, data_config => $data_config);

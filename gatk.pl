@@ -417,16 +417,17 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> 'run_indel_realigner_target_creator_' . $patient,
 					cmd	=> $stage1_cmd,
-					modules	=> [$gatk]
+					modules	=> [$gatk],
+					dependencies	=> $run_id_patient,
+					max_time	=> $tool_data->{parameters}->{target_creator}->{time},
+					mem		=> $tool_data->{parameters}->{target_creator}->{mem},
+					cpus_per_task	=> scalar(@input_bams),
+					hpc_driver	=> $tool_data->{HPC_driver}
 					);
 
 				$run_id_patient = submit_job(
 					jobname		=> 'run_indel_realigner_target_creator_' . $patient,
 					shell_command	=> $run_script,
-					dependencies	=> $run_id_patient,
-					max_time	=> $tool_data->{parameters}->{target_creator}->{time},
-					mem		=> $tool_data->{parameters}->{target_creator}->{mem},
-					cpus_per_task	=> scalar(@input_bams),
 					hpc_driver	=> $tool_data->{HPC_driver},
 					dry_run		=> $tool_data->{dry_run}
 					);
@@ -471,15 +472,16 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> 'run_indel_realigner_' . $patient,
 					cmd	=> $stage2_cmd,
-					modules	=> [$gatk]
+					modules	=> [$gatk],
+					dependencies	=> $run_id_patient,
+					max_time	=> $tool_data->{parameters}->{realign}->{time},
+					mem		=> $tool_data->{parameters}->{realign}->{mem},
+					hpc_driver	=> $tool_data->{HPC_driver}
 					);
 
 				$run_id_patient = submit_job(
 					jobname		=> 'run_indel_realigner_' . $patient,
 					shell_command	=> $run_script,
-					dependencies	=> $run_id_patient,
-					max_time	=> $tool_data->{parameters}->{realign}->{time},
-					mem		=> $tool_data->{parameters}->{realign}->{mem},
 					hpc_driver	=> $tool_data->{HPC_driver},
 					dry_run		=> $tool_data->{dry_run}
 					);
@@ -534,15 +536,16 @@ sub main {
 						log_dir	=> $log_directory,
 						name	=> 'run_split_cigar_' . $sample,
 						cmd	=> $split_cmd,
-						modules	=> [$gatk]
+						modules	=> [$gatk],
+						dependencies	=> $run_id_sample,
+						max_time	=> $tool_data->{parameters}->{split_cigar}->{time},
+						mem		=> $tool_data->{parameters}->{split_cigar}->{mem},
+						hpc_driver	=> $tool_data->{HPC_driver}
 						);
 
 					$run_id_sample = submit_job(
 						jobname		=> 'run_split_cigar_' . $sample,
 						shell_command	=> $run_script,
-						dependencies	=> $run_id_sample,
-						max_time	=> $tool_data->{parameters}->{split_cigar}->{time},
-						mem		=> $tool_data->{parameters}->{split_cigar}->{mem},
 						hpc_driver	=> $tool_data->{HPC_driver},
 						dry_run		=> $tool_data->{dry_run}
 						);
@@ -576,15 +579,16 @@ sub main {
 						log_dir	=> $log_directory,
 						name	=> 'run_indel_realigner_target_creator_' . $sample,
 						cmd	=> $stage1_cmd,
-						modules	=> [$gatk]
+						modules	=> [$gatk],
+						dependencies	=> $run_id_sample,
+						max_time	=> $tool_data->{parameters}->{target_creator}->{time},
+						mem		=> $tool_data->{parameters}->{target_creator}->{mem},
+						hpc_driver	=> $tool_data->{HPC_driver}
 						);
 
 					$run_id_sample = submit_job(
 						jobname		=> 'run_indel_realigner_target_creator_' . $sample,
 						shell_command	=> $run_script,
-						dependencies	=> $run_id_sample,
-						max_time	=> $tool_data->{parameters}->{target_creator}->{time},
-						mem		=> $tool_data->{parameters}->{target_creator}->{mem},
 						hpc_driver	=> $tool_data->{HPC_driver},
 						dry_run		=> $tool_data->{dry_run}
 						);
@@ -621,15 +625,16 @@ sub main {
 						log_dir	=> $log_directory,
 						name	=> 'run_indel_realigner_' . $sample,
 						cmd	=> $stage2_cmd,
-						modules	=> [$gatk]
+						modules	=> [$gatk],
+						dependencies	=> $run_id_sample,
+						max_time	=> $tool_data->{parameters}->{realign}->{time},
+						mem		=> $tool_data->{parameters}->{realign}->{mem},
+						hpc_driver	=> $tool_data->{HPC_driver}
 						);
 
 					$run_id_sample = submit_job(
 						jobname		=> 'run_indel_realigner_' . $sample,
 						shell_command	=> $run_script,
-						dependencies	=> $run_id_sample,
-						max_time	=> $tool_data->{parameters}->{realign}->{time},
-						mem		=> $tool_data->{parameters}->{realign}->{mem},
 						hpc_driver	=> $tool_data->{HPC_driver},
 						dry_run		=> $tool_data->{dry_run}
 						);
@@ -666,46 +671,45 @@ sub main {
 				# record command (in log directory) and then run job
 				print "\nSubmitting job for BaseRecalibrator...";
 
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_base_quality_score_recalibrator_' . $sample,
-					cmd	=> $stage3_cmd,
-					modules	=> [$gatk]
-					);
-
 				if ('dna' eq $data_type) {
 
-					$run_id_sample = submit_job(
-						jobname		=> 'run_base_quality_score_recalibrator_' . $sample,
-						shell_command	=> $run_script,
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_base_quality_score_recalibrator_' . $sample,
+						cmd	=> $stage3_cmd,
+						modules	=> [$gatk],
 						dependencies	=> $run_id_patient,
 						max_time	=> $tool_data->{parameters}->{bqsr}->{time}->{$type},
 						mem		=> $tool_data->{parameters}->{bqsr}->{mem},
 						cpus_per_task	=> 8,
-						hpc_driver	=> $tool_data->{HPC_driver},
-						dry_run		=> $tool_data->{dry_run}
+						hpc_driver	=> $tool_data->{HPC_driver}
 						);
-
-					push @patient_jobs, $run_id_sample;
-					push @all_jobs, $run_id_sample;
-
 					}
 
 				elsif ('rna' eq $data_type) {
 
-					$run_id_sample = submit_job(
-						jobname		=> 'run_base_quality_score_recalibrator_' . $sample,
-						shell_command	=> $run_script,
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_base_quality_score_recalibrator_' . $sample,
+						cmd	=> $stage3_cmd,
+						modules	=> [$gatk],
 						dependencies	=> $run_id_sample,
 						max_time	=> $tool_data->{parameters}->{bqsr}->{time}->{$type},
 						mem		=> $tool_data->{parameters}->{bqsr}->{mem},
-						hpc_driver	=> $tool_data->{HPC_driver},
-						dry_run		=> $tool_data->{dry_run}
+						cpus_per_task	=> 1,
+						hpc_driver	=> $tool_data->{HPC_driver}
 						);
-
-					push @patient_jobs, $run_id_sample;
-					push @all_jobs, $run_id_sample;
 					}
+
+				$run_id_sample = submit_job(
+					jobname		=> 'run_base_quality_score_recalibrator_' . $sample,
+					shell_command	=> $run_script,
+					hpc_driver	=> $tool_data->{HPC_driver},
+					dry_run		=> $tool_data->{dry_run}
+					);
+
+				push @patient_jobs, $run_id_sample;
+				push @all_jobs, $run_id_sample;
 				}
 			else {
 				print "Skipping BaseRecalibrator because this has already been completed!\n";
@@ -725,15 +729,22 @@ sub main {
 			# check if this should be run
 			if ( ('N' eq $resume) || ('Y' eq missing_file($recal_bam . '.md5'))) {
 
+				# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
+				# create a symlink for the final output in the TOP directory
+				my @final = split /\//, $recal_bam;
+				$final_link = join('/', $tool_data->{output_dir}, $final[-1]);
+
+				if (-l $final_link) {
+					unlink $final_link or die "Failed to remove previous symlink: $final_link;\n";
+					}
+
+				my $link_cmd = "echo Creating new symlink...";
+				$link_cmd .= "\nln -s $recal_bam $final_link";
+
+				$stage4_cmd .= "\n" . $link_cmd;
+
 				# record command (in log directory) and then run job
 				print "Submitting job for PrintReads (applying base recalibration)...\n";
-
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_apply_base_recalibration_' . $sample,
-					cmd	=> $stage4_cmd,
-					modules	=> [$gatk]
-					);
 
 				my $n_cpus;
 				if ('dna' eq $data_type) {
@@ -742,37 +753,21 @@ sub main {
 					$n_cpus = 1;
 					}
 
-				$run_id_sample = submit_job(
-					jobname		=> 'run_apply_base_recalibration_' . $sample,
-					shell_command	=> $run_script,
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_apply_base_recalibration_' . $sample,
+					cmd	=> $stage4_cmd,
+					modules	=> [$gatk],
 					dependencies	=> $run_id_sample,
 					max_time	=> $tool_data->{parameters}->{recalibrate}->{time}->{$type},
 					mem		=> $tool_data->{parameters}->{recalibrate}->{mem},
 					cpus_per_task	=> $n_cpus,
-					hpc_driver	=> $tool_data->{HPC_driver},
-					dry_run		=> $tool_data->{dry_run}
-					);
-
-				push @patient_jobs, $run_id_sample;
-				push @all_jobs, $run_id_sample;
-
-				# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
-				# create a symlink for the final output in the TOP directory
-				my @final = split /\//, $recal_bam;
-				$final_link = join('/', $tool_data->{output_dir}, $final[-1]);
-
-				$run_script = write_script(
-					log_dir	=> $tmp_directory,
-					name	=> 'create_symlink_' . $sample,
-					cmd	=> "ln -s $recal_bam $final_link"
+					hpc_driver	=> $tool_data->{HPC_driver}
 					);
 
 				$run_id_sample = submit_job(
-					jobname		=> 'create_symlink_' . $sample,
+					jobname		=> 'run_apply_base_recalibration_' . $sample,
 					shell_command	=> $run_script,
-					dependencies	=> $run_id_sample,
-					mem		=> '256M',
-					max_time	=> '00:05:00',
 					hpc_driver	=> $tool_data->{HPC_driver},
 					dry_run		=> $tool_data->{dry_run}
 					);
@@ -792,18 +787,28 @@ sub main {
 
 			print "Submitting job to clean up temporary/intermediate files...\n";
 
+			# make sure final output exists before removing intermediate files!
+			$cleanup_cmd = join("\n",
+				"if [ -s " . join(" ] && [ -s ", @final_outputs) . " ]; then",
+				$cleanup_cmd,
+				"else",
+				'echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
+				"fi"
+				);
+
 			$run_script = write_script(
 				log_dir	=> $log_directory,
 				name	=> 'run_cleanup_' . $patient,
-				cmd	=> $cleanup_cmd
+				cmd	=> $cleanup_cmd,
+				dependencies	=> join(',', @patient_jobs),
+				max_time	=> '00:05:00',
+				mem		=> '256M',
+				hpc_driver	=> $tool_data->{HPC_driver}
 				);
 
 			$run_id_patient = submit_job(
 				jobname		=> 'run_cleanup_' . $patient,
 				shell_command	=> $run_script,
-				dependencies	=> join(',', @patient_jobs),
-				max_time	=> '00:05:00',
-				mem		=> '256M',
 				hpc_driver	=> $tool_data->{HPC_driver},
 				dry_run		=> $tool_data->{dry_run}
 				);
@@ -825,15 +830,16 @@ sub main {
 		$run_script = write_script(
 			log_dir	=> $log_directory,
 			name	=> 'output_job_metrics_' . $run_count,
-			cmd	=> $collect_metrics
+			cmd	=> $collect_metrics,
+			dependencies	=> join(',', @all_jobs),
+			max_time	=> '0:05:00',
+			mem		=> '256M',
+			hpc_driver	=> $tool_data->{HPC_driver}
 			);
 
 		$run_id_extra = submit_job(
 			jobname		=> 'output_job_metrics',
 			shell_command	=> $run_script,
-			dependencies	=> join(',', @all_jobs),
-			max_time	=> '0:05:00',
-			mem		=> '256M',
 			hpc_driver	=> $tool_data->{HPC_driver},
 			dry_run		=> $tool_data->{dry_run}
 			);
@@ -855,15 +861,16 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'output_final_yaml',
 			cmd	=> $output_yaml_cmd,
-			modules	=> ['perl']
+			modules	=> ['perl'],
+			dependencies	=> join(',', @all_jobs),
+			max_time	=> '0:10:00',
+			mem		=> '1G',
+			hpc_driver	=> $tool_data->{HPC_driver}
 			);
 
 		$run_id_extra = submit_job(
 			jobname		=> 'output_final_yaml',
 			shell_command	=> $run_script,
-			dependencies	=> join(',', @all_jobs),
-			max_time	=> '0:10:00',
-			mem		=> '1G',
 			hpc_driver	=> $tool_data->{HPC_driver},
 			dry_run		=> $tool_data->{dry_run}
 			);

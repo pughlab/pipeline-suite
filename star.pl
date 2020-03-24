@@ -244,16 +244,11 @@ sub main {
 			$cleanup_cmd .= "; rm -rf $tmp_directory";
 
 			my @lanes = keys %{$smp_data->{$patient}->{$sample}->{runlanes}};
-#			my (@lane_intermediates, @lane_holds);
 			my (@r1_fastqs, @r2_fastqs);
 
 			foreach my $lane ( @lanes ) {
 
 				print "    LANE: $lane\n";
-
-				# make some directories
-#				my $lane_directory = join('/', $sample_directory, $lane);
-#				unless(-e $lane_directory) { make_path($lane_directory); }
 
 				# collect input files
 				my $r1 = $smp_data->{$patient}->{$sample}->{runlanes}->{$lane}->{R1};
@@ -309,29 +304,27 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> 'run_STAR_' . $sample,
 					cmd	=> $star,
-					modules	=> [$star_version]
+					modules	=> [$star_version],
+					dependencies	=> $run_id,
+					max_time	=> $tool_data->{parameters}->{star}->{time},
+					mem		=> $tool_data->{parameters}->{star}->{mem},
+					hpc_driver	=> $tool_data->{HPC_driver}
 					);
 
 				# initial test took 15 hours with 22G and 1 node
 				$run_id = submit_job(
 					jobname		=>'run_STAR_' . $sample,
 					shell_command	=> $run_script,
-					dependencies	=> $run_id,
-					max_time	=> $tool_data->{parameters}->{star}->{time},
-					mem		=> $tool_data->{parameters}->{star}->{mem},
 					hpc_driver	=> $tool_data->{HPC_driver},
 					dry_run		=> $tool_data->{dry_run}
 					);
 
-			#	push @lane_holds, $run_id;
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				}
 			else {
 				print "Skipping alignment step because output already exists...\n";
 				}
-
-		#	push @lane_intermediates, $lane_directory . '/Aligned.sortedByCoord.out.bam';
 		
 			## mark duplicates
 			my $input_file = join('/', $sample_directory, '/Aligned.sortedByCoord.out.bam');
@@ -347,6 +340,19 @@ sub main {
 			# check if this should be run
 			if ( ('N' eq $resume) || ('Y' eq missing_file($dedup_bam . '.md5')) ) {
 
+				# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
+				# create a symlink for the final output in the TOP directory
+				my @final = split /\//, $dedup_bam;
+                                my $final_link = join('/', $tool_data->{output_dir}, $final[-1]);
+
+				if (-l $final_link) {
+					unlink $final_link or die "Failed to remove previous symlink: $final_link;\n";
+					}
+
+				my $link_cmd = "ln -s $dedup_bam $final_link";
+
+				$markdup_cmd .= "\n" . $link_cmd;
+
 				# record command (in log directory) and then run job
 				print "Submitting job to merge lanes and mark dupilcates...\n";
 
@@ -354,44 +360,22 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> 'run_MarkDups_' . $sample,
 					cmd	=> $markdup_cmd,
-					modules	=> [$picard]
+					modules	=> [$picard],
+					dependencies	=> $run_id,
+					max_time	=> $tool_data->{parameters}->{markdup}->{time},
+					mem		=> $tool_data->{parameters}->{markdup}->{mem},
+					hpc_driver	=> $tool_data->{HPC_driver}
 					);
 
 				$run_id = submit_job(
 					jobname		=> 'run_MarkDups_' . $sample,
 					shell_command	=> $run_script,
-					dependencies	=> $run_id,
-					max_time	=> $tool_data->{parameters}->{markdup}->{time},
-					mem		=> $tool_data->{parameters}->{markdup}->{mem},
 					hpc_driver	=> $tool_data->{HPC_driver},
 					dry_run		=> $tool_data->{dry_run}
 					);
 
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
-
-				# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
-				# create a symlink for the final output in the TOP directory
-				my @final = split /\//, $dedup_bam;
-                                my $final_link = join('/', $tool_data->{output_dir}, $final[-1]);
-
-                                $run_script = write_script(
-                                        log_dir => $tmp_directory,
-                                        name    => 'create_symlink_' . $sample,
-                                        cmd     => "ln -s $dedup_bam $final_link"
-                                        );
-
-                                $run_id = submit_job(
-                                        jobname         => 'create_symlink_' . $sample,
-                                        shell_command   => $run_script,
-                                        dependencies    => $run_id,
-                                        mem             => '256M',
-                                        max_time        => '00:05:00',
-                                        hpc_driver      => $tool_data->{HPC_driver},
-                                        dry_run         => $tool_data->{dry_run}
-                                        );
-
-				push @patient_jobs, $run_id;
 				}
 			else {
 				print "Skipping mark duplicate step because output already exists...\n";
@@ -405,19 +389,30 @@ sub main {
 
 			print "Submitting job to clean up temporary/intermediate files...\n";
 
+			# make sure final output exists before removing intermediate files!
+			$cleanup_cmd = join("\n",
+				"if [ -s " . join(" ] && [ -s ", @final_outputs) . " ]; then",
+				$cleanup_cmd,
+				"else",
+				'echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
+				"fi"
+				);
+
+
 			# if all lane alignments + mark dup are successful, clean up tmp directories
 			$run_script = write_script(
 				log_dir	=> $log_directory,
 				name	=> 'run_cleanup_' . $patient,
-				cmd	=> $cleanup_cmd
+				cmd	=> $cleanup_cmd,
+				dependencies	=> join(',', @patient_jobs),
+				max_time	=> '00:05:00',
+				mem		=> '256M',
+				hpc_driver	=> $tool_data->{HPC_driver}
 				);
 
 			$run_id = submit_job(
 				jobname		=> 'run_cleanup_' . $patient,
 				shell_command	=> $run_script,
-				dependencies	=> join(',', @patient_jobs),
-				max_time	=> '00:05:00',
-				mem		=> '256M',
 				hpc_driver	=> $tool_data->{HPC_driver},
 				dry_run		=> $tool_data->{dry_run}
 				);
@@ -439,15 +434,16 @@ sub main {
 		$run_script = write_script(
 			log_dir => $log_directory,
 			name    => 'output_job_metrics_' . $run_count,
-			cmd     => $collect_metrics
+			cmd     => $collect_metrics,
+			dependencies	=> join(',', @all_jobs),
+			max_time	=> '0:05:00',
+			mem		=> '256M',
+			hpc_driver	=> $tool_data->{HPC_driver}
 			);
 
 		$run_id = submit_job(
 			jobname		=> 'output_job_metrics',
 			shell_command	=> $run_script,
-			dependencies	=> join(',', @all_jobs),
-			max_time	=> '0:05:00',
-			mem		=> '256M',
 			hpc_driver	=> $tool_data->{HPC_driver},
 			dry_run		=> $tool_data->{dry_run}
 			);
@@ -469,15 +465,16 @@ sub main {
 			log_dir => $log_directory,
 			name    => 'output_final_yaml',
 			cmd     => $output_yaml_cmd,
-			modules => ['perl']
+			modules => ['perl'],
+			dependencies	=> join(',', @all_jobs),
+			max_time	=> '0:10:00',
+			mem		=> '1G',
+			hpc_driver	=> $tool_data->{HPC_driver}
 			);
 
 		$run_id = submit_job(
 			jobname		=> 'output_final_yaml',
 			shell_command	=> $run_script,
-			dependencies	=> join(',', @all_jobs),
-			max_time	=> '0:10:00',
-			mem		=> '1G',
 			hpc_driver	=> $tool_data->{HPC_driver},
 			dry_run		=> $tool_data->{dry_run}
 			);
