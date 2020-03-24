@@ -34,13 +34,22 @@ There are example config files located in the "examples" folder:
     - sequencing centre and platform
     - optional steps: mark_dup (either Y or N)
 
+   - rsem_tool_config.yaml, specifies:
+    - path/stem to RSEM reference directory
+
+   - star_fusion_tool_config.yaml, specifies:
+    - path/stem to STAR-Fusion reference directory
+
   - gatk_tool_config.yaml, works for both DNA- and RNA-Seq data, specifies:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to target intervals (exome capture kit, if defined)
     - path to dbSNP file (if undefined, a default will be used)
 
-   - rsem_tool_config.yaml, specifies:
-    - path/stem to RSEM reference directory
+   - variant_call_config.yaml, specifies:
+    - path to reference genome (requires .fa, .dict and .fai files)
+    - path to vcf2maf.pl
+    - path to VEP (tool/version, cache data)
+    - path to ExAC data (for filtering/annotating with population allele frequencies)
 
 ## Running a pipeline
 If you are running these pipelines on the cluster, be sure to first load perl!
@@ -89,11 +98,14 @@ perl star.pl -t /path/to/star_tool_config.yaml -c /path/to/fastq_config.yaml > /
 # run RSEM on STAR-aligned BAMs
 perl rsem.pl -t /path/to/rsem_tool_config.yaml -c /path/to/bam_config.yaml > /path/to/output/rsem_submission_out.log
 
+# run STAR-Fusion on STAR-aligned BAMs
+perl star_fusion.pl -t /path/to/star_fusion_tool_config.yaml -c /path/to/bam_config.yaml > /path/to/output/star_fusion_submission_out.log
+
 # run GATK split CIGAR, indel realignment and base quality score recalibration on MarkDup BAMs
 perl gatk.pl -t /path/to/gatk_tool_config.yaml -c /path/to/bam_config.yaml --rna > /path/to/output/rna_gatk_submission_out.log
 
 # run GATK HaplotypeCaller, variant filtration and annotataion
-perl variant_call.pl -t /path/to/variant_call_config.yaml -c /path/to/gatk_bam_config.yaml --rna > /path/to/output/variant_call_submission_out.log
+perl variant_call_rna.pl -t /path/to/variant_call_config.yaml -c /path/to/gatk_bam_config.yaml > /path/to/output/variant_call_submission_out.log
 </code></pre>
 
 ### Resuming a run:

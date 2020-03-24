@@ -1,0 +1,31 @@
+---
+tool: HaplotypeCaller
+tool_version: 3.8
+ref_type: hg38
+reference: /cluster/tools/data/genomes/human/hg38/iGenomes/Sequence/WholeGenomeFasta/genome.fa
+output_dir: /cluster/projects/pughlab/projects/PROJECTNAME/VariantCall/
+#resume_dir: /cluster/projects/pughlab/projects/PROJECTNAME/VariantCall/DATE_Call_Variants/
+resume_dir:
+HPC_driver: Slurm
+samtools_version: 1.9
+del_intermediate: N
+create_output_yaml: Y
+dry_run: N
+# and indicate some parameters for job submission
+parameters:
+    haplotype_call:
+        java_mem: 8g
+        mem: 12G
+        time: '12:00:00'
+    filter:
+        java_mem: 8g
+        mem: 12G
+        time: '12:00:00'
+    annotate:
+        vcf2maf_path: /cluster/projects/pughlab/bin/vcf2maf-1.6.17/vcf2maf.pl
+        vep_path: /cluster/tools/software/centos7/vep/98
+        vep_data: /cluster/projects/pughlab/references/VEP_cache/98
+        filter_vcf: 0
+#       filter_vcf: /cluster/projects/pughlab/references/VEP_cache/ExAC_nonTCGA.r1.sites.hg19ToHg38.vep.vcf.gz 
+        mem: 12G
+        time: '12:00:00'
