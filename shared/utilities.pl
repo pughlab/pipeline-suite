@@ -242,8 +242,13 @@ sub write_script {
 			);
 
 		if ('' ne $args{dependencies}) {
-			$sbatch_params .= "\n#SBATCH --dependency=afterok:" . $args{dependencies};
-			$sbatch_params .= "\n#SBATCH --kill-on-invalid-dep=yes";
+
+			if ($args{name} =~ m/job_metrics/) {
+				$sbatch_params .= "\n#SBATCH --dependency=afterany:" . $args{dependencies};
+				} else {
+				$sbatch_params .= "\n#SBATCH --dependency=afterok:" . $args{dependencies};
+				$sbatch_params .= "\n#SBATCH --kill-on-invalid-dep=yes";
+				}
 			}
 
 		print $fh_script $sbatch_params . "\n\n";
