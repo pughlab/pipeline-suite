@@ -311,4 +311,52 @@ sub collect_job_stats {
 
 	return($sacct_command);
 	}
+
+# format command to convert annotated VCF to MAF
+sub get_vcf2maf_command {
+	my %args = (
+		input		=> undef,
+		tumour_id	=> undef,
+		normal_id	=> undef,
+		reference	=> undef,
+		ref_type	=> undef,
+		output		=> undef,
+		tmp_dir		=> undef,
+		vcf2maf		=> undef,
+		vep_path	=> undef,
+		vep_data	=> undef,
+		filter_vcf	=> undef,
+		@_
+		);
+
+	my $ref_type;
+	if ('hg19' eq $args{ref_type}) {
+		$ref_type = 'GRCh37';
+		} elsif ('hg38' eq $args{ref_type}) {
+		$ref_type = 'GRCh38';
+		}
+
+	my $maf_command = join(' ',
+		'perl', $args{vcf2maf},
+		'--species homo_sapiens',
+		'--ncbi-build', $ref_type,
+		'--ref-fasta', $args{reference},
+		'--input-vcf', $args{input},
+		'--output-maf', $args{output},
+		'--tumor-id', $args{tumour_id},
+		'--vep-path', $args{vep_path},
+		'--vep-data', $args{vep_data},
+		'--vep-forks 1',
+		'--filter-vcf', $args{filter_vcf},
+		'--buffer-size 1000',
+		'--tmp-dir', $args{tmp_dir}
+		);
+
+	if (defined($args{normal_id})) {
+		$maf_command .= " --normal-id $args{normal_id}";
+		}
+
+	return($maf_command);
+	}
+
 1;
