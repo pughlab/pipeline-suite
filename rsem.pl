@@ -156,6 +156,7 @@ sub main{
 			my $data_dir = $smp_data->{$patient}->{$type}->{$sample};
 			my @parts = split /\//, $data_dir;
 			$data_dir =~ s/$parts[-1]//;
+			$data_dir =~ s/\/$//;
 
 			# now direct it to the specific sample of interest
 			my $aligned_bam = join('/', $data_dir, $sample, 'Aligned.toTranscriptome.out.bam');
