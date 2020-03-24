@@ -133,7 +133,7 @@ sub validate_ref {
 
 	my $ref_file_base;
 
-	if ( ('bwa' eq $args{pipeline}) || ('gatk' eq $args{pipeline}) ) {
+	if ( ('bwa' eq $args{pipeline}) || ('gatk' eq $args{pipeline}) || ('variant_call' eq $args{pipeline}) ) {
 		$ref_file_base = ($args{reference} =~ s/\.fa$//r);
 		} else {
 		$ref_file_base = $args{reference};
