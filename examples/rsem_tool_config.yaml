@@ -2,7 +2,7 @@
 tool: rsem
 tool_version: 1.3.0
 ref_type: hg38
-reference: /cluster/projects/pughlab/references/RSEM/GRCh38/v26/grch38.v26
+reference: /cluster/projects/pughlab/references/RSEM/GRCh38/v31/grch38.v31
 output_dir: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/RSEM/ 
 #resume_dir: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/RSEM/DATE_rsem_version/
 resume_dir:

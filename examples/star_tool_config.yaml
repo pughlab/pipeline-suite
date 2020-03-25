@@ -2,7 +2,7 @@
 tool: STAR
 tool_version: 2.7.2b
 ref_type: hg38
-reference_dir: /cluster/projects/pughlab/references/STAR/STAR_2.7.2b_hg38_gencode_v26/
+reference_dir: /cluster/projects/pughlab/references/STAR/STAR_2.7.2b_GRCh38_gencode_v31/
 output_dir: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/STAR/
 #resume_dir: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/STAR/DATE_STAR_version/
 resume_dir:
