@@ -377,9 +377,7 @@ sub main {
 						);
 					$index_lane_cmd = 'cd ' . $lane_directory . ";\n" . $index_lane_cmd;
 
-					if ('Y' eq $tool_data->{del_intermediate}) {
-						$cleanup_cmd .= ";\nrm $lane_directory/$filestem.sam";
-						}
+					$cleanup_cmd .= "\nrm $lane_directory/$filestem.sam";
 
 					# check if this should be run
 					if ( ('N' eq $resume) ||
@@ -453,9 +451,7 @@ sub main {
 					);
 				}
 
-			if ('Y' eq $tool_data->{del_intermediate}) {
-				$cleanup_cmd .= ";\nrm " . join(";\nrm ", @lane_intermediates) . "\n";
-				}
+			$cleanup_cmd .= "\nrm " . join(";\nrm ", @lane_intermediates) . "\n";
 
 			# check if this should be run
 			if ( ('N' eq $resume) || ('Y' eq missing_file($smp_output)) ) {
