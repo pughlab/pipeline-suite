@@ -46,7 +46,7 @@ print $fh "---\n";
 
 # find all patient/subject directories
 opendir(SUBJECTS, $data_directory) or die "Cannot open '$data_directory' !";
-my @subject_dirs = grep { !/logs|^\./ && -d "$data_directory/$_" } readdir(SUBJECTS);
+my @subject_dirs = grep { !/logs|RNASeQC|^\./ && -d "$data_directory/$_" } readdir(SUBJECTS);
 closedir(SUBJECTS);
 
 my @subject_names = ();
