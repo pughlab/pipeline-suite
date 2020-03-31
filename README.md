@@ -45,11 +45,13 @@ There are example config files located in the "examples" folder:
     - path to target intervals (exome capture kit, if defined)
     - path to dbSNP file (if undefined, a default will be used)
 
-   - variant_call_config.yaml, specifies:
+   - haplotype_caller_config.yaml, specifies:
     - path to reference genome (requires .fa, .dict and .fai files)
-    - path to vcf2maf.pl
-    - path to VEP (tool/version, cache data)
-    - path to ExAC data (for filtering/annotating with population allele frequencies)
+    - path to vcf2maf.pl (RNA mode)
+    - path to VEP (tool/version, cache data) (RNA mode)
+    - path to ExAC data (for filtering/annotating with population allele frequencies) (RNA mode)
+    - path to target intervals (exome capture kit, if defined) (DNA mode)
+    - path to dbSNP file (if undefined, a default will be used) (DNA mode)
 
 ## Running a pipeline
 If you are running these pipelines on the cluster, be sure to first load perl!
@@ -87,6 +89,10 @@ perl bwa.pl -t /path/to/bwa_tool_config.yaml -c /path/to/fastq_config.yaml > /pa
 perl gatk.pl -t /path/to/gatk_tool_config.yaml -c /path/to/bam_config.yaml --dna > /path/to/output/gatk_submission_out.log
 </code></pre>
 
+# run GATK's HaplotypeCaller to produce gvcfs
+perl haplotype_caller.pl -t /path/to/haplotype_caller_config.yaml -c /path/to/gatk_bam_config.yaml --dna > /path/to/output/haplotype_call_submission_out.log
+</code></pre>
+
 ### RNA pipeline:
 <pre><code>cd /path/to/some/directory/pipeline-suite/
 
@@ -105,7 +111,7 @@ perl star_fusion.pl -t /path/to/star_fusion_tool_config.yaml -c /path/to/bam_con
 perl gatk.pl -t /path/to/gatk_tool_config.yaml -c /path/to/bam_config.yaml --rna > /path/to/output/rna_gatk_submission_out.log
 
 # run GATK HaplotypeCaller, variant filtration and annotataion
-perl variant_call_rna.pl -t /path/to/variant_call_config.yaml -c /path/to/gatk_bam_config.yaml > /path/to/output/variant_call_submission_out.log
+perl haplotype_caller.pl -t /path/to/haplotype_caller_config.yaml -c /path/to/gatk_bam_config.yaml --rna > /path/to/output/haplotype_caller_submission_out.log
 </code></pre>
 
 ### Resuming a run:
