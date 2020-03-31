@@ -151,7 +151,7 @@ sub main {
 		if (scalar(@normal_ids) > 0) { push @samples, @normal_ids; }
 
 		my (@final_outputs, @patient_jobs);
-		my $cleanup_cmd;
+		my $cleanup_cmd = '';
 
 		# process each separate sample for this patient
 		foreach my $sample (@samples) {
