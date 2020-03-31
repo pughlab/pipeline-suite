@@ -13,6 +13,7 @@ samtools_version: 1.9
 del_intermediate: N
 create_output_yaml: N
 dry_run: Y
+FusionInspect: inspect
 # and indicate some parameters for job submission
 parameters:
     star_fusion:
