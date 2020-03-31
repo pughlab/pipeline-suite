@@ -11,6 +11,7 @@ platform: Illumina
 HPC_driver: Slurm
 samtools_version: 1.9
 picard_version: 2.6.0
+rna_seqc_version: 1.1.8
 mark_dup: Y
 del_intermediate: Y
 create_output_yaml: Y
@@ -24,3 +25,10 @@ parameters:
         java_mem: 6g
         mem: 8G
         time: '08:00:00'
+    rna_seqc:
+        java_mem: 4g
+        mem: 6G
+        time: '24:00:00'
+        bwa_path: /cluster/tools/software/bwa/0.7.15/
+        reference: /cluster/tools/data/genomes/human/hg38/iGenomes/Sequence/WholeGenomeFasta/genome.fa
+        reference_gtf: /cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.GRCh38.genes.gtf
