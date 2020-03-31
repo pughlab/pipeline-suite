@@ -200,7 +200,7 @@ sub main{
 	# get sample data
 	my $smp_data = LoadFile($data_config);
 
-	my ($run_script, $run_id, $link);
+	my ($run_script, $run_id, $link, $java_check, $cleanup_cmd_dna, $cleanup_cmd_rna);
 	my (@all_jobs, @gvcfs);
 
 	# process each sample in $smp_data
@@ -213,7 +213,10 @@ sub main{
 
 		my $tmp_directory = join('/', $patient_directory, 'TEMP');
 		unless(-e $tmp_directory) { make_path($tmp_directory); }
-		my $cleanup_cmd = "rm -rf $tmp_directory";
+
+		# indicate this should be removed at the end
+		$cleanup_cmd_dna .= "\nrm -rf $tmp_directory";
+		$cleanup_cmd_rna = "rm -rf $tmp_directory";
 
 		my $link_directory = join('/', $patient_directory, 'bam_links');
 		unless(-e $link_directory) { make_path($link_directory); }
@@ -237,7 +240,7 @@ sub main{
 			}
 
 		# create an array to hold final outputs and all patient job ids
-		my (@final_outputs);
+		my (@final_outputs, @patient_jobs);
 		my ($run_id, $java_check) = '';
 
 		foreach my $sample (@sample_ids) {
@@ -296,6 +299,7 @@ sub main{
 					dry_run		=> $tool_data->{dry_run}
 					);
 
+				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				}
 			else {
@@ -305,8 +309,8 @@ sub main{
 			# if this is RNA-Seq, run filter + vcf2maf
 			if ('rna' eq $data_type) {
 
-				$cleanup_cmd .= "\nrm $hc_vcf";
-				$cleanup_cmd .= "\nrm $hc_vcf.idx";
+				$cleanup_cmd_rna .= "\nrm $hc_vcf";
+				$cleanup_cmd_rna .= "\nrm $hc_vcf.idx";
 
 				# run filter variants
 				my $filtered_vcf = join('/',
@@ -314,8 +318,8 @@ sub main{
 					$sample . '_HaplotypeCaller_filtered.vcf'
 					);
 
-				$cleanup_cmd .= "\nrm $filtered_vcf";
-				$cleanup_cmd .= "\nrm $filtered_vcf.idx";
+				$cleanup_cmd_rna .= "\nrm $filtered_vcf";
+				$cleanup_cmd_rna .= "\nrm $filtered_vcf.idx";
 
 				my $filter_cmd = get_filter_command(
 					input		=> $hc_vcf,
@@ -351,6 +355,7 @@ sub main{
 						dry_run		=> $tool_data->{dry_run}
 						);
 
+					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
 					}
 				else {
@@ -425,6 +430,7 @@ sub main{
 						dry_run		=> $tool_data->{dry_run}
 						);
 
+					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
 					}
 				else {
@@ -442,9 +448,9 @@ sub main{
 			print "Submitting job to clean up temporary/intermediate files...\n";
 
 			# make sure final output exists before removing intermediate files!
-			$cleanup_cmd = join("\n",
+			$cleanup_cmd_rna = join("\n",
 				"if [ -s " . join(" ] && [ -s ", @final_outputs) . " ]; then",
-				$cleanup_cmd,
+				$cleanup_cmd_rna,
 				"else",
 				'echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
 				"fi"
@@ -453,7 +459,7 @@ sub main{
 			$run_script = write_script(
 				log_dir	=> $log_directory,
 				name	=> 'run_cleanup_' . $patient,
-				cmd	=> $cleanup_cmd,
+				cmd	=> $cleanup_cmd_rna,
 				dependencies	=> join(',', @patient_jobs),
 				max_time	=> '00:05:00',
 				mem		=> '256M',
@@ -482,7 +488,7 @@ sub main{
 			input		=> join(' -V ', @gvcfs),
 			output		=> $combined_gvcf,
 			java_mem	=> $tool_data->{parameters}->{combine}->{java_mem},
-			tmp_dir		=> $tmp_directory
+			tmp_dir		=> $output_directory
 			);
 
 		# this is a java-based command, so run a final check
@@ -510,7 +516,7 @@ sub main{
 				);
 
 			$run_id = submit_job(
-				jobname		=> 'run_combine_gvcfs'
+				jobname		=> 'run_combine_gvcfs',
 				shell_command	=> $run_script,
 				hpc_driver	=> $tool_data->{HPC_driver},
 				dry_run		=> $tool_data->{dry_run}
@@ -528,9 +534,9 @@ sub main{
 			print "Submitting job to clean up temporary/intermediate files...\n";
 
 			# make sure final output exists before removing intermediate files!
-			$cleanup_cmd = join("\n",
+			$cleanup_cmd_dna = join("\n",
 				"if [ -s $combined_gvcf ]; then",
-				"  $cleanup_cmd",
+				"  $cleanup_cmd_dna",
 				"else",
 				'  echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
 				"fi"
@@ -539,7 +545,7 @@ sub main{
 			$run_script = write_script(
 				log_dir	=> $log_directory,
 				name	=> 'run_final_cleanup',
-				cmd	=> $cleanup_cmd,
+				cmd	=> $cleanup_cmd_dna,
 				dependencies	=> join(',', @all_jobs),
 				max_time	=> '00:05:00',
 				mem		=> '256M',
@@ -643,6 +649,7 @@ GetOptions(
 if (!defined($tool_config)) { die("No tool config file defined; please provide -t | --tool (ie, tool_config.yaml)"); }
 if (!defined($data_config)) { die("No data config file defined; please provide -c | --config (ie, sample_config.yaml)"); }
 
+my $data_type;
 if ($dna && $rna) {
 	die("Please don't set both --dna and --rna; can only be one of these!");
 	} elsif ($dna) {
