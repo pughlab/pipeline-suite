@@ -20,6 +20,7 @@ sub error_checking {
 
 	my $tool_data = $args{tool_data};
 	my $pipeline  = $args{pipeline};
+	my $data_type = $args{data_type};
 
 	# check to see if common arguments are supplied and/or are correct
 	# for del_intermediates, if not Y then default to N
@@ -312,11 +313,13 @@ sub submit_job {
 		chop $job_id;
 		if ($job_id =~ m/Submitted batch job ([0-9]+)/) {
 			$job_id = $1;
-		} else {
+			} else {
 			die("Failed to submit job with command $job_command");
 			}
 
 		print "Job number $job_id submitted.\n";
+		} else {
+		print "Job not submitted.\n";
 		}
 
 	# print 1 extra blank line in the log to separate steps
