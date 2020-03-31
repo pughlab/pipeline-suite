@@ -132,7 +132,7 @@ sub main{
 		if (scalar(@normal_ids) > 0) { push @samples, @normal_ids; }
 
 		my (@patient_jobs, @final_outputs);
-		my $cleanup_cmd;
+		my $cleanup_cmd = '';
 
 		foreach my $sample (@samples) {
 
