@@ -101,6 +101,20 @@ sub main{
 	print "\n  Sample config used: $data_config";
 	print "\n---";
 
+	# create a file to hold job metrics
+	my (@files, $run_count, $outfile, $touch_exit_status);
+	if ('N' eq $tool_data->{dry_run}) {
+		# initiate a file to hold job metrics (ensures that an existing file isn't overwritten by concurrent jobs)
+		opendir(LOGFILES, $log_directory) or die "Cannot open $log_directory";
+		@files = grep { /slurm_job_metrics/ } readdir(LOGFILES);
+		$run_count = scalar(@files) + 1;
+		closedir(LOGFILES);
+
+		$outfile = $log_directory . '/slurm_job_metrics_' . $run_count . '.out';
+		$touch_exit_status = system("touch $outfile");
+		if (0 != $touch_exit_status) { Carp::croak("Cannot touch file $outfile"); }
+		}
+
 	### RUN ###########################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
@@ -236,9 +250,37 @@ sub main{
 		dry_run		=> $tool_data->{dry_run}
 		);
 
+	push @all_jobs, $run_id;
 
 	print "\nFINAL OUTPUT: $output_directory/fastqc_key_metrics.tsv\n";
 	print "---\n";
+
+	# collect job metrics if not dry_run
+	if ('N' eq $tool_data->{dry_run}) {
+
+		# collect job stats
+		my $collect_metrics = collect_job_stats(
+			job_ids => join(',', @all_jobs),
+			outfile => $outfile
+			);
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'output_job_metrics_' . $run_count,
+			cmd	=> $collect_metrics,
+			dependencies	=> join(',', @all_jobs),
+			max_time	=> '0:10:00',
+			mem		=> '1G',
+			hpc_driver	=> $tool_data->{HPC_driver}
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'output_job_metrics',
+			shell_command	=> $run_script,
+			hpc_driver	=> $tool_data->{HPC_driver},
+			dry_run		=> $tool_data->{dry_run}
+			);
+		}
 
 	# finish up
 	print "\nProgramming terminated successfully.\n\n";
