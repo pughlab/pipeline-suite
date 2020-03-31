@@ -160,6 +160,35 @@ sub get_markdup_command {
 	return($markdup_command);
 	}
 
+# format command to run RNA-SeQC
+sub get_rnaseqc_cmd {
+	my %args = (
+		input		=> undef,
+		output_dir	=> undef,
+		bwa		=> '/cluster/tools/software/bwa/0.7.15/',
+		reference	=> undef,
+		gtf		=> undef,
+		java_mem	=> undef,
+		tmp_dir		=> undef,
+		@_
+		);
+
+	my $qc_command = join(' ',
+		'java -Xmx' . $args{java_mem},
+		'-D' . $args{tmp_dir},
+		'-jar $rnaseqc_dir/RNA-SeQC.jar',
+		'-bwa', $args{bwa},
+		'-o', $args{output_dir},
+		'-t', $args{gtf},
+		'-r', $args{reference},
+		'-singleEnd no',
+		'-s', $args{input}
+		);
+
+	return($qc_command);
+	}
+
+### MAIN ###########################################################################################
 sub main {
 	my %args = (
 		tool_config	=> undef,
@@ -193,6 +222,7 @@ sub main {
 	my $star_version	= 'STAR/' . $tool_data->{tool_version};
 	my $samtools		= 'samtools/' . $tool_data->{samtools_version};
 	my $picard		= 'picard/' . $tool_data->{picard_version};
+	my $rnaseqc		= 'rna_seqc/' . $tool_data->{rna_seqc_version};
 
 	# create a file to hold job metrics
 	my (@files, $run_count, $outfile, $touch_exit_status);
@@ -215,6 +245,16 @@ sub main {
 	my ($run_script, $run_id);
 	my @all_jobs;
 
+	# create sample sheet (tab-delim file with id/path/group)
+	my $qc_directory = join('/', $output_directory, 'RNASeQC');
+	unless ( -e $qc_directory ) { make_path($qc_directory); }
+
+	my $sample_sheet = join('/', $qc_directory, 'sample_sheet.tsv');
+	open(my $fh, '>', $sample_sheet) or die "Cannot open '$sample_sheet' !";
+
+	# add header
+	print $fh "SampleID\tLocation\tGroup\n";
+
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
@@ -223,7 +263,7 @@ sub main {
 		my $patient_directory = join('/', $output_directory, $patient);
 		unless(-e $patient_directory) { make_path($patient_directory); }
 
-		my $cleanup_cmd;
+		my $cleanup_cmd = '';
 		my (@final_outputs, @patient_jobs);
 
 		foreach my $sample (sort keys %{$smp_data->{$patient}}) {
@@ -280,16 +320,19 @@ sub main {
 				platform	=> $tool_data->{platform}
 				);
 
-			
-			my $star = get_star_command_devel(
+			my $star = "cd $sample_directory\n";
+
+			if ( -e $temp_star ) {
+				$star .= "rm -rf $temp_star\n";
+				}
+
+			$star .= get_star_command_devel(
 				r1		=> join(',', @r1_fastqs),
 				r2		=> join(',', @r2_fastqs),
 				reference_dir	=> $tool_data->{reference_dir},
 				readgroup	=> $readgroup,
 				tmp_dir		=> $temp_star
 				);
-
-			$star = 'cd ' . $sample_directory . ";\n" . $star ;
 
 			# check if this should be run
 			if ( ('N' eq $resume) ||
@@ -330,6 +373,8 @@ sub main {
 			my $input_file = join('/', $sample_directory, '/Aligned.sortedByCoord.out.bam');
 			my $dedup_bam = join('/', $patient_directory, $sample . '_sorted_markdup.bam');
 
+			print $fh "$sample\t$dedup_bam\tRNASeq\n";
+
 			my $markdup_cmd = get_markdup_command(
 				input		=> $input_file,
 				output		=> $dedup_bam,
@@ -351,7 +396,15 @@ sub main {
 
 				my $link_cmd = "ln -s $dedup_bam $final_link";
 
-				$markdup_cmd .= "\n" . $link_cmd;
+				# this is a java-based command, so run a final check
+				my $java_check = check_java_output(
+					extra_cmd	=> $link_cmd
+					);
+
+				$markdup_cmd .= "\n" . join("\n",
+					"samtools quickcheck $dedup_bam",
+					$java_check
+					);
 
 				# record command (in log directory) and then run job
 				print "Submitting job to merge lanes and mark dupilcates...\n";
@@ -360,7 +413,7 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> 'run_MarkDups_' . $sample,
 					cmd	=> $markdup_cmd,
-					modules	=> [$picard],
+					modules	=> [$picard, $samtools],
 					dependencies	=> $run_id,
 					max_time	=> $tool_data->{parameters}->{markdup}->{time},
 					mem		=> $tool_data->{parameters}->{markdup}->{mem},
@@ -385,7 +438,7 @@ sub main {
 			}
 
 		# once per patient, run cleanup
-		if ('Y' eq $tool_data->{del_intermediate}) {
+		if ( ('Y' eq $tool_data->{del_intermediate}) && (scalar(@patient_jobs) > 0) ) {
 
 			print "Submitting job to clean up temporary/intermediate files...\n";
 
@@ -397,7 +450,6 @@ sub main {
 				'echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
 				"fi"
 				);
-
 
 			# if all lane alignments + mark dup are successful, clean up tmp directories
 			$run_script = write_script(
@@ -421,6 +473,42 @@ sub main {
 		print "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
 		print "---\n";
 		}
+
+	close $fh;
+
+	# get command for RNASeQC
+	my $qc_cmd = get_rnaseqc_cmd(
+		input		=> $sample_sheet,
+		output_dir	=> $qc_directory,
+		bwa		=> $tool_data->{parameters}->{rna_seqc}->{bwa_path},
+		reference	=> $tool_data->{parameters}->{rna_seqc}->{reference},
+		gtf		=> $tool_data->{parameters}->{rna_seqc}->{reference_gtf},
+		java_mem	=> $tool_data->{parameters}->{rna_seqc}->{java_mem},
+		tmp_dir		=> $qc_directory
+		);
+
+	# record command (in log directory) and then run job
+	print "\nSubmitting job for RNA-SeQC...\n";
+
+	$run_script = write_script(
+		log_dir	=> $log_directory,
+		name	=> 'run_rna_seqc_cohort',
+		cmd	=> $qc_cmd,
+		modules	=> [$rnaseqc],
+		dependencies	=> join(',', @all_jobs),
+		max_time	=> $tool_data->{parameters}->{rna_seqc}->{time},
+		mem		=> $tool_data->{parameters}->{rna_seqc}->{mem},
+		hpc_driver	=> $tool_data->{HPC_driver}
+		);
+
+	$run_id = submit_job(
+		jobname		=> 'run_rna_seqc_cohort',
+		shell_command	=> $run_script,
+		hpc_driver	=> $tool_data->{HPC_driver},
+		dry_run		=> $tool_data->{dry_run}
+		);
+
+	push @all_jobs, $run_id;
 
 	# if this is not a dry run, collect job metrics (exit status, mem, run time)
 	if ('N' eq $tool_data->{dry_run}) {
