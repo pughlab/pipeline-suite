@@ -378,7 +378,7 @@ sub main {
 			}
 
 		## for DNA, indel realigner target creation and indel realigner use all patient input files
-		my ($input_string, $target_intervals, $stage1_cmd, $stage2_cmd);
+		my ($input_string, $target_intervals, $stage1_cmd, $stage2_cmd, $java_check);
 		my @realign_bams_dna;
 
 		if ('dna' eq $data_type) {
@@ -449,10 +449,11 @@ sub main {
 
 			$stage2_cmd = "cd $intermediate_directory;\n$stage2_cmd;";
 
+			my ($outbam, $md5_cmd);
 			foreach my $inbam (@input_bams) {
-				my $outbam = $inbam; 
+				$outbam = $inbam; 
 				$outbam =~ s/.bam/_realigned.bam/; 
-				$stage2_cmd .= "\nmd5sum $outbam > $outbam.md5;";
+				$md5_cmd .= "\n  md5sum $outbam > $outbam.md5;";
 				push @realign_bams_dna, join('/', $intermediate_directory, $outbam);
 
 				$outbam = join('/', $intermediate_directory, $outbam);
@@ -461,6 +462,14 @@ sub main {
 				$cleanup_cmd .= ";\nrm " . $outbam;
 				$cleanup_cmd .= ";\nrm " . $outbai;
 				}
+
+			# this is a java-based command, so run a final check
+			$java_check = "samtools quickcheck $realign_bams_dna[0]";
+			$java_check .= "\n" . check_java_output(
+				extra_cmd => $md5_cmd
+				);
+
+			$stage2_cmd .= "\n$java_check";
 
 			# check if this should be run
 			if ( ('N' eq $resume) || ('Y' eq missing_file($realign_bams_dna[-1] . '.md5'))) {
@@ -472,7 +481,7 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> 'run_indel_realigner_' . $patient,
 					cmd	=> $stage2_cmd,
-					modules	=> [$gatk],
+					modules	=> [$gatk, $samtools],
 					dependencies	=> $run_id_patient,
 					max_time	=> $tool_data->{parameters}->{realign}->{time},
 					mem		=> $tool_data->{parameters}->{realign}->{mem},
@@ -523,6 +532,12 @@ sub main {
 					tmp_dir		=> $tmp_directory
 					);
 
+				# this is a java-based command, so run a final check
+				$java_check = "samtools quickcheck $split_bam";
+				$java_check .= "\n" . check_java_output();
+
+				$split_cmd .= "\n$java_check";
+
 				$cleanup_cmd .= ";\nrm " . $split_bam;
 				$cleanup_cmd .= ";\nrm " . $split_bai;
 
@@ -536,7 +551,7 @@ sub main {
 						log_dir	=> $log_directory,
 						name	=> 'run_split_cigar_' . $sample,
 						cmd	=> $split_cmd,
-						modules	=> [$gatk],
+						modules	=> [$gatk, $samtools],
 						dependencies	=> $run_id_sample,
 						max_time	=> $tool_data->{parameters}->{split_cigar}->{time},
 						mem		=> $tool_data->{parameters}->{split_cigar}->{mem},
@@ -612,6 +627,12 @@ sub main {
 					tmp_dir		=> $tmp_directory
 					);
 
+				# this is a java-based command, so run a final check
+				$java_check = "samtools quickcheck $realigned_bam";
+				$java_check .= "\n" . check_java_output();
+
+				$stage2_cmd .= "\n$java_check";
+
 				$cleanup_cmd .= ";\nrm " . $realigned_bam;
 				$cleanup_cmd .= ";\nrm " . $realigned_bai;
 
@@ -625,7 +646,7 @@ sub main {
 						log_dir	=> $log_directory,
 						name	=> 'run_indel_realigner_' . $sample,
 						cmd	=> $stage2_cmd,
-						modules	=> [$gatk],
+						modules	=> [$gatk, $samtools],
 						dependencies	=> $run_id_sample,
 						max_time	=> $tool_data->{parameters}->{realign}->{time},
 						mem		=> $tool_data->{parameters}->{realign}->{mem},
@@ -664,6 +685,8 @@ sub main {
 				java_mem	=> $tool_data->{parameters}->{bqsr}->{java_mem},
 				tmp_dir		=> $tmp_directory
 				);
+
+			$stage3_cmd .= "\n" . check_java_output();
 
 			# check if this should be run
 			if ( ('N' eq $resume) || ('Y' eq missing_file($bqsr_file)) ) {
@@ -741,7 +764,12 @@ sub main {
 				my $link_cmd = "echo Creating new symlink...";
 				$link_cmd .= "\nln -s $recal_bam $final_link";
 
-				$stage4_cmd .= "\n" . $link_cmd;
+				$java_check = "samtools quickcheck $recal_bam";
+				$java_check .= "\n" . check_java_output(
+					extra_cmd => $link_cmd
+					);
+
+				$stage4_cmd .= "\n" . $java_check;
 
 				# record command (in log directory) and then run job
 				print "Submitting job for PrintReads (applying base recalibration)...\n";
@@ -757,7 +785,7 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> 'run_apply_base_recalibration_' . $sample,
 					cmd	=> $stage4_cmd,
-					modules	=> [$gatk],
+					modules	=> [$gatk, $samtools],
 					dependencies	=> $run_id_sample,
 					max_time	=> $tool_data->{parameters}->{recalibrate}->{time}->{$type},
 					mem		=> $tool_data->{parameters}->{recalibrate}->{mem},
