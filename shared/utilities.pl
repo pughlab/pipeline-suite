@@ -69,7 +69,7 @@ sub error_checking {
 			);
 		}
 
-	if ( ('gatk' eq $pipeline) || ('variant_call' eq $pipeline) ) {
+	if ('gatk' eq $pipeline) {
 
 		if (!defined($tool_data->{reference})) { die("Must supply path to reference genome!"); }
 		$is_ref_valid = validate_ref(
@@ -78,8 +78,8 @@ sub error_checking {
 			exts		=> [qw(.fa .dict .fa.fai)]
 			);
 
-		if ('gatk' eq $pipeline) {
-			if ( ('dna' eq $args{data_type}) && (!defined($tool_data->{intervals_bed})) ) {
+		if ('dna' eq $data_type) {
+			if (!defined($tool_data->{intervals_bed})) {
 				print "WARNING: no target intervals provided.\n";
 				print ">>If this is exome data, please provide the target regions!\n";
 				}
@@ -151,7 +151,6 @@ sub validate_ref {
 sub set_output_path {
 	my %args = (
 		tool_data	=> undef,
-		pipeline	=> '',
 		@_
 		);
 
@@ -259,6 +258,34 @@ sub write_script {
 	close($fh_script);
 
 	return($script);
+	}
+
+# Many java-based programs (ie, GATK) can fail without triggering a SLURM error
+# To address this, we will add a final check to be run once these tasks finish,
+# to verify that they completed successfully
+sub check_java_output {
+	my %args = (
+		extra_cmd	=> undef,
+		@_
+		);
+
+	my $java_check .= "\n" . join("\n",
+		'if [ $? == 0 ]; then',
+		'  echo "java task completed successfully!"'
+		);
+
+	if (defined($args{extra_cmd})) {
+		$java_check .= "\n  $args{extra_cmd}";
+		}
+
+	$java_check .= "\n" . join("\n",
+		'else',
+		'  echo "java task failed!"',
+		'  exit 1',
+		'fi'
+		);
+
+	return($java_check);
 	}
 
 # execute commands/submit jobs
