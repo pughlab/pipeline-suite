@@ -13,10 +13,12 @@ create_output_yaml: Y
 dry_run: N
 # and indicate some parameters for job submission
 parameters:
+# for both DNA and RNA
     haplotype_call:
         java_mem: 8g
         mem: 12G
         time: '12:00:00'
+# only for RNA
     filter:
         java_mem: 8g
         mem: 12G
@@ -29,3 +31,8 @@ parameters:
         filter_vcf: /cluster/projects/pughlab/references/VEP_cache/ExAC_nonTCGA.r1.sites.hg19ToHg38.vep.vcf.gz 
         mem: 12G
         time: '12:00:00'
+# only for DNA
+    combine:
+        java_mem: 4g
+        mem: 6G
+        time: '04:00:00'
