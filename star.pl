@@ -148,7 +148,7 @@ sub get_markdup_command {
 
 	my $markdup_command = join(' ',
 		'java -Xmx' . $args{java_mem},
-		'-D' . $args{tmp_dir},
+		'-Djava.io.tmpdir=' . $args{tmp_dir},
 		'-jar $picard_dir/picard.jar MarkDuplicates',
 		'INPUT=' . $args{input},
 		'OUTPUT=' . $args{output},
@@ -175,7 +175,7 @@ sub get_rnaseqc_cmd {
 
 	my $qc_command = join(' ',
 		'java -Xmx' . $args{java_mem},
-		'-D' . $args{tmp_dir},
+		'-Djava.io.tmpdir=' . $args{tmp_dir},
 		'-jar $rnaseqc_dir/RNA-SeQC.jar',
 		'-bwa', $args{bwa},
 		'-o', $args{output_dir},
@@ -486,6 +486,11 @@ sub main {
 		java_mem	=> $tool_data->{parameters}->{rna_seqc}->{java_mem},
 		tmp_dir		=> $qc_directory
 		);
+
+	$qc_cmd .= ";\n\ncd $qc_directory;";
+	$qc_cmd .= "\nif [ -s metrics.tsv ]; then";
+	$qc_cmd .= "\n  find . -name '*tmp.txt*' -exec rm {} ". '\;';
+	$qc_cmd .= "\nfi";
 
 	# record command (in log directory) and then run job
 	print "\nSubmitting job for RNA-SeQC...\n";
