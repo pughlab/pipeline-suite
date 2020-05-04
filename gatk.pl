@@ -15,7 +15,7 @@ my $cwd = dirname($0);
 require "$cwd/shared/utilities.pl";
 
 # define some global variables
-our ($data_type, $reference, $known_1000g, $known_mills, $dbsnp);
+our ($data_type, $reference, $known_1000g, $known_indels, $known_mills, $dbsnp);
 
 ####################################################################################################
 # version       author	  	comment
@@ -45,7 +45,7 @@ sub get_split_command {
 
 	my $split_command = join(' ',
 		'java -Xmx' . $args{java_mem},
-		'-D' . $args{tmp_dir},
+		'-Djava.io.tmpdir=' . $args{tmp_dir},
 		'-jar $gatk_dir/GenomeAnalysisTK.jar -T SplitNCigarReads',
 		'-R', $reference,
 		'-I', $args{input},
@@ -58,7 +58,7 @@ sub get_split_command {
 	return($split_command);
 	}
 
-# format command to run GATK RealignerTargetCreatro
+# format command to run GATK RealignerTargetCreator
 sub get_target_intervals_command {
 	my %args = (
 		input		=> undef,
@@ -72,12 +72,12 @@ sub get_target_intervals_command {
 
 	my $target_command = join(' ',
 		'java -Xmx' . $args{java_mem},
-		'-D' . $args{tmp_dir},
+		'-Djava.io.tmpdir=' . $args{tmp_dir},
 		'-jar $gatk_dir/GenomeAnalysisTK.jar -T RealignerTargetCreator',
 		'-R', $reference,
 		'-I', $args{input},
 		'-o', $args{output},
-		'-known', $known_1000g,
+		'-known', $known_indels,
 		'-known', $known_mills
 		);
 
@@ -85,7 +85,8 @@ sub get_target_intervals_command {
 	if ('dna' eq $data_type) {
 		$target_command = join(' ',
 			$target_command,
-			'--disable_auto_index_creation_and_locking_when_reading_rods -nt', $args{n_samples}
+			'--disable_auto_index_creation_and_locking_when_reading_rods -nt', $args{n_samples},
+			'-dt None'
 			);
 
 		if ('' ne $args{intervals}) {
@@ -113,7 +114,7 @@ sub get_indelrealign_command {
 
 	my $realign_command = join(' ',
 		'java -Xmx' . $args{java_mem},
-		'-D' . $args{tmp_dir},
+		'-Djava.io.tmpdir=' . $args{tmp_dir},
 		'-jar $gatk_dir/GenomeAnalysisTK.jar -T IndelRealigner',
 		'-I', $args{input},
 		'-R', $reference,
@@ -127,9 +128,9 @@ sub get_indelrealign_command {
 			$realign_command,
 			'--disable_auto_index_creation_and_locking_when_reading_rods',
 			'-nWayOut _realigned.bam',
-			'-known', $known_1000g,
+			'-known', $known_indels,
 			'-known', $known_mills,
-			'-compress 0'
+			'-compress 0 -dt None'
 			);
 
 		# otherwise, it is RNA, so add these options
@@ -158,12 +159,12 @@ sub create_recalibration_table {
 
 	my $bqsr_command = join(' ', 
 		'java -Xmx' . $args{java_mem},
-		'-D' . $args{tmp_dir},
+		'-Djava.io.tmpdir=' . $args{tmp_dir},
 		'-jar $gatk_dir/GenomeAnalysisTK.jar -T BaseRecalibrator',
 		'-I', $args{input},
 		'-R', $reference,
 		'-knownSites', $known_1000g,
-		'-knownSites', $known_mills,
+		'-knownSites', $dbsnp,
 		'-o', $args{output}
 		);
 
@@ -177,7 +178,8 @@ sub create_recalibration_table {
 			'--covariate ReadGroupCovariate',
 			'--covariate QualityScoreCovariate',
 			'--covariate CycleCovariate',
-			'--covariate ContextCovariate'
+			'--covariate ContextCovariate',
+			'-dt None'
 			);
 
 		if ('' ne $args{intervals}) {
@@ -187,14 +189,6 @@ sub create_recalibration_table {
 				'--interval_padding 100'
 				);
 			}
-
-		# otherwise, it is RNA, so add these options
-		} elsif ('rna' eq $data_type) {
-
-		$bqsr_command = join(' ',
-			$bqsr_command,
-			'-knownSites', $dbsnp,
-			);
 		}
 
 	return($bqsr_command);
@@ -213,7 +207,7 @@ sub create_recalibrated_bam {
 
 	my $recal_command = join(' ',
 		'java -Xmx' . $args{java_mem},
-		'-D' . $args{tmp_dir},
+		'-Djava.io.tmpdir=' . $args{tmp_dir},
 		'-jar $gatk_dir/GenomeAnalysisTK.jar -T PrintReads',
 		'-I', $args{input},
 		'-R', $reference,
@@ -228,7 +222,7 @@ sub create_recalibrated_bam {
 		$recal_command = join(' ',
 			$recal_command,
 			'--disable_auto_index_creation_and_locking_when_reading_rods -nct 8',
-			'-rf BadCigar'
+			'-rf BadCigar -dt None'
 			);
 		}
 
@@ -273,6 +267,7 @@ sub main {
 
 		print "\n      Using GATK's hg38bundle files: /cluster/tools/data/genomes/human/hg38/hg38bundle/";
 		$known_1000g	= '/cluster/tools/data/genomes/human/hg38/hg38bundle/1000G_phase1.snps.high_confidence.hg38.vcf.gz';
+		$known_indels	= '/cluster/tools/data/genomes/human/hg38/hg38bundle/Homo_sapiens_assembly38.known_indels.vcf.gz';
 		$known_mills	= '/cluster/tools/data/genomes/human/hg38/hg38bundle/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz';
 		$dbsnp		= '/cluster/tools/data/genomes/human/hg38/hg38bundle/dbsnp_144.hg38.vcf.gz';
 
@@ -280,6 +275,7 @@ sub main {
 
 		print "\n      Using hg19 variant calling files: /cluster/tools/data/genomes/human/hg19/variantcallingdata/";
 		$known_1000g	= '/cluster/tools/data/genomes/human/hg19/variantcallingdata/1000G_phase1.snps.high_confidence.hg19.vcf';
+		$known_indels	= '/cluster/tools/data/genomes/human/hg19/variantcallingdata/1000G_phase1.indels.hg19.vcf';
 		$known_mills	= '/cluster/tools/data/genomes/human/hg19/variantcallingdata/Mills_and_1000G_gold_standard.indels.hg19.vcf';
 		$dbsnp		= '/cluster/tools/data/genomes/human/hg19/variantcallingdata/dbsnp_138.hg19.vcf';
 
