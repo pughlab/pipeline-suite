@@ -49,7 +49,7 @@ sub get_haplotype_command {
 
 	my $gatk_command = join(' ',
 		'java -Xmx' . $args{java_mem},
-		'-D' . $args{tmp_dir},
+		'-Djava.io.tmpdir=' . $args{tmp_dir},
 		'-jar $gatk_dir/GenomeAnalysisTK.jar -T HaplotypeCaller',
 		'-R', $reference,
 		'-I', $args{bam},
@@ -93,7 +93,7 @@ sub get_filter_command {
 
 	my $gatk_command = join(' ',
 		'java -Xmx' . $args{java_mem},
-		'-D' . $args{tmp_dir},
+		'-Djava.io.tmpdir=' . $args{tmp_dir},
 		'-jar $gatk_dir/GenomeAnalysisTK.jar -T VariantFiltration',
 		'-R', $reference,
 		'-V', $args{input},
@@ -119,7 +119,7 @@ sub get_combine_gvcf_command {
 
 	my $gatk_command = join(' ',
 		'java -Xmx' . $args{java_mem},
-		'-D' . $args{tmp_dir},
+		'-Djava.io.tmpdir=' . $args{tmp_dir},
 		'-jar $gatk_dir/GenomeAnalysisTK.jar -T CombineGVCFs',
 		'-R', $reference,
 		'-V', $args{input},
@@ -404,6 +404,7 @@ sub main{
 						"  ln -s $final_maf $final_link",
 						"  mv $tmp_directory/$sample" . "_HaplotypeCaller_filtered.vep.vcf $final_vcf",
 						"  md5sum $final_vcf > $final_vcf.md5",
+						"  gzip $final_vcf",
 						"else",
 						'  echo "FINAL OUTPUT MAF is missing; not running md5sum or producing final symlink..."',
 						"fi"
@@ -448,8 +449,14 @@ sub main{
 			print "Submitting job to clean up temporary/intermediate files...\n";
 
 			# make sure final output exists before removing intermediate files!
+			my @files_to_check;
+			foreach my $tmp ( @final_outputs ) {
+				$tmp .= '.md5';
+				push @files_to_check, $tmp;
+				}
+
 			$cleanup_cmd_rna = join("\n",
-				"if [ -s " . join(" ] && [ -s ", @final_outputs) . " ]; then",
+				"if [ -s " . join(" ] && [ -s ", @files_to_check) . " ]; then",
 				$cleanup_cmd_rna,
 				"else",
 				'echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
@@ -482,7 +489,7 @@ sub main{
 	if ('dna' eq $data_type) {
 
 		# run CombineGVCFs
-		my $combined_gvcf = join('/', $output_directory . 'haplotype_caller_combined.g.vcf');
+		my $combined_gvcf = join('/', $output_directory, 'haplotype_caller_combined.g.vcf');
 
 		my $combine_cmd = get_combine_gvcf_command(
 			input		=> join(' -V ', @gvcfs),
@@ -597,7 +604,7 @@ sub main{
 			"perl $cwd/shared/create_final_yaml.pl",
 			'-d', $output_directory,
 			'-o', $output_directory . '/vcf_config.yaml',
-			'-p', 'vep.vcf$' 
+			'-p', 'annotated.vcf.gz$' 
 			);
 
 		my $output_yaml_cmd_maf = join(' ',
