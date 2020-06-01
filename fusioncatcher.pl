@@ -131,7 +131,7 @@ sub main {
 		# process each separate sample for this patient
 		foreach my $sample (sort keys %{$smp_data->{$patient}}) {
 
-			if ($sample =~ m/BC|SK|A/) {
+			if ($sample =~ m/BC$|SK$|A$/) {
 				print "\n>> SAMPLE: $sample is labelled as normal - will be skipped!\n";
 				next;
 				}
@@ -179,7 +179,7 @@ sub main {
 			$run_id = '';
 
 			## run FusionCatcher on these fastqs
-			my $fusion_output = join('/', $sample_directory, 'star-fusion.fusion_predictions.abridged.tsv');
+			my $fusion_output = join('/', $sample_directory, 'final-list_candidate-fusion-genes.txt');
 
 			my $fusion_cmd = get_fusion_command(
 				ref_dir		=> $tool_data->{reference_dir},
@@ -192,7 +192,7 @@ sub main {
 
 			# IF THIS STEP IS SUCCESSFULLY RUN,
 			# create a symlink for the final output in the TOP directory
-			my $smp_output = $sample . "_fusion_predictions.abridged.tsv";
+			my $smp_output = $sample . "_candidate-fusion-genes.txt";
 			my $links_cmd = join("\n",
 				"cd $patient_directory",
 				"ln -s $fusion_output $smp_output",
@@ -217,7 +217,8 @@ sub main {
 					modules => [$fusioncatcher],
 					max_time	=> $tool_data->{parameters}->{fusioncatcher}->{time},
 					mem		=> $tool_data->{parameters}->{fusioncatcher}->{mem},
-					hpc_driver	=> $tool_data->{HPC_driver}
+					hpc_driver	=> $tool_data->{HPC_driver},
+					extra_args	=> '-p himem'
 					);
 
 				$run_id = submit_job(

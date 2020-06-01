@@ -199,8 +199,8 @@ sub main {
 				$data_dir = join('/', $data_dir, $sample, 'fastq_links');
 				opendir(RAWFILES, $data_dir) or die "Cannot open $data_dir !";
 				my @dir_files = readdir(RAWFILES);
-				@r1_fastq_files = grep {/R1.fastq.gz/} @dir_files;
-				@r2_fastq_files = grep {/R2.fastq.gz/} @dir_files;
+				@r1_fastq_files = grep {/R1.fastq.gz|R1_001.fastq.gz/} @dir_files;
+				@r2_fastq_files = grep {/R2.fastq.gz|R2_001.fastq.gz/} @dir_files;
 				closedir(RAWFILES);
 
 				# if there were multiple lanes, we will need to combine them

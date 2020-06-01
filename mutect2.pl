@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-### mutect.pl ######################################################################################
+### mutect2.pl #####################################################################################
 use AutoLoader 'AUTOLOAD';
 use strict;
 use warnings;
@@ -19,10 +19,10 @@ our ($reference, $dbsnp, $cosmic, $pon) = undef;
 
 ####################################################################################################
 # version       author		comment
-# 1.0		sprokopec       script to run MuTect1 with options for T/N, PoN and T only
+# 1.0		sprokopec       script to run MuTect2 with options for T/N, PoN and T only
 
 ### USAGE ##########################################################################################
-# mutect.pl -t tool_config.yaml -c data_config.yaml { --create-panel-of-normals }
+# mutect2.pl -t tool_config.yaml -c data_config.yaml { --create-panel-of-normals }
 #
 # where:
 # 	- tool_config.yaml contains tool versions and parameters, output directory,
@@ -41,7 +41,7 @@ our ($reference, $dbsnp, $cosmic, $pon) = undef;
 sub get_mutect_pon_command {
 	my %args = (
 		normal		=> undef,
-		output_stem	=> undef,
+		output		=> undef,
 		java_mem	=> undef,
 		tmp_dir		=> undef,
 		intervals	=> undef,
@@ -51,18 +51,17 @@ sub get_mutect_pon_command {
 	my $mutect_command = join(' ',
 		'java -Xmx' . $args{java_mem},
 		'-Djava.io.tmpdir=' . $args{tmp_dir},
-		'-jar $mutect_dir/muTect.jar -T MuTect',
+		'-jar $gatk_dir/GenomeAnalysisTK.jar -T MuTect2',
 		'-R', $reference,
-		'--input_file:tumor', $args{normal},
-		'--vcf', $args{output_stem} . '.vcf',
-	#	'--out', $args{output_stem} . '.stats',
+		'-I:tumor', $args{normal},
+		'--out', $args{output},
 		'--artifact_detection_mode',
 		'--dbsnp', $dbsnp
 		);
 
-	if (defined($cosmic)) {
-		$mutect_command .= " --cosmic $cosmic";
-		}
+#	if (defined($cosmic)) {
+#		$mutect_command .= " --cosmic $cosmic";
+#		}
 
 	if (defined($args{intervals})) {
 		$mutect_command .= ' ' . join(' ',
@@ -108,9 +107,7 @@ sub get_mutect_tn_command {
 	my %args = (
 		tumour		=> undef,
 		normal		=> undef,
-		tumour_ID	=> undef,
-		normal_ID	=> undef,
-		output_stem	=> undef,
+		output		=> undef,
 		java_mem	=> undef,
 		tmp_dir		=> undef,
 		intervals	=> undef,
@@ -120,14 +117,11 @@ sub get_mutect_tn_command {
 	my $mutect_command = join(' ',
 		'java -Xmx' . $args{java_mem},
 		'-Djava.io.tmpdir=' . $args{tmp_dir},
-		'-jar $mutect_dir/muTect.jar -T MuTect',
+		'-jar $gatk_dir/GenomeAnalysisTK.jar -T MuTect2',
 		'-R', $reference,
-		'--input_file:tumor', $args{tumour},
-		'--input_file:normal', $args{normal},
-		'--tumor_sample_name', $args{tumour_ID},
-		'--normal_sample_name', $args{normal_ID},
-		'--vcf', $args{output_stem} . '.vcf',
-		'--out', $args{output_stem} . '.stats',
+		'-I:tumor', $args{tumour},
+		'-I:normal', $args{normal},
+		'--out', $args{output},
 		'--dbsnp', $dbsnp
 		);
 
@@ -153,8 +147,7 @@ sub get_mutect_tn_command {
 sub get_mutect_tonly_command {
 	my %args = (
 		tumour		=> undef,
-		tumour_ID	=> undef,
-		output_stem	=> undef,
+		output		=> undef,
 		java_mem	=> undef,
 		tmp_dir		=> undef,
 		intervals	=> undef,
@@ -164,12 +157,10 @@ sub get_mutect_tonly_command {
 	my $mutect_command = join(' ',
 		'java -Xmx' . $args{java_mem},
 		'-Djava.io.tmpdir=' . $args{tmp_dir},
-		'-jar $mutect_dir/muTect.jar -T MuTect',
+		'-jar $gatk_dir/GenomeAnalysisTK.jar -T MuTect2',
 		'-R', $reference,
-		'--input_file:tumor', $args{tumour},
-		'--tumor_sample_name', $args{tumour_ID},
-		'--vcf', $args{output_stem} . '.vcf',
-		'--out', $args{output_stem} . '.stats',
+		'-I:tumor', $args{tumour},
+		'--out', $args{output},
 		'--dbsnp', $dbsnp,
 		'--normal_panel', $pon
 		);
@@ -192,19 +183,42 @@ sub get_mutect_tonly_command {
 sub get_filter_command {
 	my %args = (
 		input		=> undef,
-		output		=> undef,
+		output_stem	=> undef,
 		tmp_dir		=> undef,
+		split		=> 0,
 		@_
 		);
 
-	my $filter_command = join(' ',
-		'vcftools',
-		'--vcf', $args{input},
-		'--remove-filtered REJECT',
-		'--stdout --recode',
-		'--temp', $args{tmp_dir},
-		'>', $args{output}
-		);
+	my $filter_command;
+
+	if ($args{split}) {
+		$filter_command = join(' ',
+			'vcftools',
+			'--vcf', $args{input},
+			'--keep-filtered PASS --remove-indels',
+			'--stdout --recode',
+			'--temp', $args{tmp_dir},
+			'>', $args{output_stem} . "_snps.vcf"
+			);
+
+		$filter_command .= "\n\n" . join(' ',
+			'vcftools',
+			'--vcf', $args{input},
+			'--keep-filtered PASS --keep-only-indels',
+			'--stdout --recode',
+			'--temp', $args{tmp_dir},
+			'>', $args{output_stem} . "_indels.vcf"
+			);
+		} else {
+		$filter_command = join(' ',
+			'vcftools',
+			'--vcf', $args{input},
+			'--keep-filtered PASS',
+			'--stdout --recode',
+			'--temp', $args{tmp_dir},
+			'>', $args{output_stem} . ".vcf"
+			);
+		}
 
 	return($filter_command);
 	}
@@ -225,6 +239,11 @@ sub pon{
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'gatk');
+
+	if ($tool_data->{tool_version} =~ m/^4/) {
+		die("Incompatible GATK version requested! MuTect2 pipeline is currently only compatible with GATK 3.x");
+		}
+
 	$tool_data->{date} = strftime "%F", localtime;
 	
 	# check for resume and confirm output directories
@@ -232,7 +251,7 @@ sub pon{
 
 	# start logging
 	print "---\n";
-	print "Running MuTect Panel of Normals pipeline.\n";
+	print "Running MuTect2 Panel of Normals pipeline.\n";
 	print "\n  Tool config used: $tool_config";
 	print "\n    Reference used: $tool_data->{reference}";
 
@@ -261,8 +280,7 @@ sub pon{
 	print "\n---";
 
 	# set tools and versions
-	my $mutect	= 'mutect/' . $tool_data->{tool_version};
-	my $gatk	= 'gatk/' . $tool_data->{gatk_version};
+	my $gatk	= 'gatk/' . $tool_data->{tool_version};
 	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
 
 	# create a file to hold job metrics
@@ -327,12 +345,12 @@ sub pon{
 			print "  SAMPLE: $sample\n\n";
 
 			# run MuTect
-			my $output_stem = join('/', $intermediate_directory, $sample . '_MuTect');
-			$cleanup_cmd .= "\nrm $output_stem.vcf";
+			my $mutect_vcf = join('/', $intermediate_directory, $sample . '_MuTect2.vcf');
+			$cleanup_cmd .= "\nrm $mutect_vcf";
 
 			my $mutect_command = get_mutect_pon_command(
 				normal		=> $smp_data->{$patient}->{normal}->{$sample},
-				output_stem	=> $output_stem,
+				output		=> $mutect_vcf,
 				java_mem	=> $tool_data->{parameters}->{mutect}->{java_mem},
 				tmp_dir		=> $tmp_directory,
 				intervals	=> $tool_data->{intervals_bed}
@@ -340,22 +358,22 @@ sub pon{
 
 			# this is a java-based command, so run a final check
 			my $java_check = "\n" . check_java_output(
-				extra_cmd => "\n\nmd5sum $output_stem.vcf > $output_stem.vcf.md5"
+				extra_cmd => "\n\nmd5sum $mutect_vcf > $mutect_vcf.md5"
 				);
 
 			$mutect_command .= "\n$java_check";
 
 			# check if this should be run
-			if ( ('N' eq $resume) || ('Y' eq missing_file($output_stem . '.vcf.md5')) ) {
+			if ( ('N' eq $resume) || ('Y' eq missing_file($mutect_vcf . '.md5')) ) {
 
 				# record command (in log directory) and then run job
-				print "Submitting job for MuTect in artifact_detection_mode...\n";
+				print "Submitting job for MuTect2 in artifact_detection_mode...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
 					name	=> 'run_mutect_artifact_detection_mode_' . $sample,
 					cmd	=> $mutect_command,
-					modules	=> [$mutect],
+					modules	=> [$gatk],
 					max_time	=> $tool_data->{parameters}->{mutect}->{time},
 					mem		=> $tool_data->{parameters}->{mutect}->{mem},
 					hpc_driver	=> $tool_data->{HPC_driver}
@@ -371,23 +389,25 @@ sub pon{
 				push @all_jobs, $run_id;
 				}
 			else {
-				print "Skipping MuTect (artifact_detection) because this has already been completed!\n";
+				print "Skipping MuTect2 (artifact_detection) because this has already been completed!\n";
 				}
 
 			# filter results
+			my $filtered_stem = join('/', $intermediate_directory, $sample . '_MuTect2_filtered');
 			my $filter_command = get_filter_command(
-				input	=> $output_stem . '.vcf',
-				output	=> $output_stem . '_filtered.vcf',
-				tmp_dir	=> $tmp_directory
+				input		=> $mutect_vcf,
+				output_stem	=> $filtered_stem,
+				tmp_dir		=> $tmp_directory,
+				split		=> 0
 				);
 
 			$filter_command .= "\n\n" . join(' ',
-				'md5sum', $output_stem . "_filtered.vcf",
-				'>', $output_stem . "_filtered.vcf.md5"
+				'md5sum', $filtered_stem . '.vcf',
+				'>', "$filtered_stem.vcf.md5"
 				);
 
 			# check if this should be run
-			if ( ('N' eq $resume) || ('Y' eq missing_file($output_stem . '_filtered.vcf.md5')) ) {
+			if ( ('N' eq $resume) || ('Y' eq missing_file($filtered_stem . '.md5')) ) {
 
 				# record command (in log directory) and then run job
 				print "Submitting job for VCF-filter...\n";
@@ -416,7 +436,7 @@ sub pon{
 				print "Skipping VCF-filter because this has already been completed!\n";
 				}
 
-			push @pon_vcfs, join(' ', "-V:$sample", $output_stem . "_filtered.vcf");
+			push @pon_vcfs, join(' ', "-V:$sample", $filtered_stem . ".vcf");
 			} # end sample
 		} # end patient
 
@@ -599,14 +619,19 @@ sub main{
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'gatk');
+
+	if ($tool_data->{tool_version} =~ m/^4/) {
+		die("Incompatible GATK version requested! MuTect2 pipeline is currently only compatible with GATK 3.x");
+		}
+
 	$tool_data->{date} = strftime "%F", localtime;
-	
+
 	# check for resume and confirm output directories
 	my ($resume, $output_directory, $log_directory) = set_output_path(tool_data => $tool_data);
 
 	# start logging
 	print "---\n";
-	print "Running MuTect variant calling pipeline.\n";
+	print "Running MuTect2 variant calling pipeline.\n";
 	print "\n  Tool config used: $tool_config";
 	print "\n    Reference used: $tool_data->{reference}";
 
@@ -640,7 +665,7 @@ sub main{
 	print "\n---";
 
 	# set tools and versions
-	my $mutect	= 'mutect/' . $tool_data->{tool_version};
+	my $gatk	= 'gatk/' . $tool_data->{tool_version};
 	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 
@@ -662,8 +687,8 @@ sub main{
 	# get sample data
 	my $smp_data = LoadFile($data_config);
 
-	my ($run_script, $run_id, $link, $java_check, $cleanup_cmd);
-	my (@all_jobs, @pon_vcfs);
+	my ($run_script, $run_id, $link, $java_check, $cleanup_cmd, $run_id_other);
+	my (@all_jobs);
 
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
@@ -713,7 +738,7 @@ sub main{
 			($run_id, $java_check) = '';
 
 			# run MuTect
-			my $output_stem = join('/', $sample_directory, $sample . '_MuTect');
+			my $output_stem = join('/', $sample_directory, $sample . '_MuTect2');
 			$cleanup_cmd .= "\nrm $output_stem.vcf";
 
 			my ($mutect_command, $extra_cmds) = undef;
@@ -723,8 +748,7 @@ sub main{
 
 				$mutect_command = get_mutect_tonly_command(
 					tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
-					tumour_ID	=> $sample,
-					output_stem	=> $output_stem,
+					output		=> $output_stem . '.vcf',
 					java_mem	=> $tool_data->{parameters}->{mutect}->{java_mem},
 					tmp_dir		=> $tmp_directory,
 					intervals	=> $tool_data->{intervals_bed}
@@ -736,9 +760,7 @@ sub main{
 				$mutect_command = get_mutect_tn_command(
 					tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
 					normal		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
-					tumour_ID	=> $sample,
-					normal_ID	=> $normal_ids[0],
-					output_stem	=> $output_stem,
+					output		=> $output_stem . '.vcf',
 					java_mem	=> $tool_data->{parameters}->{mutect}->{java_mem},
 					tmp_dir		=> $tmp_directory,
 					intervals	=> $tool_data->{intervals_bed}
@@ -760,20 +782,21 @@ sub main{
 			if ( ('N' eq $resume) || ('Y' eq missing_file($output_stem . '.vcf.md5')) ) {
 
 				# record command (in log directory) and then run job
-				print "Submitting job for MuTect...\n";
+				print "Submitting job for MuTect2...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
-					name	=> 'run_mutect_' . $sample,
+					name	=> 'run_mutect2_' . $sample,
 					cmd	=> $mutect_command,
-					modules	=> [$mutect],
+					modules	=> [$gatk],
 					max_time	=> $tool_data->{parameters}->{mutect}->{time},
 					mem		=> $tool_data->{parameters}->{mutect}->{mem},
+					cpus_per_task	=> 2,
 					hpc_driver	=> $tool_data->{HPC_driver}
 					);
 
 				$run_id = submit_job(
-					jobname		=> 'run_mutect_' . $sample,
+					jobname		=> 'run_mutect2_' . $sample,
 					shell_command	=> $run_script,
 					hpc_driver	=> $tool_data->{HPC_driver},
 					dry_run		=> $tool_data->{dry_run}
@@ -783,25 +806,32 @@ sub main{
 				push @all_jobs, $run_id;
 				}
 			else {
-				print "Skipping MuTect because this has already been completed!\n";
+				print "Skipping MuTect2 because this has already been completed!\n";
 				}
 
 			# filter results
 			my $filter_command = get_filter_command(
-				input	=> $output_stem . '.vcf',
-				output	=> $output_stem . '_filtered.vcf',
-				tmp_dir	=> $tmp_directory
+				input		=> $output_stem . '.vcf',
+				output_stem	=> $output_stem . '_filtered',
+				tmp_dir		=> $tmp_directory,
+				split		=> 1
 				);
 
 			$filter_command .= "\n" . join(' ',
-				'md5sum', $output_stem . "_filtered.vcf",
-				'>', $output_stem . "_filtered.vcf.md5"
+				'md5sum', $output_stem . "_filtered_snps.vcf",
+				'>', $output_stem . "_filtered_snps.vcf.md5"
 				);
 
-			$cleanup_cmd .= "\nrm " . $output_stem . "_filtered.vcf";
+			$filter_command .= "\n" . join(' ',
+				'md5sum', $output_stem . "_filtered_indels.vcf",
+				'>', $output_stem . "_filtered_indels.vcf.md5"
+				);
+
+			$cleanup_cmd .= "\nrm " . $output_stem . "_filtered_snps.vcf";
+			$cleanup_cmd .= "\nrm " . $output_stem . "_filtered_indels.vcf";
 
 			# check if this should be run
-			if ( ('N' eq $resume) || ('Y' eq missing_file($output_stem . '_filtered.vcf.md5')) ) {
+			if ( ('N' eq $resume) || ('Y' eq missing_file($output_stem . '_filtered_snps.vcf.md5')) ) {
 
 				# record command (in log directory) and then run job
 				print "Submitting job for VCF-filter...\n";
@@ -832,99 +862,102 @@ sub main{
 				}
 
 			### Run variant annotation (VEP + vcf2maf)
-			my $final_vcf = $output_stem . "_filtered_annotated.vcf";
-			my $final_maf = $output_stem . "_filtered_annotated.maf";
+			my ($vcf2maf_cmd, $final_vcf, $final_maf) = '';
 
-			# Tumour only, with a panel of normals
-			my $vcf2maf_cmd;
+			my @var_types = qw(snps indels);
+			foreach my $vtype (@var_types) {
 
-			if ( (defined($tool_data->{pon})) && (scalar(@normal_ids) == 0) ) {
+				$final_vcf = join('_', $output_stem, "filtered", $vtype, "annotated.vcf");
+				$final_maf = join('_', $output_stem, "filtered", $vtype, "annotated.maf");
 
-				$vcf2maf_cmd = get_vcf2maf_command(
-					input           => $output_stem . "_filtered.vcf",
-					tumour_id       => $sample,
-					reference       => $reference,
-					ref_type        => $tool_data->{ref_type},
-					output          => $final_maf,
-					tmp_dir         => $tmp_directory,
-					vcf2maf         => $tool_data->{parameters}->{annotate}->{vcf2maf_path},
-					vep_path        => $tool_data->{parameters}->{annotate}->{vep_path},
-					vep_data        => $tool_data->{parameters}->{annotate}->{vep_data},
-					filter_vcf      => $tool_data->{parameters}->{annotate}->{filter_vcf}
-					);
+				# Tumour only, with a panel of normals
+				if ( (defined($tool_data->{pon})) && (scalar(@normal_ids) == 0) ) {
 
-				# paired tumour/normal
-				} elsif (scalar(@normal_ids) > 0) {
+					$vcf2maf_cmd = get_vcf2maf_command(
+						input           => join('_', $output_stem, "filtered", $vtype . ".vcf"),
+						tumour_id       => $sample,
+						reference       => $reference,
+						ref_type        => $tool_data->{ref_type},
+						output          => $final_maf,
+						tmp_dir         => $tmp_directory,
+						vcf2maf         => $tool_data->{parameters}->{annotate}->{vcf2maf_path},
+						vep_path        => $tool_data->{parameters}->{annotate}->{vep_path},
+						vep_data        => $tool_data->{parameters}->{annotate}->{vep_data},
+						filter_vcf      => $tool_data->{parameters}->{annotate}->{filter_vcf}
+						);
 
-				$vcf2maf_cmd = get_vcf2maf_command(
-					input           => $output_stem . "_filtered.vcf",
-					tumour_id       => $sample,
-					normal_id       => $normal_ids[0],
-					reference       => $reference,
-					ref_type        => $tool_data->{ref_type},
-					output          => $final_maf,
-					tmp_dir         => $tmp_directory,
-					vcf2maf         => $tool_data->{parameters}->{annotate}->{vcf2maf_path},
-					vep_path        => $tool_data->{parameters}->{annotate}->{vep_path},
-					vep_data        => $tool_data->{parameters}->{annotate}->{vep_data},
-					filter_vcf      => $tool_data->{parameters}->{annotate}->{filter_vcf}
-					);
-				}
+					# paired tumour/normal
+					} elsif (scalar(@normal_ids) > 0) {
 
-			# check if this should be run
-			if ( ('N' eq $resume) || ('Y' eq missing_file($final_maf . '.md5')) ) {
-
-				# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
-				# create a symlink for the final output in the TOP directory
-				my @final = split /\//, $final_maf;
-				my $final_link = join('/', $tool_data->{output_dir}, $final[-1]);
-
-				if (-l $final_link) {
-					unlink $final_link or die "Failed to remove previous symlink: $final_link";
+					$vcf2maf_cmd = get_vcf2maf_command(
+						input           => join('_', $output_stem, "filtered", $vtype . ".vcf"),
+						tumour_id       => $sample,
+						normal_id       => $normal_ids[0],
+						reference       => $reference,
+						ref_type        => $tool_data->{ref_type},
+						output          => $final_maf,
+						tmp_dir         => $tmp_directory,
+						vcf2maf         => $tool_data->{parameters}->{annotate}->{vcf2maf_path},
+						vep_path        => $tool_data->{parameters}->{annotate}->{vep_path},
+						vep_data        => $tool_data->{parameters}->{annotate}->{vep_data},
+						filter_vcf      => $tool_data->{parameters}->{annotate}->{filter_vcf}
+						);
 					}
 
-				$vcf2maf_cmd .= "\n\n" . join("\n",
-					"if [ -s " . join(" ] && [ -s ", $final_maf) . " ]; then",
-					"  md5sum $final_maf > $final_maf.md5",
-					"  ln -s $final_maf $final_link",
-					"  mv $tmp_directory/$sample" . "_MuTect_filtered.vep.vcf $final_vcf",
-					"  md5sum $final_vcf > $final_vcf.md5",
-					"  bgzip $final_vcf",
-					"  tabix -p vcf $final_vcf.gz",
-					"else",
-					'  echo "FINAL OUTPUT MAF is missing; not running md5sum or producing final symlink..."',
-					"fi"
-					);
+				# check if this should be run
+				if ( ('N' eq $resume) || ('Y' eq missing_file($final_maf . '.md5')) ) {
 
-				# record command (in log directory) and then run job
-				print "Submitting job for vcf2maf...\n";
+					# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
+					# create a symlink for the final output in the TOP directory
+					my @final = split /\//, $final_maf;
+					my $final_link = join('/', $tool_data->{output_dir}, $final[-1]);
 
-				$run_script = write_script(
-					log_dir => $log_directory,
-					name    => 'run_vcf2maf_and_VEP_' . $sample,
-					cmd     => $vcf2maf_cmd,
-					modules => ['perl', $samtools, 'tabix'],
-					dependencies    => $run_id,
-					max_time        => $tool_data->{parameters}->{annotate}->{time},
-					mem             => $tool_data->{parameters}->{annotate}->{mem},
-					hpc_driver      => $tool_data->{HPC_driver}
-					);
+					if (-l $final_link) {
+						unlink $final_link or die "Failed to remove previous symlink: $final_link";
+						}
 
-				$run_id = submit_job(
-					jobname         => 'run_vcf2maf_and_VEP_' . $sample,
-					shell_command   => $run_script,
-					hpc_driver      => $tool_data->{HPC_driver},
-					dry_run         => $tool_data->{dry_run}
-					);
+					$vcf2maf_cmd .= "\n\n" . join("\n",
+						"if [ -s " . join(" ] && [ -s ", $final_maf) . " ]; then",
+						"  md5sum $final_maf > $final_maf.md5",
+						"  ln -s $final_maf $final_link",
+						"  mv $tmp_directory/$sample" . "_MuTect2_filtered_$vtype.vep.vcf $final_vcf",
+						"  md5sum $final_vcf > $final_vcf.md5",
+						"  gzip $final_vcf",
+						"else",
+						'  echo "FINAL OUTPUT MAF is missing; not running md5sum or producing final symlink..."',
+						"fi"
+						);
 
-				push @patient_jobs, $run_id;
-				push @all_jobs, $run_id;
+					# record command (in log directory) and then run job
+					print "Submitting job for vcf2maf ($vtype)...\n";
+
+					$run_script = write_script(
+						log_dir => $log_directory,
+						name    => 'run_vcf2maf_and_VEP_' . $sample . '_' . $vtype,
+						cmd     => $vcf2maf_cmd,
+						modules => ['perl', $samtools],
+						dependencies    => $run_id,
+						max_time        => $tool_data->{parameters}->{annotate}->{time},
+						mem             => $tool_data->{parameters}->{annotate}->{mem},
+						hpc_driver      => $tool_data->{HPC_driver}
+						);
+
+					$run_id_other = submit_job(
+						jobname         => 'run_vcf2maf_and_VEP_' . $sample . '_' . $vtype,
+						shell_command   => $run_script,
+						hpc_driver      => $tool_data->{HPC_driver},
+						dry_run         => $tool_data->{dry_run}
+						);
+
+					push @patient_jobs, $run_id_other;
+					push @all_jobs, $run_id_other;
+					}
+				else {
+					print "Skipping vcf2maf ($vtype) because this has already been completed!\n";
+					}
+
+				push @final_outputs, $final_maf;
 				}
-			else {
-				print "Skipping vcf2maf because this has already been completed!\n";
-				}
-
-			push @final_outputs, $final_maf;
 			}
 
 		# should intermediate files be removed

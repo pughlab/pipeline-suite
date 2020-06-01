@@ -13,6 +13,6 @@ dry_run: Y
 # and indicate some parameters for job submission
 parameters:
     fusioncatcher:
-        java_mem: 26g
-        mem: 28G
+        java_mem: 30g
+        mem: 32G
         time: '72:00:00'

@@ -207,6 +207,7 @@ sub write_script {
 		mem		=> undef,
 		cpus_per_task	=> 1,
 		hpc_driver	=> 'slurm',
+		extra_args	=> undef,
 		@_
 		);
 
@@ -240,6 +241,19 @@ sub write_script {
 			'--mem ' . $args{mem},
 			'-c ' . $args{cpus_per_task}
 			);
+
+		my ($size, $unit);
+		if ($args{mem} =~ m/(\d+)([A-Z])/) {
+			$size = $1;
+			$unit = $2;
+			if (($size > 28) && ($size < 61) && ('G' eq $unit)) {
+				$sbatch_params .= "\n#SBATCH -p himem";
+				}
+			} 
+
+		if (defined($args{extra_args})) {
+			$sbatch_params .= "\n#SBATCH " . $args{extra_args};
+			}
 
 		if ('' ne $args{dependencies}) {
 
@@ -383,7 +397,7 @@ sub get_vcf2maf_command {
 		'--vep-data', $args{vep_data},
 		'--vep-forks 1',
 		'--filter-vcf', $args{filter_vcf},
-		'--buffer-size 1000',
+		'--buffer-size 100',
 		'--tmp-dir', $args{tmp_dir}
 		);
 
