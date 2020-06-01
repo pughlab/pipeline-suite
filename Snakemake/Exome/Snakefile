@@ -1,0 +1,60 @@
+####################################################################################################
+### PughLab Exome-Seq Pipeline #####################################################################
+####################################################################################################
+
+### SET-UP REQUIREMENTS ############################################################################
+# indicate required input parameters
+configfile: "config.yaml"
+
+# import required packages
+import pandas as pd
+import os
+import datetime
+
+# extract other details from config
+project_dir = config["project_dir"]
+ref_genome = config["ref_type"]
+
+# format timestamp (used for differentiating runs)
+date = datetime.datetime.now()
+
+# define reference-based input paths
+if ref_genome == "hg19":
+    known_mills = "/cluster/tools/data/genomes/human/hg19/variantcallingdata/Mills_and_1000G_gold_standard.indels.hg19.vcf"
+    known_1000G_indels = "/cluster/tools/data/genomes/human/hg19/variantcallingdata/1000G_phase1.indels.hg19.vcf"
+    known_1000G_snps = "/cluster/tools/data/genomes/human/hg19/variantcallingdata/1000G_phase1.snps.high_confidence.hg19.vcf"
+    dbsnp	= "/cluster/tools/data/genomes/human/hg19/variantcallingdata/dbsnp_138.hg19.vcf"
+    ref_type	= "GRCh37"
+else:
+    known_mills = "/cluster/tools/data/genomes/human/hg38/hg38bundle/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz"
+    known_1000G_indels = "/cluster/tools/data/genomes/human/hg38/hg38bundle/Homo_sapiens_assembly38.known_indels.vcf.gz"
+    known_1000G_snps = "/cluster/tools/data/genomes/human/hg38/hg38bundle/1000G_phase1.snps.high_confidence.hg38.vcf.gz"
+    dbsnp	= "/cluster/tools/data/genomes/human/hg38/hg38bundle/dbsnp_144.hg38.vcf.gz"
+    ref_type	= "GRCh38"
+
+# extract sample details
+samples = pd.read_table(config["fastq_file"]) #.set_index("sample", drop = False)
+samples = samples[['patient','sample']]
+samples = samples.drop_duplicates().set_index("sample", drop = False)
+
+patients = list(set(samples["patient"]))
+
+units = pd.read_table(config["fastq_file"], dtype=str).set_index(["sample", "lane"], drop = False)
+units.index = units.index.set_levels([i.astype(str) for i in units.index.levels])
+
+#wildcard_constraints:
+#    project_dir=project_dir,
+#    patients="|".join(patients),
+#    sample="|".join(samples.index),
+#    unit="|".join(units["lane"])
+
+### BEGIN PROCESSING ###############################################################################
+# target rule:
+# this indicates the expected *final* output files - required to ensure all steps are run
+rule all:
+    input:
+        expand("{project_dir}/BWA/{patient}/{sample}/{sample}_bwamem_aligned_sorted_merged_markdup.bam", project_dir = project_dir, sample = samples.loc[(wildcards.patient),"sample"], patient = patients["patient"])
+
+### MODULES ###
+# BWA aligner (paired-end only) + MarkDuplicates
+include: "rules/bwa.smk"

@@ -1,0 +1,22 @@
+# general parameters
+ref_type: hg38
+project_dir: /cluster/home/sprokope/pipeline_tests/Exome
+# sample config
+fastq_file: /cluster/home/sprokope/pipeline_tests/Exome/fastq_file.tsv
+## tool details
+# Alignment
+bwa_version: bwa/0.7.15
+bwa_ref: /cluster/projects/pughlab/references/bwa_index/hg38/genome.fa 
+bwa_mem: 8G
+# Merge/Mark duplicates
+picard_version: picard/2.6.0
+merge_java_mem: 14G
+merge_mem: 16G
+#
+samtools_version: samtools/1.9
+gatk_version: gatk/3.8
+gatk_ref: /cluster/tools/data/genomes/human/hg38/iGenomes/Sequence/WholeGenomeFasta/genome.fa
+vcf2maf: /cluster/projects/pughlab/bin/vcf2maf-1.6.17/vcf2maf.pl
+vep_path: /cluster/tools/software/centos7/vep/98
+vep_data: /cluster/projects/pughlab/references/VEP_cache/98
+vep_filter: /cluster/projects/pughlab/references/VEP_cache/ExAC_nonTCGA.r1.sites.hg19ToHg38.vep.vcf.gz
