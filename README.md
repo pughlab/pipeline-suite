@@ -43,11 +43,11 @@ There are example config files located in the "configs" folder:
   - fusioncatcher_config.yam (RNA)l, specifies:
     - path to Fusioncatcher reference directory
 
-   - rsem_tool_config.yaml (RNA), specifies:
+  - rsem_tool_config.yaml (RNA), specifies:
     - path/stem to RSEM reference directory
     - strandedness type (probably reverse, other options: forward or none)
 
-   - star_fusion_tool_config.yaml (RNA), specifies:
+  - star_fusion_tool_config.yaml (RNA), specifies:
     - path/stem to STAR-Fusion reference directory
     - path to tool (because it isn't currently installed as a module)
     - optional step: FusionInspect (either inspect, validate; if not wanted, leave blank)
@@ -57,7 +57,7 @@ There are example config files located in the "configs" folder:
     - path to target intervals (such as bed file for exome capture kit)
     - path to dbSNP file (if undefined, a default will be used)
 
-   - haplotype_caller_config.yaml (works for both DNA- and RNA-Seq data), specifies:
+  - haplotype_caller_config.yaml (works for both DNA- and RNA-Seq data), specifies:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to vcf2maf.pl (RNA mode)
     - path to VEP (tool/version, cache data) (RNA mode)
@@ -65,7 +65,7 @@ There are example config files located in the "configs" folder:
     - path to target intervals (exome capture kit [bed], if defined) (DNA mode)
     - path to dbSNP file (if undefined, a default will be used) (DNA mode)
 
-   - mutect_config.yaml (DNA), specifies:
+  - mutect_config.yaml (DNA), specifies:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to vcf2maf.pl
     - path to VEP (tool/version, cache data)
@@ -75,7 +75,7 @@ There are example config files located in the "configs" folder:
     - path to COSMIC file (if desired)
     - path to panel of normals (if desired)
 
-   - mutect2_config.yaml (DNA), specifies:
+  - mutect2_config.yaml (DNA), specifies:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to vcf2maf.pl
     - path to VEP (tool/version, cache data)
@@ -85,7 +85,7 @@ There are example config files located in the "configs" folder:
     - path to COSMIC file (if desired)
     - path to panel of normals (if desired)
 
-   - varscan_config.yaml (DNA), specifies:
+  - varscan_config.yaml (DNA), specifies:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to vcf2maf.pl
     - path to VEP (tool/version, cache data)
@@ -116,7 +116,7 @@ for this sample, and lane information is pulled from the file name
 
 For both the DNA- and RNA-Seq pipelines, all tools listed in the master config will be run and each tool can be run separately if desired. The 'master' pipelines will write out the perl commands for each individual step for easy reference.
 
-### DNA pipeline:
+## DNA pipeline:
 <pre><code>cd /path/to/git/pipeline-suite/
 
 module load perl
@@ -126,24 +126,24 @@ perl pughlab_dnaseq_pipeline.pl -t /path/to/master_dna_config.yaml -d /path/to/f
 
 This will generate the directory structure in the output directory (provided in /path/to/master_dna_config.yaml), including a "logs/run_DNA_pipeline_TIMESTAMP/" directory containing a file "run_DNASeq_pipeline.log" which lists the individual tool commands; these can be run separately if "dry_run: Y" or in the event of a failure at any stage and you don't need to re-run the entire thing (***Note:*** doing so would not regenerate files that already exist).
 
-# run BWA to align to a reference genome
+### run BWA to align to a reference genome
 </code></pre>
 perl bwa.pl -t /path/to/bwa_aligner_config.yaml -d /path/to/fastq_dna_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N}
 </code></pre>
 
 This will again write individual commands to file: /path/to/output/directory/BWA/TIMESTAMP/logs/run_BWA_pipeline.log
 
-# run GATK indel realignment and base quality score recalibration
+### run GATK indel realignment and base quality score recalibration
 </code></pre>
 perl gatk.pl --dna -t /path/to/gatk_tool_config.yaml -d /path/to/bwa_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --depends { optional: final job ID from bwa.pl }
 </code></pre>
 
-# run GATK's HaplotypeCaller to produce gvcfs
+### run GATK's HaplotypeCaller to produce gvcfs
 </code></pre>
 perl haplotype_caller.pl --dna -t /path/to/haplotype_caller_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} -p PROJECTNAME --depends { optional: final job ID from gatk.pl }
 </code></pre>
 
-# run GATK's MuTect2 to produce somatic SNV calls
+### run GATK's MuTect2 to produce somatic SNV calls
 </code></pre>
 Create a panel of normals:
 perl mutect2.pl -t /path/to/mutect2_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --create-panel-of-normals --depends { optional: final job ID from gatk.pl }
@@ -152,12 +152,12 @@ Generate somatic SNV calls:
 perl mutect2.pl -t /path/to/mutect2_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --depends { optional: final job ID from gatk.pl or above panel of normal creation}
 </code></pre>
 
-# run VarScan to produce SNV and CNA calls
+### run VarScan to produce SNV and CNA calls
 </code></pre>
 perl varscan.pl -t /path/to/varscan_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --depends { optional: final job ID from gatk.pl }
 </code></pre>
 
-# run GATK's MuTect (v1) to produce somatic SNV calls
+### run GATK's MuTect (v1) to produce somatic SNV calls
 This is currently not part of the above 'master' pipeline, because there are additional steps required following PoN creation. First, create a panel of normals (because this uses an older version of GATK (MuTect1) this requires manual updating of the final VCF for compatibility with downstream steps).
 
 </code></pre>
@@ -175,7 +175,7 @@ perl mutect.pl -t /path/to/mutect_config.yaml -d /path/to/gatk_bam_config.yaml -
 perl mutect.pl -t /path/to/mutect_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N}
 </code></pre>
 
-### RNA pipeline:
+## RNA pipeline:
 <pre><code>cd /path/to/git/pipeline-suite/
 
 module load perl
@@ -185,34 +185,34 @@ perl pughlab_rnaseq_pipeline.pl -t /path/to/master_rna_config.yaml -d /path/to/f
 
 This will generate the directory structure in the output directory (provided in /path/to/master_rna_config.yaml), including a "logs/run_RNA_pipeline_TIMESTAMP/" directory containing a file "run_RNASeq_pipeline.log" which lists the individual tool commands; these can be run separately if "dry_run: Y" or in the event of a failure at any stage and you don't need to re-run the entire thing (although doing so would not regenerate files that already exist).
 
-# run STAR to align to a reference genome
+### run STAR to align to a reference genome
 </code></pre>
 perl star.pl -t /path/to/star_aligner_config.yaml -d /path/to/fastq_rna_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} -p PROJECTNAME
 </code></pre>
 
 This will again write individual commands to file: /path/to/output/directory/STAR/TIMESTAMP/logs/run_STAR_pipeline.log
 
-# run Fusioncatcher on raw FASTQ data
+### run Fusioncatcher on raw FASTQ data
 </code></pre>
 perl fusioncatcher.pl -t /path/to/fusioncatcher_config.yaml -d /path/to/fastq_rna_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} -p PROJECTNAME
 </code></pre>
 
-# run RSEM on STAR-aligned BAMs
+### run RSEM on STAR-aligned BAMs
 </code></pre>
 perl rsem.pl -t /path/to/rsem_expression_config.yaml -d /path/to/star_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} -p PROJECTNAME --depends { optional: final job ID from star.pl }
 </code></pre>
 
-# run STAR-Fusion on STAR-aligned BAMs
+### run STAR-Fusion on STAR-aligned BAMs
 </code></pre>
 perl star_fusion.pl -t /path/to/star_fusion_config.yaml -d /path/to/star_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} -p PROJECTNAME --depends { optional: final job ID from star.pl }
 </code></pre>
 
-# run GATK split CIGAR, indel realignment and base quality score recalibration on MarkDup BAMs
+### run GATK split CIGAR, indel realignment and base quality score recalibration on MarkDup BAMs
 </code></pre>
 perl gatk.pl --rna -t /path/to/gatk_tool_config.yaml -d /path/to/star_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --depends { optional: final job ID from star.pl }
 </code></pre>
 
-# run GATK HaplotypeCaller, variant filtration and annotataion
+### run GATK HaplotypeCaller, variant filtration and annotataion
 </code></pre>
 perl haplotype_caller.pl --rna -t /path/to/haplotype_caller_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} -p PROJECTNAME --depends { optional: final job ID from gatk.pl }
 </code></pre>
@@ -224,7 +224,7 @@ If the initial run is unsuccessful or incomplete, check the logs to identify the
 
 Now, rerun individual tool commands (as found in /path/to/output/directory/logs/TIMESTAMP/run_RNASeq_pipeline.log).
 
-## Output
+# Output
 Each step/perl script will produce the following directory structure and output files:
 
 ```
@@ -247,7 +247,7 @@ Each step/perl script will produce the following directory structure and output 
 
 On completion, certain steps will collate and format the tool output from all patients:
 
-# RNASeq
+### RNASeq
 - star.pl
   - will use collect_rnaseqc_output.R to collect RNASeQC metrics from all processed samples
   - output includes:
