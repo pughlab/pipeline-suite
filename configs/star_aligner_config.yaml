@@ -3,24 +3,18 @@ tool: STAR
 tool_version: 2.7.2b
 ref_type: hg38
 reference_dir: /cluster/projects/pughlab/references/STAR/STAR_2.7.2b_GRCh38_gencode_v31/
-output_dir: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/STAR/
-#resume_dir: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/STAR/DATE_STAR_version/
-resume_dir:
 seq_center: PMGC
 platform: Illumina
-HPC_driver: Slurm
 samtools_version: 1.9
 picard_version: 2.6.0
 rna_seqc_version: 1.1.8
+r_version: 3.6.1
 mark_dup: Y
-del_intermediate: Y
-create_output_yaml: Y
-dry_run: Y
 # and indicate some parameters for job submission
 parameters:
     star:
         mem: 22G
-        time: '24:00:00'
+        time: '48:00:00'
     markdup:
         java_mem: 6g
         mem: 8G
@@ -28,7 +22,11 @@ parameters:
     rna_seqc:
         java_mem: 4g
         mem: 6G
-        time: '24:00:00'
+        time: '48:00:00'
         bwa_path: /cluster/tools/software/bwa/0.7.15/
         reference: /cluster/tools/data/genomes/human/hg38/iGenomes/Sequence/WholeGenomeFasta/genome.fa
         reference_gtf: /cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.GRCh38.genes.gtf
+    combine_results:
+        run: Y
+        mem: 4G
+        time: '04:00:00'

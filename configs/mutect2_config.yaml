@@ -1,9 +1,8 @@
 ---
-tool: mutect
-tool_version: 1.1.5
+tool: MuTect2
+tool_version: 3.8
 ref_type: hg38
 reference: /cluster/tools/data/genomes/human/hg38/iGenomes/Sequence/WholeGenomeFasta/genome.fa
-gatk_version: 3.8
 samtools_version: 1.9
 vcftools_version: 0.1.15
 dbsnp:
@@ -26,8 +25,8 @@ parameters:
         vep_data: /cluster/projects/pughlab/references/VEP_cache/98
 #       filter_vcf: 0
         filter_vcf: /cluster/projects/pughlab/references/VEP_cache/ExAC_nonTCGA.r1.sites.hg19ToHg38.vep.vcf.gz 
-        mem: 12G
-        time: '12:00:00'
+        mem: 28G
+        time: '72:00:00'
 # only for DNA
     combine:
         java_mem: 4g

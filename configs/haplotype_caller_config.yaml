@@ -3,36 +3,27 @@ tool: HaplotypeCaller
 tool_version: 3.8
 ref_type: hg38
 reference: /cluster/tools/data/genomes/human/hg38/iGenomes/Sequence/WholeGenomeFasta/genome.fa
-output_dir: /cluster/projects/pughlab/projects/PROJECTNAME/VariantCall/
-#resume_dir: /cluster/projects/pughlab/projects/PROJECTNAME/VariantCall/DATE_Call_Variants/
-resume_dir:
-HPC_driver: Slurm
 samtools_version: 1.9
-del_intermediate: N
-create_output_yaml: Y
-dry_run: N
+picard_version: 2.6.0
+r_version: 3.6.1
 # and indicate some parameters for job submission
 parameters:
-# for both DNA and RNA
     haplotype_call:
-        java_mem: 8g
+        java_mem: 8g # 16g for some reason?
         mem: 12G
         time: '12:00:00'
-# only for RNA
     filter:
-        java_mem: 8g
+        java_mem: 8g # 16g for some reason?
         mem: 12G
         time: '12:00:00'
     annotate:
         vcf2maf_path: /cluster/projects/pughlab/bin/vcf2maf-1.6.17/vcf2maf.pl
         vep_path: /cluster/tools/software/centos7/vep/98
         vep_data: /cluster/projects/pughlab/references/VEP_cache/98
-#       filter_vcf: 0
-        filter_vcf: /cluster/projects/pughlab/references/VEP_cache/ExAC_nonTCGA.r1.sites.hg19ToHg38.vep.vcf.gz 
+        filter_vcf: /cluster/projects/pughlab/references/VEP_cache/ExAC_nonTCGA.r1.sites.hg19ToHg38.vep.vcf.gz
         mem: 12G
-        time: '12:00:00'
-# only for DNA
-    combine:
-        java_mem: 4g
-        mem: 6G
-        time: '04:00:00'
+        time: '24:00:00'
+    combine_results:
+        run: Y
+        mem: 12G
+        time: '08:00:00'

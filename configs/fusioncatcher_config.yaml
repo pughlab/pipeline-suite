@@ -3,16 +3,15 @@ tool: fusioncatcher
 tool_version: 1.20
 ref_type: hg38
 reference_dir: /cluster/tools/software/centos7/fusioncatcher/1.20/fusioncatcher/data/current/ 
-output_dir: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/FusionCatcher/
-resume_dir:
-HPC_driver: Slurm
 samtools_version: 1.9
-del_intermediate: N
-create_output_yaml: N
-dry_run: Y
+r_version: 3.6.1
 # and indicate some parameters for job submission
 parameters:
     fusioncatcher:
-        java_mem: 30g
-        mem: 32G
+        java_mem: 35g
+        mem: 36G
         time: '72:00:00'
+    combine_results:
+        run: Y
+        mem: 4G
+        time: '04:00:00'

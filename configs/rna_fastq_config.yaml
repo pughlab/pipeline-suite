@@ -1,0 +1,15 @@
+---
+PATIENT_ID:
+    SAMPLE_ID:
+        type: tumour
+        runlanes:
+            LANE_NAME:
+#           ie, 181119_D00355_0257_ACD07PANXX_CAGATCTG-TCTTTCCC_L005
+                R1: /cluster/projects/pughlab/data/PROJECTNAME/EXOME/SAMPLE_ID_LANE_NAME_R1.fastq.gz
+                R2: /cluster/projects/pughlab/data/PROJECTNAME/EXOME/SAMPLE_ID_LANE_NAME_R2.fastq.gz
+    SAMPLE_ID:
+        type: normal
+        runlanes:
+            LANE_NAME:
+                R1: /cluster/projects/pughlab/data/PROJECTNAME/EXOME/SAMPLE_ID_LANE_NAME_R1.fastq.gz
+                R2: /cluster/projects/pughlab/data/PROJECTNAME/EXOME/SAMPLE_ID_LANE_NAME_R2.fastq.gz

@@ -4,18 +4,16 @@ tool_version: 1.8.1
 tool_path: /cluster/projects/pughlab/bin/STAR-Fusion-1.8.1/STAR-Fusion
 ref_type: hg38
 reference_dir: /cluster/projects/pughlab/references/STAR-Fusion/GRCh38_gencode_v31_CTAT_lib_Oct012019/ctat_genome_lib_build_dir/
-output_dir: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/STAR-Fusion/ 
-#resume_dir: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/STAR-Fusion/DATE_STAR-Fusion_version/ 
-resume_dir: 
-HPC_driver: Slurm
 star_version: 2.7.2b
 samtools_version: 1.9
-del_intermediate: N
-create_output_yaml: N
-dry_run: Y
+r_version: 3.6.1
 FusionInspect: inspect
 # and indicate some parameters for job submission
 parameters:
     star_fusion:
         mem: 6G
         time: '24:00:00'
+    combine_results:
+        run: Y
+        mem: 4G
+        time: '04:00:00'

@@ -1,0 +1,14 @@
+---
+# common parameters
+project_name: PROJECTNAME
+output_dir: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/
+HPC_driver: Slurm
+del_intermediates: Y
+dry_run: N
+# tool parameters
+star_config: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/configs/star_aligner_config.yaml
+star_fusion_config: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/configs/star_fusion_config.yaml
+rsem_config: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/configs/rsem_expression_config.yaml
+gatk_config: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/configs/gatk_tool_config.yaml
+haplotype_caller_config: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/configs/haplotype_caller_config.yaml
+fusioncatcher_config: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/configs/fusioncatcher_config.yaml

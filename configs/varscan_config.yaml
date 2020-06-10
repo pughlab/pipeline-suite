@@ -1,24 +1,20 @@
 ---
-tool: mutect
-tool_version: 1.1.5
+tool: VarScan
+tool_version: 2.4.2
 ref_type: hg38
 reference: /cluster/tools/data/genomes/human/hg38/iGenomes/Sequence/WholeGenomeFasta/genome.fa
-gatk_version: 3.8
 samtools_version: 1.9
 vcftools_version: 0.1.15
-dbsnp:
-cosmic: /cluster/projects/pughlab/references/COSMIC/GRCh38/v91/CosmicCodingMuts.vcf.gz
-pon:
 intervals_bed: /cluster/tools/data/genomes/human/hg38/SureSelect_Human_All_Exon_V5+UTRs_S04380219_Covered_for_bamqc_liftover_hg38.bed
 # and indicate some parameters for job submission
 parameters:
-    mutect:
-        java_mem: 8g
-        mem: 12G
-        time: '12:00:00'
+    varscan:
+        java_mem: 3g
+        mem: 4G
+        time: '24:00:00'
     filter:
-        java_mem: 8g
-        mem: 12G
+        java_mem: 1g
+        mem: 2G
         time: '12:00:00'
     annotate:
         vcf2maf_path: /cluster/projects/pughlab/bin/vcf2maf-1.6.17/vcf2maf.pl
@@ -26,10 +22,9 @@ parameters:
         vep_data: /cluster/projects/pughlab/references/VEP_cache/98
 #       filter_vcf: 0
         filter_vcf: /cluster/projects/pughlab/references/VEP_cache/ExAC_nonTCGA.r1.sites.hg19ToHg38.vep.vcf.gz 
-        mem: 12G
-        time: '12:00:00'
-# only for DNA
+        mem: 28G
+        time: '72:00:00'
     combine:
-        java_mem: 4g
-        mem: 6G
-        time: '04:00:00'
+        java_mem: 3g
+        mem: 4G
+        time: '24:00:00'

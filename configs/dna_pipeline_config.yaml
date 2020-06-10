@@ -1,0 +1,15 @@
+---
+# common parameters
+project_name: PROJECTNAME
+seq_type: wxs # one of exome, wgs or targeted
+output_dir: /cluster/projects/pughlab/projects/PROJECTNAME/Exome/
+HPC_driver: Slurm
+del_intermediates: Y
+dry_run: N
+# tool parameters
+bwa_config: /cluster/projects/pughlab/projects/PROJECTNAME/Exome/configs/bwa_aligner_config.yaml
+gatk_config: /cluster/projects/pughlab/projects/PROJECTNAME/Exome/configs/gatk_tool_config.yaml
+haplotype_caller_config: /cluster/projects/pughlab/projects/PROJECTNAME/Exome/configs/haplotype_caller_config.yaml
+mutect_config: /cluster/projects/pughlab/projects/PROJECTNAME/Exome/configs/mutect_config.yaml
+mutect2_config: /cluster/projects/pughlab/projects/PROJECTNAME/Exome/configs/mutect2_config.yaml
+varscan_config: /cluster/projects/pughlab/projects/PROJECTNAME/Exome/configs/varscan_config.yaml

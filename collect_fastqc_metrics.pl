@@ -12,7 +12,7 @@ use File::Path qw(make_path);
 use YAML qw(LoadFile);
 
 my $cwd = dirname($0);
-require "$cwd/shared/utilities.pl";
+require "$cwd/scripts/utilities.pl";
 
 ####################################################################################################
 # version       author		comment
@@ -83,23 +83,18 @@ sub main{
 
 	# load tool config
 	my $tool_data = LoadFile($tool_config);
-	$tool_data->{date} = strftime "%F", localtime;
+	my $date = strftime "%F", localtime;
 
 	# organize output directories
 	$tool_data->{output_dir} =~ s/\/$//;
-	my $output_directory = join('/', $tool_data->{output_dir}, $tool_data->{date} . '_fastqc');
+	my $output_directory = join('/', $tool_data->{output_dir}, $date . '_fastqc');
 	my $log_directory = join('/', $output_directory, 'logs');
 
 	unless(-e $output_directory) { make_path($output_directory); }
 	unless(-e $log_directory) { make_path($log_directory); }
 
 	# start logging
-	print "---\n";
-	print "Running pipeline to collect quality metrics...\n";
-	print "\n  Tool config used: $tool_config";
-	print "\n    Output directory: $output_directory";
-	print "\n  Sample config used: $data_config";
-	print "\n---";
+	my $log_file = join('/', $log_directory, 'run_FASTQC_pipeline.log');
 
 	# create a file to hold job metrics
 	my (@files, $run_count, $outfile, $touch_exit_status);
@@ -112,8 +107,19 @@ sub main{
 
 		$outfile = $log_directory . '/slurm_job_metrics_' . $run_count . '.out';
 		$touch_exit_status = system("touch $outfile");
-		if (0 != $touch_exit_status) { Carp::croak("Cannot touch file $outfile"); }
+		if (0 != $touch_exit_status) { Carp::croak("Cannot touch file $outfile"); 
+
+		$log_file = join('/', $log_directory, 'run_FASTQC_pipeline_' . $run_count . '.log');}
 		}
+
+	open (my $log, '>', $log_file) or die "Could not open $log_file for writing.";
+
+	print $log "---\n";
+	print $log "Running pipeline to collect quality metrics...\n";
+	print $log "\n  Tool config used: $tool_config";
+	print $log "\n    Output directory: $output_directory";
+	print $log "\n  Sample config used: $data_config";
+	print $log "\n---\n";
 
 	### RUN ###########################################################################################
 	# get sample data
@@ -167,7 +173,7 @@ sub main{
 				);
 
 			# record command (in log directory) and then run job
-			print "Submitting job for FASTQC...\n";
+			print $log "Submitting job for FASTQC...\n";
 
 			$run_script = write_script(
 				log_dir	=> $log_directory,
@@ -183,7 +189,8 @@ sub main{
 				jobname		=> 'run_fastqc_' . $sample,
 				shell_command	=> $run_script,
 				hpc_driver	=> $tool_data->{HPC_driver},
-				dry_run		=> $tool_data->{dry_run}
+				dry_run		=> $tool_data->{dry_run},
+				log_file	=> $log
 				);
 
 			push @all_jobs, $run_id;
@@ -197,7 +204,7 @@ sub main{
 				}
 
 			# record command (in log directory) and then run job
-			print "Submitting job for MD5SUM...\n";
+			print $log "Submitting job for MD5SUM...\n";
 
 			$run_script = write_script(
 				log_dir	=> $log_directory,
@@ -212,7 +219,8 @@ sub main{
 				jobname		=> 'run_md5sums_' . $sample,
 				shell_command	=> $run_script,
 				hpc_driver	=> $tool_data->{HPC_driver},
-				dry_run		=> $tool_data->{dry_run}
+				dry_run		=> $tool_data->{dry_run},
+				log_file	=> $log
 				);
 
 			push @all_jobs, $run_id;
@@ -224,13 +232,13 @@ sub main{
 	my $extract_cmd = get_fastqc_metrics(output_dir => $output_directory);
 
 	# format command to collate results
-	my $combine_cmd = "Rscript $cwd/combine_key_metrics.R";
+	my $combine_cmd = "Rscript $cwd/scripts/combine_key_metrics.R";
 
 	my $collate_cmd = $extract_cmd . "\n" . $combine_cmd;
 	$collate_cmd .= "\nrm *metrics.txt";
 	$collate_cmd .= "\nrm *md5";
 
-	print "Submitting job to extract and collate results...\n";
+	print $log "Submitting job to extract and collate results...\n";
 
 	$run_script = write_script(
 		log_dir	=> $log_directory,
@@ -247,13 +255,14 @@ sub main{
 		jobname		=> 'run_collate_results',
 		shell_command	=> $run_script,
 		hpc_driver	=> $tool_data->{HPC_driver},
-		dry_run		=> $tool_data->{dry_run}
+		dry_run		=> $tool_data->{dry_run},
+		log_file	=> $log
 		);
 
 	push @all_jobs, $run_id;
 
-	print "\nFINAL OUTPUT: $output_directory/fastqc_key_metrics.tsv\n";
-	print "---\n";
+	print $log "\nFINAL OUTPUT: $output_directory/fastqc_key_metrics.tsv\n";
+	print $log "---\n";
 
 	# collect job metrics if not dry_run
 	if ('N' eq $tool_data->{dry_run}) {
@@ -278,12 +287,14 @@ sub main{
 			jobname		=> 'output_job_metrics',
 			shell_command	=> $run_script,
 			hpc_driver	=> $tool_data->{HPC_driver},
-			dry_run		=> $tool_data->{dry_run}
+			dry_run		=> $tool_data->{dry_run},
+			log_file	=> $log
 			);
 		}
 
 	# finish up
-	print "\nProgramming terminated successfully.\n\n";
+	print $log "\nProgramming terminated successfully.\n\n";
+	close $log;
 
 	}
 

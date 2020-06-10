@@ -12,19 +12,23 @@ use File::Path qw(make_path);
 use YAML qw(LoadFile);
 
 my $cwd = dirname($0);
-require "$cwd/shared/utilities.pl";
+require "$cwd/utilities.pl";
 
 ####################################################################################################
 # version       author	  	comment
 # 1.0		sprokopec       script to run FusionCatcher on RNA-Seq data
+# 1.1		sprokopec	minor updates for compatibility with larger pipeline	
 
 ### USAGE ##########################################################################################
-# fusioncatcher.pl -t tool_config.yaml -c data_config.yaml
+# fusioncatcher.pl -t tool_config.yaml -d data_config.yaml -o /path/to/output/dir -h slurm -r Y -n Y
 #
 # where:
-#	- tool_config.yaml contains tool versions and parameters, output directory,
-#	reference information, etc.
+#	- tool_config.yaml contains tool versions and parameters, reference information, etc.
 #	- data_config.yaml contains sample information (YAML file containing paths to FASTQ files)
+#	-o /path/to/output/dir indicates tool-specific output directory
+#	-h indicates hpc driver (ie, slurm)
+#	-r indicates whether or not to remove intermediate files (Y/N)
+#	-n indicates whether or not this is a dry run (Y/N)
 
 ### SUBROUTINES ####################################################################################
 # format command to run FusionCatcher
@@ -62,8 +66,13 @@ sub get_fusion_command {
 ### MAIN ##########################################################################################
 sub main {
 	my %args = (
-		tool_config => undef,
-		data_config => undef,
+		tool_config		=> undef,
+		data_config		=> undef,
+		output_directory	=> undef,
+		hpc_driver		=> undef,
+		del_intermediates	=> undef,
+		dry_run			=> undef,
+		project			=> undef,
 		@_
 		);
 
@@ -75,26 +84,25 @@ sub main {
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'fusioncatcher');
-	$tool_data->{date} = strftime "%F", localtime;
+	my $date = strftime "%F", localtime;
 
 	# clean up reference_dir (aesthetic reasons only)
 	$tool_data->{reference_dir} =~ s/\/$//;
 
-	# check for resume and confirm output directories
-	my ($resume, $output_directory, $log_directory) = set_output_path(tool_data => $tool_data);
+	# deal with extra arguments
+	$tool_data->{HPC_driver} = $args{hpc_driver};
+	$tool_data->{del_intermediates} = $args{del_intermediates};
+	$tool_data->{dry_run} = $args{dry_run};
+	$tool_data->{project} = $args{project};
 
-	# start logging
-	print "---\n";
-	print "Running FusionCatcher (+ViralAlignment) pipeline.\n";
-	print "\n  Tool config used: $tool_config";
-	print "\n    FusionCatcher reference directory: $tool_data->{reference_dir}";
-	print "\n    Output directory: $output_directory";
-	print "\n  Sample config used: $data_config";
-	print "\n---";
+	# organize output and log directories
+	my $output_directory = $args{output_directory};
+	$output_directory =~ s/\/$//;
 
-	# set tools and versions
-	my $fusioncatcher = $tool_data->{tool} . '/' . $tool_data->{tool_version};
-	my $perl	= 'perl/5.30.0';
+	my $log_directory = join('/', $output_directory, 'logs');
+	unless(-e $log_directory) { make_path($log_directory); }
+
+	my $log_file = join('/', $log_directory, 'run_FusionCatcher_pipeline.log');
 
 	# create a file to hold job metrics
 	my (@files, $run_count, $outfile, $touch_exit_status);
@@ -108,7 +116,26 @@ sub main {
 		$outfile = $log_directory . '/slurm_job_metrics_' . $run_count . '.out';
 		$touch_exit_status = system("touch $outfile");
 		if (0 != $touch_exit_status) { Carp::croak("Cannot touch file $outfile"); }
+
+		my $log_file = join('/', $log_directory, 'run_FusionCatcher_pipeline_' . $run_count . '.log');
 		}
+
+	# start logging
+	open (my $log, '>', $log_file) or die "Could not open $log_file for writing.";
+
+	# start logging
+	print $log "---\n";
+	print $log "Running FusionCatcher (+ViralAlignment) pipeline.\n";
+	print $log "\n  Tool config used: $tool_config";
+	print $log "\n    FusionCatcher reference directory: $tool_data->{reference_dir}";
+	print $log "\n    Output directory: $output_directory";
+	print $log "\n  Sample config used: $data_config";
+	print $log "\n---";
+
+	# set tools and versions
+	my $fusioncatcher	= $tool_data->{tool} . '/' . $tool_data->{tool_version};
+	my $perl		= 'perl/5.30.0';
+	my $r_version		= 'R/' . $tool_data->{r_version};
 
 	### RUN ############################################################################################
 	# get sample data
@@ -120,7 +147,7 @@ sub main {
 	# process each patient in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient\n";
 
 		my $patient_directory = join('/', $output_directory, $patient);
 		unless(-e $patient_directory) { make_path($patient_directory); }
@@ -132,11 +159,11 @@ sub main {
 		foreach my $sample (sort keys %{$smp_data->{$patient}}) {
 
 			if ($sample =~ m/BC$|SK$|A$/) {
-				print "\n>> SAMPLE: $sample is labelled as normal - will be skipped!\n";
+				print $log "\n>> SAMPLE: $sample is labelled as normal - will be skipped!\n";
 				next;
 				}
 
-			print "  SAMPLE: $sample\n";
+			print $log "  SAMPLE: $sample\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
@@ -153,14 +180,14 @@ sub main {
 
 			foreach my $lane ( @lanes ) {
 
-				print "    LANE: $lane\n";
+				print $log "    LANE: $lane\n";
 
 				# collect input files
 				my $r1 = $smp_data->{$patient}->{$sample}->{runlanes}->{$lane}->{R1};
 				my $r2 = $smp_data->{$patient}->{$sample}->{runlanes}->{$lane}->{R2};
 
-				print "      R1: $r1\n";
-				print "      R2: $r2\n\n";
+				print $log "      R1: $r1\n";
+				print $log "      R2: $r2\n\n";
 
 				# create a symlink for this file
 				my @tmp = split /\//, $r1;
@@ -192,23 +219,27 @@ sub main {
 
 			# IF THIS STEP IS SUCCESSFULLY RUN,
 			# create a symlink for the final output in the TOP directory
-			my $smp_output = $sample . "_candidate-fusion-genes.txt";
-			my $links_cmd = join("\n",
-				"cd $patient_directory",
-				"ln -s $fusion_output $smp_output",
-				"cd $tool_data->{output_dir}"
-				);
+			my $smp_output = join('/', $patient_directory, $sample . "_candidate-fusion-genes.txt");
+			if (-l $smp_output) {
+				unlink $smp_output or die "Failed to remove previous symlink: $smp_output;\n";
+				}
 
-			if (-l $smp_output) { unlink $smp_output or die "Failed to remove previous symlink: $smp_output;\n"; }
+			my $links_cmd = "ln -s $fusion_output $smp_output";
+
+			$smp_output = join('/', $output_directory, '..', $sample . "_candidate-fusion-genes.txt");
+			if (-l $smp_output) {
+				unlink $smp_output or die "Failed to remove previous symlink: $smp_output;\n";
+				}
+
 			$links_cmd .= "\nln -s $fusion_output $smp_output";
 
-			$fusion_cmd .= "\n$links_cmd";
+			$fusion_cmd .= "\n\n$links_cmd";
 
 			# check if this should be run
-			if ( ('N' eq $resume) || ('Y' eq missing_file($fusion_output))) {
+			if ('Y' eq missing_file($fusion_output)) {
 
 				# record command (in log directory) and then run job
-				print "Submitting job to run FusionCatcher...\n";
+				print $log "Submitting job to run FusionCatcher...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -217,15 +248,15 @@ sub main {
 					modules => [$fusioncatcher],
 					max_time	=> $tool_data->{parameters}->{fusioncatcher}->{time},
 					mem		=> $tool_data->{parameters}->{fusioncatcher}->{mem},
-					hpc_driver	=> $tool_data->{HPC_driver},
-					extra_args	=> '-p himem'
+					hpc_driver	=> $tool_data->{HPC_driver}
 					);
 
 				$run_id = submit_job(
 					jobname		=> 'run_FusionCatcher_' . $sample,
 					shell_command	=> $run_script,
 					hpc_driver	=> $tool_data->{HPC_driver},
-					dry_run		=> $tool_data->{dry_run}
+					dry_run		=> $tool_data->{dry_run},
+					log_file	=> $log
 					);
 
 				push @patient_jobs, $run_id;
@@ -233,7 +264,7 @@ sub main {
 
 				}
 			else {
-				print "Skipping FusionCatcher because output already exists...\n";
+				print $log "Skipping FusionCatcher because output already exists...\n";
 				}
 
 			# add output from STAR-Fusion to final_outputs
@@ -241,9 +272,9 @@ sub main {
 			}
 
 		# remove temporary directories (once per patient)
-		if ('Y' eq $tool_data->{del_intermediate}) {
+		if ('Y' eq $tool_data->{del_intermediates}) {
 
-			print "Submitting job to clean up temporary/intermediate files...\n";
+			print $log "Submitting job to clean up temporary/intermediate files...\n";
 
 			# make sure final output exists before removing intermediate files!
 			$cleanup_cmd = join("\n",
@@ -259,7 +290,6 @@ sub main {
 				name    => 'run_cleanup_' . $patient,
 				cmd     => $cleanup_cmd,
 				dependencies	=> join(',', @patient_jobs),
-				max_time	=> '00:05:00',
 				mem		=> '256M',
 				hpc_driver	=> $tool_data->{HPC_driver}
 				);
@@ -268,12 +298,42 @@ sub main {
 				jobname		=> 'run_cleanup_' . $patient,
 				shell_command	=> $run_script,
 				hpc_driver	=> $tool_data->{HPC_driver},
-				dry_run		=> $tool_data->{dry_run}
+				dry_run		=> $tool_data->{dry_run},
+				log_file	=> $log
 				);
 			}
 
-		print "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
-		print "---\n";
+		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
+		print $log "---\n";
+		}
+
+	# collect and combine results
+	if ('Y' eq $tool_data->{parameters}->{combine_results}->{run}) {
+
+		my $collect_results = join(' ',
+			"Rscript $cwd/collect_fusioncatcher_output.R",
+			'-d', $output_directory,
+			'-p', $tool_data->{project}
+			);
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'combine_and_format_results',
+			cmd	=> $collect_results,
+			modules		=> [$r_version],
+			dependencies	=> join(',', @all_jobs),
+			max_time	=> $tool_data->{parameters}->{combine_results}->{time},
+			mem		=> $tool_data->{parameters}->{combine_results}->{mem},
+			hpc_driver	=> $tool_data->{HPC_driver}
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'combine_and_format_results',
+			shell_command	=> $run_script,
+			hpc_driver	=> $tool_data->{HPC_driver},
+			dry_run		=> $tool_data->{dry_run},
+			log_file	=> $log
+			);
 		}
 
 	# collect job metrics if any were run
@@ -290,7 +350,6 @@ sub main {
 			name	=> 'output_job_metrics_' . $run_count,
 			cmd	=> $collect_metrics,
 			dependencies	=> join(',', @all_jobs),
-			max_time	=> '0:05:00',
 			mem		=> '256M',
 			hpc_driver	=> $tool_data->{HPC_driver}
 			);
@@ -299,62 +358,48 @@ sub main {
 			jobname		=> 'output_job_metrics',
 			shell_command	=> $run_script,
 			hpc_driver	=> $tool_data->{HPC_driver},
-			dry_run		=> 'N'
+			dry_run		=> 'N',
+			log_file	=> $log
 			);
-		}
-
-	# final job to output a BAM config for downstream stuff
-	if ('Y' eq $tool_data->{create_output_yaml}) {
-
-		print "Creating config yaml for output fusion calls...\n";
-
-		my $output_yaml_cmd = join(' ',
-			"perl $cwd/shared/create_final_yaml.pl",
-			'-d', $output_directory,
-			'-o', $output_directory . '/fusions_config.yaml',
-			'-p', 'final-list_candidate-fusion-genes.txt'
-			);
-
-		$run_script = write_script(
-			log_dir	=> $log_directory,
-			name	=> 'output_final_yaml',
-			cmd	=> $output_yaml_cmd,,
-			modules	=> ['perl'],
-			dependencies	=> join(',', @all_jobs),
-			max_time	=> '00:10:00',
-			mem		=> '1G',
-			hpc_driver	=> $tool_data->{HPC_driver}
-			);
-
-		$run_id = submit_job(
-			jobname		=> 'output_final_yaml',
-			shell_command	=> $run_script,
-			hpc_driver	=> $tool_data->{HPC_driver},
-			dry_run		=> $tool_data->{dry_run}
-			);
-
-		} else {
-			print "Not creating output config yaml as requested...\n";
 		}
 
 	# finish up
-	print "\nProgramming terminated successfully.\n\n";
+	print $log "\nProgramming terminated successfully.\n\n";
+	close $log;
 
+	# print the final job id to stdout to be collected by the master pipeline
+	print $run_id;
 	}
 
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
-my $tool_config;
-my $data_config;
+my ($data_config, $tool_config, $output_directory, $project_name);
+my $hpc_driver = 'slurm';
+my $remove_junk = 'N';
+my $dry_run = 'Y';
 
 # get command line arguments
 GetOptions(
+	'd|data=s'	=> \$data_config,
 	't|tool=s'	=> \$tool_config,
-	'c|config=s'	=> \$data_config
+	'o|out_dir=s'	=> \$output_directory,
+	'h|hpc=s'	=> \$hpc_driver,
+	'r|remove=s'	=> \$remove_junk,
+	'n|dry_run=s'	=> \$dry_run,
+	'p|project=s'	=> \$project_name
 	);
 
-# do some quick error checks to ensure valid input	
+# do some quick error checks to ensure valid input
 if (!defined($tool_config)) { die("No tool config file defined; please provide -t | --tool (ie, tool_config.yaml)"); }
-if (!defined($data_config)) { die("No data config file defined; please provide -c | --config (ie, sample_config.yaml)"); }
+if (!defined($data_config)) { die("No data config file defined; please provide -d | --data (ie, sample_config.yaml)"); }
+if (!defined($output_directory)) { die("No output directory defined; please provide -o | --out_dir"); }
 
-main(tool_config => $tool_config, data_config => $data_config);
+main(
+	tool_config		=> $tool_config,
+	data_config		=> $data_config,
+	output_directory 	=> $output_directory,
+	hpc_driver		=> $hpc_driver,
+	del_intermediates	=> $remove_junk,
+	dry_run			=> $dry_run,
+	project			=> $project_name
+	);
