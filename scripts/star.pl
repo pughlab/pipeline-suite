@@ -417,32 +417,20 @@ sub main {
 				);
 	
 			my $type;
-			if ($sample =~ m/BC|SK|A|N/) { $type = 'normal'; } else { $type = 'tumour'; }
+			if ( ($sample =~ m/BC|SK|A|N/) && ($sample !~ m/Ar/) ) {
+				$type = 'normal';
+				} else {
+				$type = 'tumour';
+				}
+
 			if ('normal' eq $type) { $normals{$sample} = $dedup_bam; }
 			if ('tumour' eq $type) { $tumours{$sample} = $dedup_bam; }
 
 			# check if this should be run
 			if ('Y' eq missing_file($dedup_bam . '.md5')) {
 
-				# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
-				# create a symlink for the final output in the TOP directory
-				my @final = split /\//, $dedup_bam;
-				my $final_link = join('/', $output_directory, '..', $final[-1]);
-
-				if (-l $final_link) {
-					unlink $final_link or die "Failed to remove previous symlink: $final_link;\n";
-					}
-
-				my $link_cmd = "ln -s $dedup_bam $final_link";
-
-				# this is a java-based command, so run a final check
-				my $java_check = check_java_output(
-					extra_cmd	=> $link_cmd
-					);
-
 				$markdup_cmd .= "\n" . join("\n",
 					"samtools quickcheck $dedup_bam",
-					$java_check
 					);
 
 				# record command (in log directory) and then run job

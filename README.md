@@ -30,42 +30,51 @@ There are example config files located in the "configs" folder:
     - reference (file or directory) and ref_type (hg19 or hg38)
     - memory and run time parameters for each step
 
-  - bwa_aligner_config.yaml (DNA), specifies:
-    - path to bwa-indexed reference
-    - sequencing centre and platform information (for BAM header)
-    - optional step: mark_dup (either Y or N)
-
-  - star_aligner_config.yaml (RNA), specifies:
+### RNA-Seq
+  - star_aligner_config.yaml, specifies:
     - path to STAR reference directory
     - sequencing centre and platform information (for BAM header)
     - optional step: mark_dup (either Y or N)
 
-  - fusioncatcher_config.yam (RNA)l, specifies:
+  - fusioncatcher_config.yaml, specifies:
     - path to Fusioncatcher reference directory
 
-   - rsem_tool_config.yaml (RNA), specifies:
+   - rsem_tool_config.yaml, specifies:
     - path/stem to RSEM reference directory
     - strandedness type (probably reverse, other options: forward or none)
 
-   - star_fusion_tool_config.yaml (RNA), specifies:
+   - star_fusion_tool_config.yaml, specifies:
     - path/stem to STAR-Fusion reference directory
     - path to tool (because it isn't currently installed as a module)
     - optional step: FusionInspect (either inspect, validate; if not wanted, leave blank)
+  
+   - gatk_tool_config.yaml, specifies:
+    - path to reference genome (requires .fa, .dict and .fai files)
+    - path to dbSNP file (if undefined, a default will be used)
 
-  - gatk_tool_config.yaml (works for both DNA- and RNA-Seq data), specifies:
+   - haplotype_caller_config.yaml, specifies:
+    - path to reference genome (requires .fa, .dict and .fai files)
+    - path to vcf2maf.pl
+    - path to VEP (tool/version, cache data)
+    - path to ExAC data (for filtering/annotating with population allele frequencies)
+
+### DNA-Seq
+  - bwa_aligner_config.yaml, specifies:
+    - path to bwa-indexed reference
+    - sequencing centre and platform information (for BAM header)
+    - optional step: mark_dup (either Y or N)
+
+  - gatk_tool_config.yaml, specifies:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to target intervals (such as bed file for exome capture kit)
     - path to dbSNP file (if undefined, a default will be used)
 
-   - haplotype_caller_config.yaml (works for both DNA- and RNA-Seq data), specifies:
+   - haplotype_caller_config.yaml, specifies:
     - path to reference genome (requires .fa, .dict and .fai files)
-    - path to vcf2maf.pl (RNA mode)
-    - path to VEP (tool/version, cache data) (RNA mode)
-    - path to ExAC data (for filtering/annotating with population allele frequencies) (RNA mode)
-    - path to target intervals (exome capture kit [bed], if defined) (DNA mode)
-    - path to dbSNP file (if undefined, a default will be used) (DNA mode)
+    - path to target intervals (exome capture kit [bed], if defined)
+    - path to dbSNP file (if undefined, a default will be used)
 
-   - mutect_config.yaml (DNA), specifies:
+   - mutect_config.yaml, specifies:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to vcf2maf.pl
     - path to VEP (tool/version, cache data)
@@ -73,9 +82,9 @@ There are example config files located in the "configs" folder:
     - path to target intervals (exome capture kit [bed], if defined)
     - path to dbSNP file (if undefined, a default will be used)
     - path to COSMIC file (if desired)
-    - path to panel of normals (if desired)
+    - path to panel of normals (optional if developed elsewhere)
 
-   - mutect2_config.yaml (DNA), specifies:
+   - mutect2_config.yaml, specifies:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to vcf2maf.pl
     - path to VEP (tool/version, cache data)
@@ -83,9 +92,9 @@ There are example config files located in the "configs" folder:
     - path to target intervals (exome capture kit [bed], if defined)
     - path to dbSNP file (if undefined, a default will be used)
     - path to COSMIC file (if desired)
-    - path to panel of normals (if desired)
+    - path to panel of normals (optional if developed elsewhere)
 
-   - varscan_config.yaml (DNA), specifies:
+   - varscan_config.yaml, specifies:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to vcf2maf.pl
     - path to VEP (tool/version, cache data)
@@ -116,16 +125,26 @@ for this sample, and lane information is pulled from the file name
 
 For both the DNA- and RNA-Seq pipelines, all tools listed in the master config will be run and each tool can be run separately if desired. The 'master' pipelines will write out the perl commands for each individual step for easy reference.
 
+See ./configs/dna_fastq_config.yaml and ./configs/rna_fastq_config.yaml for examples.
+
+Also, be sure to run FASTQC to verify fastq quality prior to running downstream pipelines:
+<pre><code>
+perl collect_fastqc_metrics.pl -c /path/to/fastq_config.yaml -t /path/to/fastqc_tool_config.yaml --dna (or --rna)
+</code></pre>
+
 ### DNA pipeline:
 <pre><code>cd /path/to/git/pipeline-suite/
 
 module load perl
 
-perl pughlab_dnaseq_pipeline.pl -t /path/to/master_dna_config.yaml -d /path/to/fastq_dna_config.yaml
+perl pughlab_dnaseq_pipeline.pl -t /path/to/dna_pipeline_config.yaml -d /path/to/dna_fastq_config.yaml
 </code></pre>
 
-This will generate the directory structure in the output directory (provided in /path/to/master_dna_config.yaml), including a "logs/run_DNA_pipeline_TIMESTAMP/" directory containing a file "run_DNASeq_pipeline.log" which lists the individual tool commands; these can be run separately if "dry_run: Y" or in the event of a failure at any stage and you don't need to re-run the entire thing (***Note:*** doing so would not regenerate files that already exist).
+This will generate the directory structure in the output directory (provided in /path/to/dna_pipeline_config.yaml), including a "logs/run_DNA_pipeline_TIMESTAMP/" directory containing a file "run_DNASeq_pipeline.log" which lists the individual tool commands; these can be run separately if "dry_run: Y" or in the event of a failure at any stage and you don't need to re-run the entire thing (***Note:*** doing so would not regenerate files that already exist).
 
+If your project is quite large (>20 samples), you may prefer to run the alignments and variant calling steps separately (ie, produce the final GATK-processed bams and remove BWA intermediates to free up space). To accomplish this, simply set preprocessing: Y and variant_calling: N in the dna_pipeline_config.yaml. However, since the variant calling steps are best run as a single cohort, be sure to combine all of the gatk_bam_config.yamls prior to running variant calling (ie, from the GATK directory: cat \*/gatk_bam_config.yaml | awk 'NR <= 1 || !/^---/' > combined_gatk_bam_config.yaml).
+
+# Preprocessing steps:
 # run BWA to align to a reference genome
 </code></pre>
 perl bwa.pl -t /path/to/bwa_aligner_config.yaml -d /path/to/fastq_dna_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N}
@@ -136,11 +155,31 @@ This will again write individual commands to file: /path/to/output/directory/BWA
 # run GATK indel realignment and base quality score recalibration
 </code></pre>
 perl gatk.pl --dna -t /path/to/gatk_tool_config.yaml -d /path/to/bwa_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --depends { optional: final job ID from bwa.pl }
+
 </code></pre>
 
+# get BAM QC metrics, including coverage, contamination estimates and callable bases
+</code></pre>
+perl contest.pl -t /path/to/bamqc_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --depends { optional: final job ID from gatk.pl }
+
+perl get_coverage.pl -t /path/to/bamqc_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --depends { optional: final job ID from gatk.pl }
+</code></pre>
+
+# Variant calling steps:
 # run GATK's HaplotypeCaller to produce gvcfs
 </code></pre>
-perl haplotype_caller.pl --dna -t /path/to/haplotype_caller_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} -p PROJECTNAME --depends { optional: final job ID from gatk.pl }
+perl haplotype_caller.pl --dna -t /path/to/haplotype_caller_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --depends { optional: final job ID from gatk.pl }
+
+perl genotype_gvcfs.pl -t /path/to/haplotype_caller_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --depends { optional: final job ID from haplotype_caller.pl }
+</code></pre>
+
+# run GATK's MuTect (v1) to produce somatic SNV calls
+</code></pre>
+Create a panel of normals:
+perl mutect.pl -t /path/to/mutect_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --create-panel-of-normals --depends { optional: final job ID from gatk.pl }
+
+Generate somatic SNV calls:
+perl mutect.pl -t /path/to/mutect_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --depends { optional: final job ID from gatk.pl or above panel of normal creation } --pon /path/to/panel_of_normals.vcf { optional: can also be specified in mutect_config.yaml if created elsewhere }
 </code></pre>
 
 # run GATK's MuTect2 to produce somatic SNV calls
@@ -149,30 +188,16 @@ Create a panel of normals:
 perl mutect2.pl -t /path/to/mutect2_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --create-panel-of-normals --depends { optional: final job ID from gatk.pl }
 
 Generate somatic SNV calls:
-perl mutect2.pl -t /path/to/mutect2_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --depends { optional: final job ID from gatk.pl or above panel of normal creation}
+perl mutect2.pl -t /path/to/mutect2_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --depends { optional: final job ID from gatk.pl or above panel of normal creation } --pon /path/to/panel_of_normals.vcf { optional: can also be specified in mutect_config.yaml if created elsewhere }
 </code></pre>
 
 # run VarScan to produce SNV and CNA calls
 </code></pre>
-perl varscan.pl -t /path/to/varscan_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --depends { optional: final job ID from gatk.pl }
-</code></pre>
+Run T/N pairs and create a panel of normals:
+perl varscan.pl --mode paired -t /path/to/varscan_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --depends { optional: final job ID from gatk.pl }
 
-# run GATK's MuTect (v1) to produce somatic SNV calls
-This is currently not part of the above 'master' pipeline, because there are additional steps required following PoN creation. First, create a panel of normals (because this uses an older version of GATK (MuTect1) this requires manual updating of the final VCF for compatibility with downstream steps).
-
-</code></pre>
-*** NOTE: Final step of PoN generation uses GATK CombineVariants which outputs VCFv4.2**
-   MuTect requires VCFv4.1 - to address this, you must manually change the VCF header:
-   ##fileformat=VCFv4.2 to ##fileformat=VCFv4.1
-   ##FORMAT=<ID=AD,Number=R to ##FORMAT=<ID=AD,Number=.
-</code></pre>
-
-Next, update the mutect_config.yaml to point to the finished PoN and run MuTect to generate somatic SNV calls.
-
-</code></pre>
-perl mutect.pl -t /path/to/mutect_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --create-panel-of-normals
-
-perl mutect.pl -t /path/to/mutect_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N}
+Run tumour-only samples with a panel of normals (can also be run without, but germline filtering will not be performed):
+perl varscan.pl --mode unpaired -t /path/to/varscan_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --depends { optional: final job ID from gatk.pl or above panel of normals creation } --pon /path/to/panel_of_normals.vcf { optional: can also be specified in mutect_config.yaml if created elsewhere }
 </code></pre>
 
 ### RNA pipeline:

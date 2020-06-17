@@ -248,6 +248,19 @@ sub write_script {
 			$sbatch_params .= "\n#SBATCH " . $args{extra_args};
 			}
 
+		if ($args{dependencies} =~ m/,/) {
+			my @depends;
+			my @parts = split(/,/, $args{dependencies});
+			foreach my $part (@parts) {
+				next if ('' eq $part);
+				push @depends, $part;
+				}
+
+			if (scalar(@depends) > 1) { $args{dependencies} = join(',', @depends); }
+			elsif (scalar(@depends) == 1) { $args{dependencies} = $depends[0]; }
+			else { $args{dependencies} = ''; }
+			}
+
 		if ('' ne $args{dependencies}) {
 
 			if ($args{name} =~ m/job_metrics/) {

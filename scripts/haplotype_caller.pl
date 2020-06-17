@@ -275,8 +275,12 @@ sub main{
 			print $log "  SAMPLE: $sample\n\n";
 
 			my $type;
-			if ($sample =~ m/BC|SK|A/) { $type = 'normal'; } else { $type = 'tumour'; }
-		
+			if ( ($sample =~ m/BC|SK|A/) && ($sample !~ m/Ar/) ) {
+				$type = 'normal';
+				} else {
+				$type = 'tumour';
+				}
+
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
 
@@ -420,23 +424,15 @@ sub main{
 				if ('Y' eq missing_file($final_maf . '.md5')) {
 
 					# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
-					# create a symlink for the final output in the TOP directory
-					my @final = split /\//, $final_maf;
-					my $final_link = join('/', $output_directory, '..', $final[-1]);
-
-					if (-l $final_link) {
-						unlink $final_link or die "Failed to remove previous symlink: $final_link";
-						}
-
 					$vcf2maf_cmd .= "\n\n" . join("\n",
 						"if [ -s " . join(" ] && [ -s ", $final_maf) . " ]; then",
 						"  md5sum $final_maf > $final_maf.md5",
-						"  ln -s $final_maf $final_link",
 						"  mv $tmp_directory/$sample" . "_HaplotypeCaller_filtered.vep.vcf $final_vcf",
 						"  md5sum $final_vcf > $final_vcf.md5",
-						"  gzip $final_vcf",
+						"  bgzip $final_vcf",
+						"  tabix -p vcf $final_vcf.gz",
 						"else",
-						'  echo "FINAL OUTPUT MAF is missing; not running md5sum or producing final symlink..."',
+						'  echo "FINAL OUTPUT MAF is missing; not running md5sum/bgzip/tabix..."',
 						"fi"
 						);
 
@@ -447,7 +443,7 @@ sub main{
 						log_dir	=> $log_directory,
 						name	=> 'run_vcf2maf_and_VEP_' . $sample,
 						cmd	=> $vcf2maf_cmd,
-						modules	=> ['perl', $samtools],
+						modules	=> ['perl', $samtools, 'tabix'],
 						dependencies	=> $run_id,
 						max_time	=> $tool_data->{parameters}->{annotate}->{time},
 						mem		=> $tool_data->{parameters}->{annotate}->{mem},
@@ -520,52 +516,72 @@ sub main{
 	# if this is DNA-Seq (WXS or WGS), combine above gvcfs (per-batch)
 	if ('dna' eq $data_type) {
 
-		# run CombineGVCFs
-		my $combined_gvcf = join('/', $output_directory, 'haplotype_caller_combined.g.vcf');
+		my @batches = (());
+		my $batch_idx = 0;
+		my $file_count = 0;
 
-		my $combine_cmd = get_combine_gvcf_command(
-			input		=> join(' -V ', @gvcfs),
-			output		=> $combined_gvcf,
-			java_mem	=> $tool_data->{parameters}->{combine}->{java_mem},
-			tmp_dir		=> $output_directory
-			);
+		foreach my $gvcf ( @gvcfs ) {
 
-		# this is a java-based command, so run a final check
-		$java_check = "\n" . check_java_output(
-			extra_cmd => "\nmd5sum $combined_gvcf > $combined_gvcf.md5"
-			);
+			if ($file_count > 15) {
+				$batch_idx++;
+				@batches[$batch_idx] = ();
+				}
+			push @batches[$batch_idx], $gvcf;
 
-		$combine_cmd .= "\n$java_check";
+			$file_count++;
 
-		# check if this should be run
-		if ('Y' eq missing_file($combined_gvcf . '.md5')) {
-
-			# record command (in log directory) and then run job
-			print $log "Submitting job for CombineGVCFs...\n";
-
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'run_combine_gvcfs',
-				cmd	=> $combine_cmd,
-				modules	=> [$gatk],
-				dependencies	=> join(',', @all_jobs),
-				max_time	=> $tool_data->{parameters}->{combine}->{time},
-				mem		=> $tool_data->{parameters}->{combine}->{mem},
-				hpc_driver	=> $tool_data->{HPC_driver}
-				);
-
-			$run_id = submit_job(
-				jobname		=> 'run_combine_gvcfs',
-				shell_command	=> $run_script,
-				hpc_driver	=> $tool_data->{HPC_driver},
-				dry_run		=> $tool_data->{dry_run},
-				log_file	=> $log
-				);
-
-			push @all_jobs, $run_id;
 			}
-		else {
-			print $log "Skipping CombineGVCFs because this has already been completed!\n";
+
+		$batch_idx = 0;
+
+		foreach my @batch ( @batches ) {
+
+			$batch_idx++;
+
+			# run CombineGVCFs
+			my $combined_gvcf = join('/', $output_directory, 'haplotype_caller_' . $batch_idx . '.g.vcf');
+
+			my $combine_cmd = get_combine_gvcf_command(
+				input		=> join(' -V ', @batch),
+				output		=> $combined_gvcf,
+				java_mem	=> $tool_data->{parameters}->{combine_gvcfs}->{java_mem},
+				tmp_dir		=> $output_directory
+				);
+
+			# this is a java-based command, so run a final check
+			$java_check = "\n" . check_java_output(
+				extra_cmd => "\nmd5sum $combined_gvcf > $combined_gvcf.md5"
+				);
+
+			$combine_cmd .= "\n$java_check";
+
+			# check if this should be run
+			if ('Y' eq missing_file($combined_gvcf . '.md5')) {
+
+				# record command (in log directory) and then run job
+				print $log "Submitting job for CombineGVCFs...\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_combine_gvcfs_batch_' . $batch_idx,
+					cmd	=> $combine_cmd,
+					modules	=> [$gatk],
+					dependencies	=> join(',', @all_jobs),
+					max_time	=> $tool_data->{parameters}->{combine_gvcfs}->{time},
+					mem		=> $tool_data->{parameters}->{combine_gvcfs}->{mem},
+					hpc_driver	=> $tool_data->{HPC_driver}
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_combine_gvcfs_batch_' . $batch_idx,
+					shell_command	=> $run_script,
+					hpc_driver	=> $tool_data->{HPC_driver},
+					dry_run		=> $tool_data->{dry_run},
+					log_file	=> $log
+					);
+
+				push @all_jobs, $run_id;
+				}
 			}
 
 		# should intermediate files be removed
@@ -599,7 +615,6 @@ sub main{
 				log_file	=> $log
 				);
 			}
-
 		}
 
 	if ( ('rna' eq $data_type) && ('Y' eq $tool_data->{parameters}->{combine_results}->{run})) {

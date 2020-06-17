@@ -229,7 +229,7 @@ sub main {
 	# get sample data
 	my $smp_data = LoadFile($data_config);
 
-	my ($run_script, $run_id, $run_id_extra, $raw_link, $final_link);
+	my ($run_script, $run_id, $run_id_extra, $raw_link);
 	my @all_jobs;
 
 	# initiate final output yaml file
@@ -483,20 +483,6 @@ sub main {
 			# check if this should be run
 			if ('Y' eq missing_file($smp_output)) {
 
-				# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
-				# create a symlink for the final output in the TOP directory
-				my @final = split /\//, $smp_output;
-				$final_link = join('/', $tool_data->{output_dir}, $final[-1]);
-
-				if (-l $final_link) {
-					unlink $final_link or die "Failed to remove previous symlink: $final_link;\n";
-					}
-
-				my $link_cmd = "echo Creating new symlink...";
-				$link_cmd .= "\nln -s $smp_output $final_link";
-
-				$merge_cmd .= "\n" . $link_cmd;
-
 				# record command (in log directory) and then run job
 				print $log "Submitting job to merge lanes and mark dupilcates...\n";
 
@@ -529,7 +515,7 @@ sub main {
 			push @final_outputs, $smp_output;
 
 			# clean up/remove intermediate files (once per sample)
-			if ('Y' eq $tool_data->{del_intermediate}) {
+			if ('Y' eq $tool_data->{del_intermediates}) {
 
 				print $log "Submitting job to clean up temporary/intermediate files...\n";
 

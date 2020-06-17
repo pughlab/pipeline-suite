@@ -343,7 +343,7 @@ sub main {
 	# get sample data
 	my $smp_data = LoadFile($data_config);
 
-	my ($run_script, $run_id_patient, $run_id_sample, $run_id_extra, $raw_link, $final_link);
+	my ($run_script, $run_id_patient, $run_id_sample, $run_id_extra, $raw_link);
 	my @all_jobs;
 
 	# initiate final output yaml file
@@ -540,7 +540,7 @@ sub main {
 
 			# determine sample type
 			my $type;
-			if ($sample =~ m/BC|SK|A/) { $type = 'normal'; } else { $type = 'tumour'; }
+			if (($sample =~ m/BC|SK|A/) && ($sample !~ m/Ar/)) { $type = 'normal'; } else { $type = 'tumour'; }
 
 			# initiate some variables
 			my ($realigned_bam, $realigned_bai);
@@ -787,21 +787,7 @@ sub main {
 			if ('Y' eq missing_file($recal_bam . '.md5')) {
 
 				# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
-				# create a symlink for the final output in the TOP directory
-				my @final = split /\//, $recal_bam;
-				$final_link = join('/', $output_directory, '..', $final[-1]);
-
-				if (-l $final_link) {
-					unlink $final_link or die "Failed to remove previous symlink: $final_link;\n";
-					}
-
-				my $link_cmd = "echo Creating new symlink...";
-				$link_cmd .= "\nln -s $recal_bam $final_link";
-
 				$java_check = "samtools quickcheck $recal_bam";
-				$java_check .= "\n" . check_java_output(
-					extra_cmd => $link_cmd
-					);
 
 				$stage4_cmd .= "\n" . $java_check;
 

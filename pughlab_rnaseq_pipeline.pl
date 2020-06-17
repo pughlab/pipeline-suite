@@ -123,7 +123,7 @@ sub main {
 		$star_run_id = `$star_command`;
 		sleep(5);
 
-		print $log ">>> Final STAR job id: $star_run_id\n";
+		print $log ">>> Final STAR job id: $star_run_id\n\n";
 
 		}
 
@@ -204,7 +204,7 @@ sub main {
 		print $log "  COMMAND: $gatk_command\n\n";
 		$gatk_run_id = `$gatk_command`;
 		sleep(5);
-		print $log ">>> Final GATK job id: $gatk_run_id\n";
+		print $log ">>> Final GATK job id: $gatk_run_id\n\n";
 
 		}
 

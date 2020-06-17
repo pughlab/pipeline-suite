@@ -160,7 +160,7 @@ sub main {
 	# get sample data
 	my $smp_data = LoadFile($data_config);
 
-	my ($run_script, $run_id, $raw_link, $final_link);
+	my ($run_script, $run_id, $raw_link);
 	my @all_jobs;
 
 	# process each patient in $smp_data
@@ -196,7 +196,11 @@ sub main {
 			$cleanup_cmd .= "\nrm -rf $tmp_directory";
 
 			my $type;
-			if ($sample =~ m/BC|SK|A/) { $type = 'normal'; } else { $type = 'tumour'; }
+			if ( ($sample =~ m/BC|SK|A/) && ($sample !~ m/Ar/)) {
+				$type = 'normal';
+				} else {
+				$type = 'tumour';
+				}
 
 			# because smp_data points to STAR-aligned, picard merged/markdup BAMs,
 			# we need to first, get the parent directory
@@ -244,13 +248,13 @@ sub main {
 
 					$cat_fq_cmd .= join(' ',
 						"\nzcat",
-						join(' ', @r1_fastq_files),
+						join(' ', sort(@r1_fastq_files)),
 						'>', $r1
 						);
 
 					$cat_fq_cmd .= join(' ',
 						"\nzcat",
-						join(' ', @r2_fastq_files),
+						join(' ', sort(@r2_fastq_files)),
 						'>', $r2
 						);
 
@@ -286,6 +290,7 @@ sub main {
 					$r2 .= '.gz';
 
 					push @smp_jobs, $run_id;
+					push @all_jobs, $run_id;
 					}
 				}
 
@@ -315,7 +320,7 @@ sub main {
 					cmd	=> $fusion_cmd,
 					modules => [$star, $perl, $samtools, 'tabix', 'python', $star_fusion],
 					# requires python igv-reports
-					dependencies	=> $args{dependencies},
+					dependencies	=> join(',', $args{dependencies}, $run_id),
 					max_time	=> $tool_data->{parameters}->{star_fusion}->{time},
 					mem		=> $tool_data->{parameters}->{star_fusion}->{mem},
 					hpc_driver	=> $tool_data->{HPC_driver},
@@ -338,36 +343,6 @@ sub main {
 				$cleanup_cmd .= "\nrm $sample_directory/pipeliner*";
 				$cleanup_cmd .= "\nrm -rf $sample_directory/_starF_checkpoints";
 				$cleanup_cmd .= "\nrm $sample_directory/*.ok";
-
-				# IF THIS STEP IS SUCCESSFULLY RUN,
-				# create a symlink for the final output in the TOP directory
-				my $smp_output = $sample . "_fusion_predictions.abridged.tsv";
-				my $links_cmd = join("\n",
-					"cd $patient_directory",
-					"ln -s $fusion_output $smp_output",
-					"cd $output_directory/../"
-					);
-
-				if (-l $smp_output) { unlink $smp_output or die "Failed to remove previous symlink: $smp_output;\n"; }
-				$links_cmd .= "\nln -s $fusion_output $smp_output";
-
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'create_symlink_' . $sample,
-					cmd	=> $links_cmd,
-					dependencies	=> $run_id,
-					mem		=> '256M',
-					max_time	=> '00:05:00',
-					hpc_driver	=> $tool_data->{HPC_driver}
-					);
-
-				$run_id = submit_job(
-					jobname		=> 'create_symlinks_' . $sample,
-					shell_command	=> $run_script,
-					hpc_driver	=> $tool_data->{HPC_driver},
-					dry_run		=> $tool_data->{dry_run},
-					log_file	=> $log
-					);
 
 				push @patient_jobs, $run_id;
 				}

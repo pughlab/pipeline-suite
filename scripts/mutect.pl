@@ -244,7 +244,7 @@ sub pon {
 	my $output_directory = $args{output_directory};
 	$output_directory =~ s/\/$//;
 
-	my $log_directory = join('/', $output_directory, 'logs');
+	my $log_directory = join('/', $output_directory, '..', 'logs', 'CREATE_PanelOfNormals');
 	unless(-e $log_directory) { make_path($log_directory); }
 
 	my $log_file = join('/', $log_directory, 'run_MuTect_GeneratePoN_pipeline.log');
@@ -448,8 +448,8 @@ sub pon {
 		} # end patient
 
 	# combine results
-	my $pon_tmp	= join('/', $output_directory, $tool_data->{date} . "_merged_panelOfNormals.vcf");
-	my $pon		= join('/', $output_directory, $tool_data->{date} . "_merged_panelOfNormals_trimmed.vcf");
+	my $pon_tmp	= join('/', $output_directory, $date . "_merged_panelOfNormals.vcf");
+	my $pon		= join('/', $output_directory, $date . "_merged_panelOfNormals_trimmed.vcf");
 
 	# create a fully merged output (useful for combining with other studies later)
 	my $full_merge_command = generate_pon(
@@ -502,14 +502,17 @@ sub pon {
 		out_type	=> 'trimmed'
 		);
 
-	my $final_link = join('/', $tool_data->{output_dir}, 'panel_of_normals.vcf');
+	my $final_link = join('/', $output_directory, '..', 'panel_of_normals.vcf');
 	if (-l $final_link) {
 		unlink $final_link or die "Failed to remove previous symlink: $final_link";
 		}
 
+	symlink($pon, $final_link);
+
 	my $extra_args = join("\n",
-		"md5sum $pon > $pon.md5",
-		"ln -s $pon $final_link"
+		"  md5sum $pon > $pon.md5",
+		"\n  sed -i 's/VCFv4.2/VCFv4.1/g' $pon",
+		"  sed -i 's/AD,Number=R/AD,Number=./g' $pon"
 		);
 
 	$trimmed_merge_command .= "\n" . check_java_output(
@@ -547,7 +550,7 @@ sub pon {
 		}
 
 	# should intermediate files be removed
-	if ('Y' eq $tool_data->{del_intermediate}) {
+	if ('Y' eq $tool_data->{del_intermediates}) {
 
 		print $log "Submitting job to clean up temporary/intermediate files...\n";
 
@@ -606,6 +609,11 @@ sub pon {
 			dry_run		=> $tool_data->{dry_run},
 			log_file	=> $log
 			);
+
+		# print the final job id to stdout to be collected by the master pipeline
+		print $run_id;
+		} else {
+		print '000000';
 		}
 
 	# finish up
@@ -623,6 +631,7 @@ sub main {
 		hpc_driver		=> undef,
 		del_intermediates	=> undef,
 		dry_run			=> undef,
+		pon			=> undef,
 		dependencies		=> '',
 		@_
 		);
@@ -646,7 +655,7 @@ sub main {
 	my $output_directory = $args{output_directory};
 	$output_directory =~ s/\/$//;
 
-	my $log_directory = join('/', $output_directory, 'logs');
+	my $log_directory = join('/', $output_directory, 'logs', 'RUN_SOMATIC_VARIANTCALL');
 	unless(-e $log_directory) { make_path($log_directory); }
 
 	my $log_file = join('/', $log_directory, 'run_MuTect_SomaticVariant_pipeline.log');
@@ -694,6 +703,11 @@ sub main {
 	if (defined($tool_data->{pon})) {
 		print $log "\n      Panel of Normals: $tool_data->{pon}";
 		$pon = $tool_data->{pon};
+		} elsif (defined($args{pon})) {
+		print $log "\n      Panel of Normals: $args{pon}";
+		$pon = $args{pon};
+		} else {
+		print $log "\n      No panel of normals defined! Tumour-only samples will not be run!!";
 		}
 
 	if (defined($tool_data->{intervals_bed})) {
@@ -768,7 +782,7 @@ sub main {
 			my $output_stem = join('/', $sample_directory, $sample . '_MuTect');
 			$cleanup_cmd .= "\nrm $output_stem.vcf";
 
-			my ($mutect_command, $extra_cmds) = undef;
+			my $mutect_command = undef;
 
 			# Tumour only, with a panel of normals
 			if ( (defined($tool_data->{pon})) && (scalar(@normal_ids) == 0) ) {
@@ -829,7 +843,8 @@ sub main {
 					jobname		=> 'run_mutect_' . $sample,
 					shell_command	=> $run_script,
 					hpc_driver	=> $tool_data->{HPC_driver},
-					dry_run		=> $tool_data->{dry_run}
+					dry_run		=> $tool_data->{dry_run},
+					log_file	=> $log
 					);
 
 				push @patient_jobs, $run_id;
@@ -874,7 +889,8 @@ sub main {
 					jobname		=> 'run_vcf_filter_' . $sample,
 					shell_command	=> $run_script,
 					hpc_driver	=> $tool_data->{HPC_driver},
-					dry_run		=> $tool_data->{dry_run}
+					dry_run		=> $tool_data->{dry_run},
+					log_file	=> $log
 					);
 
 				push @patient_jobs, $run_id;
@@ -928,24 +944,15 @@ sub main {
 			if ('Y' eq missing_file($final_maf . '.md5')) {
 
 				# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
-				# create a symlink for the final output in the TOP directory
-				my @final = split /\//, $final_maf;
-				my $final_link = join('/', $output_directory, '..', $final[-1]);
-
-				if (-l $final_link) {
-					unlink $final_link or die "Failed to remove previous symlink: $final_link";
-					}
-
 				$vcf2maf_cmd .= "\n\n" . join("\n",
 					"if [ -s " . join(" ] && [ -s ", $final_maf) . " ]; then",
 					"  md5sum $final_maf > $final_maf.md5",
-					"  ln -s $final_maf $final_link",
 					"  mv $tmp_directory/$sample" . "_MuTect_filtered.vep.vcf $final_vcf",
 					"  md5sum $final_vcf > $final_vcf.md5",
 					"  bgzip $final_vcf",
 					"  tabix -p vcf $final_vcf.gz",
 					"else",
-					'  echo "FINAL OUTPUT MAF is missing; not running md5sum or producing final symlink..."',
+					'  echo "FINAL OUTPUT MAF is missing; not running md5sum/bgzip/tabix..."',
 					"fi"
 					);
 
@@ -967,7 +974,8 @@ sub main {
 					jobname         => 'run_vcf2maf_and_VEP_' . $sample,
 					shell_command   => $run_script,
 					hpc_driver      => $tool_data->{HPC_driver},
-					dry_run         => $tool_data->{dry_run}
+					dry_run         => $tool_data->{dry_run},
+					log_file	=> $log
 					);
 
 				push @patient_jobs, $run_id;
@@ -982,7 +990,7 @@ sub main {
 
 		# should intermediate files be removed
 		# run per patient
-		if ('Y' eq $tool_data->{del_intermediate}) {
+		if ('Y' eq $tool_data->{del_intermediates}) {
 
 			print $log "Submitting job to clean up temporary/intermediate files...\n";
 
@@ -1006,7 +1014,6 @@ sub main {
 				name	=> 'run_cleanup_' . $patient,
 				cmd	=> $cleanup_cmd,
 				dependencies	=> join(',', @patient_jobs),
-				max_time	=> '00:05:00',
 				mem		=> '256M',
 				hpc_driver	=> $tool_data->{HPC_driver}
 				);
@@ -1016,6 +1023,7 @@ sub main {
 				shell_command	=> $run_script,
 				hpc_driver	=> $tool_data->{HPC_driver},
 				dry_run		=> $tool_data->{dry_run}
+				log_file	=> $log
 				);
 			}	
 
@@ -1037,7 +1045,6 @@ sub main {
 			name	=> 'output_job_metrics_' . $run_count,
 			cmd	=> $collect_metrics,
 			dependencies	=> join(',', @all_jobs),
-			max_time	=> '0:10:00',
 			mem		=> '1G',
 			hpc_driver	=> $tool_data->{HPC_driver}
 			);
@@ -1047,6 +1054,7 @@ sub main {
 			shell_command	=> $run_script,
 			hpc_driver	=> $tool_data->{HPC_driver},
 			dry_run		=> $tool_data->{dry_run}
+			log_file	=> $log
 			);
 		}
 
@@ -1066,6 +1074,7 @@ my $hpc_driver = 'slurm';
 my $remove_junk = 'N';
 my $dry_run = 'Y';
 my $dependencies = '';
+my $panel_of_normals = undef;
 
 # get command line arguments
 GetOptions(
@@ -1076,7 +1085,8 @@ GetOptions(
 	'r|remove=s'		=> \$remove_junk,
 	'n|dry_run=s'		=> \$dry_run,
 	'depends=s'		=> \$dependencies,
-	'create-panel-of-normals'	=> \$create_pon
+	'create-panel-of-normals'	=> \$create_pon,
+	'pon'			=> \$panel_of_normals
 	);
 
 # do some quick error checks to confirm valid arguments	
@@ -1102,6 +1112,7 @@ if ($create_pon) {
 		hpc_driver		=> $hpc_driver,
 		del_intermediates	=> $remove_junk,
 		dry_run			=> $dry_run,
+		pon			=> $panel_of_normals,
 		dependencies		=> $dependencies
 		);
 }

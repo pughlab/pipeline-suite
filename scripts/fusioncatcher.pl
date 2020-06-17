@@ -141,7 +141,7 @@ sub main {
 	# get sample data
 	my $smp_data = LoadFile($data_config);
 
-	my ($run_script, $run_id, $raw_link, $final_link);
+	my ($run_script, $run_id, $raw_link);
 	my @all_jobs;
 
 	# process each patient in $smp_data
@@ -178,7 +178,7 @@ sub main {
 			my @lanes = keys %{$smp_data->{$patient}->{$sample}->{runlanes}};
 			my @fastqs;
 
-			foreach my $lane ( @lanes ) {
+			foreach my $lane ( sort(@lanes) ) {
 
 				print $log "    LANE: $lane\n";
 
@@ -216,24 +216,6 @@ sub main {
 				ref_type	=> $tool_data->{ref_type},
 				java_mem	=> $tool_data->{parameters}->{fusioncatcher}->{java_mem}
 				);
-
-			# IF THIS STEP IS SUCCESSFULLY RUN,
-			# create a symlink for the final output in the TOP directory
-			my $smp_output = join('/', $patient_directory, $sample . "_candidate-fusion-genes.txt");
-			if (-l $smp_output) {
-				unlink $smp_output or die "Failed to remove previous symlink: $smp_output;\n";
-				}
-
-			my $links_cmd = "ln -s $fusion_output $smp_output";
-
-			$smp_output = join('/', $output_directory, '..', $sample . "_candidate-fusion-genes.txt");
-			if (-l $smp_output) {
-				unlink $smp_output or die "Failed to remove previous symlink: $smp_output;\n";
-				}
-
-			$links_cmd .= "\nln -s $fusion_output $smp_output";
-
-			$fusion_cmd .= "\n\n$links_cmd";
 
 			# check if this should be run
 			if ('Y' eq missing_file($fusion_output)) {

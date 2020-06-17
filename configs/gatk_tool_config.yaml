@@ -7,7 +7,6 @@ samtools_version: 1.9
 picard_version: 2.6.0
 intervals_bed:
 dbsnp:
-create_output_yaml: Y
 # and indicate some parameters for job submission
 parameters:
     split_cigar:

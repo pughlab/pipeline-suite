@@ -142,7 +142,7 @@ sub main {
 	# get sample data
 	my $smp_data = LoadFile($data_config);
 
-	my ($run_script, $run_id, $raw_link, $final_link);
+	my ($run_script, $run_id, $raw_link);
 	my @all_jobs;
 
 	# process each sample in $smp_data
@@ -177,7 +177,11 @@ sub main {
 			$cleanup_cmd .= "\nrm -rf $tmp_directory";
 
 			my $type;
-			if ($sample =~ m/BC|SK|A/) { $type = 'normal'; } else { $type = 'tumour'; }
+			if ( ($sample =~ m/BC|SK|A/) && ($sample !~ m/Ar/) ) {
+				$type = 'normal';
+				} else {
+				$type = 'tumour';
+				}
 
 			# because smp_data points to STAR-aligned, picard merged/markdup BAMs,
 			# we need to first, get the parent directory
@@ -243,52 +247,6 @@ sub main {
 
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
-
-				# IF THIS STEP IS SUCCESSFULLY RUN,	
-				# create a symlink for the final output in the TOP directory
-				my @final = split /\//, $genes_file;
-				my $link_genes = $final[-1];
-				my $link_isoforms = $final[-1];
-				$link_isoforms =~ s/genes/isoforms/;
-
-				my $links_cmd = join("\n",
-					"cd $patient_directory",
-					"ln -s $genes_file .",
-					"ln -s $isoforms_file .",
-					"cd $output_directory/../"
-					);
-
-				if (-l $link_genes) {
-					unlink $link_genes or die "Failed to remove previous symlink: $link_genes;\n";
-					}
-				if (-l $link_isoforms) {
-					unlink $link_isoforms or die "Failed to remove previous symlink: $link_isoforms;";
-					}
-
-				$links_cmd .= "\n";
-				$links_cmd .= join("\n",
-					"ln -s $genes_file .",
-					"ln -s $isoforms_file ."
-					);
-
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'create_symlink_' . $sample,
-					cmd	=> $links_cmd,
-					dependencies	=> $run_id,
-					mem		=> '256M',
-					hpc_driver	=> $tool_data->{HPC_driver}					
-					);
-
-				$run_id = submit_job(
-					jobname		=> 'create_symlinks_' . $sample,
-					shell_command	=> $run_script,
-					hpc_driver	=> $tool_data->{HPC_driver},
-					dry_run		=> $tool_data->{dry_run},
-					log_file	=> $log
-					);
-
-				push @patient_jobs, $run_id;
 				}
 			else {
 				print $log "Skipping rsem-calculate-expression because this has already been completed!\n";
