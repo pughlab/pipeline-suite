@@ -142,38 +142,43 @@ perl pughlab_dnaseq_pipeline.pl -t /path/to/dna_pipeline_config.yaml -d /path/to
 
 This will generate the directory structure in the output directory (provided in /path/to/dna_pipeline_config.yaml), including a "logs/run_DNA_pipeline_TIMESTAMP/" directory containing a file "run_DNASeq_pipeline.log" which lists the individual tool commands; these can be run separately if "dry_run: Y" or in the event of a failure at any stage and you don't need to re-run the entire thing (***Note:*** doing so would not regenerate files that already exist).
 
-If your project is quite large (>20 samples), you may prefer to run the alignments and variant calling steps separately (ie, produce the final GATK-processed bams and remove BWA intermediates to free up space). To accomplish this, simply set preprocessing: Y and variant_calling: N in the dna_pipeline_config.yaml. However, since the variant calling steps are best run as a single cohort, be sure to combine all of the gatk_bam_config.yamls prior to running variant calling (ie, from the GATK directory: cat \*/gatk_bam_config.yaml | awk 'NR <= 1 || !/^---/' > combined_gatk_bam_config.yaml).
+If your project is quite large (>20 samples), you may prefer to run the alignments and variant calling steps separately (ie, produce the final GATK-processed bams and remove BWA intermediates to free up space). To accomplish this, simply set preprocessing: Y and variant_calling: N in the dna_pipeline_config.yaml. However, since the variant calling steps are best run as a single cohort, be sure to combine all of the gatk_bam_config.yamls prior to running variant calling:
 
-# Preprocessing steps:
-# run BWA to align to a reference genome
+<pre><code>cd /path/to/output/GATK/
+
+cat \*/gatk_bam_config.yaml | awk 'NR <= 1 || !/^---/' > combined_gatk_bam_config.yaml
+</code></pre>
+
+### Preprocessing steps:
+### run BWA to align to a reference genome
 </code></pre>
 perl bwa.pl -t /path/to/bwa_aligner_config.yaml -d /path/to/fastq_dna_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N}
 </code></pre>
 
 This will again write individual commands to file: /path/to/output/directory/BWA/TIMESTAMP/logs/run_BWA_pipeline.log
 
-# run GATK indel realignment and base quality score recalibration
+### run GATK indel realignment and base quality score recalibration
 </code></pre>
 perl gatk.pl --dna -t /path/to/gatk_tool_config.yaml -d /path/to/bwa_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --depends { optional: final job ID from bwa.pl }
 
 </code></pre>
 
-# get BAM QC metrics, including coverage, contamination estimates and callable bases
+### get BAM QC metrics, including coverage, contamination estimates and callable bases
 </code></pre>
 perl contest.pl -t /path/to/bamqc_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --depends { optional: final job ID from gatk.pl }
 
 perl get_coverage.pl -t /path/to/bamqc_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --depends { optional: final job ID from gatk.pl }
 </code></pre>
 
-# Variant calling steps:
-# run GATK's HaplotypeCaller to produce gvcfs
+### Variant calling steps:
+### run GATK's HaplotypeCaller to produce gvcfs
 </code></pre>
 perl haplotype_caller.pl --dna -t /path/to/haplotype_caller_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --depends { optional: final job ID from gatk.pl }
 
 perl genotype_gvcfs.pl -t /path/to/haplotype_caller_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --depends { optional: final job ID from haplotype_caller.pl }
 </code></pre>
 
-# run GATK's MuTect (v1) to produce somatic SNV calls
+### run GATK's MuTect (v1) to produce somatic SNV calls
 </code></pre>
 Create a panel of normals:
 perl mutect.pl -t /path/to/mutect_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --create-panel-of-normals --depends { optional: final job ID from gatk.pl }
@@ -182,7 +187,7 @@ Generate somatic SNV calls:
 perl mutect.pl -t /path/to/mutect_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --depends { optional: final job ID from gatk.pl or above panel of normal creation } --pon /path/to/panel_of_normals.vcf { optional: can also be specified in mutect_config.yaml if created elsewhere }
 </code></pre>
 
-# run GATK's MuTect2 to produce somatic SNV calls
+### run GATK's MuTect2 to produce somatic SNV calls
 </code></pre>
 Create a panel of normals:
 perl mutect2.pl -t /path/to/mutect2_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --create-panel-of-normals --depends { optional: final job ID from gatk.pl }
@@ -191,7 +196,7 @@ Generate somatic SNV calls:
 perl mutect2.pl -t /path/to/mutect2_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --depends { optional: final job ID from gatk.pl or above panel of normal creation } --pon /path/to/panel_of_normals.vcf { optional: can also be specified in mutect_config.yaml if created elsewhere }
 </code></pre>
 
-# run VarScan to produce SNV and CNA calls
+### run VarScan to produce SNV and CNA calls
 </code></pre>
 Run T/N pairs and create a panel of normals:
 perl varscan.pl --mode paired -t /path/to/varscan_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --depends { optional: final job ID from gatk.pl }
@@ -210,34 +215,34 @@ perl pughlab_rnaseq_pipeline.pl -t /path/to/master_rna_config.yaml -d /path/to/f
 
 This will generate the directory structure in the output directory (provided in /path/to/master_rna_config.yaml), including a "logs/run_RNA_pipeline_TIMESTAMP/" directory containing a file "run_RNASeq_pipeline.log" which lists the individual tool commands; these can be run separately if "dry_run: Y" or in the event of a failure at any stage and you don't need to re-run the entire thing (although doing so would not regenerate files that already exist).
 
-# run STAR to align to a reference genome
+### run STAR to align to a reference genome
 </code></pre>
 perl star.pl -t /path/to/star_aligner_config.yaml -d /path/to/fastq_rna_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} -p PROJECTNAME
 </code></pre>
 
 This will again write individual commands to file: /path/to/output/directory/STAR/TIMESTAMP/logs/run_STAR_pipeline.log
 
-# run Fusioncatcher on raw FASTQ data
+### run Fusioncatcher on raw FASTQ data
 </code></pre>
 perl fusioncatcher.pl -t /path/to/fusioncatcher_config.yaml -d /path/to/fastq_rna_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} -p PROJECTNAME
 </code></pre>
 
-# run RSEM on STAR-aligned BAMs
+### run RSEM on STAR-aligned BAMs
 </code></pre>
 perl rsem.pl -t /path/to/rsem_expression_config.yaml -d /path/to/star_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} -p PROJECTNAME --depends { optional: final job ID from star.pl }
 </code></pre>
 
-# run STAR-Fusion on STAR-aligned BAMs
+### run STAR-Fusion on STAR-aligned BAMs
 </code></pre>
 perl star_fusion.pl -t /path/to/star_fusion_config.yaml -d /path/to/star_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} -p PROJECTNAME --depends { optional: final job ID from star.pl }
 </code></pre>
 
-# run GATK split CIGAR, indel realignment and base quality score recalibration on MarkDup BAMs
+### run GATK split CIGAR, indel realignment and base quality score recalibration on MarkDup BAMs
 </code></pre>
 perl gatk.pl --rna -t /path/to/gatk_tool_config.yaml -d /path/to/star_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} --depends { optional: final job ID from star.pl }
 </code></pre>
 
-# run GATK HaplotypeCaller, variant filtration and annotataion
+### run GATK HaplotypeCaller, variant filtration and annotataion
 </code></pre>
 perl haplotype_caller.pl --rna -t /path/to/haplotype_caller_config.yaml -d /path/to/gatk_bam_config.yaml -o /path/to/output/directory -h slurm -r {Y|N} -n {Y|N} -p PROJECTNAME --depends { optional: final job ID from gatk.pl }
 </code></pre>
