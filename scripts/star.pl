@@ -305,6 +305,9 @@ sub main {
 
 			print $log "  SAMPLE: $sample\n";
 
+			# determine sample type
+			my $type = $smp_data->{$patient}->{$sample}->{type};
+
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
 
@@ -416,13 +419,6 @@ sub main {
 				tmp_dir		=> $tmp_directory
 				);
 	
-			my $type;
-			if ( ($sample =~ m/BC|SK|A|N/) && ($sample !~ m/Ar/) ) {
-				$type = 'normal';
-				} else {
-				$type = 'tumour';
-				}
-
 			if ('normal' eq $type) { $normals{$sample} = $dedup_bam; }
 			if ('tumour' eq $type) { $tumours{$sample} = $dedup_bam; }
 

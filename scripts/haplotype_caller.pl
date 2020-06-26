@@ -10,6 +10,7 @@ use POSIX qw(strftime);
 use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
+use List::Util qw(any);
 
 my $cwd = dirname($0);
 require "$cwd/utilities.pl";
@@ -275,7 +276,7 @@ sub main{
 			print $log "  SAMPLE: $sample\n\n";
 
 			my $type;
-			if ( ($sample =~ m/BC|SK|A/) && ($sample !~ m/Ar/) ) {
+			if ( (any { $_ =~ m/$sample/ } @normal_ids) ) {
 				$type = 'normal';
 				} else {
 				$type = 'tumour';

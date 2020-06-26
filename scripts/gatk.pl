@@ -10,6 +10,7 @@ use Getopt::Long;
 use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
+use List::Util qw(any);
 
 my $cwd = dirname($0);
 require "$cwd/utilities.pl";
@@ -413,10 +414,10 @@ sub main {
 			if (scalar(@normal_paths) > 0) {
 				$input_string .=  join(' -I ', @normal_paths);
 				}
-			if ( (scalar @normal_paths > 0) & (scalar @tumour_paths > 0) ) {
+			if ( (scalar(@normal_paths) > 0) & (scalar(@tumour_paths( > 0) ) {
 				$input_string .= ' -I ';
 				}
-			if (scalar @tumour_paths > 0) {
+			if (scalar(@tumour_paths) > 0) {
 				$input_string .= join(' -I ', @tumour_paths);
 				}
 
@@ -540,7 +541,11 @@ sub main {
 
 			# determine sample type
 			my $type;
-			if (($sample =~ m/BC|SK|A/) && ($sample !~ m/Ar/)) { $type = 'normal'; } else { $type = 'tumour'; }
+			if ( (any { $_ =~ m/$sample/ } @normal_ids) ) {
+				$type = 'normal';
+				} else {
+				$type = 'tumour';
+				}
 
 			# initiate some variables
 			my ($realigned_bam, $realigned_bai);

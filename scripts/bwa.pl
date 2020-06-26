@@ -263,7 +263,7 @@ sub main {
 			unless(-e $tmp_directory) { make_path($tmp_directory); }
 			my $cleanup_cmd = "rm -rf $tmp_directory";
 
-			my @libraries = keys %{$smp_data->{$patient}->{$sample}->{libraries}};
+			my @libraries = sort keys %{$smp_data->{$patient}->{$sample}->{libraries}};
 			my (@lane_intermediates, @lane_holds, @smp_jobs);
 
 			# determine sample type
@@ -273,7 +273,7 @@ sub main {
 
 				print $log "    LIBRARY: $lib\n";
 
-				my @lanes = keys %{$smp_data->{$patient}->{$sample}->{libraries}->{$lib}->{runlanes}};
+				my @lanes = sort keys %{$smp_data->{$patient}->{$sample}->{libraries}->{$lib}->{runlanes}};
 
 				foreach my $lane ( @lanes ) {
 
@@ -537,13 +537,17 @@ sub main {
 					hpc_driver	=> $tool_data->{HPC_driver}
 					);
 
-				$run_id_extra = submit_job(
-					jobname		=> 'run_cleanup_' . $sample,
-					shell_command	=> $run_script,
-					hpc_driver	=> $tool_data->{HPC_driver},
-					dry_run		=> $tool_data->{dry_run},
-					log_file	=> $log
-					);
+				# don't submit a job if there is nothing to cleanup, because all above jobs were skipped!
+				if (scalar(@smp_jobs) > 0) {
+
+					$run_id_extra = submit_job(
+						jobname		=> 'run_cleanup_' . $sample,
+						shell_command	=> $run_script,
+						hpc_driver	=> $tool_data->{HPC_driver},
+						dry_run		=> $tool_data->{dry_run},
+						log_file	=> $log
+						);
+					}
 				}
 			}
 

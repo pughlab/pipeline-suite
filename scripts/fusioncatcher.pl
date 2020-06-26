@@ -158,7 +158,7 @@ sub main {
 		# process each separate sample for this patient
 		foreach my $sample (sort keys %{$smp_data->{$patient}}) {
 
-			if ($sample =~ m/BC$|SK$|A$/) {
+			if ('normal' eq $smp_data->{$patient}->{$sample}->{type}) {
 				print $log "\n>> SAMPLE: $sample is labelled as normal - will be skipped!\n";
 				next;
 				}

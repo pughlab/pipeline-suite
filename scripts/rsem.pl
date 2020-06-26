@@ -177,7 +177,7 @@ sub main {
 			$cleanup_cmd .= "\nrm -rf $tmp_directory";
 
 			my $type;
-			if ( ($sample =~ m/BC|SK|A/) && ($sample !~ m/Ar/) ) {
+			if ( (any { $_ =~ m/$sample/ } @normal_ids) ) {
 				$type = 'normal';
 				} else {
 				$type = 'tumour';
