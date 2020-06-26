@@ -133,8 +133,8 @@ colnames(formatted.qc)[which(colnames(formatted.qc) == 'Gap..')] <- 'Gap.Percent
 write.table(
 	corr.data,
 	file = generate.filename(arguments$project, 'rnaseqc_Pearson_correlations', 'tsv'),
-	row.names = FALSE,
-	col.names = TRUE,
+	row.names = TRUE,
+	col.names = NA,
 	sep = '\t'
 	);
 
