@@ -9,11 +9,11 @@ r_version: 3.6.1
 # and indicate some parameters for job submission
 parameters:
     haplotype_call:
-        java_mem: 8g # 16g for some reason?
+        java_mem: 8g
         mem: 12G
         time: '12:00:00'
     filter:
-        java_mem: 8g # 16g for some reason?
+        java_mem: 8g
         mem: 12G
         time: '12:00:00'
     annotate:
