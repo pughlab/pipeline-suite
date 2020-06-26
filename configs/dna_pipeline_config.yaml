@@ -1,7 +1,7 @@
 ---
 # common parameters
 project_name: PROJECTNAME
-seq_type: wxs # one of exome, wgs or targeted
+#seq_type: wxs # one of exome, wgs or targeted
 output_dir: /cluster/projects/pughlab/projects/PROJECTNAME/Exome/
 HPC_driver: Slurm
 del_intermediates: Y
@@ -10,11 +10,13 @@ dry_run: N
 # if all samples are run together, these can be run at the same time, otherwise, do the preprocessing first, combine the 
 # output yaml files (gatk) and then run the variant calling
 # see README for examples
-preprocessing: Y
+preprocessing:
+    run: Y
     bwa_config: /cluster/projects/pughlab/projects/PROJECTNAME/Exome/configs/bwa_aligner_config.yaml
     gatk_config: /cluster/projects/pughlab/projects/PROJECTNAME/Exome/configs/gatk_tool_config.yaml
     bamqc_config: /cluster/projects/pughlab/projects/PROJECTNAME/Exome/configs/bamqc_config.yaml
-variant_calling: Y
+variant_calling:
+    run: Y
     haplotype_caller_config: /cluster/projects/pughlab/projects/PROJECTNAME/Exome/configs/haplotype_caller_config.yaml
     mutect_config: /cluster/projects/pughlab/projects/PROJECTNAME/Exome/configs/mutect_config.yaml
     mutect2_config: /cluster/projects/pughlab/projects/PROJECTNAME/Exome/configs/mutect2_config.yaml

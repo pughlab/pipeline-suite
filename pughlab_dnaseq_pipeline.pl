@@ -84,16 +84,17 @@ sub main {
 	my $sequenza_directory = join('/', $output_directory, 'Sequenza');
 	my $delly_directory = join('/', $output_directory, 'Delly');
 
+	# indicate YAML files for processed BAMs
+	my $bwa_output_yaml = join('/', $bwa_directory, 'bwa_bam_config.yaml');
+	my $gatk_output_yaml = join('/', $gatk_directory, 'gatk_bam_config.yaml');
+
 	# Should pre-processing (alignment + GATK indel realignment/recalibration + QC) be performed?
-	if ('Y' eq $tool_data->{preprocessing}) {
+	if ('Y' eq $tool_data->{preprocessing}->{run}) {
 
 		## run BWA-alignment pipeline
 		unless(-e $bwa_directory) { make_path($bwa_directory); }
 
-		# indicate yaml containing BWA-aligned BAMs
-		my $bwa_output_yaml = join('/', $bwa_directory, 'bwa_bam_config.yaml');
-
-		if (defined($tool_data->{bwa_config})) {
+		if (defined($tool_data->{preprocessing}->{bwa_config})) {
 
 			my $bwa_command = join(' ',
 				"perl $cwd/scripts/bwa.pl",
@@ -119,10 +120,7 @@ sub main {
 		## run GATK indel realignment/recalibration pipeline
 		unless(-e $gatk_directory) { make_path($gatk_directory); }
 
-		# indicate yaml containing GATK-processed BAMs
-		my $gatk_output_yaml = join('/', $gatk_directory, 'gatk_bam_config.yaml');
-
-		if (defined($tool_data->{gatk_config})) {
+		if (defined($tool_data->{preprocessing}->{gatk_config})) {
 
 			my $gatk_command = join(' ',
 				"perl $cwd/scripts/gatk.pl",
@@ -148,9 +146,11 @@ sub main {
 			}
 
 		## run GATK's ContEst for contamination estimation (T/N only)
+		## and GATK's DepthOfCoverage and find Callable Bases
 		unless(-e $contest_directory) { make_path($contest_directory); }
+		unless(-e $coverage_directory) { make_path($coverage_directory); }
 
-		if (defined($tool_data->{contest_config})) {
+		if (defined($tool_data->{preprocessing}->{bamqc_config})) {
 
 			my $contest_command = join(' ',
 				"perl $cwd/scripts/contest.pl",
@@ -171,12 +171,6 @@ sub main {
 			sleep(5);
 
 			print $log ">>> Final ContEst job id: $contest_run_id\n\n";
-			}
-
-		## run GATK's DepthOfCoverage and find Callable Bases
-		unless(-e $coverage_directory) { make_path($coverage_directory); }
-
-		if (defined($tool_data->{coverage_config})) {
 
 			my $coverage_command = join(' ',
 				"perl $cwd/scripts/get_coverage.pl",
@@ -201,13 +195,12 @@ sub main {
 		}
 
 	########################################################################################
-	# From here on out, it makes more sense to run everything as a single batch. Therefore,
-	# unless $tool_data->{full_set} eq 'Y', we will now exit
+	# From here on out, it makes more sense to run everything as a single batch.
 	########################################################################################
-	if ('Y' eq $tool_data->{variant_calling}) {
+	if ('Y' eq $tool_data->{variant_calling}->{run}) {
 
 		## run GATK's HaplotypeCaller pipeline
-		if (defined($tool_data->{haplotype_caller_config})) {
+		if (defined($tool_data->{variant_calling}->{haplotype_caller_config})) {
 	 
 			my $hc_command = join(' ',
 				"perl $cwd/scripts/haplotype_caller.pl",
@@ -251,7 +244,7 @@ sub main {
 			}
 
 		## run GATK's MuTect pipeline
-		if (defined($tool_data->{mutect_config})) {
+		if (defined($tool_data->{variant_calling}->{mutect_config})) {
 
 			unless(-e $mutect_directory) { make_path($mutect_directory); }
 
@@ -299,7 +292,7 @@ sub main {
 			}
 
 		## also run GATK's newer MuTect2 pipeline
-		if (defined($tool_data->{mutect2_config})) {
+		if (defined($tool_data->{variant_calling}->{mutect2_config})) {
 
 			unless(-e $mutect2_directory) { make_path($mutect2_directory); }
 
@@ -347,7 +340,7 @@ sub main {
 			}
 
 		## run VarScan SNV/CNV pipeline
-		if (defined($tool_data->{varscan_config})) {
+		if (defined($tool_data->{variant_calling}->{varscan_config})) {
 
 			unless(-e $varscan_directory) { make_path($varscan_directory); }
 
@@ -399,7 +392,7 @@ sub main {
 		}
 
 	## run Sequenza pipeline
-	if (defined($tool_data->{sequenza_config})) {
+	if (defined($tool_data->{variant_calling}->{sequenza_config})) {
 
 		unless(-e $sequenza_directory) { make_path($sequenza_directory); }
 
@@ -424,7 +417,7 @@ sub main {
 		}
 
 	## run Delly SV pipeline
-	if (defined($tool_data->{delly_config})) {
+	if (defined($tool_data->{variant_calling}->{delly_config})) {
 
 		unless(-e $delly_directory) { make_path($delly_directory); }
 
