@@ -111,13 +111,13 @@ module load perl
 perl create_fastq_yaml.pl -i /path/to/sampleInfo.txt -d /path/to/fastq/directory/ -o /path/to/fastq_config.yaml -t {dna|rna}
 </code></pre>
 
-Where sampleInfo.txt is a tab-separate table containing two columms, and each row represents a single sample:
+Where sampleInfo.txt is a tab-separate table containing three columms, and each row represents a single sample:
 
-| Patient.ID | Sample.ID  |
-| ---------- | ---------- |
-| Patient1   | Patient1-N |
-| Patient1   | Patient1-T |
-| Patient2   | Patient2-T |
+| Patient.ID | Sample.ID  | Type       |
+| ---------- | ---------- | ---------- |
+| Patient1   | Patient1-N | normal     |
+| Patient1   | Patient1-T | tumour     |
+| Patient2   | Patient2-T | tumour     |
 
 The assumption is that each FASTQ file will follow a similar naming convention, with Sample.ID used to identify files
 for this sample, and lane information is pulled from the file name 
