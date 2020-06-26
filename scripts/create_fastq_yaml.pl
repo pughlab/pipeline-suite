@@ -16,9 +16,8 @@ use File::Path qw(make_path);
 # create_fastq_yaml.pl -i INPUT.samples -d DATA_DIR -o /path/to/OUTPUT_CONFIG.yaml -t dna|rna
 #
 # where INPUT.samples is a tab separated file containing sample info for use as YAML entries
-# 	header = <Patient.ID\tSample.ID>   Sample.ID is also used to grab sample-specific files
+# 	header = <Patient.ID\tSample.ID\tType> Sample.ID is also used to grab sample-specific files
 #
-# Tumour/Normal are identified based on pattern matching (where any SK/BC/A = Normal)
 # FASTQ files are expected to be paired end, with filenames ending with R1.fastq.gz and R2.fastq.gz
 
 ### GETOPTS PLUS ERROR CHECKING AND DEFAULT VALUES #################################################
@@ -69,14 +68,12 @@ while (my $line = <$INPUT>) {
 	my @file_info = split(/\t/, $line);
 	my $subject = $file_info[0];
 	my $sample = $file_info[1];
+	my $type = $file_info[2];
 
 	# find sample fastq files
 	my @subset = grep {/$sample/} @fastqfiles;
 	@subset = sort(@subset);
 	my $size = scalar @subset;	
-
-	my $type;
-	if ($sample =~ m/BC|SK|A/) { $type = 'normal'; } else { $type = 'tumour'; }		# indicates if these are tumour or normal
 
 	# if the subject has already been written (if multiple samples per patient)
 	if (grep /$subject/, @subject_names) {
