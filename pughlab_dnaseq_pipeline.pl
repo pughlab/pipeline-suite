@@ -70,7 +70,7 @@ sub main {
 	### MAIN ###########################################################################################
 
 	my ($bwa_run_id, $gatk_run_id, $contest_run_id, $coverage_run_id, $hc_run_id) = '';
-	my ($mutect_run_id, $mutect2_run_id, $varscan_run_id, $sequenza_run_id, $delly_run_id) = '';
+	my ($strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id, $delly_run_id) = ''
 
 	# prepare directory structure
 	my $bwa_directory = join('/', $output_directory, 'BWA');
@@ -78,15 +78,15 @@ sub main {
 	my $contest_directory = join('/', $output_directory, 'BAMQC', 'ContEst');
 	my $coverage_directory = join('/', $output_directory, 'BAMQC', 'Coverage');
 	my $hc_directory = join('/', $output_directory, 'HaplotypeCaller');
+	my $strelka_directory = join('/', $output_directory, 'Strelka');
 	my $mutect_directory = join('/', $output_directory, 'MuTect');
 	my $mutect2_directory = join('/', $output_directory, 'MuTect2');
 	my $varscan_directory = join('/', $output_directory, 'VarScan');
-	my $sequenza_directory = join('/', $output_directory, 'Sequenza');
 	my $delly_directory = join('/', $output_directory, 'Delly');
 
 	# indicate YAML files for processed BAMs
-	my $bwa_output_yaml = join('/', $bwa_directory, 'bwa_bam_config.yaml');
-	my $gatk_output_yaml = join('/', $gatk_directory, 'gatk_bam_config.yaml');
+	my $bwa_output_yaml = join('/', $bwa_directory, 'bwa_bam_config_' . $timestamp . '.yaml');
+	my $gatk_output_yaml = join('/', $gatk_directory, 'gatk_bam_config_' . $timestamp . '.yaml');
 
 	# Should pre-processing (alignment + GATK indel realignment/recalibration + QC) be performed?
 	if ('Y' eq $tool_data->{preprocessing}->{run}) {
@@ -103,7 +103,8 @@ sub main {
 				"-d", $data_config,
 				"-h", $tool_data->{HPC_driver},
 				"-r", $tool_data->{del_intermediates},
-				"-n", $tool_data->{dry_run}
+				"-n", $tool_data->{dry_run},
+				"-c", $bwa_output_yaml
 				);
 
 			# record command (in log directory) and then run job
@@ -131,6 +132,7 @@ sub main {
 				"-h", $tool_data->{HPC_driver},
 				"-r", $tool_data->{del_intermediates},
 				"-n", $tool_data->{dry_run},
+				"-c", $gatk_output_yaml,
 				"--depends", $bwa_run_id
 				);
 
@@ -241,6 +243,33 @@ sub main {
 		
 			$hc_run_id = `$hc_command`;
 			sleep(5);
+			}
+
+		## run STRELKA/MANTA pipeline
+		if (defined($tool_data->{variant_calling}->{strelka_config})) {
+
+			unless(-e $strelka_directory) { make_path($strelka_directory); }
+
+			# first create a panel of normals
+			my $strelka_command = join(' ',
+				"perl $cwd/scripts/strelka.pl",
+				"-o", $strelka_directory,
+				"-t", $tool_data->{variant_calling}->{strelka_config},
+				"-d", $gatk_output_yaml,
+				"-h", $tool_data->{HPC_driver},
+				"-r", $tool_data->{del_intermediates},
+				"-n", $tool_data->{dry_run},
+				"--depends", $gatk_run_id
+				);
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for strelka.pl\n";
+			print $log "  COMMAND: $strelka_command\n\n";
+
+			$strelka_run_id = `$strelka_command`;
+			sleep(5);
+			
+			print $log ">>> Final Strelka job id: $strelka_run_id\n\n";
 			}
 
 		## run GATK's MuTect pipeline
@@ -389,31 +418,6 @@ sub main {
 			
 			print $log ">>> Final VarScan job id: $varscan_run_id\n\n";
 			}
-		}
-
-	## run Sequenza pipeline
-	if (defined($tool_data->{variant_calling}->{sequenza_config})) {
-
-		unless(-e $sequenza_directory) { make_path($sequenza_directory); }
-
-		my $sequenza_command = join(' ',
-			"perl $cwd/scripts/sequenza.pl",
-			"-o", $sequenza_directory,
-			"-t", $tool_data->{variant_calling}->{sequenza_config},
-			"-d", $gatk_output_yaml,
-			"-h", $tool_data->{HPC_driver},
-			"-r", $tool_data->{del_intermediates},
-			"-n", $tool_data->{dry_run},
-			"--depends", $varscan_run_id
-			);
-
-		# record command (in log directory) and then run job
-		print $log "Submitting job for sequenza.pl\n";
-		print $log "  COMMAND: $sequenza_command\n\n";
-
-		$sequenza_run_id = `$sequenza_command`;
-		sleep(5);
-
 		}
 
 	## run Delly SV pipeline
