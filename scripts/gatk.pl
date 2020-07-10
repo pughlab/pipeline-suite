@@ -241,6 +241,7 @@ sub main {
 		data_config		=> undef,
 		data_type		=> undef,
 		output_directory	=> undef,
+		output_config		=> undef,
 		hpc_driver		=> undef,
 		del_intermediates	=> undef,
 		dry_run			=> undef,
@@ -349,6 +350,9 @@ sub main {
 
 	# initiate final output yaml file
 	my $output_yaml = join('/', $output_directory, 'gatk_bam_config.yaml');
+	if (defined($args{output_config})) {
+		$output_yaml = $args{output_config};
+		}
 	open (my $yaml, '>', $output_yaml) or die "Cannot open '$output_yaml' !";
 	print $yaml "---\n";
 
@@ -414,7 +418,7 @@ sub main {
 			if (scalar(@normal_paths) > 0) {
 				$input_string .=  join(' -I ', @normal_paths);
 				}
-			if ( (scalar(@normal_paths) > 0) & (scalar(@tumour_paths( > 0) ) {
+			if ( (scalar(@normal_paths) > 0) & (scalar(@tumour_paths) > 0) ) {
 				$input_string .= ' -I ';
 				}
 			if (scalar(@tumour_paths) > 0) {
@@ -928,7 +932,7 @@ sub main {
 
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
-my ($data_config, $tool_config, $output_directory);
+my ($data_config, $tool_config, $output_directory, $output_config) = undef;
 my $hpc_driver = 'slurm';
 my $remove_junk = 'N';
 my $dry_run = 'Y';
@@ -940,6 +944,7 @@ my ($dna, $rna);
 GetOptions(
 	'd|data=s'	=> \$data_config,
 	'o|out_dir=s'	=> \$output_directory,
+	'c|out_yaml=s'	=> \$output_config,
 	't|tool=s'	=> \$tool_config,
 	'h|hpc=s'	=> \$hpc_driver,
 	'r|remove=s'	=> \$remove_junk,
@@ -969,6 +974,7 @@ main(
 	tool_config 		=> $tool_config,
 	data_config 		=> $data_config,
 	output_directory	=> $output_directory,
+	output_config		=> $output_config,
 	hpc_driver		=> $hpc_driver,
 	del_intermediates	=> $remove_junk,
 	dry_run			=> $dry_run,

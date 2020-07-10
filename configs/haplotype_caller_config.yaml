@@ -3,6 +3,7 @@ tool: HaplotypeCaller
 tool_version: 3.8
 ref_type: hg38
 reference: /cluster/tools/data/genomes/human/hg38/iGenomes/Sequence/WholeGenomeFasta/genome.fa
+intervals_bed: /cluster/tools/data/genomes/human/hg38/SureSelect_Human_All_Exon_V5+UTRs_S04380219_Covered_for_bamqc_liftover_hg38.bed
 samtools_version: 1.9
 picard_version: 2.6.0
 r_version: 3.6.1
@@ -12,7 +13,7 @@ parameters:
         java_mem: 8g
         mem: 12G
         time: '12:00:00'
-    filter:
+    filter_raw:
         java_mem: 8g
         mem: 12G
         time: '12:00:00'
@@ -27,3 +28,22 @@ parameters:
         run: Y
         mem: 12G
         time: '08:00:00'
+    combine_gvcfs:
+        java_mem: 4g
+        mem: 6G
+        time: '5-00:00:00'
+    genotype_gvcfs:
+        java_mem: 4g
+        mem: 6G
+        time: '5-00:00:00'
+    vqsr:
+        java_mem: 7g
+        mem: 8G
+        time: '24:00:00'
+    apply_vqsr:
+        java_mem: 1g
+        mem: 2G
+        time: '24:00:00'
+    filter_recalibrated:
+        mem: 4G
+        time: '24:00:00'

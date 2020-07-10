@@ -290,7 +290,7 @@ sub main {
 
 		# should intermediate files be removed
 		# run per patient
-		if ('Y' eq $tool_data->{del_intermediates}) {
+		if ( ('Y' eq $tool_data->{del_intermediates}) && (scalar(@patient_jobs) > 0) ) {
 
 			print $log "Submitting job to clean up temporary/intermediate files...\n";
 

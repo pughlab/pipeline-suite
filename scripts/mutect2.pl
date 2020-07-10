@@ -796,7 +796,9 @@ sub main {
 			my ($mutect_command, $extra_cmds) = undef;
 
 			# Tumour only, with a panel of normals
-			if ( (defined($tool_data->{pon})) && (scalar(@normal_ids) == 0) ) {
+			if ( (defined($pon)) && (scalar(@normal_ids) == 0) ) {
+
+				print $log "PON defined and no normals detected, so running tumour-only...\n";
 
 				$mutect_command = get_mutect_tonly_command(
 					tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
@@ -809,6 +811,8 @@ sub main {
 				# paired tumour/normal
 				} elsif (scalar(@normal_ids) > 0) {
 
+				print $log "T/N pair detected, running paired mode...\n";
+
 				$mutect_command = get_mutect_tn_command(
 					tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
 					normal		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
@@ -820,6 +824,7 @@ sub main {
 
 				# else, skip this sample
 				} else {
+				print $log "no PON or normal detected...skipping this sample...\n";
 				next;
 				}
 
@@ -988,7 +993,7 @@ sub main {
 						log_dir => $log_directory,
 						name    => 'run_vcf2maf_and_VEP_' . $sample . '_' . $vtype,
 						cmd     => $vcf2maf_cmd,
-						modules => ['perl', $samtools, tabix],
+						modules => ['perl', $samtools, 'tabix'],
 						dependencies    => $run_id,
 						max_time        => $tool_data->{parameters}->{annotate}->{time},
 						mem             => $tool_data->{parameters}->{annotate}->{mem},
@@ -1106,7 +1111,7 @@ GetOptions(
 	't|tool=s'			=> \$tool_config,
 	'd|data=s'			=> \$data_config,
 	'create-panel-of-normals'	=> \$create_pon,
-	'pon'				=> \$panel_of_normals,
+	'pon=s'				=> \$panel_of_normals,
 	'o|out_dir=s'			=> \$output_directory,
 	'h|hpc=s'			=> \$hpc_driver,
 	'r|remove=s'			=> \$remove_junk,

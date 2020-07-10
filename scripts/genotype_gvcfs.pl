@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-### filter_germline_variants.pl ####################################################################
+### genotype_gvcfs.pl ##############################################################################
 use AutoLoader 'AUTOLOAD';
 use strict;
 use warnings;
@@ -22,7 +22,7 @@ our ($reference, $known_1000g, $hapmap, $omni, $known_mills, $dbsnp);
 # 1.0		sprokopec       script to filter germline/somatic SNVs/INDELs from haplotypecaller
 
 ### USAGE ##########################################################################################
-# filter_germline_variants.pl -d data_config.yaml
+# genotype_gvcfs.pl -d data_config.yaml
 #
 # where:
 # 	- data_config.yaml contains sample information (YAML file containing paths to fastq
@@ -73,7 +73,7 @@ sub create_vqsr_command {
 		);
 
 	if ('INDEL' eq $args{var_type}) {
-		$vqsr_command .= join(' ',
+		$vqsr_command .= ' ' . join(' ',
 			'-resource:mills,known=true,training=true,truth=true,prior=12.0', $known_mills,
 			'-an DP -an FS -an MQRankSum -an ReadPosRankSum -mode INDEL',
 			'-tranche 100.0 -tranche 99.9 -tranche 99.0 -tranche 90.0 --maxGaussians 2'
@@ -81,7 +81,7 @@ sub create_vqsr_command {
 
 		} elsif ('SNP' eq $args{var_type}) {
 
-		$vqsr_command .= join(' ',
+		$vqsr_command .= ' ' . join(' ',
 			'-resource:hapmap,known=false,training=true,truth=true,prior=15.0', $hapmap,
 			'-resource:omni,known=false,training=true,truth=true,prior=12.0', $omni,
 			'-resource:1000G,known=false,training=true,truth=false,prior=10.0', $known_1000g,
@@ -153,7 +153,7 @@ sub main{
 	my $output_directory = $args{output_directory};
 	$output_directory =~ s/\/$//;
 
-	my $log_directory = join('/', $output_directory, 'logs');
+	my $log_directory = join('/', $output_directory, 'logs', 'RUN_GENOTYPE_GVCFS');
 	unless(-e $log_directory) { make_path($log_directory); }
 
 	my $log_file = join('/', $log_directory, 'run_GENOTYPEGVCFs_pipeline.log');
@@ -224,22 +224,25 @@ sub main{
 	my @all_jobs;
 
 	# set up some directories
-	my $cohort_directory = join('/', $output_directory, '../cohort');
+	my $cohort_directory = join('/', $output_directory, 'cohort');
 	unless (-e $cohort_directory) { make_path($cohort_directory); }
 
 	my $tmp_directory = join('/', $cohort_directory, 'TEMP');
 	unless (-e $tmp_directory) { make_path($tmp_directory); }
+
+	$cleanup_cmd = "rm -rf $tmp_directory";
 
 	my $sample_directory = join('/', $cohort_directory, 'germline_variants');
 	unless (-e $sample_directory) { make_path($sample_directory); }
 
 	# First step, find all of the CombineGVCF files
 	opendir(HC_OUTPUT, $output_directory) or die "Could not open $output_directory";
-	my @combined_gvcfs = grep { /'g.vcf.gz\$'/ } readdir(HC_OUTPUT);
+	my @combined_gvcfs = grep { /g.vcf.gz$/ } readdir(HC_OUTPUT);
 	closedir(HC_OUTPUT);
 
 	my $genotype_run_id = '';
-	my $genotype_cmd = create_genotype_gvcfs_command(
+	my $genotype_cmd = "cd $output_directory\n";
+	$genotype_cmd .= create_genotype_gvcfs_command(
 		input		=> join(' -V ', @combined_gvcfs),
 		output		=> join('/', $cohort_directory, 'haplotype_caller_combined_genotypes.g.vcf'),
 		tmp_dir		=> $tmp_directory,
@@ -253,7 +256,7 @@ sub main{
 		"\ntabix -p vcf", join('/', $cohort_directory, 'haplotype_caller_combined_genotypes.g.vcf.gz')
 		);
 
-	$cleanup_cmd = 'rm ' . join('/', $cohort_directory, 'haplotype_caller_combined_genotypes.g.vcf.gz');
+	$cleanup_cmd .= "\nrm " . join('/', $cohort_directory, 'haplotype_caller_combined_genotypes.g.vcf.gz');
 
 	if ('Y' eq missing_file(join('/', $cohort_directory, 'haplotype_caller_combined_genotypes.g.vcf.md5'))) {
 
@@ -286,7 +289,7 @@ sub main{
 	my $vqsr_indel_run_id = '';
 	my $vqsr_cmd_indel = create_vqsr_command(
 		var_type	=> 'INDEL',
-		input		=> join('/', $cohort_directory, 'haplotype_caller_combined_genotypes.g.vcf'),
+		input		=> join('/', $cohort_directory, 'haplotype_caller_combined_genotypes.g.vcf.gz'),
 		output_stem	=> join('/', $cohort_directory, 'haplotype_caller_combined_genotypes_indel'),
 		tmp_dir		=> $tmp_directory,
 		java_mem	=> $tool_data->{parameters}->{vqsr}->{java_mem}
@@ -326,7 +329,7 @@ sub main{
 	my $apply_indel_recal_run_id = '';
 	my $apply_vqsr_indel = create_apply_vqsr_command(
 		var_type	=> 'INDEL',
-		input		=> join('/', $cohort_directory, 'haplotype_caller_combined_genotypes.g.vcf'),
+		input		=> join('/', $cohort_directory, 'haplotype_caller_combined_genotypes.g.vcf.gz'),
 		vqsr_stem	=> join('/', $cohort_directory, 'haplotype_caller_combined_genotypes_indel'),
 		output		=> join('/', $cohort_directory, 'haplotype_caller_indel_recalibrated.vcf'),
 		tmp_dir		=> $tmp_directory,
@@ -348,7 +351,7 @@ sub main{
 		$run_script = write_script(
 			log_dir	=> $log_directory,
 			name	=> 'run_apply_indel_recalibration_cohort',
-			cmd	=> $vqsr_cmd_indel,
+			cmd	=> $apply_vqsr_indel,
 			modules	=> [$gatk],
 			dependencies	=> $vqsr_indel_run_id,
 			max_time	=> $tool_data->{parameters}->{apply_vqsr}->{time},
@@ -371,7 +374,7 @@ sub main{
 	my $vqsr_snp_run_id = '';
 	my $vqsr_cmd_snp = create_vqsr_command(
 		var_type	=> 'SNP',
-		input		=> join('/', $cohort_directory, 'haplotype_caller_combined_genotypes.g.vcf'),
+		input		=> join('/', $cohort_directory, 'haplotype_caller_combined_genotypes.g.vcf.gz'),
 		output_stem	=> join('/', $cohort_directory, 'haplotype_caller_combined_genotypes_snp'),
 		tmp_dir		=> $tmp_directory,
 		java_mem	=> $tool_data->{parameters}->{vqsr}->{java_mem}
@@ -512,8 +515,8 @@ sub main{
 				cmd	=> $filter_cmd,
 				modules	=> ['perl', 'tabix'],
 				dependencies	=> $apply_snp_recal_run_id,
-				max_time	=> $tool_data->{parameters}->{filter}->{time},
-				mem		=> $tool_data->{parameters}->{filter}->{mem},
+				max_time	=> $tool_data->{parameters}->{filter_recalibrated}->{time},
+				mem		=> $tool_data->{parameters}->{filter_recalibrated}->{mem},
 				hpc_driver	=> $tool_data->{HPC_driver}
 				);
 

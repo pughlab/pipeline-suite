@@ -43,8 +43,8 @@ sub set_readgroup {
 		@_
 		);
 
-	my $readgroup = '"@RG\tID:patient\tSM:smp\tPL:platform\tPU:unit\tLB:library"';
-	$readgroup =~ s/patient/$args{subject}/;
+	my $readgroup = '"@RG\tID:id\tSM:smp\tPL:platform\tPU:unit\tLB:library"';
+	$readgroup =~ s/id/"$args{library}\_$args{lane}"/;
 	$readgroup =~ s/smp/$args{sample}/;
 	$readgroup =~ s/unit/$args{lane}/;
 	$readgroup =~ s/library/$args{library}/;
@@ -163,6 +163,7 @@ sub main {
 		tool_config		=> undef,
 		data_config		=> undef,
 		output_directory	=> undef,
+		output_config		=> undef,
 		hpc_driver		=> undef,
 		del_intermediates	=> undef,
 		dry_run			=> undef,
@@ -234,6 +235,9 @@ sub main {
 
 	# initiate final output yaml file
 	my $output_yaml = join('/', $output_directory, 'bwa_bam_config.yaml');
+	if (defined($args{output_config})) {
+		$output_yaml = $args{output_config};
+		}
 	open (my $yaml, '>', $output_yaml) or die "Cannot open '$output_yaml' !";
 	print $yaml "---\n";
 
@@ -608,7 +612,7 @@ sub main {
 
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
-my ($data_config, $tool_config, $output_directory);
+my ($data_config, $tool_config, $output_directory, $output_config) = undef;
 my $hpc_driver = 'slurm';
 my $remove_junk = 'N';
 my $dry_run = 'Y';
@@ -617,6 +621,7 @@ my $dry_run = 'Y';
 GetOptions(
 	'd|data=s'	=> \$data_config,
 	'o|out_dir=s'	=> \$output_directory,
+	'c|out_yaml=s'	=> \$output_config,
 	't|tool=s'	=> \$tool_config,
 	'h|hpc=s'	=> \$hpc_driver,
 	'r|remove=s'	=> \$remove_junk,
@@ -631,6 +636,7 @@ main(
 	tool_config		=> $tool_config,
 	data_config		=> $data_config,
 	output_directory	=> $output_directory,
+	output_config		=> $output_config,
 	hpc_driver		=> $hpc_driver,
 	del_intermediates	=> $remove_junk,
 	dry_run			=> $dry_run

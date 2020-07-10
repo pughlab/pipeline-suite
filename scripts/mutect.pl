@@ -785,7 +785,7 @@ sub main {
 			my $mutect_command = undef;
 
 			# Tumour only, with a panel of normals
-			if ( (defined($tool_data->{pon})) && (scalar(@normal_ids) == 0) ) {
+			if ( (defined($pon)) && (scalar(@normal_ids) == 0) ) {
 
 				$mutect_command = get_mutect_tonly_command(
 					tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
@@ -907,7 +907,7 @@ sub main {
 			# Tumour only, with a panel of normals
 			my $vcf2maf_cmd;
 
-			if ( (defined($tool_data->{pon})) && (scalar(@normal_ids) == 0) ) {
+			if ( (defined($pon)) && (scalar(@normal_ids) == 0) ) {
 
 				$vcf2maf_cmd = get_vcf2maf_command(
 					input		=> $output_stem . "_filtered.vcf",
@@ -1022,7 +1022,7 @@ sub main {
 				jobname		=> 'run_cleanup_' . $patient,
 				shell_command	=> $run_script,
 				hpc_driver	=> $tool_data->{HPC_driver},
-				dry_run		=> $tool_data->{dry_run}
+				dry_run		=> $tool_data->{dry_run},
 				log_file	=> $log
 				);
 			}	
@@ -1053,7 +1053,7 @@ sub main {
 			jobname		=> 'output_job_metrics',
 			shell_command	=> $run_script,
 			hpc_driver	=> $tool_data->{HPC_driver},
-			dry_run		=> $tool_data->{dry_run}
+			dry_run		=> $tool_data->{dry_run},
 			log_file	=> $log
 			);
 		}
@@ -1086,7 +1086,7 @@ GetOptions(
 	'n|dry_run=s'		=> \$dry_run,
 	'depends=s'		=> \$dependencies,
 	'create-panel-of-normals'	=> \$create_pon,
-	'pon'			=> \$panel_of_normals
+	'pon=s'			=> \$panel_of_normals
 	);
 
 # do some quick error checks to confirm valid arguments	

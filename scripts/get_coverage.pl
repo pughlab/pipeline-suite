@@ -78,12 +78,9 @@ sub find_callable_bases_step1 {
 		@_
 		);
 
-	my @parts = split /\//, $args{output_stem};
-	my $output_stem = $parts[-1];
-
-	my $output1 = join('/', $args{tmp_dir}, $output_stem . "\_$args{min_depth}.bed");
-	my $output2 = join('/', $args{tmp_dir}, $output_stem . "\_$args{min_depth}\_collapsed.bed");
-	my $output3 = $args{output_stem} . '_mincov_collapsed_sorted.bed';
+	my $output1 = join('/', $args{tmp_dir}, $args{output_stem} . "\_$args{min_depth}.bed");
+	my $output2 = join('/', $args{tmp_dir}, $args{output_stem} . "\_$args{min_depth}\_collapsed.bed");
+	my $output3 = join('/', $args{tmp_dir}, $args{output_stem} . '_mincov_collapsed_sorted.bed');
 
 	my $cb_command = join(' ',
 		'samtools view -b', $args{input},
@@ -120,14 +117,17 @@ sub find_callable_bases_step2 {
 		@_
 		);
 
+	my $n_samples = scalar(@{$args{input_files}});
 	my $cb_command = join(' ',
-		'bedtools multiinter -header',
-		'-names', $args{sample_names},
-		'-i', $args{input_files},
+		'bedtools multiinter',
+	#	' -header -names', $args{sample_names},
+		'-i', join(' ', @{$args{input_files}}),
+		"| awk '$n_samples == \$4 { print \$0 }'",
+		'| cut -f1-3',
 		'>', $args{output}
 		);
 
-	$cb_command .= ";\n" . join(' ',
+	$cb_command .= ";\n\n" . join(' ',
 		'md5sum', $args{output},
 		'>', $args{output} . '.md5'
 		);
@@ -264,7 +264,7 @@ sub main {
 				}
 
 			# Run DepthOfCoverage on all input BAMs
-			my $coverage_out = join('/', $patient_directory, $sample . '_DepthOfCoverage.tsv');
+			my $coverage_out = join('/', $patient_directory, $sample . '_DepthOfCoverage');
 
 			my $cov_command = get_coverage_command(
 				input		=> $smp_data->{$patient}->{$type}->{$sample},
@@ -274,13 +274,20 @@ sub main {
 				java_mem	=> $tool_data->{parameters}->{coverage}->{java_mem},
 				tmp_dir		=> $tmp_directory
 				);
+				
+			my $md5_cmds = "  " . join("\n  ",
+				"md5sum $coverage_out\.read_group_statistics > $coverage_out\.read_group_statistics.md5",
+				"md5sum $coverage_out\.read_group_summary > $coverage_out\.read_group_summary.md5",
+				"md5sum $coverage_out\.sample_statistics > $coverage_out\.sample_statistics.md5",
+				"md5sum $coverage_out\.sample_summary > $coverage_out\.sample_summary.md5"
+				);
 
 			$cov_command .= "\n" . check_java_output(
-				extra_cmd => "  md5sum $coverage_out > $coverage_out.md5"
+				extra_cmd => $md5_cmds
 				);
 
 			# check if this should be run
-			if ('Y' eq missing_file($coverage_out . '.md5')) {
+			if ('Y' eq missing_file($coverage_out . '.sample_summary.md5')) {
 
 				# record command (in log directory) and then run job
 				print $log "Submitting job for DepthOfCoverage...\n";
@@ -291,6 +298,7 @@ sub main {
 					cmd	=> $cov_command,
 					modules	=> [$gatk],
 					dependencies	=> $args{dependencies},
+					cpus_per_taks	=> 2,
 					max_time	=> $tool_data->{parameters}->{coverage}->{time},
 					mem		=> $tool_data->{parameters}->{coverage}->{mem},
 					hpc_driver	=> $tool_data->{HPC_driver}
@@ -311,7 +319,7 @@ sub main {
 				print $log "Skipping DepthOfCoverage because this has already been completed!\n";
 				}
 
-			push @final_outputs, $coverage_out;
+			push @final_outputs, $coverage_out . ".read_group_statistics";
 
 			## Find CallableBases on all input BAMs
 			my $cb_output = join('/', $tmp_directory, $sample . '_mincov_collapsed_sorted.bed');
@@ -324,7 +332,7 @@ sub main {
 				);
 
 			if (scalar(@sample_ids) > 1) {
-				push @patient_cb_files, $cb_output;
+				push @patient_cb_files, $sample . "_mincov_collapsed_sorted.bed";
 				} else {
 				$cb_command .= join(' ',
 					"mv", $cb_output . "*",
@@ -342,7 +350,7 @@ sub main {
 				$run_script = write_script(
 					log_dir	=> $log_directory,
 					name	=> 'run_get_callable_bases_' . $sample,
-					cmd	=> $cov_command,
+					cmd	=> $cb_command,
 					modules	=> [$samtools, $bedtools],
 					dependencies	=> $args{dependencies},
 					max_time	=> $tool_data->{parameters}->{callable_bases}->{time},
@@ -372,17 +380,15 @@ sub main {
 
 			my $cb_intersect = join('/', $patient_directory, $patient . '_CallableBases_intersect.tsv');
 
-			my $cb_command2 = find_callable_bases_step2(
-				input_files	=> join(' ', @patient_cb_files),
-				sample_names	=> join(' ', @sample_ids),
-				output		=> $cb_intersect, 
-				tmp_dir		=> $tmp_directory
+			my $cb_command2 = "\ncd $tmp_directory\n\n";
+			$cb_command2 = find_callable_bases_step2(
+				input_files	=> @patient_cb_files,
+				output		=> $cb_intersect
 				);
 
 			$cb_command2 .= "\n\n" . join(' ',
-				"tar -czvf $output_directory/per_sample_callable_bases.tar.gz",
-				@patient_cb_files,
-				'--remove-files' 
+				"tar -czf $patient_directory/callable_bases.tar.gz",
+				"*_mincov_collapsed_sorted.bed*"
 				);
 
 			if ('Y' eq missing_file($cb_intersect . '.md5')) {
@@ -418,7 +424,7 @@ sub main {
 
 		# should intermediate files be removed
 		# run per patient
-		if ('Y' eq $tool_data->{del_intermediates}) {
+		if ( ('Y' eq $tool_data->{del_intermediates}) && (scalar(@patient_jobs) > 0) ) {
 
 			print $log "Submitting job to clean up temporary/intermediate files...\n";
 

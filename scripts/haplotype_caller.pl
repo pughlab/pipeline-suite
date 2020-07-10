@@ -170,7 +170,7 @@ sub main{
 	my $output_directory = $args{output_directory};
 	$output_directory =~ s/\/$//;
 
-	my $log_directory = join('/', $output_directory, 'logs');
+	my $log_directory = join('/', $output_directory, 'logs', 'RUN_HAPLOTYPE_CALLER');
 	unless(-e $log_directory) { make_path($log_directory); }
 
 	my $log_file = join('/', $log_directory, 'run_VariantCalling_pipeline.log');
@@ -359,7 +359,7 @@ sub main{
 					input		=> $hc_vcf,
 					output		=> $filtered_vcf,
 					reference	=> $tool_data->{reference},
-					java_mem	=> $tool_data->{parameters}->{filter}->{java_mem},
+					java_mem	=> $tool_data->{parameters}->{filter_raw}->{java_mem},
 					tmp_dir		=> $tmp_directory
 					);
 
@@ -377,8 +377,8 @@ sub main{
 						cmd	=> $filter_cmd,
 						modules	=> [$gatk],
 						dependencies	=> $run_id,
-						max_time	=> $tool_data->{parameters}->{filter}->{time},
-						mem		=> $tool_data->{parameters}->{filter}->{mem},
+						max_time	=> $tool_data->{parameters}->{filter_raw}->{time},
+						mem		=> $tool_data->{parameters}->{filter_raw}->{mem},
 						hpc_driver	=> $tool_data->{HPC_driver}
 						);
 
@@ -550,8 +550,14 @@ sub main{
 				);
 
 			# this is a java-based command, so run a final check
+			my $extra_cmds = "\n" . join("\n  ",
+				"md5sum $combined_gvcf > $combined_gvcf.md5",
+				"bgzip $combined_gvcf",
+				"tabix -p vcf $combined_gvcf.gz"
+				);
+
 			$java_check = "\n" . check_java_output(
-				extra_cmd => "\nmd5sum $combined_gvcf > $combined_gvcf.md5"
+				extra_cmd => $extra_cmds
 				);
 
 			$combine_cmd .= "\n$java_check";
@@ -566,7 +572,7 @@ sub main{
 					log_dir	=> $log_directory,
 					name	=> 'run_combine_gvcfs_batch_' . $batch_idx,
 					cmd	=> $combine_cmd,
-					modules	=> [$gatk],
+					modules	=> [$gatk, 'tabix'],
 					dependencies	=> join(',', @all_jobs),
 					max_time	=> $tool_data->{parameters}->{combine_gvcfs}->{time},
 					mem		=> $tool_data->{parameters}->{combine_gvcfs}->{mem},
