@@ -5,12 +5,18 @@ ref_type: hg38
 reference: /cluster/tools/data/genomes/human/hg38/iGenomes/Sequence/WholeGenomeFasta/genome.fa
 samtools_version: 1.9
 vcftools_version: 0.1.15
+gatk_version: 3.8
+r_version: 3.3.0
+sequenza_path: /cluster/projects/pughlab/src/sequenza_wrapper/SequenzaSingleSample_v2.1.R # note: this script is coded for hg38 only
 intervals_bed: /cluster/tools/data/genomes/human/hg38/SureSelect_Human_All_Exon_V5+UTRs_S04380219_Covered_for_bamqc_liftover_hg38.bed
 # and indicate some parameters for job submission
 parameters:
     varscan:
         java_mem: 3g
         mem: 4G
+        time: '24:00:00'
+    sequenza:
+        mem: 6G
         time: '24:00:00'
     filter:
         java_mem: 1g
