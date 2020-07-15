@@ -70,7 +70,7 @@ sub main {
 	### MAIN ###########################################################################################
 
 	my ($bwa_run_id, $gatk_run_id, $contest_run_id, $coverage_run_id, $hc_run_id) = '';
-	my ($strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id, $delly_run_id) = ''
+	my ($strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id, $delly_run_id) = '';
 
 	# prepare directory structure
 	my $bwa_directory = join('/', $output_directory, 'BWA');
@@ -87,6 +87,11 @@ sub main {
 	# indicate YAML files for processed BAMs
 	my $bwa_output_yaml = join('/', $bwa_directory, 'bwa_bam_config_' . $timestamp . '.yaml');
 	my $gatk_output_yaml = join('/', $gatk_directory, 'gatk_bam_config_' . $timestamp . '.yaml');
+
+	if (('N' eq $tool_data->{preprocessing}->{run}) && ('Y' eq $tool_data->{variant_calling}->{run})) {
+		$gatk_output_yaml = $data_config;
+		$gatk_run_id = '000000';
+		}
 
 	# Should pre-processing (alignment + GATK indel realignment/recalibration + QC) be performed?
 	if ('Y' eq $tool_data->{preprocessing}->{run}) {
@@ -415,34 +420,32 @@ sub main {
 
 			$varscan_run_id = `$varscan_command`;
 			sleep(5);
-			
-			print $log ">>> Final VarScan job id: $varscan_run_id\n\n";
 			}
-		}
 
-	## run Delly SV pipeline
-	if (defined($tool_data->{variant_calling}->{delly_config})) {
+		## run Delly SV pipeline
+		if (defined($tool_data->{variant_calling}->{delly_config})) {
 
-		unless(-e $delly_directory) { make_path($delly_directory); }
+			unless(-e $delly_directory) { make_path($delly_directory); }
 
-		my $delly_command = join(' ',
-			"perl $cwd/scripts/delly.pl",
-			"-o", $delly_directory,
-			"-t", $tool_data->{variant_calling}->{delly_config},
-			"-d", $gatk_output_yaml,
-			"-h", $tool_data->{HPC_driver},
-			"-r", $tool_data->{del_intermediates},
-			"-n", $tool_data->{dry_run},
-			"--depends", $gatk_run_id
-			);
+			my $delly_command = join(' ',
+				"perl $cwd/scripts/delly.pl",
+				"--somatic",
+				"-o", $delly_directory,
+				"-t", $tool_data->{variant_calling}->{delly_config},
+				"-d", $gatk_output_yaml,
+				"-h", $tool_data->{HPC_driver},
+				"-r", $tool_data->{del_intermediates},
+				"-n", $tool_data->{dry_run},
+				"--depends", $gatk_run_id
+				);
 
-		# record command (in log directory) and then run job
-		print $log "Submitting job for delly.pl\n";
-		print $log "  COMMAND: $delly_command\n\n";
+			# record command (in log directory) and then run job
+			print $log "Submitting job for delly.pl\n";
+			print $log "  COMMAND: $delly_command\n\n";
 
-		$delly_run_id = `$delly_command`;
-		sleep(5);
-
+			$delly_run_id = `$delly_command`;
+			sleep(5);
+			}
 		}
 
 	# finish up

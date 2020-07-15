@@ -1,0 +1,21 @@
+---
+tool: delly
+tool_version: 0.8.1
+ref_type: hg38
+reference: /cluster/tools/data/genomes/human/hg38/iGenomes/Sequence/WholeGenomeFasta/genome.fa
+bcftools_version: 1.2
+bcftools_path: /cluster/projects/pughlab/bin/bcftools/bcftools
+# and indicate some parameters for job submission
+parameters:
+    call:
+        mem: 4G
+        time: '24:00:00'
+    genotype:
+        mem: 4G
+        time: '24:00:00'
+    merge:
+        mem: 2G
+        time: '24:00:00'
+    filter:
+        mem: 2G
+        time: '12:00:00'

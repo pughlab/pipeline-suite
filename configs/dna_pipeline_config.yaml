@@ -22,3 +22,4 @@ variant_calling:
     mutect2_config: /cluster/projects/pughlab/projects/PROJECTNAME/Exome/configs/mutect2_config.yaml
     varscan_config: /cluster/projects/pughlab/projects/PROJECTNAME/Exome/configs/varscan_config.yaml
     strelka_config: /cluster/projects/pughlab/projects/PROJECTNAME/Exome/configs/strelka_config.yaml
+    delly_config: /cluster/projects/pughlab/projects/PROJECTNAME/Exome/configs/delly_config.yaml
