@@ -10,6 +10,7 @@ use POSIX qw(strftime);
 use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
+use List::Util 'first';
 
 my $cwd = dirname($0);
 require "$cwd/utilities.pl";
@@ -361,6 +362,9 @@ sub main {
 	my $pon_directory = join('/', $output_directory, 'PanelOfNormals');
 	unless(-e $pon_directory) { make_path($pon_directory); }
 
+	my $pon_intermediates = join('/', $pon_directory, 'intermediates');
+	unless(-e $pon_intermediates) { make_path($pon_intermediates); }
+
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
@@ -401,7 +405,7 @@ sub main {
 			}
 
 		# create an array to hold final outputs and all patient job ids
-		my (@final_outputs, @patient_jobs);
+		my (@germline_vcfs, @final_outputs, @patient_jobs);
 
 		# for T/N pair
 		foreach my $sample (@tumour_ids) {
@@ -664,9 +668,7 @@ sub main {
 					'>', join('.',  $output_stem, $vtype . "_germline_hc.vcf.md5")
 					);
 
-				if ('snp' eq $vtype) {
-					push @pon_vcfs, join(' ', "-V:$sample", join('.',  $output_stem, $vtype . "_germline_hc.vcf"));
-					}
+				push @germline_vcfs, join('.', $output_stem, $vtype . "_germline_hc.vcf");
 
 				$filter_command .= "\n\n" . join(' ',
 					'md5sum', join('.',  $output_stem, $vtype . "_somatic_hc.vcf"),
@@ -781,6 +783,83 @@ sub main {
 
 				push @final_outputs, $final_maf;
 				}
+			}
+
+		# before making the PoN, we will merge snp/indel results
+		# as well as collapsing results from multi-tumour patients
+		unless (defined($args{pon})) {
+
+			my $merged_germline = join('/', $pon_intermediates, $patient . '_germline_variants.vcf');
+			my $format_germline_cmd;
+			my @intermediate_files;
+
+			foreach my $sample (sort @tumour_ids) {
+
+				my @smp_files = grep { /$sample/ } @germline_vcfs;
+				my $snp_vcf = first { /snp/ } @smp_files;
+				my $indel_vcf = first { /indel/ } @smp_files;
+
+				my $tmp_vcf = join('/', $pon_intermediates, $sample . '_merged_variants.vcf');
+
+				$format_germline_cmd .= "\n" . join(' ',
+					'vcf-concat', $snp_vcf, $indel_vcf,
+					'| vcf-sort -c -t', $tmp_directory,
+					'>', $tmp_vcf
+					);
+
+				$format_germline_cmd .= "\n\n" . "bgzip $tmp_vcf";
+				$format_germline_cmd .= "\n" . "tabix -p vcf $tmp_vcf.gz\n";
+
+				push @intermediate_files, "$tmp_vcf.gz";
+				$cleanup_cmd .= "\nrm $tmp_vcf.gz";
+				}
+
+			if (scalar(@tumour_ids) > 1) {
+
+				$format_germline_cmd .= "\n\n" . join(' ',
+					'vcf-isec -n +1',
+					@intermediate_files,
+					'| vcf-subset -c NORMAL',
+					'>', $merged_germline
+					);
+
+				} else {
+
+				$format_germline_cmd .= "\n\n" . join(' ',
+					'vcf-subset -c NORMAL',
+					$intermediate_files[0],
+					'>', $merged_germline
+					);
+				}
+
+			$format_germline_cmd .= "\n" . "md5sum $merged_germline > $merged_germline.md5";
+
+			if ('Y' eq missing_file($merged_germline . '.md5')) {
+
+				# record command (in log directory) and then run job
+				print $log "Submitting job for PoN prep...\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'collapse_germline_calls_' . $patient,
+					cmd	=> $format_germline_cmd,
+					modules	=> ['perl', $vcftools, 'tabix'],
+					dependencies	=> join(',', @patient_jobs),
+					hpc_driver	=> $tool_data->{HPC_driver}
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'collapse_germline_calls_' . $patient,
+					shell_command	=> $run_script,
+					hpc_driver	=> $tool_data->{HPC_driver},
+					dry_run		=> $tool_data->{dry_run},
+					log_file	=> $log
+					);
+
+				push @patient_jobs, $run_id;
+				}
+
+			push @pon_vcfs, "-V:$patient $merged_germline";
 			}
 
 		# should intermediate files be removed
