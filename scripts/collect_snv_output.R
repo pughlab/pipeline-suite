@@ -50,7 +50,8 @@ parser <- ArgumentParser();
 
 parser$add_argument('-d', '--directory', type = 'character', help = 'path to data directory');
 parser$add_argument('-p', '--project', type = 'character', help = 'project name');
-parser$add_argument('-g', '--gtf', type = 'character', help = 'annotation gtf (refGene)', default = '/cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.GRCh38.genes.gtf');
+parser$add_argument('-g', '--gtf', type = 'character', help = 'annotation gtf (refGene)',
+	default = '/cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.GRCh38.genes.gtf');
 
 arguments <- parser$parse_args();
 
@@ -143,8 +144,8 @@ for (i in 1:length(maf.files)) {
 	file <- maf.files[i];
 
 	# extract sample ID
-	smp <- unlist(strsplit(file,'\\/'))[3];
-	samples <- c(samples, smp);
+	if (is.rnaseq) { smp <- unlist(strsplit(file,'\\/'))[3]; } else { smp <- unlist(strsplit(file,'\\/'))[2]; }
+	samples <- unique(c(samples, smp));
 
 	# read in data
 	tmp <- read.delim(file, skip = 1);
