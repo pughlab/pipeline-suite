@@ -127,7 +127,7 @@ sub get_combine_gvcf_command {
 		'-Djava.io.tmpdir=' . $args{tmp_dir},
 		'-jar $gatk_dir/GenomeAnalysisTK.jar -T CombineGVCFs',
 		'-R', $reference,
-		'-V', $args{input},
+		 $args{input},
 		'-o', $args{output}
 		);
 
@@ -289,7 +289,7 @@ sub main{
 			my $hc_vcf = join('/', $sample_directory, $sample . '_HaplotypeCaller.vcf');
 			if ('dna' eq $data_type) {
 				$hc_vcf = join('/', $sample_directory, $sample . '_HaplotypeCaller.g.vcf');
-				push @gvcfs, $hc_vcf;
+				push @gvcfs, " -V:$sample $hc_vcf";
 				}
 
 			my $call_variants_cmd = get_haplotype_command(
@@ -517,7 +517,7 @@ sub main{
 	# if this is DNA-Seq (WXS or WGS), combine above gvcfs (per-batch)
 	if ('dna' eq $data_type) {
 
-		my @batches = (());
+		my @batches = ([]);
 		my $batch_idx = 0;
 		my $file_count = 0;
 
@@ -525,9 +525,10 @@ sub main{
 
 			if ($file_count > 15) {
 				$batch_idx++;
-				@batches[$batch_idx] = ();
+				@batches[$batch_idx] = [];
+				$file_count = 0;
 				}
-			push @batches[$batch_idx], $gvcf;
+			push @{$batches[$batch_idx]}, $gvcf;
 
 			$file_count++;
 
@@ -535,7 +536,9 @@ sub main{
 
 		$batch_idx = 0;
 
-		foreach my @batch ( @batches ) {
+		my (@combined_gvcfs, @batch_jobs);
+
+		foreach my $batch ( @batches ) {
 
 			$batch_idx++;
 
@@ -543,17 +546,17 @@ sub main{
 			my $combined_gvcf = join('/', $output_directory, 'haplotype_caller_' . $batch_idx . '.g.vcf');
 
 			my $combine_cmd = get_combine_gvcf_command(
-				input		=> join(' -V ', @batch),
+				input		=> join(' ', @{$batch}),
 				output		=> $combined_gvcf,
 				java_mem	=> $tool_data->{parameters}->{combine_gvcfs}->{java_mem},
 				tmp_dir		=> $output_directory
 				);
 
 			# this is a java-based command, so run a final check
-			my $extra_cmds = "\n" . join("\n  ",
+			my $extra_cmds = "\n  " . join("\n  ",
 				"md5sum $combined_gvcf > $combined_gvcf.md5",
 				"bgzip $combined_gvcf",
-				"tabix -p vcf $combined_gvcf.gz"
+				"tabix -p vcf $combined_gvcf.gz\n"
 				);
 
 			$java_check = "\n" . check_java_output(
@@ -587,9 +590,13 @@ sub main{
 					log_file	=> $log
 					);
 
-				push @all_jobs, $run_id;
+				push @batch_jobs, $run_id;
 				}
+
+			push @combined_gvcfs, $combined_gvcf;
 			}
+
+		push @all_jobs, @batch_jobs;
 
 		# should intermediate files be removed
 		if ('Y' eq $tool_data->{del_intermediates}) {
@@ -598,7 +605,7 @@ sub main{
 
 			# make sure final output exists before removing intermediate files!
 			$cleanup_cmd_dna = join("\n",
-				"if [ -s $combined_gvcf ]; then",
+				"if [ -s " . join(" ] && [ -s ", @combined_gvcfs) . " ]; then",
 				"  $cleanup_cmd_dna",
 				"else",
 				'  echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
