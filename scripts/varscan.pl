@@ -277,6 +277,7 @@ sub main {
 		tool_config		=> undef,
 		data_config		=> undef,
 		output_directory	=> undef,
+		pon			=> undef,
 		hpc_driver		=> undef,
 		del_intermediates	=> undef,
 		dry_run			=> undef,
@@ -517,6 +518,7 @@ sub main {
 				}
 
 			# format command for sequenza (T/N only)
+			my $sequenza_output = join('/', $sequenza_directory, $sample . '_VarScan_Total_CN.seg');
 			my $sequenza_command = get_sequenza_command(
 				out_dir	=> $sequenza_directory,
 				snp	=> $output_stem . '.snp',
@@ -525,7 +527,7 @@ sub main {
 				);
 
 			# check if this should be run
-			if ('Y' eq missing_file("$output_stem\_Total_CN.seg")) {
+			if ('Y' eq missing_file($sequenza_output)) {
 
 				# record command (in log directory) and then run job
 				print $log "Submitting job for Sequenza...\n";
@@ -824,80 +826,83 @@ sub main {
 		print $log "---\n";
 		}
 
-	# let's create a command and write script to combine variants for a PoN
-	my $pon_tmp	= join('/', $pon_directory, $date . "_merged_panelOfNormals.vcf");
-	my $pon		= join('/', $pon_directory, $date . "_merged_panelOfNormals_trimmed.vcf");
-	my $final_pon_link = join('/', $output_directory, 'panelOfNormals.vcf');
+	unless (defined($args{pon})) {
 
-	# create a fully merged output (useful for combining with other studies later)
-	my $pon_command = generate_pon(
-		input		=> join(' ', @pon_vcfs),
-		output		=> $pon_tmp,
-		java_mem	=> $tool_data->{parameters}->{combine}->{java_mem},
-		tmp_dir		=> $output_directory,
-		out_type	=> 'full'
-		);
+		# let's create a command and write script to combine variants for a PoN
+		my $pon_tmp	= join('/', $pon_directory, $date . "_merged_panelOfNormals.vcf");
+		my $pon		= join('/', $pon_directory, $date . "_merged_panelOfNormals_trimmed.vcf");
+		my $final_pon_link = join('/', $output_directory, 'panelOfNormals.vcf');
 
-	$pon_command .= "\n" . check_java_output(
-		extra_cmd => "md5sum $pon_tmp > $pon_tmp.md5;\n  bgzip $pon_tmp;\n  tabix -p vcf $pon_tmp.gz;"
-		);
+		# create a fully merged output (useful for combining with other studies later)
+		my $pon_command = generate_pon(
+			input		=> join(' ', @pon_vcfs),
+			output		=> $pon_tmp,
+			java_mem	=> $tool_data->{parameters}->{combine}->{java_mem},
+			tmp_dir		=> $output_directory,
+			out_type	=> 'full'
+			);
 
-	$run_script = write_script(
-		log_dir	=> $log_directory,
-		name	=> 'create_panel_of_normals',
-		cmd	=> $pon_command,
-		dependencies	=> join(',', @all_jobs),
-		modules		=> [$gatk, 'tabix'],
-		max_time	=> $tool_data->{parameters}->{combine}->{time},
-		mem		=> $tool_data->{parameters}->{combine}->{mem},
-		hpc_driver	=> $tool_data->{HPC_driver}
-		);
+		$pon_command .= "\n" . check_java_output(
+			extra_cmd => "md5sum $pon_tmp > $pon_tmp.md5;\n  bgzip $pon_tmp;\n  tabix -p vcf $pon_tmp.gz;"
+			);
 
-	$run_id = submit_job(
-		jobname		=> 'create_panel_of_normals',
-		shell_command	=> $run_script,
-		hpc_driver	=> $tool_data->{HPC_driver},
-		dry_run		=> $tool_data->{dry_run},
-		log_file	=> $log
-		);
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'create_panel_of_normals',
+			cmd	=> $pon_command,
+			dependencies	=> join(',', @all_jobs),
+			modules		=> [$gatk, 'tabix'],
+			max_time	=> $tool_data->{parameters}->{combine}->{time},
+			mem		=> $tool_data->{parameters}->{combine}->{mem},
+			hpc_driver	=> $tool_data->{HPC_driver}
+			);
 
-	# create a trimmed (sites only) output (this is the panel of normals)
-	$pon_command = generate_pon(
-		input		=> join(' ', @pon_vcfs),
-		output		=> $pon,
-		java_mem	=> $tool_data->{parameters}->{combine}->{java_mem},
-		tmp_dir		=> $output_directory,
-		out_type	=> 'trimmed'
-		);
+		$run_id = submit_job(
+			jobname		=> 'create_panel_of_normals',
+			shell_command	=> $run_script,
+			hpc_driver	=> $tool_data->{HPC_driver},
+			dry_run		=> $tool_data->{dry_run},
+			log_file	=> $log
+			);
 
-	if (-l $final_pon_link) {
-		unlink $final_pon_link or die "Failed to remove previous symlink: $final_pon_link";
+		# create a trimmed (sites only) output (this is the panel of normals)
+		$pon_command = generate_pon(
+			input		=> join(' ', @pon_vcfs),
+			output		=> $pon,
+			java_mem	=> $tool_data->{parameters}->{combine}->{java_mem},
+			tmp_dir		=> $output_directory,
+			out_type	=> 'trimmed'
+			);
+
+		if (-l $final_pon_link) {
+			unlink $final_pon_link or die "Failed to remove previous symlink: $final_pon_link";
+			}
+
+		symlink($pon, $final_pon_link);
+
+		$pon_command .= "\n" . check_java_output(
+			extra_cmd => "  md5sum $pon > $pon.md5"
+			);
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'create_sitesOnly_trimmed_panel_of_normals',
+			cmd	=> $pon_command,
+			modules	=> [$gatk],
+			dependencies	=> join(',', @all_jobs),
+			max_time	=> $tool_data->{parameters}->{combine}->{time},
+			mem		=> $tool_data->{parameters}->{combine}->{mem},
+			hpc_driver	=> $tool_data->{HPC_driver}
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'create_sitesOnly_trimmed_panel_of_normals',
+			shell_command	=> $run_script,
+			hpc_driver	=> $tool_data->{HPC_driver},
+			dry_run		=> $tool_data->{dry_run},
+			log_file	=> $log
+			);
 		}
-
-	symlink($pon, $final_pon_link);
-
-	$pon_command .= "\n" . check_java_output(
-		extra_cmd => "  md5sum $pon > $pon.md5"
-		);
-
-	$run_script = write_script(
-		log_dir	=> $log_directory,
-		name	=> 'create_sitesOnly_trimmed_panel_of_normals',
-		cmd	=> $pon_command,
-		modules	=> [$gatk],
-		dependencies	=> join(',', @all_jobs),
-		max_time	=> $tool_data->{parameters}->{combine}->{time},
-		mem		=> $tool_data->{parameters}->{combine}->{mem},
-		hpc_driver	=> $tool_data->{HPC_driver}
-		);
-
-	$run_id = submit_job(
-		jobname		=> 'create_sitesOnly_trimmed_panel_of_normals',
-		shell_command	=> $run_script,
-		hpc_driver	=> $tool_data->{HPC_driver},
-		dry_run		=> $tool_data->{dry_run},
-		log_file	=> $log
-		);
 
 	# should job metrics be collected
 	if ('N' eq $tool_data->{dry_run}) {
@@ -1368,6 +1373,7 @@ if ('paired' eq $run_mode) {
 		tool_config		=> $tool_config,
 		data_config		=> $data_config,
 		output_directory	=> $output_directory,
+		pon			=> $panel_of_normals,
 		hpc_driver		=> $hpc_driver,
 		del_intermediates	=> $remove_junk,
 		dry_run			=> $dry_run,

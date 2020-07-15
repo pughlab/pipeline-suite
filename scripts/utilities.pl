@@ -412,6 +412,12 @@ sub get_vcf2maf_command {
 
 	if (defined($args{normal_id})) {
 		$maf_command .= " --normal-id $args{normal_id}";
+
+		if ($args{input} =~ m/Strelka|VarScan/) {
+			$maf_command .= " --vcf-tumor-id TUMOR --vcf-normal-id NORMAL";
+			}
+	} elsif ($args{input} =~ m/VarScan/) {
+		$maf_command .= " --vcf-tumor-id Sample1";
 		}
 
 	return($maf_command);

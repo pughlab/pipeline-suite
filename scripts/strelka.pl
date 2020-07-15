@@ -327,7 +327,7 @@ sub main {
 	my (%final_outputs, %patient_jobs, %cleanup);
 
 	# process each sample in $smp_data
-	print $log "\nCreating directory structure and running germline variant caller...\n\n";
+	print $log "\nCreating directory structure and running germline variant caller...\n";
 
 	foreach my $patient (sort keys %{$smp_data}) {
 
@@ -357,8 +357,8 @@ sub main {
 			symlink($smp_data->{$patient}->{tumour}->{$tumour}, $link);
 			}
 
-		@patient_jobs{$patient} = ();
-		@final_outputs{$patient} = ();
+		@patient_jobs{$patient} = [];
+		@final_outputs{$patient} = [];
 		$cleanup{$patient} = "rm -rf $tmp_directory";
 
 		next if (scalar(@normal_ids) == 0);
@@ -367,7 +367,7 @@ sub main {
 		# for germline variants
 		foreach my $norm (@normal_ids) {
 
-			print $log ">>NORMAL: $norm\n";
+			print $log "\n>>NORMAL: $norm\n";
 
 			my $germline_directory = join('/', $patient_directory, $norm);
 			unless(-e $germline_directory) { make_path($germline_directory); }
@@ -386,15 +386,32 @@ sub main {
 
 			my $germline_output = join('/', $germline_directory, 'results','variants','variants.vcf.gz');
 
-			$cleanup{$patient} .= "\nrm -rf ";
-			$cleanup{$patient} .= join('/', $germline_directory, 'workspace/pyflow.data/logs/tmp');
-			$cleanup{$patient} .= "\nrm " . join('/', $germline_directory, 'results/variants/genome*');
+			$cleanup{$patient} .= "\nrm -rf " . join('/', $germline_directory, 'workspace');
+			$cleanup{$patient} .= "\nrm -rf " . join('/', $germline_directory, 'results');
+
+			# indicate output from next step
+			my $filtered_germline_output = join('/',
+				$germline_directory,
+				$norm . '_Strelka_germline_filtered.vcf'
+				);
 
 			# check if this should be run
-			if ('Y' eq missing_file($germline_output)) {
+			if (
+				('Y' eq missing_file($germline_output)) && 
+				('Y' eq missing_file($filtered_germline_output)) 
+				) {
 
 				# record command (in log directory) and then run job
 				print $log "Submitting job for Strelka (germline)...\n";
+
+				# if this has been run once before and failed, we need to clean up the previous attempt
+				# before initiating a new one
+				if ('N' eq missing_file("$germline_directory/runWorkflow.py")) {
+					$germline_snv_command = join("\n\n",
+						"rm -rf $germline_directory/*",
+						$germline_snv_command
+						);
+					}
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -423,11 +440,6 @@ sub main {
 				}
 
 			# filter results to keep only confident (PASS) calls
-			my $filtered_germline_output = join('/',
-				$germline_directory,
-				$norm . '_Strelka_germline_filtered.vcf'
-				);
-
 			my $filter_command = get_filter_command(
 				input	=> $germline_output,
 				output	=> $filtered_germline_output,
@@ -435,8 +447,6 @@ sub main {
 				);
 
 			$filter_command .= "\n\nmd5sum $filtered_germline_output > $filtered_germline_output.md5";
-
-			$cleanup{$patient} .= "\nrm $germline_output";
 
 			# check if this should be run
 			if ('Y' eq missing_file($filtered_germline_output . '.md5')) {
@@ -493,42 +503,8 @@ sub main {
 		$pon		= join('/', $pon_directory, $date . "_merged_panelOfNormals_trimmed.vcf");
 		my $final_pon_link = join('/', $output_directory, 'panelOfNormals.vcf');
 
-		# create a fully merged output (useful for combining with other studies later)
-		my $pon_command = generate_pon(
-			input		=> join(' ', @pon_vcfs),
-			output		=> $pon_tmp,
-			java_mem	=> $tool_data->{parameters}->{combine}->{java_mem},
-			tmp_dir		=> $pon_directory,
-			out_type	=> 'full'
-			);
-
-		$pon_command .= "\n" . check_java_output(
-			extra_cmd => "md5sum $pon_tmp > $pon_tmp.md5;\n  bgzip $pon_tmp;\n  tabix -p vcf $pon_tmp.gz;"
-			);
-
-		$run_script = write_script(
-			log_dir	=> $log_directory,
-			name	=> 'create_panel_of_normals',
-			cmd	=> $pon_command,
-			dependencies	=> join(',', @all_pon_jobs),
-			modules		=> [$gatk, 'tabix'],
-			max_time	=> $tool_data->{parameters}->{combine}->{time},
-			mem		=> $tool_data->{parameters}->{combine}->{mem},
-			hpc_driver	=> $tool_data->{HPC_driver}
-			);
-
-		$run_id = submit_job(
-			jobname		=> 'create_panel_of_normals',
-			shell_command	=> $run_script,
-			hpc_driver	=> $tool_data->{HPC_driver},
-			dry_run		=> $tool_data->{dry_run},
-			log_file	=> $log
-			);
-
-		push @all_jobs, $run_id;
-
 		# create a trimmed (sites only) output (this is the panel of normals)
-		$pon_command = generate_pon(
+		my $pon_command = generate_pon(
 			input		=> join(' ', @pon_vcfs),
 			output		=> $pon,
 			java_mem	=> $tool_data->{parameters}->{combine}->{java_mem},
@@ -566,6 +542,40 @@ sub main {
 			);
 
 		push @all_jobs, $pon_run_id;
+
+		# create a fully merged output (useful for combining with other studies later)
+		$pon_command = generate_pon(
+			input		=> join(' ', @pon_vcfs),
+			output		=> $pon_tmp,
+			java_mem	=> $tool_data->{parameters}->{combine}->{java_mem},
+			tmp_dir		=> $pon_directory,
+			out_type	=> 'full'
+			);
+
+		$pon_command .= "\n" . check_java_output(
+			extra_cmd => "md5sum $pon_tmp > $pon_tmp.md5;\n  bgzip $pon_tmp;\n  tabix -p vcf $pon_tmp.gz;"
+			);
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'create_panel_of_normals',
+			cmd	=> $pon_command,
+			dependencies	=> join(',', @all_pon_jobs, $pon_run_id),
+			modules		=> [$gatk, 'tabix'],
+			max_time	=> $tool_data->{parameters}->{combine}->{time},
+			mem		=> $tool_data->{parameters}->{combine}->{mem},
+			hpc_driver	=> $tool_data->{HPC_driver}
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'create_panel_of_normals',
+			shell_command	=> $run_script,
+			hpc_driver	=> $tool_data->{HPC_driver},
+			dry_run		=> $tool_data->{dry_run},
+			log_file	=> $log
+			);
+
+		push @all_jobs, $run_id;
 		}
 
 	# loop over all samples again, this time to run somatic callers
@@ -624,14 +634,22 @@ sub main {
 
 			my $manta_output = join('/', $manta_directory, 'results/variants/candidateSmallIndels.vcf.gz');
 
-			$cleanup{$patient} .= "\nrm -rf ";
-			$cleanup{$patient} .= join('/', $manta_directory, 'workspace/pyflow.data/logs/tmp');
+			$cleanup{$patient} .= "\nrm -rf " . join('/', $manta_directory, 'workspace');
 
 			# check if this should be run
 			if ('Y' eq missing_file($manta_output)) {
 
 				# record command (in log directory) and then run job
 				print $log "Submitting job for Manta...\n";
+
+				# if this has been run once before and failed, we need to clean up the previous attempt
+				# before initiating a new one
+				if ('N' eq missing_file("$manta_directory/runWorkflow.py")) {
+					$manta_command = join("\n\n",
+						"rm -rf $manta_directory/*",
+						$manta_command
+						);
+					}
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -694,8 +712,8 @@ sub main {
 			my $somatic_indel_output = join('/', $sample_directory, 'results/variants/somatic.indels.vcf.gz');
 			my $somatic_tonly_output = join('/', $sample_directory, 'results/variants/variants.vcf.gz');
 
-			$cleanup{$patient} .= "\nrm -rf ";
-			$cleanup{$patient} .= join('/', $sample_directory, 'workspace/pyflow.data/logs/tmp');
+			$cleanup{$patient} .= "\nrm -rf " . join('/', $sample_directory, 'workspace');
+			$cleanup{$patient} .= "\nrm -rf " . join('/', $sample_directory, 'results');
 
 			# check if this should be run
 			if (
@@ -705,6 +723,18 @@ sub main {
 
 				# record command (in log directory) and then run job
 				print $log "Submitting job for Strelka (somatic)...\n";
+
+				# if this has been run once before and failed, we need to clean up the previous attempt
+				# before initiating a new one
+				if ('N' eq missing_file("$sample_directory/runWorkflow.py")) {
+					$somatic_snv_command = join("\n",
+						"rm -rf $sample_directory/results/",
+						"rm -rf $sample_directory/workspace/",
+						"rm $sample_directory/workflow*",
+						"rm $sample_directory/runWorkflow*\n",
+						$somatic_snv_command
+						);
+					}
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -982,7 +1012,7 @@ sub main {
 
 			}
 
-		push @all_jobs, @{$patient_jobs{$patient}};
+		if (scalar(@{$patient_jobs{$patient}}) > 0) { push @all_jobs, @{$patient_jobs{$patient}}; }
 
 		# should intermediate files be removed
 		# run per patient
