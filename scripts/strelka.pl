@@ -407,10 +407,7 @@ sub main {
 				# if this has been run once before and failed, we need to clean up the previous attempt
 				# before initiating a new one
 				if ('N' eq missing_file("$germline_directory/runWorkflow.py")) {
-					$germline_snv_command = join("\n\n",
-						"rm -rf $germline_directory/*",
-						$germline_snv_command
-						);
+					`rm -rf $germline_directory`;
 					}
 
 				$run_script = write_script(
@@ -645,10 +642,7 @@ sub main {
 				# if this has been run once before and failed, we need to clean up the previous attempt
 				# before initiating a new one
 				if ('N' eq missing_file("$manta_directory/runWorkflow.py")) {
-					$manta_command = join("\n\n",
-						"rm -rf $manta_directory/*",
-						$manta_command
-						);
+					`rm -rf $manta_directory`;
 					}
 
 				$run_script = write_script(
@@ -715,51 +709,6 @@ sub main {
 			$cleanup{$patient} .= "\nrm -rf " . join('/', $sample_directory, 'workspace');
 			$cleanup{$patient} .= "\nrm -rf " . join('/', $sample_directory, 'results');
 
-			# check if this should be run
-			if (
-				('Y' eq missing_file($somatic_indel_output)) &&
-				('Y' eq missing_file($somatic_tonly_output))
-				) {
-
-				# record command (in log directory) and then run job
-				print $log "Submitting job for Strelka (somatic)...\n";
-
-				# if this has been run once before and failed, we need to clean up the previous attempt
-				# before initiating a new one
-				if ('N' eq missing_file("$sample_directory/runWorkflow.py")) {
-					$somatic_snv_command = join("\n",
-						"rm -rf $sample_directory/results/",
-						"rm -rf $sample_directory/workspace/",
-						"rm $sample_directory/workflow*",
-						"rm $sample_directory/runWorkflow*\n",
-						$somatic_snv_command
-						);
-					}
-
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_strelka_somatic_variant_caller_' . $sample,
-					cmd	=> $somatic_snv_command,
-					modules	=> [$strelka],
-					dependencies	=> $run_id,
-					max_time	=> $tool_data->{parameters}->{strelka}->{time},
-					mem		=> $tool_data->{parameters}->{strelka}->{mem},
-					hpc_driver	=> $tool_data->{HPC_driver}
-					);
-
-				$run_id = submit_job(
-					jobname		=> 'run_strelka_somatic_variant_caller_' . $sample,
-					shell_command	=> $run_script,
-					hpc_driver	=> $tool_data->{HPC_driver},
-					dry_run		=> $tool_data->{dry_run},
-					log_file	=> $log
-					);
-
-				push @{$patient_jobs{$patient}}, $run_id;
-				}
-			else {
-				print $log "Skipping Strelka (somatic) because this has already been completed!\n";
-				}
 
 			# filter variant calls
 			my ($filter_command, $required, $depends);
@@ -845,6 +794,50 @@ sub main {
 				$depends  = join(',', $run_id, $pon_run_id);
 				}
 
+			# if filter output already exists, don't re-run strelka caller
+			if (
+				('Y' eq missing_file($somatic_indel_output)) &&
+				('Y' eq missing_file($somatic_tonly_output)) &&
+				('Y' eq missing_file("$required.md5"))
+				) {
+
+				# record command (in log directory) and then run job
+				print $log "Submitting job for Strelka (somatic)...\n";
+
+				# if this has been run once before and failed, we need to clean up the previous attempt
+				# before initiating a new one
+				if ('N' eq missing_file("$sample_directory/runWorkflow.py")) {
+					`rm -rf $sample_directory/results/`;
+					`rm -rf $sample_directory/workspace/`;
+					`rm $sample_directory/workflow*`;
+					`rm $sample_directory/runWorkflow*`;
+					}
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_strelka_somatic_variant_caller_' . $sample,
+					cmd	=> $somatic_snv_command,
+					modules	=> [$strelka],
+					dependencies	=> $run_id,
+					max_time	=> $tool_data->{parameters}->{strelka}->{time},
+					mem		=> $tool_data->{parameters}->{strelka}->{mem},
+					hpc_driver	=> $tool_data->{HPC_driver}
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_strelka_somatic_variant_caller_' . $sample,
+					shell_command	=> $run_script,
+					hpc_driver	=> $tool_data->{HPC_driver},
+					dry_run		=> $tool_data->{dry_run},
+					log_file	=> $log
+					);
+
+				push @{$patient_jobs{$patient}}, $run_id;
+				}
+			else {
+				print $log "Skipping Strelka (somatic) because this has already been completed!\n";
+				}
+
 			# check if this should be run
 			if ('Y' eq missing_file($required . '.md5')) {
 
@@ -902,6 +895,10 @@ sub main {
 
 			# check if this should be run
 			if ('Y' eq missing_file($final_maf . '.md5')) {
+
+				if ('N' eq missing_file("$tmp_directory/$sample\_Strelka_somatic_indels_filtered.vep.vcf")) {
+					`rm $tmp_directory/$sample\_Strelka_somatic_indels_filtered.vep.vcf`;
+					}
 
 				# IF THIS FINAL STEP IS SUCCESSFULLY RUN
 				$vcf2maf_cmd .= "\n\n" . join("\n",
@@ -967,6 +964,10 @@ sub main {
 			# check if this should be run
 			if ('Y' eq missing_file($final_maf . '.md5')) {
 
+				if ('N' eq missing_file("$tmp_directory/$sample\_Strelka_somatic_snvs_filtered.vep.vcf")) {
+					`rm $tmp_directory/$sample\_Strelka_somatic_snvs_filtered.vep.vcf`;
+					}
+
 				# IF THIS FINAL STEP IS SUCCESSFULLY RUN
 				$vcf2maf_cmd .= "\n\n" . join("\n",
 					"if [ -s " . join(" ] && [ -s ", $final_maf) . " ]; then",
@@ -1018,33 +1019,39 @@ sub main {
 		# run per patient
 		if ('Y' eq $tool_data->{del_intermediates}) {
 
-			print $log "\nSubmitting job to clean up temporary/intermediate files...\n";
+			if (scalar(@{$patient_jobs{$patient}}) == 0) {
+				`rm -rf $tmp_directory`;
 
-			# make sure final output exists before removing intermediate files!
-			my $cleanup_cmd = join("\n",
-				"if [ -s " . join(" ] && [ -s ", @{$final_outputs{$patient}}) . " ]; then",
-				"  $cleanup{$patient}",
-				"else",
-				'  echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
-				"fi"
-				);
+				} else {
 
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'run_cleanup_' . $patient,
-				cmd	=> $cleanup_cmd,
-				dependencies	=> join(',', @{$patient_jobs{$patient}}),
-				mem		=> '256M',
-				hpc_driver	=> $tool_data->{HPC_driver}
-				);
+				print $log "\nSubmitting job to clean up temporary/intermediate files...\n";
 
-			$run_id = submit_job(
-				jobname		=> 'run_cleanup_' . $patient,
-				shell_command	=> $run_script,
-				hpc_driver	=> $tool_data->{HPC_driver},
-				dry_run		=> $tool_data->{dry_run},
-				log_file	=> $log
-				);
+				# make sure final output exists before removing intermediate files!
+				my $cleanup_cmd = join("\n",
+					"if [ -s " . join(" ] && [ -s ", @{$final_outputs{$patient}}) . " ]; then",
+					"  $cleanup{$patient}",
+					"else",
+					'  echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
+					"fi"
+					);
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_cleanup_' . $patient,
+					cmd	=> $cleanup_cmd,
+					dependencies	=> join(',', @{$patient_jobs{$patient}}),
+					mem		=> '256M',
+					hpc_driver	=> $tool_data->{HPC_driver}
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_cleanup_' . $patient,
+					shell_command	=> $run_script,
+					hpc_driver	=> $tool_data->{HPC_driver},
+					dry_run		=> $tool_data->{dry_run},
+					log_file	=> $log
+					);
+				}
 			}
 
 		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @{$final_outputs{$patient}}) . "\n";
