@@ -148,7 +148,7 @@ for (i in 1:length(maf.files)) {
 	samples <- unique(c(samples, smp));
 
 	# read in data
-	tmp <- read.delim(file, skip = 1);
+	tmp <- read.delim(file, comment.char = "#");
 
 	## do some filtering
 	# if RNA-Seq or Exome-Seq, focus on genic regions only
