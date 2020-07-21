@@ -76,7 +76,7 @@ sub error_checking {
 			);
 		}
 
-		# GATK (indel realignment/recalibration + HaplotypeCaller)
+		# GATK (indel realignment/recalibration + HaplotypeCaller + MuTect + MuTect2)
 		if ('gatk' eq $pipeline) {
 
 			if (!defined($tool_data->{reference})) { die("Must supply path to reference genome!"); }
@@ -91,6 +91,37 @@ sub error_checking {
 					print "gatk_config: WARNING: no target intervals provided.\n";
 					print ">>If this is exome data, please provide the target regions!\n";
 				}
+			}
+		}
+
+		# Strelka, VarScan and Delly
+		if ( ('strelka' eq $pipeline) || ('varscan' eq $pipeline) || ('delly' eq $pipeline) ) {
+
+			if (!defined($tool_data->{reference})) { die("Must supply path to reference genome!"); }
+
+			if ('dna' eq $data_type) {
+
+				if ('strelka' eq $pipeline) {
+					if ( any { /$tool_data->{seq_type}/ } qw(exome targeted) ) {
+						if (!defined($tool_data->{intervals_bed})) {
+							die("Must supply path to target intervals!");
+						}
+						elsif ($tool_data->{intervals_bed} !~ m/.gz$/) {
+							print "WARNING: target intervals (if provided) must be bgzipped and tabix indexed.\n";
+						}	
+					}
+				}
+
+				elsif (!defined($tool_data->{intervals_bed})) {
+					print "WARNING: no target intervals provided.\n";
+					print ">>If this is exome data, please provide the target regions!\n";
+				}
+
+			} elsif (('rna' eq $data_type) && ('strelka' eq $pipeline) {
+
+				if ('rna' ne $tool_data->{seq_type}) {
+					$tool_data->{seq_type} = 'rna';
+					}
 			}
 		}
 
@@ -413,7 +444,7 @@ sub get_vcf2maf_command {
 	if (defined($args{normal_id})) {
 		$maf_command .= " --normal-id $args{normal_id}";
 
-		if ($args{input} =~ m/Strelka|VarScan/) {
+		if ($args{input} =~ m/Strelka|VarScan|MuTect2/) {
 			$maf_command .= " --vcf-tumor-id TUMOR --vcf-normal-id NORMAL";
 			}
 	} elsif ($args{input} =~ m/VarScan/) {
