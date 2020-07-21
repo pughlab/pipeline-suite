@@ -39,6 +39,7 @@ our ($reference, $dbsnp, $cosmic, $pon) = undef;
 # 	MuTect requires VCFv4.1 - to address this, you must manually change the VCF header:
 # 		##fileformat=VCFv4.2 to ##fileformat=VCFv4.1
 # 		##FORMAT=<ID=AD,Number=R to ##FORMAT=<ID=AD,Number=.
+# 	This manual change is necessary as vcf-convert does not change the second part.
 
 ### DEFINE SUBROUTINES #############################################################################
 # format command to run MuTect in artifact detection mode
@@ -943,6 +944,10 @@ sub main {
 			# check if this should be run
 			if ('Y' eq missing_file($final_maf . '.md5')) {
 
+				if ('N' eq missing_file("$tmp_directory/$sample\_MuTect_filtered.vep.vcf")) {
+					`rm $tmp_directory/$sample\_MuTect_filtered.vep.vcf`;
+					}
+
 				# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
 				$vcf2maf_cmd .= "\n\n" . join("\n",
 					"if [ -s " . join(" ] && [ -s ", $final_maf) . " ]; then",
@@ -992,39 +997,45 @@ sub main {
 		# run per patient
 		if ('Y' eq $tool_data->{del_intermediates}) {
 
-			print $log "Submitting job to clean up temporary/intermediate files...\n";
+			if (scalar(@patient_jobs) == 0) {
+				`rm $tmp_directory`;
 
-			# make sure final output exists before removing intermediate files!
-			my @files_to_check;
-			foreach my $tmp ( @final_outputs ) {
-				$tmp .= '.md5';
-				push @files_to_check, $tmp;
+				} else {
+
+				print $log "Submitting job to clean up temporary/intermediate files...\n";
+
+				# make sure final output exists before removing intermediate files!
+				my @files_to_check;
+				foreach my $tmp ( @final_outputs ) {
+					$tmp .= '.md5';
+					push @files_to_check, $tmp;
+					}
+
+				$cleanup_cmd = join("\n",
+					"if [ -s " . join(" ] && [ -s ", @files_to_check) . " ]; then",
+					"  $cleanup_cmd",
+					"else",
+					'  echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
+					"fi"
+					);
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_cleanup_' . $patient,
+					cmd	=> $cleanup_cmd,
+					dependencies	=> join(',', @patient_jobs),
+					mem		=> '256M',
+					hpc_driver	=> $tool_data->{HPC_driver}
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_cleanup_' . $patient,
+					shell_command	=> $run_script,
+					hpc_driver	=> $tool_data->{HPC_driver},
+					dry_run		=> $tool_data->{dry_run},
+					log_file	=> $log
+					);
 				}
-
-			$cleanup_cmd = join("\n",
-				"if [ -s " . join(" ] && [ -s ", @files_to_check) . " ]; then",
-				"  $cleanup_cmd",
-				"else",
-				'  echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
-				"fi"
-				);
-
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'run_cleanup_' . $patient,
-				cmd	=> $cleanup_cmd,
-				dependencies	=> join(',', @patient_jobs),
-				mem		=> '256M',
-				hpc_driver	=> $tool_data->{HPC_driver}
-				);
-
-			$run_id = submit_job(
-				jobname		=> 'run_cleanup_' . $patient,
-				shell_command	=> $run_script,
-				hpc_driver	=> $tool_data->{HPC_driver},
-				dry_run		=> $tool_data->{dry_run},
-				log_file	=> $log
-				);
 			}	
 
 		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
