@@ -21,7 +21,8 @@ our ($reference, $dbsnp, $cosmic, $pon) = undef;
 # version       author		comment
 # 1.0		sprokopec       script to run MuTect2 with options for T/N, PoN and T only
 # 1.1		sprokopec	minor updates for compatibility with larger pipeline
-
+# 1.2		sprokopec	MuTect2 runs very slowly (even on exome data); therefore, we will
+# 				now run each chromosome independently and then merge the output
 ### USAGE ##########################################################################################
 # mutect2.pl -t tool.yaml -d data.yaml { --create-panel-of-normals } -o /path/to/output/dir -h slurm -r Y -n Y
 #
@@ -178,41 +179,53 @@ sub get_mutect_tonly_command {
 sub get_filter_command {
 	my %args = (
 		input		=> undef,
+		intervals	=> undef,
 		output_stem	=> undef,
 		tmp_dir		=> undef,
 		split		=> 0,
 		@_
 		);
 
-	my $filter_command;
+	my $filter_command = join(' ',
+		'vcftools',
+		'--vcf', $args{input},
+		'--stdout --recode',
+		'--temp', $args{tmp_dir}
+		);
 
 	if ($args{split}) {
-		$filter_command = join(' ',
-			'vcftools',
-			'--vcf', $args{input},
-			'--keep-filtered PASS --remove-indels',
-			'--stdout --recode',
-			'--temp', $args{tmp_dir},
-			'>', $args{output_stem} . "_snps.vcf"
-			);
+
+		$filter_command .= ' --keep-filtered PASS --remove-indels';
+
+		if (defined($args{intervals})) {
+			$filter_command .= " --bed $args{intervals}";
+			}
+
+		$filter_command .= " > $args{output_stem}\_snps.vcf";
 
 		$filter_command .= "\n\n" . join(' ',
 			'vcftools',
 			'--vcf', $args{input},
-			'--keep-filtered PASS --keep-only-indels',
 			'--stdout --recode',
 			'--temp', $args{tmp_dir},
-			'>', $args{output_stem} . "_indels.vcf"
-			);
-		} else {
-		$filter_command = join(' ',
-			'vcftools',
-			'--vcf', $args{input},
-			'--keep-filtered PASS',
-			'--stdout --recode',
-			'--temp', $args{tmp_dir},
-			'>', $args{output_stem} . ".vcf"
-			);
+			'--keep-filtered PASS --keep-only-indels'
+			);;
+
+		if (defined($args{intervals})) {
+			$filter_command .= " --bed $args{intervals}";
+			}
+
+		$filter_command .= " > $args{output_stem}\_indels.vcf";
+
+	} else {
+		$filter_command .= ' --keep-filtered PASS';
+
+		if (defined($args{intervals})) {
+			$filter_command .= " --bed $args{intervals}";
+			}
+
+		$filter_command .= " > $args{output_stem}.vcf";
+
 		}
 
 	return($filter_command);
@@ -640,6 +653,7 @@ sub main {
 		dry_run			=> undef,
 		pon			=> undef,
 		dependencies		=> '',
+		chromosomes		=> undef,
 		@_
 		);
 
@@ -696,6 +710,15 @@ sub main {
 	print $log "\n    Reference used: $tool_data->{reference}";
 
 	$reference = $tool_data->{reference};
+
+	my @chroms;
+	if (defined($args{chromosomes})) {
+		@chroms = split(/,/, $args{chromosomes});
+		} elsif ('hg38' eq $tool_data->{ref_type}) {
+		@chroms = qw(chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 chr11 chr12 chr13 chr14 chr15 chr16 chr17 chr18 chr19 chr20 chr21 chr22 chrX chrY);
+		} elsif ('hg19' eq $tool_data->{ref_type}) {
+		@chroms = qw(chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 chr11 chr12 chr13 chr14 chr15 chr16 chr17 chr18 chr19 chr20 chr21 chr22 chrX chrY);
+		}
 	
 	if (defined($tool_data->{dbsnp})) {
 		print $log "\n      dbSNP: $tool_data->{dbsnp}";
@@ -786,75 +809,146 @@ sub main {
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
 
-			$run_id = $args{dependencies};
-			$java_check = '';
-
 			# run MuTect
 			my $output_stem = join('/', $sample_directory, $sample . '_MuTect2');
-			$cleanup_cmd .= "\nrm $output_stem.vcf";
+			my $merged_output = "$output_stem\_merged.vcf";
 
-			my ($mutect_command, $extra_cmds) = undef;
+			my %mutect_commands;
+			my $chr;
+			my @chr_parts;
 
 			# Tumour only, with a panel of normals
 			if ( (defined($pon)) && (scalar(@normal_ids) == 0) ) {
 
 				print $log "PON defined and no normals detected, so running tumour-only...\n";
 
-				$mutect_command = get_mutect_tonly_command(
-					tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
-					output		=> $output_stem . '.vcf',
-					java_mem	=> $tool_data->{parameters}->{mutect}->{java_mem},
-					tmp_dir		=> $tmp_directory,
-					intervals	=> $tool_data->{intervals_bed}
-					);
+				foreach my $chr ( @chroms ) {
+
+					$cleanup_cmd .= "\nrm $output_stem\_$chr.vcf";
+			
+					$mutect_commands{$chr} = get_mutect_tonly_command(
+						tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
+						output		=> "$output_stem\_$chr.vcf",
+						java_mem	=> $tool_data->{parameters}->{mutect}->{java_mem},
+						tmp_dir		=> $tmp_directory,
+						intervals	=> $chr #$tool_data->{intervals_bed}
+						);
+
+					push @chr_parts, "$output_stem\_$chr.vcf";
+					}
 
 				# paired tumour/normal
 				} elsif (scalar(@normal_ids) > 0) {
 
 				print $log "T/N pair detected, running paired mode...\n";
 
-				$mutect_command = get_mutect_tn_command(
-					tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
-					normal		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
-					output		=> $output_stem . '.vcf',
-					java_mem	=> $tool_data->{parameters}->{mutect}->{java_mem},
-					tmp_dir		=> $tmp_directory,
-					intervals	=> $tool_data->{intervals_bed}
-					);
+				foreach $chr ( @chroms ) {
+
+					$cleanup_cmd .= "\nrm $output_stem\_$chr.vcf";
+
+					$mutect_commands{$chr} = get_mutect_tn_command(
+						tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
+						normal		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
+						output		=> "$output_stem\_$chr.vcf",
+						java_mem	=> $tool_data->{parameters}->{mutect}->{java_mem},
+						tmp_dir		=> $tmp_directory,
+						intervals	=> $chr #$tool_data->{intervals_bed}
+						);
+
+					push @chr_parts, "$output_stem\_$chr.vcf";
+					}
 
 				# else, skip this sample
 				} else {
-				print $log "no PON or normal detected...skipping this sample...\n";
-				next;
+					print $log "no PON or normal detected...skipping this sample...\n";
+					next;
 				}
+
+			my ($mutect_command, $extra_cmds) = undef;
+			my @chr_jobs;
+
+			foreach $chr ( @chroms ) {
+
+				$mutect_command = $mutect_commands{$chr};
+
+				# this is a java-based command, so run a final check
+				$java_check = "\n" . check_java_output(
+					extra_cmd => "md5sum $output_stem\_$chr.vcf > $output_stem\_$chr.vcf.md5"
+					);
+
+				$mutect_command .= "\n$java_check";
+
+				# check if this should be run
+				if ('Y' eq missing_file("$output_stem\_$chr.vcf.md5")) {
+
+					# record command (in log directory) and then run job
+					print $log "Submitting job for MuTect2 ($chr)...\n";
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_mutect2_' . $sample . '_' . $chr,
+						cmd	=> $mutect_command,
+						modules	=> [$gatk],
+						dependencies	=> $args{dependencies},
+						max_time	=> $tool_data->{parameters}->{mutect}->{time},
+						mem		=> $tool_data->{parameters}->{mutect}->{mem},
+						cpus_per_task	=> 4,
+						hpc_driver	=> $tool_data->{HPC_driver}
+						);
+
+					$run_id = submit_job(
+						jobname		=> 'run_mutect2_' . $sample . '_' . $chr,
+						shell_command	=> $run_script,
+						hpc_driver	=> $tool_data->{HPC_driver},
+						dry_run		=> $tool_data->{dry_run},
+						log_file	=> $log
+						);
+
+					push @chr_jobs, $run_id;
+					push @patient_jobs, $run_id;
+					push @all_jobs, $run_id;
+					}
+				else {
+					print $log "Skipping MuTect2 ($chr) because this has already been completed!\n";
+					}
+				}
+
+			# now combine all chr output
+			my $merge_chr_command = join(' ',
+				'vcf-concat',
+				@chr_parts,
+				'>', $merged_output
+				);
 
 			# this is a java-based command, so run a final check
 			$java_check = "\n" . check_java_output(
-				extra_cmd => "md5sum $output_stem.vcf > $output_stem.vcf.md5"
+				extra_cmd => "md5sum $merged_output.vcf > $merged_output.vcf.md5"
 				);
 
-			$mutect_command .= "\n$java_check";
+			$merge_chr_command .= "\n$java_check";
+
+			$cleanup_cmd .= "\nrm $merged_output";
 
 			# check if this should be run
-			if ('Y' eq missing_file($output_stem . '.vcf.md5')) {
+			if ('Y' eq missing_file("$merged_output.vcf.md5")) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for MuTect2...\n";
+				print $log "Submitting job for Merge step...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
-					name	=> 'run_mutect2_' . $sample,
-					cmd	=> $mutect_command,
-					modules	=> [$gatk],
-					dependencies	=> $run_id,
-					max_time	=> $tool_data->{parameters}->{mutect}->{time},
-					mem		=> $tool_data->{parameters}->{mutect}->{mem},
-					cpus_per_task	=> 4,
+					name	=> 'run_combine_chromosome_output_' . $sample,
+					cmd	=> $merge_chr_command,
+					modules	=> [$vcftools],
+					dependencies	=> join(',', @chr_jobs),
+					max_time	=> $tool_data->{parameters}->{merge}->{time},
+					mem		=> $tool_data->{parameters}->{merge}->{mem},
+					cpus_per_task	=> 1,
 					hpc_driver	=> $tool_data->{HPC_driver}
 					);
 
 				$run_id = submit_job(
-					jobname		=> 'run_mutect2_' . $sample,
+					jobname		=> 'run_combine_chromosome_output_' . $sample,
 					shell_command	=> $run_script,
 					hpc_driver	=> $tool_data->{HPC_driver},
 					dry_run		=> $tool_data->{dry_run},
@@ -865,18 +959,19 @@ sub main {
 				push @all_jobs, $run_id;
 				}
 			else {
-				print $log "Skipping MuTect2 because this has already been completed!\n";
+				print $log "Skipping Merge chromosomes because this has already been completed!\n";
 				}
 
 			# filter results
 			my $filter_command = get_filter_command(
-				input		=> $output_stem . '.vcf',
+				input		=> $merged_output . '.vcf',
+				intervals	=> $tool_data->{intervals_bed},
 				output_stem	=> $output_stem . '_filtered',
 				tmp_dir		=> $tmp_directory,
 				split		=> 1
 				);
 
-			$filter_command .= "\n" . join(' ',
+			$filter_command .= "\n\n" . join(' ',
 				'md5sum', $output_stem . "_filtered_snps.vcf",
 				'>', $output_stem . "_filtered_snps.vcf.md5"
 				);
@@ -922,7 +1017,7 @@ sub main {
 				}
 
 			### Run variant annotation (VEP + vcf2maf)
-			my ($vcf2maf_cmd, $final_vcf, $final_maf) = '';
+			my ($vcf2maf_cmd, $final_vcf, $final_maf, $maf_run_id) = '';
 
 			my @var_types = qw(snps indels);
 			foreach my $vtype (@var_types) {
@@ -931,7 +1026,7 @@ sub main {
 				$final_maf = join('_', $output_stem, "filtered", $vtype, "annotated.maf");
 
 				# Tumour only, with a panel of normals
-				if ( (defined($tool_data->{pon})) && (scalar(@normal_ids) == 0) ) {
+				if ( (defined($pon)) && (scalar(@normal_ids) == 0) ) {
 
 					$vcf2maf_cmd = get_vcf2maf_command(
 						input           => join('_', $output_stem, "filtered", $vtype . ".vcf"),
@@ -962,15 +1057,22 @@ sub main {
 						vep_data        => $tool_data->{parameters}->{annotate}->{vep_data},
 						filter_vcf      => $tool_data->{parameters}->{annotate}->{filter_vcf}
 						);
+
+					} else {
+					next;
 					}
 
 				# check if this should be run
 				if ('Y' eq missing_file($final_maf . '.md5')) {
 
 					# make sure to remove temp files from previous attempts
-					my $tmp_file = join('/', $tmp_directory, $sample . "_MuTect2_filtered_$vtype.vep.vcf");
+					my $tmp_file = join('/',
+						$tmp_directory,
+						$sample . "_MuTect2_filtered_$vtype.vep.vcf"
+						);
+
 					if ('N' eq missing_file($tmp_file)) {
-						$vcf2maf_cmd = "rm $tmp_file ;\n\n$vcf2maf_cmd";
+						`rm $tmp_file`;
 						}
 
 					# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
@@ -1000,7 +1102,7 @@ sub main {
 						hpc_driver      => $tool_data->{HPC_driver}
 						);
 
-					$run_id = submit_job(
+					$maf_run_id = submit_job(
 						jobname         => 'run_vcf2maf_and_VEP_' . $sample . '_' . $vtype,
 						shell_command   => $run_script,
 						hpc_driver      => $tool_data->{HPC_driver},
@@ -1008,8 +1110,8 @@ sub main {
 						log_file	=> $log
 						);
 
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
+					push @patient_jobs, $maf_run_id;
+					push @all_jobs, $maf_run_id;
 					}
 				else {
 					print $log "Skipping vcf2maf ($vtype) because this has already been completed!\n";
@@ -1105,6 +1207,7 @@ my $remove_junk = 'N';
 my $dry_run = 'Y';
 my $dependencies = '';
 my $panel_of_normals = undef;
+my $chromosomes = undef;
 
 # get command line arguments
 GetOptions(
@@ -1116,7 +1219,8 @@ GetOptions(
 	'h|hpc=s'			=> \$hpc_driver,
 	'r|remove=s'			=> \$remove_junk,
 	'n|dry_run=s'			=> \$dry_run,
-	'depends=s'			=> \$dependencies
+	'depends=s'			=> \$dependencies,
+	'chromosomes=s'			=> \$chromosomes
 	);
 
 # do some quick error checks to confirm valid arguments	
@@ -1143,6 +1247,7 @@ if ($create_pon) {
 		del_intermediates	=> $remove_junk,
 		dry_run			=> $dry_run,
 		pon			=> $panel_of_normals,
-		dependencies		=> $dependencies
+		dependencies		=> $dependencies,
+		chromosomes		=> $chromosomes
 		);
 }
