@@ -32,6 +32,33 @@ require "$cwd/utilities.pl";
 # 	-n indicates whether or not this is a dry run (Y/N)
 
 ### DEFINE SUBROUTINES #############################################################################
+# format command to extract callability metrics (exome data only)
+sub get_callableLoci_command {
+	my %args = (
+		input		=> undef,
+		output		=> undef,
+		java_mem	=> undef,
+		tmp_dir		=> undef,
+		reference	=> undef,
+		intervals	=> undef,
+		@_
+		);
+
+	my $coverage_command = join(' ',
+		'java -Xmx' . $args{java_mem},
+		'-Djava.io.tmpdir=' . $args{tmp_dir},
+		'-jar $gatk_dir/GenomeAnalysisTK.jar -T DiagnoseTargets',
+		'-R', $args{reference},
+		'-I', $args{input},
+		'-o', $args{output},
+		'--intervals', $args{intervals},
+		'--minimum_coverage 10',
+		'--maximum_coverage 1000000' #default is 1073741823
+		);
+
+	return($coverage_command);
+	}
+
 # format command to extract coverage metrics
 sub get_coverage_command {
 	my %args = (
@@ -120,7 +147,6 @@ sub find_callable_bases_step2 {
 	my $n_samples = scalar(@{$args{input_files}});
 	my $cb_command = join(' ',
 		'bedtools multiinter',
-	#	' -header -names', $args{sample_names},
 		'-i', join(' ', @{$args{input_files}}),
 		"| awk '$n_samples == \$4 { print \$0 }'",
 		'| cut -f1-3',
@@ -335,8 +361,8 @@ sub main {
 				push @patient_cb_files, $sample . "_mincov_collapsed_sorted.bed";
 				} else {
 				$cb_command .= join(' ',
-					"mv", $cb_output . "*",
-					$patient_directory
+					"\nmv", $cb_output . "*",
+					$patient_directory . "/"
 					);
 				push @final_outputs, $patient_directory . "/$sample\_mincov_collapsed_sorted.bed";
 				}
@@ -381,8 +407,8 @@ sub main {
 			my $cb_intersect = join('/', $patient_directory, $patient . '_CallableBases_intersect.tsv');
 
 			my $cb_command2 = "\ncd $tmp_directory\n\n";
-			$cb_command2 = find_callable_bases_step2(
-				input_files	=> @patient_cb_files,
+			$cb_command2 .= find_callable_bases_step2(
+				input_files	=> \@patient_cb_files,
 				output		=> $cb_intersect
 				);
 
