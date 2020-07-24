@@ -1,0 +1,13 @@
+---
+tool: mavis
+tool_version: 2.2.5
+ref_type: hg38
+reference: /cluster/tools/data/genomes/human/hg38/iGenomes/Sequence/WholeGenomeFasta/genome.fa
+mavis_annotations: /cluster/projects/pughlab/references/MAVIS_ref/ensembl79_hg38_annotations.json
+mavis_masking: /cluster/projects/pughlab/references/MAVIS_ref/GRCh38_masking.tab
+mavis_dgv_anno: /cluster/projects/pughlab/references/MAVIS_ref/dgv_hg38_variants.tab
+mavis_cytoband: /cluster/projects/pughlab/references/MAVIS_ref/cytoBand.txt
+mavis_draw_fusions_only: false
+mavis_aligner: 'bwa mem'
+bwa_version: 0.7.15
+bwa_ref: /cluster/projects/pughlab/references/bwa_index/hg38/genome.fa
