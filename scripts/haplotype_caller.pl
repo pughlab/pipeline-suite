@@ -25,19 +25,21 @@ our ($reference, $dbsnp);
 # 				change oncotator/funcotator to VEP (vcf2maf)
 # 1.3		sprokopec	added DNA-compatible options
 # 1.4		sprokopec	minor updates for compatibility with larger pipeline
+# 1.5		sprokopec	added help msg and cleaned up code
 
 ### USAGE ##########################################################################################
-# haplotype_caller.pl -t tool.yaml -d data.yaml -o /path/to/output/dir -h slurm -r Y -n Y --dna (or --rna)
+# haplotype_caller.pl -t tool.yaml -d data.yaml -o /path/to/output/dir -p PROJECTID -h slurm -r Y -n Y --rna
 #
 # where:
-# 	-t tool.yaml contains tool versions and parameters, reference information, etc.
-# 	-d data.yaml contains sample information (YAML file containing paths to BWA-aligned,
+# 	-t (tool.yaml) contains tool versions and parameters, reference information, etc.
+# 	-d (data.yaml) contains sample information (YAML file containing paths to BWA-aligned,
 # 	or STAR-aligned BAMs, post gatk processing)
-# 	-o /path/to/output/dir indicates tool-specific output directory
-# 	-h indicates hpc driver (ie, slurm)
-# 	-r indicates whether or not to remove intermediate files (Y/N)
-# 	-n indicates whether or not this is a dry run (Y/N)
-# 	--dna (or --rna) to indicate whether input is DNA or RNA based
+# 	-o (/path/to/output/dir) indicates tool-specific output directory
+# 	-p indicates project ID
+# 	-c indicates hpc driver (ie, slurm)
+# 	--remove indicates that intermediates will be removed
+# 	--dry_run indicates that this is a dry run
+# 	--rna to indicate whether input is RNA (STAR-aligned BAMs)
 
 ### DEFINE SUBROUTINES #############################################################################
 # format command to run GATK HaplotypeCaller
@@ -158,13 +160,6 @@ sub main{
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'gatk', data_type => $data_type);
-	my $date = strftime "%F", localtime;
-
-	# deal with extra arguments
-	$tool_data->{HPC_driver} = $args{hpc_driver};
-	$tool_data->{del_intermediates} = $args{del_intermediates};
-	$tool_data->{dry_run} = $args{dry_run};
-	$tool_data->{project} = $args{project};
 
 	# organize output and log directories
 	my $output_directory = $args{output_directory};
@@ -177,7 +172,7 @@ sub main{
 
 	# create a file to hold job metrics
 	my (@files, $run_count, $outfile, $touch_exit_status);
-	if ('N' eq $tool_data->{dry_run}) {
+	if ('N' eq $args{dry_run}) {
 		# initiate a file to hold job metrics
 		opendir(LOGFILES, $log_directory) or die "Cannot open $log_directory";
 		@files = grep { /slurm_job_metrics/ } readdir(LOGFILES);
@@ -322,14 +317,14 @@ sub main{
 					dependencies	=> $args{dependencies},
 					max_time	=> $tool_data->{parameters}->{haplotype_call}->{time},
 					mem		=> $tool_data->{parameters}->{haplotype_call}->{mem},
-					hpc_driver	=> $tool_data->{HPC_driver}
+					hpc_driver	=> $args{hpc_driver}
 					);
 
 				$run_id = submit_job(
 					jobname		=> 'run_haplotype_caller_' . $sample,
 					shell_command	=> $run_script,
-					hpc_driver	=> $tool_data->{HPC_driver},
-					dry_run		=> $tool_data->{dry_run},
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
 					log_file	=> $log
 					);
 
@@ -379,14 +374,14 @@ sub main{
 						dependencies	=> $run_id,
 						max_time	=> $tool_data->{parameters}->{filter_raw}->{time},
 						mem		=> $tool_data->{parameters}->{filter_raw}->{mem},
-						hpc_driver	=> $tool_data->{HPC_driver}
+						hpc_driver	=> $args{hpc_driver}
 						);
 
 					$run_id = submit_job(
 						jobname		=> 'run_filter_variants_' . $sample,
 						shell_command	=> $run_script,
-						hpc_driver	=> $tool_data->{HPC_driver},
-						dry_run		=> $tool_data->{dry_run},
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
 						log_file	=> $log
 						);
 
@@ -448,14 +443,14 @@ sub main{
 						dependencies	=> $run_id,
 						max_time	=> $tool_data->{parameters}->{annotate}->{time},
 						mem		=> $tool_data->{parameters}->{annotate}->{mem},
-						hpc_driver	=> $tool_data->{HPC_driver}
+						hpc_driver	=> $args{hpc_driver}
 						);
 
 					$run_id = submit_job(
 						jobname		=> 'run_vcf2maf_and_VEP_' . $sample,
 						shell_command	=> $run_script,
-						hpc_driver	=> $tool_data->{HPC_driver},
-						dry_run		=> $tool_data->{dry_run},
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
 						log_file	=> $log
 						);
 
@@ -472,7 +467,7 @@ sub main{
 
 		# should intermediate files be removed
 		# run per patient
-		if ('Y' eq $tool_data->{del_intermediates}) {
+		if ($args{del_intermediates}) {
 
 			print $log "Submitting job to clean up temporary/intermediate files...\n";
 
@@ -498,14 +493,14 @@ sub main{
 				dependencies	=> join(',', @patient_jobs),
 				max_time	=> '00:05:00',
 				mem		=> '256M',
-				hpc_driver	=> $tool_data->{HPC_driver}
+				hpc_driver	=> $args{hpc_driver}
 				);
 
 			$run_id = submit_job(
 				jobname		=> 'run_cleanup_' . $patient,
 				shell_command	=> $run_script,
-				hpc_driver	=> $tool_data->{HPC_driver},
-				dry_run		=> $tool_data->{dry_run},
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
 				log_file	=> $log
 				);
 			}
@@ -579,14 +574,14 @@ sub main{
 					dependencies	=> join(',', @all_jobs),
 					max_time	=> $tool_data->{parameters}->{combine_gvcfs}->{time},
 					mem		=> $tool_data->{parameters}->{combine_gvcfs}->{mem},
-					hpc_driver	=> $tool_data->{HPC_driver}
+					hpc_driver	=> $args{hpc_driver}
 					);
 
 				$run_id = submit_job(
 					jobname		=> 'run_combine_gvcfs_batch_' . $batch_idx,
 					shell_command	=> $run_script,
-					hpc_driver	=> $tool_data->{HPC_driver},
-					dry_run		=> $tool_data->{dry_run},
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
 					log_file	=> $log
 					);
 
@@ -599,7 +594,7 @@ sub main{
 		push @all_jobs, @batch_jobs;
 
 		# should intermediate files be removed
-		if ('Y' eq $tool_data->{del_intermediates}) {
+		if ($args{del_intermediates}) {
 
 			print $log "Submitting job to clean up temporary/intermediate files...\n";
 
@@ -618,14 +613,14 @@ sub main{
 				cmd	=> $cleanup_cmd_dna,
 				dependencies	=> join(',', @all_jobs),
 				mem		=> '256M',
-				hpc_driver	=> $tool_data->{HPC_driver}
+				hpc_driver	=> $args{hpc_driver}
 				);
 
 			$run_id = submit_job(
 				jobname		=> 'run_final_cleanup',
 				shell_command	=> $run_script,
-				hpc_driver	=> $tool_data->{HPC_driver},
-				dry_run		=> $tool_data->{dry_run},
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
 				log_file	=> $log
 				);
 			}
@@ -637,7 +632,7 @@ sub main{
 		my $collect_results = join(' ',
 			"Rscript $cwd/collect_snv_output.R",
 			'-d', $output_directory,
-			'-p', $tool_data->{project}
+			'-p', $args{project}
 			);
 
 		$run_script = write_script(
@@ -648,20 +643,20 @@ sub main{
 			dependencies	=> join(',', @all_jobs),
 			max_time	=> $tool_data->{parameters}->{combine_results}->{time},
 			mem		=> $tool_data->{parameters}->{combine_results}->{mem},
-			hpc_driver	=> $tool_data->{HPC_driver}
+			hpc_driver	=> $args{hpc_driver}
 			);
 
 		$run_id = submit_job(
 			jobname		=> 'combine_and_format_results',
 			shell_command	=> $run_script,
-			hpc_driver	=> $tool_data->{HPC_driver},
-			dry_run		=> $tool_data->{dry_run},
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
 			log_file	=> $log
 			);
 		}
 
 	# should job metrics be collected
-	if ('N' eq $tool_data->{dry_run}) {
+	unless ($args{dry_run}) {
 
 		# collect job stats
 		my $collect_metrics = collect_job_stats(
@@ -674,14 +669,14 @@ sub main{
 			name	=> 'output_job_metrics_' . $run_count,
 			cmd	=> $collect_metrics,
 			dependencies	=> join(',', @all_jobs),
-			hpc_driver	=> $tool_data->{HPC_driver}
+			hpc_driver	=> $args{hpc_driver}
 			);
 
 		$run_id = submit_job(
 			jobname		=> 'output_job_metrics',
 			shell_command	=> $run_script,
-			hpc_driver	=> $tool_data->{HPC_driver},
-			dry_run		=> $tool_data->{dry_run},
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
 			log_file	=> $log
 			);
 
@@ -700,24 +695,24 @@ sub main{
 # declare variables
 my ($data_config, $tool_config, $output_directory, $project_name);
 my $hpc_driver = 'slurm';
-my $remove_junk = 'N';
-my $dry_run = 'Y';
+my ($remove_junk, $dry_run);
 my $dependencies = '';
 
-my ($dna, $rna);
+my $rna;
+my $help;
 
 # get command line arguments
 GetOptions(
-	'd|data=s'		=> \$data_config,
-	't|tool=s'		=> \$tool_config,
-	'o|out_dir=s'		=> \$output_directory,
-	'h|hpc=s'		=> \$hpc_driver,
-	'r|remove=s'		=> \$remove_junk,
-	'n|dry_run=s'		=> \$dry_run,
-	'p|project=s'		=> \$project_name,
-	'depends=s'		=> \$dependencies,
-	'dna'			=> \$dna,
-	'rna'			=> \$rna
+	'h|help'	=> \$help,
+	'd|data=s'	=> \$data_config,
+	't|tool=s'	=> \$tool_config,
+	'o|out_dir=s'	=> \$output_directory,
+	'c|cluster=s'	=> \$hpc_driver,
+	'remove'	=> \$remove_junk,
+	'dry_run'	=> \$dry_run,
+	'p|project=s'	=> \$project_name,
+	'depends=s'	=> \$dependencies,
+	'rna'		=> \$rna
 	);
 
 # do some quick error checks to confirm valid arguments	
@@ -725,16 +720,8 @@ if (!defined($tool_config)) { die("No tool config file defined; please provide -
 if (!defined($data_config)) { die("No data config file defined; please provide -d | --data (ie, sample_config.yaml)"); }
 if (!defined($output_directory)) { die("No output directory defined; please provide -o | --out_dir"); }
 
-my $data_type;
-if ($dna && $rna) {
-	die("Please don't set both --dna and --rna; can only be one of these!");
-	} elsif ($dna) {
-	$data_type = 'dna';
-	} elsif ($rna) {
-	$data_type = 'rna';
-	} else {
-	die("No data type set; please set one of --dna or --rna to proceed!");
-	}
+my $data_type = 'dna';
+if ($rna) { $data_type = 'rna'; }
 
 main(
 	tool_config		=> $tool_config,

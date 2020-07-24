@@ -9,13 +9,14 @@ picard_version: 2.6.0
 r_version: 3.6.1
 # and indicate some parameters for job submission
 parameters:
+# common parameters (DNA + RNA)
     haplotype_call:
-        java_mem: 8g
+        java_mem: 11g
         mem: 12G
-        time: '12:00:00'
+        time: '72:00:00'
     filter_raw:
-        java_mem: 8g
-        mem: 12G
+        java_mem: 3g
+        mem: 4G
         time: '12:00:00'
     annotate:
         vcf2maf_path: /cluster/projects/pughlab/bin/vcf2maf-1.6.17/vcf2maf.pl
@@ -24,16 +25,18 @@ parameters:
         filter_vcf: /cluster/projects/pughlab/references/VEP_cache/ExAC_nonTCGA.r1.sites.hg19ToHg38.vep.vcf.gz
         mem: 12G
         time: '24:00:00'
+# RNA only parameters
     combine_results:
         run: Y
         mem: 12G
         time: '08:00:00'
+# DNA only parameters
     combine_gvcfs:
-        java_mem: 4g
+        java_mem: 5g
         mem: 6G
         time: '5-00:00:00'
     genotype_gvcfs:
-        java_mem: 4g
+        java_mem: 5g
         mem: 6G
         time: '5-00:00:00'
     vqsr:

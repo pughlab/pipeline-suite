@@ -2,9 +2,6 @@
 # common parameters
 project_name: PROJECTNAME
 output_dir: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/
-HPC_driver: Slurm
-del_intermediates: Y
-dry_run: N
 # tool parameters
 star_config: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/configs/star_aligner_config.yaml
 star_fusion_config: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/configs/star_fusion_config.yaml

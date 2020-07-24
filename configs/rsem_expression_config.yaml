@@ -12,6 +12,5 @@ parameters:
         mem: 4G
         time: '12:00:00'
     combine_results:
-        run: Y
         mem: 4G
         time: '04:00:00'

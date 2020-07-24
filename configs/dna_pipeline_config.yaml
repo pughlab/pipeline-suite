@@ -1,7 +1,6 @@
 ---
 # common parameters
 project_name: PROJECTNAME
-seq_type: exome # one of exome, wgs or targeted
 output_dir: /cluster/projects/pughlab/projects/PROJECTNAME/Exome/
 HPC_driver: Slurm
 del_intermediates: Y
@@ -23,3 +22,4 @@ variant_calling:
     varscan_config: /cluster/projects/pughlab/projects/PROJECTNAME/Exome/configs/varscan_config.yaml
     strelka_config: /cluster/projects/pughlab/projects/PROJECTNAME/Exome/configs/strelka_config.yaml
     delly_config: /cluster/projects/pughlab/projects/PROJECTNAME/Exome/configs/delly_config.yaml
+    mavis_config: /cluster/projects/pughlab/projects/PROJECTNAME/Exome/configs/mavis_config.yaml

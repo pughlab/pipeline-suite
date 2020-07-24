@@ -9,26 +9,28 @@ intervals_bed:
 dbsnp:
 # and indicate some parameters for job submission
 parameters:
+# RNA only parameter
     split_cigar:
-        java_mem: 8g
+        java_mem: 11g
         mem: 12G
         time: '24:00:00'
+# parameters for DNA and RNA
     target_creator:
-        java_mem: 6g
+        java_mem: 7g
         mem: 8G
         time: '24:00:00'
     realign:
-        java_mem: 10g
+        java_mem: 11g
         mem: 12G
         time: '24:00:00'
     bqsr:
-        java_mem: 10g
+        java_mem: 11g
         mem: 12G
         time:
             normal: '24:00:00'
             tumour: '48:00:00'
     recalibrate:
-        java_mem: 10g
+        java_mem: 11g
         mem: 12G
         time:
             normal: '24:00:00'

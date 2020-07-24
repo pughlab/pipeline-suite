@@ -34,6 +34,9 @@ sub main {
 	my %args = (
 		tool_config	=> undef,
 		data_config	=> undef,
+		cleanup		=> undef,
+		cluster		=> undef,
+		dry_run		=> undef,
 		@_
 		);
 
@@ -43,8 +46,7 @@ sub main {
 	### PREAMBLE ######################################################################################
 
 	# load tool config
-	my $tool_data_orig = LoadFile($tool_config);
-	my $tool_data = error_checking(tool_data => $tool_data_orig);
+	my $tool_data = LoadFile($tool_config);
 	my $date = strftime "%F", localtime;
 	my $timestamp = strftime "%F_%H-%M-%S", localtime;
 
@@ -64,7 +66,6 @@ sub main {
 	print $log "Running PughLab RNA-Seq pipeline.\n";
 	print $log "\n  Tool config used: $tool_config";
 	print $log "\n    Output directory: $output_directory";
-	print $log "\n      Batch: $timestamp";
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n---";
 
@@ -72,8 +73,19 @@ sub main {
 
 	my ($fc_run_id, $star_run_id, $gatk_run_id, $vc_run_id, $rsem_run_id, $starfus_run_id) = '';
 
+	# prepare directory structure
+	my $fc_directory = join('/', $output_directory, 'FusionCatcher');
+	my $star_directory = join('/', $output_directory, 'STAR');
+	my $starfus_directory = join('/', $output_directory, 'STAR-Fusion');
+	my $rsem_directory = join('/', $output_directory, 'RSEM');
+	my $gatk_directory = join('/', $output_directory, 'GATK');
+	my $vc_directory = join('/', $output_directory, 'HaplotypeCaller');
+
+	# indicate YAML files for processed BAMs
+	my $star_output_yaml = join('/', $star_directory, 'star_bam_config_' . $timestamp . '.yaml');
+	my $gatk_output_yaml = join('/', $gatk_directory, 'gatk_bam_config_' . $timestamp . '.yaml');
+
 	## run FusionCatcher pipeline
-	my $fc_directory = join('/', $output_directory, 'FusionCatcher', $timestamp);
 	unless(-e $fc_directory) { make_path($fc_directory); }
 
 	if (defined($tool_data->{fusioncatcher_config})) {
@@ -83,11 +95,16 @@ sub main {
 			"-o", $fc_directory,
 			"-t", $tool_data->{fusioncatcher_config},
 			"-d", $data_config,
-			"-h", $tool_data->{HPC_driver},
-			"-r", $tool_data->{del_intermediates},
-			"-n", $tool_data->{dry_run},
+			"-c", $args{cluster},
 			"-p", $tool_data->{project_name}
 			);
+
+		if ($args{cleanup}) {
+			$fc_command .= " --remove";
+			}
+		if ($args{dry_run}) {
+			$fc_command .= " --dry_run";
+			}
 
 		# record command (in log directory) and then run job
 		print $log "\n\nSubmitting job for fusioncatcher.pl\n";
@@ -98,11 +115,7 @@ sub main {
 		}
 
 	## run STAR-alignment pipeline
-	my $star_directory = join('/', $output_directory, 'STAR', $timestamp);
 	unless(-e $star_directory) { make_path($star_directory); }
-
-	# indicate yaml containing STAR-aligned BAMs
-	my $star_output_yaml = join('/', $star_directory, 'star_bam_config.yaml');
 
 	if (defined($tool_data->{star_config})) {
 
@@ -111,10 +124,17 @@ sub main {
 			"-o", $star_directory,
 			"-t", $tool_data->{star_config},
 			"-d", $data_config,
-			"-h", $tool_data->{HPC_driver},
-			"-r", $tool_data->{del_intermediates},
-			"-n", $tool_data->{dry_run}
+			"-b", $star_output_yaml,
+			"-c", $args{cluster},
+			"-p", $tool_data->{project_name}
 			);
+
+		if ($args{cleanup}) {
+			$star_command .= " --remove";
+			}
+		if ($args{dry_run}) {
+			$star_command .= " --dry_run";
+			}
 
 		# record command (in log directory) and then run job
 		print $log "Submitting job for star.pl\n";
@@ -128,7 +148,6 @@ sub main {
 		}
 
 	## run STAR-Fusion pipeline
-	my $starfus_directory = join('/', $output_directory, 'STAR-Fusion', $timestamp);
 	unless(-e $starfus_directory) { make_path($starfus_directory); }
 
 	if (defined($tool_data->{star_fusion_config})) {
@@ -138,12 +157,17 @@ sub main {
 			"-o", $starfus_directory,
 			"-t", $tool_data->{star_fusion_config},
 			"-d", $star_output_yaml,
-			"-h", $tool_data->{HPC_driver},
-			"-r", $tool_data->{del_intermediates},
-			"-n", $tool_data->{dry_run},
+			"-c", $args{cluster},
 			"-p", $tool_data->{project_name},
 			"--depends", $star_run_id
 			);
+
+		if ($args{cleanup}) {
+			$starfus_command .= " --remove";
+			}
+		if ($args{dry_run}) {
+			$starfus_command .= " --dry_run";
+			}
 
 		# record command (in log directory) and then run job
 		print $log "Submitting job for star_fusion.pl\n";
@@ -154,7 +178,6 @@ sub main {
 		}
 
 	## run RSEM pipeline
-	my $rsem_directory = join('/', $output_directory, 'RSEM', $timestamp);
 	unless(-e $rsem_directory) { make_path($rsem_directory); }
 
 	if (defined($tool_data->{rsem_config})) {
@@ -164,12 +187,17 @@ sub main {
 			"-o", $rsem_directory,
 			"-t", $tool_data->{rsem_config},
 			"-d", $star_output_yaml,
-			"-h", $tool_data->{HPC_driver},
-			"-r", $tool_data->{del_intermediates},
-			"-n", $tool_data->{dry_run},
+			"-c", $args{cluster},
 			"-p", $tool_data->{project_name},
 			"--depends", $star_run_id
 			);
+
+		if ($args{cleanup}) {
+			$rsem_command .= " --remove";
+			}
+		if ($args{dry_run}) {
+			$rsem_command .= " --dry_run";
+			}
 
 		# record command (in log directory) and then run job
 		print $log "Submitting job for rsem.pl\n";
@@ -179,11 +207,7 @@ sub main {
 		}
 
 	## run GATK indel realignment/recalibration pipeline
-	my $gatk_directory = join('/', $output_directory, 'GATK', $timestamp);
 	unless(-e $gatk_directory) { make_path($gatk_directory); }
-
-	# indicate yaml containing GATK-processed BAMs
-	my $gatk_output_yaml = join('/', $gatk_directory, 'gatk_bam_config.yaml');
 
 	if (defined($tool_data->{gatk_config})) {
 
@@ -193,11 +217,17 @@ sub main {
 			"-o", $gatk_directory,
 			"-t", $tool_data->{gatk_config},
 			"-d", $star_output_yaml,
-			"-h", $tool_data->{HPC_driver},
-			"-r", $tool_data->{del_intermediates},
-			"-n", $tool_data->{dry_run},
+			"-b", $gatk_output_yaml,
+			"-c", $args{cluster},
 			"--depends", $star_run_id
 			);
+
+		if ($args{cleanup}) {
+			$gatk_command .= " --remove";
+			}
+		if ($args{dry_run}) {
+			$gatk_command .= " --dry_run";
+			}
 
 		# record command (in log directory) and then run job
 		print $log "Submitting job for gatk.pl\n";
@@ -209,7 +239,6 @@ sub main {
 		}
 
 	## run GATK's HaplotypeCaller pipeline
-	my $vc_directory = join('/', $output_directory, 'HaplotypeCaller', $timestamp);
 	unless(-e $vc_directory) { make_path($vc_directory); }
 
 	if (defined($tool_data->{haplotype_caller_config})) {
@@ -220,12 +249,17 @@ sub main {
 			"-o", $vc_directory,
 			"-t", $tool_data->{haplotype_caller_config},
 			"-d", $gatk_output_yaml,
-			"-h", $tool_data->{HPC_driver},
-			"-r", $tool_data->{del_intermediates},
-			"-n", $tool_data->{dry_run},
+			"-c", $args{cluster},
 			"-p", $tool_data->{project_name},
 			"--depends", $gatk_run_id
 			);
+
+		if ($args{cleanup}) {
+			$vc_command .= " --remove";
+			}
+		if ($args{dry_run}) {
+			$vc_command .= " --dry_run";
+			}
 
 		# record command (in log directory) and then run job
 		print $log "Submitting job for haplotype_caller.pl\n";
@@ -242,16 +276,51 @@ sub main {
 
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
-my $tool_config;
-my $data_config;
+my ($tool_config, $data_config);
+my $hpc_driver = 'slurm';
+my ($remove_junk, $dry_run);
+
+my $help;
 
 # read in command line arguments
 GetOptions(
-	'c|config=s'	=> \$tool_config,
-	'd|data=s'	=> \$data_config
+	'h|help'	=> \$help,
+	't|tool=s'	=> \$tool_config,
+	'd|data=s'	=> \$data_config,
+	'c|cluster=s'	=> \$hpc_driver,
+	'remove'	=> \$remove_junk,
+	'dry_run'	=> \$dry_run
 	 );
 
-if (!defined($tool_config)) { die("No tool config file defined; please provide -c | --config (ie, tool_config.yaml)"); }
+if ($help) {
+	my $help_msg = join("\n",
+		"Options:",
+		"\t--help|-h\tPrint this help message",
+		"\t--data|-d\t<string> data config (yaml format)",
+		"\t--tool|-t\t<string> tool config (yaml format)",
+		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
+		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
+		"\t--dry_run\t<boolean> should jobs be submitted? (default: false)"
+		);
+
+	print $help_msg;
+	exit;
+	}
+
+if (!defined($tool_config)) { die("No tool config file defined; please provide -t | --tool (ie, tool_config.yaml)"); }
 if (!defined($data_config)) { die("No data config file defined; please provide -d | --data (ie, sample_config.yaml)"); }
 
-main(tool_config => $tool_config, data_config => $data_config);
+# check for compatible HPC driver; if not found, change dry_run to Y
+my @compatible_drivers = qw(slurm);
+if ( (!any { /$hpc_driver/ } @compatible_drivers ) && (!$dry_run) ) {
+	print "Unrecognized HPC driver requested: setting dry_run to true -- jobs will not be submitted but commands will be written to file.\n";
+	$dry_run = 1;
+	}
+
+main(
+	tool_config	=> $tool_config,
+	data_config	=> $data_config,
+	cluster		=> $hpc_driver,
+	cleanup		=> $remove_junk,
+	dry_run		=> $dry_run
+	);

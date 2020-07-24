@@ -8,7 +8,9 @@ gatk_version: 3.8
 samtools_version: 1.9
 vcftools_version: 0.1.15
 manta_version: 1.6.0
+r_version: 3.6.1
 intervals_bed: /cluster/projects/ovgroup/projects/OV_Superset/Combined/SureSelect_Human_All_Exon_V5+UTRs__hg38_trimmed_sorted.bed.gz
+gtf: /cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.GRCh38.genes.gtf
 # and indicate some parameters for job submission
 parameters:
     strelka:
@@ -26,10 +28,11 @@ parameters:
         vep_data: /cluster/projects/pughlab/references/VEP_cache/98
 #       filter_vcf: 0
         filter_vcf: /cluster/projects/pughlab/references/VEP_cache/ExAC_nonTCGA.r1.sites.hg19ToHg38.vep.vcf.gz 
-        mem: 28G
+        mem:
+            snps: 28G
+            indels: 8G
         time: '72:00:00'
-# only for DNA
-    combine:
+    combine: # for panel of normals
         java_mem: 3g
         mem: 4G
         time: '48:00:00'

@@ -6,9 +6,11 @@ reference: /cluster/tools/data/genomes/human/hg38/iGenomes/Sequence/WholeGenomeF
 samtools_version: 1.9
 vcftools_version: 0.1.15
 gatk_version: 3.8
-r_version: 3.3.0
+r_version: 3.6.1 # standard version
+r_version_seq: 3.3.0 # version required for sequenza_path
 sequenza_path: /cluster/projects/pughlab/src/sequenza_wrapper/SequenzaSingleSample_v2.1.R # note: this script is coded for hg38 only
 intervals_bed: /cluster/tools/data/genomes/human/hg38/SureSelect_Human_All_Exon_V5+UTRs_S04380219_Covered_for_bamqc_liftover_hg38.bed
+gtf: /cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.GRCh38.genes.gtf
 # and indicate some parameters for job submission
 parameters:
     varscan:
@@ -28,7 +30,9 @@ parameters:
         vep_data: /cluster/projects/pughlab/references/VEP_cache/98
 #       filter_vcf: 0
         filter_vcf: /cluster/projects/pughlab/references/VEP_cache/ExAC_nonTCGA.r1.sites.hg19ToHg38.vep.vcf.gz 
-        mem: 28G
+        mem:
+            snp: 28G
+            indel: 8G
         time: '72:00:00'
     combine:
         java_mem: 3g

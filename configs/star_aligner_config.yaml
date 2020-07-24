@@ -27,6 +27,5 @@ parameters:
         reference: /cluster/tools/data/genomes/human/hg38/iGenomes/Sequence/WholeGenomeFasta/genome.fa
         reference_gtf: /cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.GRCh38.genes.gtf
     combine_results:
-        run: Y
         mem: 4G
         time: '04:00:00'

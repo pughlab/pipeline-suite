@@ -23,19 +23,20 @@ our ($data_type, $reference, $known_1000g, $known_indels, $known_mills, $dbsnp);
 # 1.1		sprokopec	run GATKs indel realignment and recalibration on BWA aligned bams
 # 1.2		sprokopec	added functionality for processing of STAR-aligned RNA-Seq bams
 # 1.3		sprokopec	minor updates for compatibility with larger pipeline
+# 1.4		sprokopec	added help msg and cleaned up code
 
 ### USAGE ##########################################################################################
-# gatk.pl -t tool.yaml -d data.yaml -o /path/to/output/dir -h slurm -r Y -n Y --dna (or --rna)
+# gatk.pl -t tool.yaml -d data.yaml -o /path/to/output/dir -b /path/to/output/yaml -c slurm --remove --dry_ryn --rna
 #
 # where:
-#	-t tool.yaml contains tool versions and parameters, reference information, etc.
-#	-d data.yaml contains sample information (YAML file containing paths to BWA-aligned or
-#	STAR-aligned BAMs)
-#	-o /path/to/output/dir indicates tool-specific output directory
-#	-h indicates hpc driver (ie, slurm)
-#	-r indicates whether or not to remove intermediate files (Y/N)
-#	-n indicates whether or not this is a dry run (Y/N)
-#	--dna (or --rna) to indicate whether input is DNA (BWA) or RNA (STAR) based
+#	-t (tool.yaml) contains tool versions and parameters, reference information, etc.
+#	-d (data.yaml) contains sample information (YAML file containing paths to BWA-aligned or STAR-aligned BAMs)
+#	-o (/path/to/output/dir) indicates tool-specific output directory
+#	-b (/path/to/output/yaml) indicates output yaml for processed BAMs
+#	-c indicates hpc driver (ie, slurm)
+#	--remove indicates that intermediates will be removed
+#	--dry_run indicates that this is a dry run
+#	--rna to indicate whether input is RNA (STAR-aligned BAMs)
 
 ### SUBROUTINES ####################################################################################
 # format command to split Cigar Reads
@@ -251,19 +252,13 @@ sub main {
 
 	my $tool_config = $args{tool_config};
 	my $data_config = $args{data_config};
-	my $data_type = $args{data_type};
+	$data_type = $args{data_type};
 
 	### PREAMBLE ######################################################################################
 
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'gatk', data_type => $data_type);
-	my $date = strftime "%F", localtime;
-
-	# deal with extra arguments
-	$tool_data->{HPC_driver} = $args{hpc_driver};
-	$tool_data->{del_intermediates} = $args{del_intermediates};
-	$tool_data->{dry_run} = $args{dry_run};
 
 	# organize output and log directories
 	my $output_directory = $args{output_directory};
@@ -276,7 +271,7 @@ sub main {
 
 	# create a file to hold job metrics
 	my (@files, $run_count, $outfile, $touch_exit_status);
-	if ('N' eq $tool_data->{dry_run}) {
+	unless ($args{dry_run}) {
 		# initiate a file to hold job metrics (ensures that an existing file isn't overwritten by concurrent jobs)
 		opendir(LOGFILES, $log_directory) or die "Cannot open $log_directory";
 		@files = grep { /slurm_job_metrics/ } readdir(LOGFILES);
@@ -453,14 +448,14 @@ sub main {
 					max_time	=> $tool_data->{parameters}->{target_creator}->{time},
 					mem		=> $tool_data->{parameters}->{target_creator}->{mem},
 					cpus_per_task	=> scalar(@input_bams),
-					hpc_driver	=> $tool_data->{HPC_driver}
+					hpc_driver	=> $args{hpc_driver}
 					);
 
 				$run_id_patient = submit_job(
 					jobname		=> 'run_indel_realigner_target_creator_' . $patient,
 					shell_command	=> $run_script,
-					hpc_driver	=> $tool_data->{HPC_driver},
-					dry_run		=> $tool_data->{dry_run},
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
 					log_file	=> $log
 					);
 
@@ -517,14 +512,14 @@ sub main {
 					dependencies	=> $run_id_patient,
 					max_time	=> $tool_data->{parameters}->{realign}->{time},
 					mem		=> $tool_data->{parameters}->{realign}->{mem},
-					hpc_driver	=> $tool_data->{HPC_driver}
+					hpc_driver	=> $args{hpc_driver}
 					);
 
 				$run_id_patient = submit_job(
 					jobname		=> 'run_indel_realigner_' . $patient,
 					shell_command	=> $run_script,
-					hpc_driver	=> $tool_data->{HPC_driver},
-					dry_run		=> $tool_data->{dry_run},
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
 					log_file	=> $log
 					);
 
@@ -594,14 +589,14 @@ sub main {
 						dependencies	=> $args{dependencies},
 						max_time	=> $tool_data->{parameters}->{split_cigar}->{time},
 						mem		=> $tool_data->{parameters}->{split_cigar}->{mem},
-						hpc_driver	=> $tool_data->{HPC_driver}
+						hpc_driver	=> $args{hpc_driver}
 						);
 
 					$run_id_sample = submit_job(
 						jobname		=> 'run_split_cigar_' . $sample,
 						shell_command	=> $run_script,
-						hpc_driver	=> $tool_data->{HPC_driver},
-						dry_run		=> $tool_data->{dry_run},
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
 						log_file	=> $log
 						);
 
@@ -638,14 +633,14 @@ sub main {
 						dependencies	=> $run_id_sample,
 						max_time	=> $tool_data->{parameters}->{target_creator}->{time},
 						mem		=> $tool_data->{parameters}->{target_creator}->{mem},
-						hpc_driver	=> $tool_data->{HPC_driver}
+						hpc_driver	=> $args{hpc_driver}
 						);
 
 					$run_id_sample = submit_job(
 						jobname		=> 'run_indel_realigner_target_creator_' . $sample,
 						shell_command	=> $run_script,
-						hpc_driver	=> $tool_data->{HPC_driver},
-						dry_run		=> $tool_data->{dry_run},
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
 						log_file	=> $log
 						);
 
@@ -691,14 +686,14 @@ sub main {
 						dependencies	=> $run_id_sample,
 						max_time	=> $tool_data->{parameters}->{realign}->{time},
 						mem		=> $tool_data->{parameters}->{realign}->{mem},
-						hpc_driver	=> $tool_data->{HPC_driver}
+						hpc_driver	=> $args{hpc_driver}
 						);
 
 					$run_id_sample = submit_job(
 						jobname		=> 'run_indel_realigner_' . $sample,
 						shell_command	=> $run_script,
-						hpc_driver	=> $tool_data->{HPC_driver},
-						dry_run		=> $tool_data->{dry_run},
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
 						log_file	=> $log
 						);
 
@@ -747,7 +742,7 @@ sub main {
 						max_time	=> $tool_data->{parameters}->{bqsr}->{time}->{$type},
 						mem		=> $tool_data->{parameters}->{bqsr}->{mem},
 						cpus_per_task	=> 8,
-						hpc_driver	=> $tool_data->{HPC_driver}
+						hpc_driver	=> $args{hpc_driver}
 						);
 					}
 
@@ -762,15 +757,15 @@ sub main {
 						max_time	=> $tool_data->{parameters}->{bqsr}->{time}->{$type},
 						mem		=> $tool_data->{parameters}->{bqsr}->{mem},
 						cpus_per_task	=> 1,
-						hpc_driver	=> $tool_data->{HPC_driver}
+						hpc_driver	=> $args{hpc_driver}
 						);
 					}
 
 				$run_id_sample = submit_job(
 					jobname		=> 'run_base_quality_score_recalibrator_' . $sample,
 					shell_command	=> $run_script,
-					hpc_driver	=> $tool_data->{HPC_driver},
-					dry_run		=> $tool_data->{dry_run},
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
 					log_file	=> $log
 					);
 
@@ -823,14 +818,14 @@ sub main {
 					max_time	=> $tool_data->{parameters}->{recalibrate}->{time}->{$type},
 					mem		=> $tool_data->{parameters}->{recalibrate}->{mem},
 					cpus_per_task	=> $n_cpus,
-					hpc_driver	=> $tool_data->{HPC_driver}
+					hpc_driver	=> $args{hpc_driver}
 					);
 
 				$run_id_sample = submit_job(
 					jobname		=> 'run_apply_base_recalibration_' . $sample,
 					shell_command	=> $run_script,
-					hpc_driver	=> $tool_data->{HPC_driver},
-					dry_run		=> $tool_data->{dry_run},
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
 					log_file	=> $log
 					);
 
@@ -856,7 +851,7 @@ sub main {
 			}
 
 		# clean up/remove intermediate files
-		if ('Y' eq $tool_data->{del_intermediates}) {
+		if ($args{del_intermediates}) {
 
 			print $log "Submitting job to clean up temporary/intermediate files...\n";
 
@@ -875,14 +870,14 @@ sub main {
 				cmd	=> $cleanup_cmd,
 				dependencies	=> join(',', @patient_jobs),
 				mem		=> '256M',
-				hpc_driver	=> $tool_data->{HPC_driver}
+				hpc_driver	=> $args{hpc_driver}
 				);
 
 			$run_id_patient = submit_job(
 				jobname		=> 'run_cleanup_' . $patient,
 				shell_command	=> $run_script,
-				hpc_driver	=> $tool_data->{HPC_driver},
-				dry_run		=> $tool_data->{dry_run},
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
 				log_file	=> $log
 				);
 			}
@@ -892,7 +887,7 @@ sub main {
 		}
 
 	# if this is not a dry run, collect job metrics (exit status, mem, run time)
-	if ('N' eq $tool_data->{dry_run}) {
+	unless ($args{dry_run}) {
 
 		# collect job metrics
 		my $collect_metrics = collect_job_stats(
@@ -906,14 +901,14 @@ sub main {
 			cmd	=> $collect_metrics,
 			dependencies	=> join(',', @all_jobs),
 			mem		=> '256M',
-			hpc_driver	=> $tool_data->{HPC_driver}
+			hpc_driver	=> $args{hpc_driver}
 			);
 
 		$run_id_extra = submit_job(
 			jobname		=> 'output_job_metrics',
 			shell_command	=> $run_script,
-			hpc_driver	=> $tool_data->{HPC_driver},
-			dry_run		=> $tool_data->{dry_run},
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
 			log_file	=> $log
 			);
 
@@ -934,40 +929,51 @@ sub main {
 # declare variables
 my ($data_config, $tool_config, $output_directory, $output_config) = undef;
 my $hpc_driver = 'slurm';
-my $remove_junk = 'N';
-my $dry_run = 'Y';
+my ($remove_junk, $dry_run);
 my $dependencies = '';
-
-my ($dna, $rna);
+my $rna;
+my $help;
 
 # read in command line arguments
 GetOptions(
+	'h|help'	=> \$help,
 	'd|data=s'	=> \$data_config,
 	'o|out_dir=s'	=> \$output_directory,
-	'c|out_yaml=s'	=> \$output_config,
+	'b|out_yaml=s'	=> \$output_config,
 	't|tool=s'	=> \$tool_config,
-	'h|hpc=s'	=> \$hpc_driver,
-	'r|remove=s'	=> \$remove_junk,
-	'n|dry_run=s'	=> \$dry_run,
+	'c|cluster=s'	=> \$hpc_driver,
+	'remove'	=> \$remove_junk,
+	'dry_run'	=> \$dry_run,
 	'depends=s'	=> \$dependencies,
-	'dna'		=> \$dna,
 	'rna'		=> \$rna
 	);
+
+if ($help) {
+	my $help_msg = join("\n",
+		"Options:",
+		"\t--help|-h\tPrint this help message",
+		"\t--data|-d\t<string> data config (yaml format)",
+		"\t--tool|-t\t<string> tool config (yaml format)",
+		"\t--out_dir|-o\t<string> path to output directory",
+		"\t--out_yaml|-b\t<string> path to output yaml (listing GATK-processed BAMs)",
+		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
+		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
+		"\t--dry_run\t<boolean> should jobs be submitted? (default: false)",
+		"\t--rna\t<boolean> is the input RNA (STAR-aligned BAMs)? (default: false)",
+		"\t--depends\t<string> comma separated list of dependencies (optional)"
+		);
+
+	print $help_msg;
+	exit;
+	}
 
 # quick error checks to confirm valid arguments
 if (!defined($tool_config)) { die("No tool config file defined; please provide -t | --tool (ie, tool_config.yaml)"); }
 if (!defined($data_config)) { die("No data config file defined; please provide -d | --data (ie, sample_config.yaml)"); }
 if (!defined($output_directory)) { die("No output directory defined; please provide -o | --out_dir"); }
 
-if ($dna && $rna) {
-	die("Please don't set both --dna and --rna; can only be one of these!");
-	} elsif ($dna) {
-	$data_type = 'dna';
-	} elsif ($rna) {
-	$data_type = 'rna';
-	} else {
-	die("No data type set; please set one of --dna or --rna to proceed!");
-	}
+$data_type = 'dna';
+if ($rna) { $data_type = 'rna'; }
 
 # run it!
 main(

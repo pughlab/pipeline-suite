@@ -7,6 +7,7 @@ hapmap: /cluster/projects/ovgroup/projects/OV_Superset/Combined/hg38_population_
 intervals_bed: /cluster/tools/data/genomes/human/hg38/SureSelect_Human_All_Exon_V5+UTRs_S04380219_Covered_for_bamqc_liftover_hg38.bed
 samtools_version: 1.9
 bedtools_version: 2.27.1
+r_version: 3.6.1
 # and indicate some parameters for job submission
 parameters:
     contest:
