@@ -527,6 +527,8 @@ sub main {
 
 			$delly_run_id = `$delly_command`;
 			sleep(5);
+
+			print $log ">>> Final Delly job id: $delly_run_id\n\n";
 			}
 
 		## run Mavis SV annotation pipeline
@@ -541,8 +543,7 @@ sub main {
 				"-d", $gatk_output_yaml,
 				"--manta", $strelka_directory,
 				"--delly", $delly_directory,
-				"-c", $args{cluster},
-				"--depends", join(',', $delly_run_id, $strelka_run_id)
+				"-c", $args{cluster}
 				);
 
 			if ($args{cleanup}) {
@@ -556,8 +557,28 @@ sub main {
 			print $log "Submitting job for mavis.pl\n";
 			print $log "  COMMAND: $mavis_command\n\n";
 
-		#	$mavis_run_id = `$mavis_command`;
-		#	sleep(5);
+			# because mavis.pl will search provided directories and run based on what it finds
+			# (Manta/Delly resuts), this can only be run AFTER these respective jobs finish
+			# so, we will submit this with dependencies
+			my $run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_mavis',
+				cmd	=> $mavis_command,
+				modules	=> ['perl'],
+				dependencies	=> join(',', $delly_run_id, $strelka_run_id),
+				mem		=> '256M',
+				hpc_driver	=> $args{hpc_driver}
+				);
+
+			$mavis_run_id = submit_job(
+				jobname		=> $log_directory,
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			print $log ">>> MAVIS job id: $mavis_run_id\n\n";
 			}
 		}
 

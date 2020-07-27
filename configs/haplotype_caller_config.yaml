@@ -27,7 +27,6 @@ parameters:
         time: '24:00:00'
 # RNA only parameters
     combine_results:
-        run: Y
         mem: 12G
         time: '08:00:00'
 # DNA only parameters

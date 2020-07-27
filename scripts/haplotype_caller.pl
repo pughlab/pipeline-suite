@@ -626,7 +626,7 @@ sub main{
 			}
 		}
 
-	if ( ('rna' eq $data_type) && ('Y' eq $tool_data->{parameters}->{combine_results}->{run})) {
+	if ( ('rna' eq $data_type) ) {
 
 		# collect and combine results
 		my $collect_results = join(' ',
