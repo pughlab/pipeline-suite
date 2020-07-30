@@ -158,7 +158,7 @@ If your project is quite large (>20 samples), you may prefer to run the alignmen
 
 <pre><code>cd /path/to/output/GATK/
 
-cat \*/gatk_bam_config.yaml | awk 'NR <= 1 || !/^---/' > combined_gatk_bam_config.yaml
+cat gatk_bam_config\*.yaml | awk 'NR <= 1 || !/^---/' > combined_gatk_bam_config.yaml
 </code></pre>
 
 ### Preprocessing steps:
