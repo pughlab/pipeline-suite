@@ -172,7 +172,7 @@ sub main{
 
 	# create a file to hold job metrics
 	my (@files, $run_count, $outfile, $touch_exit_status);
-	if ('N' eq $args{dry_run}) {
+	unless ($args{dry_run}) {
 		# initiate a file to hold job metrics
 		opendir(LOGFILES, $log_directory) or die "Cannot open $log_directory";
 		@files = grep { /slurm_job_metrics/ } readdir(LOGFILES);

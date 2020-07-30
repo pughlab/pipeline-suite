@@ -424,10 +424,12 @@ sub main {
 
 			# create output stem
 			my $output_stem = join('/', $sample_directory, $sample . '_VarScan');
+			$cleanup_cmd .= "\nrm $output_stem";
 
 			# start with VarScan CNV caller
 			# only for paired tumour/normal
 			my $cnv_output = $output_stem . '.copynumber.called';
+			$cleanup_cmd .= "\nrm $cnv_output";
 
 			my $varscan_command = get_varscan_cnv_command(
 				tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
@@ -485,6 +487,9 @@ sub main {
 
 			$varscan_command .= "\n\nmd5sum $output_stem.snp > $output_stem.snp.md5";
 			$varscan_command .= "\nmd5sum $output_stem.indel > $output_stem.indel.md5";
+
+			$cleanup_cmd .= "\nrm $output_stem.snp";
+			$cleanup_cmd .= "\nrm $output_stem.indel";
 
 			# check if this should be run
 			if ('Y' eq missing_file("$output_stem.snp.md5")) {
@@ -568,6 +573,13 @@ sub main {
 				java_mem	=> '256M',
 				tmp_dir		=> $tmp_directory
 				);
+
+			$cleanup_cmd .= "\nrm $output_stem.indel.Germline";
+			$cleanup_cmd .= "\nrm $output_stem.snp.Germline";
+			$cleanup_cmd .= "\nrm $output_stem.indel.Somatic";
+			$cleanup_cmd .= "\nrm $output_stem.snp.Somatic";
+			$cleanup_cmd .= "\nrm $output_stem.indel.LOH";
+			$cleanup_cmd .= "\nrm $output_stem.snp.LOH";
 
 			# check if this should be run
 			if ('Y' eq missing_file("$output_stem.snp.Somatic.hc")) {

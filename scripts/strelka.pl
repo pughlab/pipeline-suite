@@ -871,7 +871,7 @@ sub main {
 			### Run variant annotation (VEP + vcf2maf)
 			my ($final_maf, $final_vcf, $vcf2maf_cmd, $extra_run_id);
 
-			my $normal_id = 'undef';
+			my $normal_id = undef;
 			if (scalar(@normal_ids) > 0) { $normal_id = $normal_ids[0]; }
 
 			# annotate INDELS

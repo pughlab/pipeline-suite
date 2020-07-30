@@ -38,7 +38,6 @@ save.session.profile <- function(file.name) {
 ### PREPARE SESSION ################################################################################
 # import libraries
 library(argparse);
-library(plyr);
 
 # import command line arguments
 parser <- ArgumentParser();

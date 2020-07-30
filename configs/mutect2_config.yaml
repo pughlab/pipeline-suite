@@ -22,7 +22,6 @@ parameters:
         mem: 2G
         time: '12:00:00'
     filter:
-        java_mem: 3g
         mem: 4G
         time: '12:00:00'
     annotate:

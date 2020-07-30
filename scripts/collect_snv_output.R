@@ -43,7 +43,6 @@ is.symlink <- function(file) {
 ### PREPARE SESSION ################################################################################
 # import libraries
 library(argparse);
-library(plyr);
 
 # import command line arguments
 parser <- ArgumentParser();

@@ -567,13 +567,13 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> join(',', $delly_run_id, $strelka_run_id),
 				mem		=> '256M',
-				hpc_driver	=> $args{hpc_driver}
+				hpc_driver	=> $args{cluster}
 				);
 
 			$mavis_run_id = submit_job(
 				jobname		=> $log_directory,
 				shell_command	=> $run_script,
-				hpc_driver	=> $args{hpc_driver},
+				hpc_driver	=> $args{cluster},
 				dry_run		=> $args{dry_run},
 				log_file	=> $log
 				);

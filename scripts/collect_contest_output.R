@@ -38,7 +38,6 @@ save.session.profile <- function(file.name) {
 ### PREPARE SESSION ################################################################################
 # import libraries
 library(argparse);
-library(plyr);
 
 # import command line arguments
 parser <- ArgumentParser();
@@ -83,7 +82,7 @@ lane.data <- do.call(rbind, lane.list);
 # format data
 meta.data$Sample <- rownames(meta.data);
 lane.data$Sample <- sapply(rownames(lane.data), function(i) { unlist(strsplit(as.character(i),'\\.'))[1] } );
-lane.data$name <- sapply(lane.data$name, function(i) { unlist(strsplit(as.character(i),'\\.'))[2] } );
+#lane.data$name <- sapply(lane.data$name, function(i) { unlist(strsplit(as.character(i),'\\.'))[2] } );
 
 # combine for writing
 formatted.data <- rbind(meta.data, lane.data);

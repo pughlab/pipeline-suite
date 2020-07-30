@@ -813,6 +813,10 @@ sub main {
 			# run MuTect
 			my $output_stem = join('/', $sample_directory, $sample . '_MuTect2');
 			my $merged_output = "$output_stem\_merged.vcf";
+	
+			if (scalar(@chroms) == 1) {
+				$merged_output = $output_stem . '_' . $chroms[0] . ".vcf";
+				}
 
 			my %mutect_commands;
 			my $chr;
@@ -915,7 +919,10 @@ sub main {
 				$mutect_command .= "\n$java_check";
 
 				# check if this should be run
-				if ('Y' eq missing_file("$output_stem\_$chr.vcf.md5")) {
+				if (
+					('Y' eq missing_file("$output_stem\_$chr.vcf.md5")) &&
+					('Y' eq missing_file("$merged_output.md5"))
+					) {
 
 					# record command (in log directory) and then run job
 					print $log "Submitting job for MuTect2 ($chr)...\n";
@@ -950,9 +957,7 @@ sub main {
 				}
 
 			# combine all chr output if necessary
-			if (scalar(@chroms) == 1) {
-				$merged_output = $output_stem . '_' . $chroms[0] . ".vcf";
-				} else {
+			if (scalar(@chroms) > 1) {
 				my $merge_chr_command = join(' ',
 					'vcf-concat',
 					@chr_parts,
