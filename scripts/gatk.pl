@@ -11,6 +11,7 @@ use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
 use List::Util qw(any);
+use IO::Handle;
 
 my $cwd = dirname($0);
 require "$cwd/utilities.pl";
@@ -246,7 +247,7 @@ sub main {
 		hpc_driver		=> undef,
 		del_intermediates	=> undef,
 		dry_run			=> undef,
-		dependencies		=> '',
+		no_wait			=> undef,
 		@_
 		);
 
@@ -287,6 +288,7 @@ sub main {
 
 	# start logging
 	open (my $log, '>', $log_file) or die "Could not open $log_file for writing.";
+	$log->autoflush;
 
 	print $log "---\n";
 	if ('dna' eq $data_type) {
@@ -444,7 +446,6 @@ sub main {
 					name	=> 'run_indel_realigner_target_creator_' . $patient,
 					cmd	=> $stage1_cmd,
 					modules	=> [$gatk],
-					dependencies	=> $args{dependencies},
 					max_time	=> $tool_data->{parameters}->{target_creator}->{time},
 					mem		=> $tool_data->{parameters}->{target_creator}->{mem},
 					cpus_per_task	=> scalar(@input_bams),
@@ -586,7 +587,6 @@ sub main {
 						name	=> 'run_split_cigar_' . $sample,
 						cmd	=> $split_cmd,
 						modules	=> [$gatk, $samtools],
-						dependencies	=> $args{dependencies},
 						max_time	=> $tool_data->{parameters}->{split_cigar}->{time},
 						mem		=> $tool_data->{parameters}->{split_cigar}->{mem},
 						hpc_driver	=> $args{hpc_driver}
@@ -853,33 +853,38 @@ sub main {
 		# clean up/remove intermediate files
 		if ($args{del_intermediates}) {
 
-			print $log "Submitting job to clean up temporary/intermediate files...\n";
+			if (scalar(@patient_jobs) == 0) {
+				`rm -rf $tmp_directory`;
+				} else {
 
-			# make sure final output exists before removing intermediate files!
-			$cleanup_cmd = join("\n",
-				"if [ -s " . join(" ] && [ -s ", @final_outputs) . " ]; then",
-				$cleanup_cmd,
-				"else",
-				'echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
-				"fi"
-				);
+				print $log "Submitting job to clean up temporary/intermediate files...\n";
 
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'run_cleanup_' . $patient,
-				cmd	=> $cleanup_cmd,
-				dependencies	=> join(',', @patient_jobs),
-				mem		=> '256M',
-				hpc_driver	=> $args{hpc_driver}
-				);
+				# make sure final output exists before removing intermediate files!
+				$cleanup_cmd = join("\n",
+					"if [ -s " . join(" ] && [ -s ", @final_outputs) . " ]; then",
+					$cleanup_cmd,
+					"else",
+					'echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
+					"fi"
+					);
 
-			$run_id_patient = submit_job(
-				jobname		=> 'run_cleanup_' . $patient,
-				shell_command	=> $run_script,
-				hpc_driver	=> $args{hpc_driver},
-				dry_run		=> $args{dry_run},
-				log_file	=> $log
-				);
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_cleanup_' . $patient,
+					cmd	=> $cleanup_cmd,
+					dependencies	=> join(':', @patient_jobs),
+					mem		=> '256M',
+					hpc_driver	=> $args{hpc_driver}
+					);
+
+				$run_id_patient = submit_job(
+					jobname		=> 'run_cleanup_' . $patient,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+				}
 			}
 
 		print $log "FINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
@@ -899,7 +904,7 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'output_job_metrics_' . $run_count,
 			cmd	=> $collect_metrics,
-			dependencies	=> join(',', @all_jobs),
+			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver}
 			);
@@ -912,10 +917,20 @@ sub main {
 			log_file	=> $log
 			);
 
-		# print the final job id to stdout to be collected by the master pipeline
-		print $run_id_extra;
-		} else {
-		print '000000';
+		# wait until it finishes
+		unless ($args{no_wait}) {
+
+			my $complete = 0;
+
+			while (!$complete) {
+				sleep(5);
+				my $status = `sacct --format='State' -j $run_id_extra`;
+				if ($status =~ m/COMPLETED/s) { $complete = 1; }
+				elsif ($status !~ m/PENDING|RUNNING/) {
+					die("Final GATK accounting job: $run_id_extra finished with errors.");
+					}
+				}
+			}
 		}
 
 	# finish up
@@ -929,10 +944,7 @@ sub main {
 # declare variables
 my ($data_config, $tool_config, $output_directory, $output_config) = undef;
 my $hpc_driver = 'slurm';
-my ($remove_junk, $dry_run);
-my $dependencies = '';
-my $rna;
-my $help;
+my ($remove_junk, $dry_run, $rna, $help, $no_wait);
 
 # read in command line arguments
 GetOptions(
@@ -943,8 +955,8 @@ GetOptions(
 	't|tool=s'	=> \$tool_config,
 	'c|cluster=s'	=> \$hpc_driver,
 	'remove'	=> \$remove_junk,
-	'dry_run'	=> \$dry_run,
-	'depends=s'	=> \$dependencies,
+	'dry-run'	=> \$dry_run,
+	'no-wait'	=> \$no_wait,
 	'rna'		=> \$rna
 	);
 
@@ -958,12 +970,12 @@ if ($help) {
 		"\t--out_yaml|-b\t<string> path to output yaml (listing GATK-processed BAMs)",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
-		"\t--dry_run\t<boolean> should jobs be submitted? (default: false)",
-		"\t--rna\t<boolean> is the input RNA (STAR-aligned BAMs)? (default: false)",
-		"\t--depends\t<string> comma separated list of dependencies (optional)"
+		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
+		"\t--no-wait\t<boolean> should we exit after job submission (true) or wait until all jobs have completed (false)? (default: false)",
+		"\t--rna\t<boolean> is the input RNA (STAR-aligned BAMs)? (default: false)"
 		);
 
-	print $help_msg;
+	print "$help_msg\n";
 	exit;
 	}
 
@@ -985,5 +997,5 @@ main(
 	del_intermediates	=> $remove_junk,
 	dry_run			=> $dry_run,
 	data_type		=> $data_type,
-	dependencies		=> $dependencies
+	no_wait			=> $no_wait
 	);

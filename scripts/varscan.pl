@@ -11,6 +11,7 @@ use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
 use List::Util 'first';
+use IO::Handle;
 
 my $cwd = dirname($0);
 require "$cwd/utilities.pl";
@@ -284,7 +285,7 @@ sub main {
 		hpc_driver		=> undef,
 		del_intermediates	=> undef,
 		dry_run			=> undef,
-		dependencies		=> '',
+		no_wait			=> undef,
 		@_
 		);
 
@@ -325,6 +326,7 @@ sub main {
 
 	# start logging
 	open (my $log, '>', $log_file) or die "Could not open $log_file for writing.";
+	$log->autoflush;
 
 	print $log "---\n";
 	print $log "Running VarScan variant calling pipeline in T/N mode.\n";
@@ -416,7 +418,7 @@ sub main {
 			my $sequenza_directory = join('/', $sample_directory, 'Sequenza');
 			unless(-e $sequenza_directory) { make_path($sequenza_directory); }
 
-			$run_id = $args{dependencies};
+			$run_id = '';
 			$cnv_run_id = '';
 			$varscan_run_id = '';
 			$sequenza_run_id = '';
@@ -429,7 +431,7 @@ sub main {
 			# start with VarScan CNV caller
 			# only for paired tumour/normal
 			my $cnv_output = $output_stem . '.copynumber.called';
-			$cleanup_cmd .= "\nrm $cnv_output";
+			$cleanup_cmd .= "\nrm $output_stem.copynumber";
 
 			my $varscan_command = get_varscan_cnv_command(
 				tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
@@ -454,7 +456,6 @@ sub main {
 					name	=> 'run_varscan_cnv_' . $sample,
 					cmd	=> $varscan_command,
 					modules	=> [$samtools, $varscan],
-					dependencies	=> $run_id,
 					max_time	=> $tool_data->{parameters}->{varscan}->{time},
 					mem		=> $tool_data->{parameters}->{varscan}->{mem},
 					hpc_driver	=> $args{hpc_driver}
@@ -502,7 +503,6 @@ sub main {
 					name	=> 'run_varscan_snv_for_sequenza_' . $sample,
 					cmd	=> $varscan_command,
 					modules	=> [$samtools, $varscan],
-					dependencies	=> $run_id,
 					max_time	=> $tool_data->{parameters}->{varscan}->{time},
 					mem		=> $tool_data->{parameters}->{varscan}->{mem},
 					hpc_driver	=> $args{hpc_driver}
@@ -544,7 +544,7 @@ sub main {
 					name	=> 'run_sequenza_' . $sample,
 					cmd	=> $sequenza_command,
 					modules	=> [$r_sequenza],
-					dependencies	=> join(',', $run_id, $varscan_run_id, $cnv_run_id),
+					dependencies	=> join(':', $varscan_run_id, $cnv_run_id),
 					max_time	=> $tool_data->{parameters}->{sequenza}->{time},
 					mem		=> $tool_data->{parameters}->{sequenza}->{mem},
 					hpc_driver	=> $args{hpc_driver}
@@ -638,7 +638,6 @@ sub main {
 					name	=> 'run_varscan_snv_' . $sample,
 					cmd	=> $varscan_command,
 					modules	=> [$samtools, $varscan],
-					dependencies	=> $run_id,
 					max_time	=> $tool_data->{parameters}->{varscan}->{time},
 					mem		=> $tool_data->{parameters}->{varscan}->{mem},
 					hpc_driver	=> $args{hpc_driver}
@@ -704,7 +703,7 @@ sub main {
 						name	=> join('_', 'run_vcf_filter', $vtype, $sample),
 						cmd	=> $filter_command,
 						modules	=> ['tabix'],
-						dependencies	=> join(',', @dependencies),
+						dependencies	=> join(':', @dependencies),
 						max_time	=> $tool_data->{parameters}->{filter}->{time},
 						mem		=> $tool_data->{parameters}->{filter}->{mem},
 						hpc_driver	=> $args{hpc_driver}
@@ -853,7 +852,7 @@ sub main {
 					name	=> 'collapse_germline_calls_' . $patient,
 					cmd	=> $format_germline_cmd,
 					modules	=> ['perl', $vcftools, 'tabix'],
-					dependencies	=> join(',', @patient_jobs),
+					dependencies	=> join(':', @patient_jobs),
 					hpc_driver	=> $args{hpc_driver}
 					);
 
@@ -875,39 +874,45 @@ sub main {
 		# run per patient
 		if ($args{del_intermediates}) {
 
-			print $log "Submitting job to clean up temporary/intermediate files...\n";
+			if (scalar(@patient_jobs) == 0) {
+				`rm -rf $tmp_directory`;
 
-			# make sure final output exists before removing intermediate files!
-			my @files_to_check;
-			foreach my $tmp ( @final_outputs ) {
-				$tmp .= '.md5';
-				push @files_to_check, $tmp;
+				} else {
+
+				print $log "Submitting job to clean up temporary/intermediate files...\n";
+
+				# make sure final output exists before removing intermediate files!
+				my @files_to_check;
+				foreach my $tmp ( @final_outputs ) {
+					$tmp .= '.md5';
+					push @files_to_check, $tmp;
+					}
+
+				$cleanup_cmd = join("\n",
+					"if [ -s " . join(" ] && [ -s ", @files_to_check) . " ]; then",
+					"  $cleanup_cmd",
+					"else",
+					'  echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
+					"fi"
+					);
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_cleanup_' . $patient,
+					cmd	=> $cleanup_cmd,
+					dependencies	=> join(':', @patient_jobs),
+					mem		=> '256M',
+					hpc_driver	=> $args{hpc_driver}
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_cleanup_' . $patient,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
 				}
-
-			$cleanup_cmd = join("\n",
-				"if [ -s " . join(" ] && [ -s ", @files_to_check) . " ]; then",
-				"  $cleanup_cmd",
-				"else",
-				'  echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
-				"fi"
-				);
-
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'run_cleanup_' . $patient,
-				cmd	=> $cleanup_cmd,
-				dependencies	=> join(',', @patient_jobs),
-				mem		=> '256M',
-				hpc_driver	=> $args{hpc_driver}
-				);
-
-			$run_id = submit_job(
-				jobname		=> 'run_cleanup_' . $patient,
-				shell_command	=> $run_script,
-				hpc_driver	=> $args{hpc_driver},
-				dry_run		=> $args{dry_run},
-				log_file	=> $log
-				);
 			}
 
 		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
@@ -938,7 +943,7 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'create_panel_of_normals',
 			cmd	=> $pon_command,
-			dependencies	=> join(',', @all_jobs),
+			dependencies	=> join(':', @all_jobs),
 			modules		=> [$gatk, 'tabix'],
 			max_time	=> $tool_data->{parameters}->{combine}->{time},
 			mem		=> $tool_data->{parameters}->{combine}->{mem},
@@ -952,6 +957,8 @@ sub main {
 			dry_run		=> $args{dry_run},
 			log_file	=> $log
 			);
+
+		push @all_jobs, $run_id;
 
 		# create a trimmed (sites only) output (this is the panel of normals)
 		$pon_command = generate_pon(
@@ -977,7 +984,7 @@ sub main {
 			name	=> 'create_sitesOnly_trimmed_panel_of_normals',
 			cmd	=> $pon_command,
 			modules	=> [$gatk],
-			dependencies	=> join(',', @all_jobs),
+			dependencies	=> join(':', @all_jobs),
 			max_time	=> $tool_data->{parameters}->{combine}->{time},
 			mem		=> $tool_data->{parameters}->{combine}->{mem},
 			hpc_driver	=> $args{hpc_driver}
@@ -1009,7 +1016,7 @@ sub main {
 		name	=> 'combine_sequenza_segment_calls',
 		cmd	=> $collect_output,
 		modules	=> [$r_version],
-		dependencies	=> join(',', @all_jobs),
+		dependencies	=> join(':', @all_jobs),
 		mem		=> '4G',
 		max_time	=> '12:00:00',
 		hpc_driver	=> $args{hpc_driver}
@@ -1036,8 +1043,8 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'output_job_metrics_' . $run_count,
 			cmd	=> $collect_metrics,
-			dependencies	=> join(',', @all_jobs),
-			mem		=> '1G',
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver}
 			);
 
@@ -1049,10 +1056,20 @@ sub main {
 			log_file	=> $log
 			);
 
-		# print the final job id to stdout to be collected by the master pipeline
-		print $run_id;
-		} else {
-		print '000000';
+		# wait until it finishes
+		unless ($args{no_wait}) {
+
+			my $complete = 0;
+
+			while (!$complete) {
+				sleep(5);
+				my $status = `sacct --format='State' -j $run_id`;
+				if ($status =~ m/COMPLETED/s) { $complete = 1; }
+				elsif ($status !~ m/PENDING|RUNNING/) {
+					die("Final VARSCAN accounting job: $run_id finished with errors.");
+					}
+				}
+			}
 		}
 
 	# finish up
@@ -1071,7 +1088,7 @@ sub unpaired_mode {
 		del_intermediates	=> undef,
 		dry_run			=> undef,
 		pon			=> undef,
-		dependencies		=> '',
+		no_wait			=> undef,
 		@_
 		);
 
@@ -1111,6 +1128,7 @@ sub unpaired_mode {
 
 	# start logging
 	open (my $log, '>', $log_file) or die "Could not open $log_file for writing.";
+	$log->autoflush;
 
 	print $log "---\n";
 	print $log "Running VarScan variant calling pipeline in tumour-only mode.\n";
@@ -1195,7 +1213,7 @@ sub unpaired_mode {
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
 
-			$run_id = $args{dependencies};
+			$run_id = '';
 			$varscan_run_id = '';
 			my @snp_jobs;
 
@@ -1224,7 +1242,6 @@ sub unpaired_mode {
 					name	=> 'run_varscan_snv_' . $sample,
 					cmd	=> $varscan_command,
 					modules	=> [$samtools, $varscan],
-					dependencies	=> $run_id,
 					max_time	=> $tool_data->{parameters}->{varscan}->{time},
 					mem		=> $tool_data->{parameters}->{varscan}->{mem},
 					hpc_driver	=> $args{hpc_driver}
@@ -1350,7 +1367,7 @@ sub unpaired_mode {
 						name    => join('_', 'run_vcf2maf_and_VEP', $vtype, $sample),
 						cmd     => $vcf2maf_cmd,
 						modules => ['perl', $samtools, 'tabix'],
-						dependencies	=> join(',', @dependencies),
+						dependencies	=> join(':', @dependencies),
 						max_time	=> $tool_data->{parameters}->{annotate}->{time},
 						mem		=> $tool_data->{parameters}->{annotate}->{mem}->{$vtype},
 						hpc_driver	=> $args{hpc_driver}
@@ -1379,39 +1396,44 @@ sub unpaired_mode {
 		# run per patient
 		if ($args{del_intermediates}) {
 
-			print $log "Submitting job to clean up temporary/intermediate files...\n";
+			if (scalar(@patient_jobs) == 0) {
+				`rm -rf $tmp_directory`;
+				} else {
 
-			# make sure final output exists before removing intermediate files!
-			my @files_to_check;
-			foreach my $tmp ( @final_outputs ) {
-				$tmp .= '.md5';
-				push @files_to_check, $tmp;
+				print $log "Submitting job to clean up temporary/intermediate files...\n";
+
+				# make sure final output exists before removing intermediate files!
+				my @files_to_check;
+				foreach my $tmp ( @final_outputs ) {
+					$tmp .= '.md5';
+					push @files_to_check, $tmp;
+					}
+
+				$cleanup_cmd = join("\n",
+					"if [ -s " . join(" ] && [ -s ", @files_to_check) . " ]; then",
+					"  $cleanup_cmd",
+					"else",
+					'  echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
+					"fi"
+					);
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_cleanup_' . $patient,
+					cmd	=> $cleanup_cmd,
+					dependencies	=> join(':', @patient_jobs),
+					mem		=> '256M',
+					hpc_driver	=> $args{hpc_driver}
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_cleanup_' . $patient,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
 				}
-
-			$cleanup_cmd = join("\n",
-				"if [ -s " . join(" ] && [ -s ", @files_to_check) . " ]; then",
-				"  $cleanup_cmd",
-				"else",
-				'  echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
-				"fi"
-				);
-
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'run_cleanup_' . $patient,
-				cmd	=> $cleanup_cmd,
-				dependencies	=> join(',', @patient_jobs),
-				mem		=> '256M',
-				hpc_driver	=> $args{hpc_driver}
-				);
-
-			$run_id = submit_job(
-				jobname		=> 'run_cleanup_' . $patient,
-				shell_command	=> $run_script,
-				hpc_driver	=> $args{hpc_driver},
-				dry_run		=> $args{dry_run},
-				log_file	=> $log
-				);
 			}
 
 		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
@@ -1431,7 +1453,7 @@ sub unpaired_mode {
 		name	=> 'combine_variant_calls',
 		cmd	=> $collect_output,
 		modules	=> [$r_version],
-		dependencies	=> join(',', @all_jobs),
+		dependencies	=> join(':', @all_jobs),
 		mem		=> '16G',
 		max_time	=> '24:00:00',
 		hpc_driver	=> $args{hpc_driver}
@@ -1458,8 +1480,8 @@ sub unpaired_mode {
 			log_dir	=> $log_directory,
 			name	=> 'output_job_metrics_' . $run_count,
 			cmd	=> $collect_metrics,
-			dependencies	=> join(',', @all_jobs),
-			mem		=> '1G',
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver}
 			);
 
@@ -1471,10 +1493,20 @@ sub unpaired_mode {
 			log_file	=> $log
 			);
 
-		# print the final job id to stdout to be collected by the master pipeline
-		print $run_id;
-		} else {
-		print '000000';
+		# wait until it finishes
+		unless ($args{no_wait}) {
+
+			my $complete = 0;
+
+			while (!$complete) {
+				sleep(5);
+				my $status = `sacct --format='State' -j $run_id`;
+				if ($status =~ m/COMPLETED/s) { $complete = 1; }
+				elsif ($status !~ m/PENDING|RUNNING/) {
+					die("Final VARSCAN accounting job: $run_id finished with errors.");
+					}
+				}
+			}
 		}
 
 	# finish up
@@ -1486,8 +1518,7 @@ sub unpaired_mode {
 # declare variables
 my ($tool_config, $data_config, $output_directory, $project_id);
 my $hpc_driver = 'slurm';
-my ($remove_junk, $dry_run, $help);
-my $dependencies = '';
+my ($remove_junk, $dry_run, $help, $no_wait);
 my $run_mode = 'paired';
 my $panel_of_normals = undef;
 
@@ -1500,9 +1531,9 @@ GetOptions(
 	'p|project=s'	=> \$project_id,
 	'c|cluster=s'	=> \$hpc_driver,
 	'remove'	=> \$remove_junk,
-	'dry_run'	=> \$dry_run,
+	'dry-run'	=> \$dry_run,
+	'no-wait'	=> \$no_wait,
 	'mode=s'	=> \$run_mode,
-	'depends=s'	=> \$dependencies,
 	'pon=s'		=> \$panel_of_normals
 	);
 
@@ -1518,11 +1549,11 @@ if ($help) {
 		"\t--project|-p\t<string> project name",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
-		"\t--dry_run\t<boolean> should jobs be submitted? (default: false)",
-		"\t--depends\t<string> comma separated list of dependencies (optional)"
+		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
+		"\t--no-wait\t<boolean> should we exit after job submission (true) or wait until all jobs have completed (false)? (default: false)"
 		);
 
-	print $help_msg;
+	print "$help_msg\n";
 	exit;
 	}
 
@@ -1541,7 +1572,7 @@ if ('paired' eq $run_mode) {
 		hpc_driver		=> $hpc_driver,
 		del_intermediates	=> $remove_junk,
 		dry_run			=> $dry_run,
-		dependencies		=> $dependencies
+		no_wait			=> $no_wait
 		);
 
 	} elsif ('unpaired' eq $run_mode) {
@@ -1555,7 +1586,7 @@ if ('paired' eq $run_mode) {
 		hpc_driver		=> $hpc_driver,
 		del_intermediates	=> $remove_junk,
 		dry_run			=> $dry_run,
-		dependencies		=> $dependencies
+		no_wait			=> $no_wait
 		);
 
 	} else { die("--mode must be one of paired (for T/N mode and PoN generation) or unpaired"); }

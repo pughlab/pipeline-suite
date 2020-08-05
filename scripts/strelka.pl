@@ -10,6 +10,7 @@ use POSIX qw(strftime);
 use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
+use IO::Handle;
 
 my $cwd = dirname($0);
 require "$cwd/utilities.pl";
@@ -244,7 +245,7 @@ sub main {
 		hpc_driver		=> undef,
 		del_intermediates	=> undef,
 		dry_run			=> undef,
-		dependencies		=> '',
+		no_wait			=> undef,
 		@_
 		);
 
@@ -285,6 +286,7 @@ sub main {
 
 	# start logging
 	open (my $log, '>', $log_file) or die "Could not open $log_file for writing.";
+	$log->autoflush;
 
 	print $log "---\n";
 	print $log "Running Strelka variant calling pipeline.\n";
@@ -371,7 +373,7 @@ sub main {
 			my $germline_directory = join('/', $patient_directory, $norm);
 			unless(-e $germline_directory) { make_path($germline_directory); }
 
-			$run_id = $args{dependencies};
+			$run_id = '';
 
 			# run germline snv caller
 			my $germline_snv_command = get_strelka_germline_command(
@@ -414,7 +416,6 @@ sub main {
 					name	=> 'run_strelka_germline_variant_caller_' . $norm,
 					cmd	=> $germline_snv_command,
 					modules	=> [$strelka],
-					dependencies	=> $run_id,
 					max_time	=> $tool_data->{parameters}->{strelka}->{time},
 					mem		=> $tool_data->{parameters}->{strelka}->{mem},
 					hpc_driver	=> $args{hpc_driver}
@@ -523,7 +524,7 @@ sub main {
 			name	=> 'create_sitesOnly_trimmed_panel_of_normals',
 			cmd	=> $pon_command,
 			modules	=> [$gatk],
-			dependencies	=> join(',', @all_pon_jobs),
+			dependencies	=> join(':', @all_pon_jobs),
 			max_time	=> $tool_data->{parameters}->{combine}->{time},
 			mem		=> $tool_data->{parameters}->{combine}->{mem},
 			hpc_driver	=> $args{hpc_driver}
@@ -556,7 +557,7 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'create_panel_of_normals',
 			cmd	=> $pon_command,
-			dependencies	=> join(',', @all_pon_jobs, $pon_run_id),
+			dependencies	=> join(':', @all_pon_jobs, $pon_run_id),
 			modules		=> [$gatk, 'tabix'],
 			max_time	=> $tool_data->{parameters}->{combine}->{time},
 			mem		=> $tool_data->{parameters}->{combine}->{mem},
@@ -597,7 +598,7 @@ sub main {
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
 
-			$run_id = $args{dependencies};
+			$run_id = '';
 
 			# first, run MANTA to find small indels
 			my $manta_directory = join('/', $sample_directory, 'Manta');
@@ -632,6 +633,8 @@ sub main {
 
 			$cleanup{$patient} .= "\nrm -rf " . join('/', $manta_directory, 'workspace');
 
+			my $manta_run_id = '';
+
 			# check if this should be run
 			if ('Y' eq missing_file($manta_output)) {
 
@@ -649,13 +652,12 @@ sub main {
 					name	=> 'run_manta_' . $sample,
 					cmd	=> $manta_command,
 					modules	=> [$manta],
-					dependencies	=> $run_id,
 					max_time	=> $tool_data->{parameters}->{manta}->{time},
 					mem		=> $tool_data->{parameters}->{manta}->{mem},
 					hpc_driver	=> $args{hpc_driver}
 					);
 
-				$run_id = submit_job(
+				$manta_run_id = submit_job(
 					jobname		=> 'run_manta_' . $sample,
 					shell_command	=> $run_script,
 					hpc_driver	=> $args{hpc_driver},
@@ -663,7 +665,7 @@ sub main {
 					log_file	=> $log
 					);
 
-				push @{$patient_jobs{$patient}}, $run_id;
+				push @{$patient_jobs{$patient}}, $manta_run_id;
 				}
 			else {
 				print $log "Skipping MANTA because this has already been completed!\n";
@@ -695,8 +697,6 @@ sub main {
 					tmp_dir		=> $tmp_directory,
 					intervals	=> $tool_data->{intervals_bed}
 					);
-
-				$run_id = $args{dependencies};
 				}
 
 			$somatic_snv_command .= ";\n\n$sample_directory/runWorkflow.py --quiet -m local";
@@ -756,7 +756,7 @@ sub main {
 				$filter_command .= "\n\nmd5sum $filtered_indels > $filtered_indels.md5";
 
 				$required = $filtered_indels;;
-				$depends  = join(',', $run_id, $pon_run_id);
+				$depends  = join(':', $run_id, $pon_run_id, $manta_run_id);
 
 				} else {
 
@@ -790,8 +790,10 @@ sub main {
 				$filter_command .= "\n\nmd5sum $filtered_indels > $filtered_indels.md5";
 
 				$required = $filtered_indels;
-				$depends  = join(',', $run_id, $pon_run_id);
+				$depends  = join(':', $run_id, $pon_run_id, $manta_run_id);
 				}
+
+			my $strelka_run_id = '';
 
 			# if filter output already exists, don't re-run strelka caller
 			if (
@@ -817,13 +819,13 @@ sub main {
 					name	=> 'run_strelka_somatic_variant_caller_' . $sample,
 					cmd	=> $somatic_snv_command,
 					modules	=> [$strelka],
-					dependencies	=> $run_id,
+					dependencies	=> join(':', $run_id, $manta_run_id),
 					max_time	=> $tool_data->{parameters}->{strelka}->{time},
 					mem		=> $tool_data->{parameters}->{strelka}->{mem},
 					hpc_driver	=> $args{hpc_driver}
 					);
 
-				$run_id = submit_job(
+				$strelka_run_id = submit_job(
 					jobname		=> 'run_strelka_somatic_variant_caller_' . $sample,
 					shell_command	=> $run_script,
 					hpc_driver	=> $args{hpc_driver},
@@ -831,11 +833,13 @@ sub main {
 					log_file	=> $log
 					);
 
-				push @{$patient_jobs{$patient}}, $run_id;
+				push @{$patient_jobs{$patient}}, $strelka_run_id;
 				}
 			else {
 				print $log "Skipping Strelka (somatic) because this has already been completed!\n";
 				}
+
+			my $filter_run_id = '';
 
 			# check if this should be run
 			if ('Y' eq missing_file($required . '.md5')) {
@@ -848,13 +852,13 @@ sub main {
 					name	=> 'run_vcf_filter_somatic_variants_' . $sample,
 					cmd	=> $filter_command,
 					modules	=> [$vcftools],
-					dependencies	=> $depends,
+					dependencies	=> join(':', $depends, $strelka_run_id),
 					max_time	=> $tool_data->{parameters}->{filter}->{time},
 					mem		=> $tool_data->{parameters}->{filter}->{mem},
 					hpc_driver	=> $args{hpc_driver}
 					);
 
-				$run_id = submit_job(
+				$filter_run_id = submit_job(
 					jobname		=> 'run_vcf_filter_somatic_variants_' . $sample,
 					shell_command	=> $run_script,
 					hpc_driver	=> $args{hpc_driver},
@@ -862,14 +866,14 @@ sub main {
 					log_file	=> $log
 					);
 
-				push @{$patient_jobs{$patient}}, $run_id;
+				push @{$patient_jobs{$patient}}, $filter_run_id;
 				}
 			else {
 				print $log "Skipping VCF-Filter (somatic) because this has already been completed!\n";
 				}
 
 			### Run variant annotation (VEP + vcf2maf)
-			my ($final_maf, $final_vcf, $vcf2maf_cmd, $extra_run_id);
+			my ($final_maf, $final_vcf, $vcf2maf_cmd, $annotate_run_id);
 
 			my $normal_id = undef;
 			if (scalar(@normal_ids) > 0) { $normal_id = $normal_ids[0]; }
@@ -920,13 +924,13 @@ sub main {
 					name	=> 'run_VEP_and_vcf2maf_indels_' . $sample,
 					cmd	=> $vcf2maf_cmd,
 					modules	=> ['perl', $samtools, 'tabix'],
-					dependencies	=> $run_id,
+					dependencies	=> $filter_run_id,
 					max_time	=> $tool_data->{parameters}->{annotate}->{time},
 					mem		=> $tool_data->{parameters}->{annotate}->{mem}->{indels},
 					hpc_driver	=> $args{hpc_driver}
 					);
 
-				$extra_run_id = submit_job(
+				$annotate_run_id = submit_job(
 					jobname		=> 'run_VEP_and_vcf2maf_indels' . $sample,
 					shell_command	=> $run_script,
 					hpc_driver	=> $args{hpc_driver},
@@ -934,7 +938,7 @@ sub main {
 					log_file	=> $log
 					);
 
-				push @{$patient_jobs{$patient}}, $extra_run_id;
+				push @{$patient_jobs{$patient}}, $annotate_run_id;
 				}
 			else {
 				print $log "Skipping vcf2maf (indels) because this has already been completed!\n";
@@ -988,13 +992,13 @@ sub main {
 					name	=> 'run_VEP_and_vcf2maf_snvs_' . $sample,
 					cmd	=> $vcf2maf_cmd,
 					modules	=> ['perl', $samtools, 'tabix'],
-					dependencies	=> $run_id,
+					dependencies	=> $filter_run_id,
 					max_time	=> $tool_data->{parameters}->{annotate}->{time},
 					mem		=> $tool_data->{parameters}->{annotate}->{mem}->{snps},
 					hpc_driver	=> $args{hpc_driver}
 					);
 
-				$extra_run_id = submit_job(
+				$annotate_run_id = submit_job(
 					jobname		=> 'run_VEP_and_vcf2maf_snvs' . $sample,
 					shell_command	=> $run_script,
 					hpc_driver	=> $args{hpc_driver},
@@ -1002,7 +1006,7 @@ sub main {
 					log_file	=> $log
 					);
 
-				push @{$patient_jobs{$patient}}, $extra_run_id;
+				push @{$patient_jobs{$patient}}, $annotate_run_id;
 				}
 			else {
 				print $log "Skipping vcf2maf (snvs) because this has already been completed!\n";
@@ -1038,7 +1042,7 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> 'run_cleanup_' . $patient,
 					cmd	=> $cleanup_cmd,
-					dependencies	=> join(',', @{$patient_jobs{$patient}}),
+					dependencies	=> join(':', @{$patient_jobs{$patient}}),
 					mem		=> '256M',
 					hpc_driver	=> $args{hpc_driver}
 					);
@@ -1070,7 +1074,7 @@ sub main {
 		name	=> 'combine_variant_calls',
 		cmd	=> $collect_output,
 		modules	=> [$r_version],
-		dependencies	=> join(',', @all_jobs),
+		dependencies	=> join(':', @all_jobs),
 		mem		=> '16G',
 		max_time	=> '24:00:00',
 		hpc_driver	=> $args{hpc_driver}
@@ -1097,8 +1101,8 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'output_job_metrics_' . $run_count,
 			cmd	=> $collect_metrics,
-			dependencies	=> join(',', @all_jobs),
-			mem		=> '1G',
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver}
 			);
 
@@ -1110,10 +1114,20 @@ sub main {
 			log_file	=> $log
 			);
 
-		# print the final job id to stdout to be collected by the master pipeline
-		print $run_id;
-		} else {
-		print '000000';
+		# wait until it finishes
+		unless ($args{no_wait}) {
+
+			my $complete = 0;
+
+			while (!$complete) {
+				sleep(5);
+				my $status = `sacct --format='State' -j $run_id`;
+				if ($status =~ m/COMPLETED/s) { $complete = 1; }
+				elsif ($status !~ m/PENDING|RUNNING/) {
+					die("Final STRELKA accounting job: $run_id finished with errors.");
+					}
+				}
+			}
 		}
 
 	# finish up
@@ -1125,11 +1139,8 @@ sub main {
 # declare variables
 my ($tool_config, $data_config, $output_directory, $project_id);
 my $hpc_driver = 'slurm';
-my ($remove_junk, $dry_run);
-my $dependencies = '';
+my ($remove_junk, $dry_run, $help, $no_wait);
 my $panel_of_normals = undef;
-
-my $help;
 
 # get command line arguments
 GetOptions(
@@ -1140,8 +1151,8 @@ GetOptions(
 	'p|project=s'	=> \$project_id,
 	'c|cluster=s'	=> \$hpc_driver,
 	'remove'	=> \$remove_junk,
-	'dry_run'	=> \$dry_run,
-	'depends=s'	=> \$dependencies,
+	'dry-run'	=> \$dry_run,
+	'no-wait'	=> \$no_wait,
 	'pon=s'		=> \$panel_of_normals
 	);
 
@@ -1156,11 +1167,11 @@ if ($help) {
 		"\t--project|-p\t<string> project name",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
-		"\t--dry_run\t<boolean> should jobs be submitted? (default: false)",
-		"\t--depends\t<string> comma separated list of dependencies (optional)"
+		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
+		"\t--no-wait\t<boolean> should we exit after job submission (true) or wait until all jobs have completed (false)? (default: false)"
 		);
 
-	print $help_msg;
+	print "$help_msg\n";
 	exit;
 	}
 
@@ -1178,5 +1189,5 @@ main(
 	hpc_driver		=> $hpc_driver,
 	del_intermediates	=> $remove_junk,
 	dry_run			=> $dry_run,
-	dependencies		=> $dependencies
+	no_wait			=> $no_wait
 	);

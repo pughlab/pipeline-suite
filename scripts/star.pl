@@ -10,6 +10,7 @@ use Getopt::Long;
 use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
+use IO::Handle;
 
 my $cwd = dirname($0);
 require "$cwd/utilities.pl";
@@ -204,6 +205,7 @@ sub main {
 		del_intermediates	=> undef,
 		dry_run			=> undef,
 		project			=> undef,
+		no_wait			=> undef,
 		@_
 		);
 
@@ -231,7 +233,8 @@ sub main {
 	my $log_file = join('/', $log_directory, 'run_STAR_pipeline.log');
 
 	# create a file to hold job metrics
-	my (@files, $run_count, $outfile, $touch_exit_status);
+	my (@files, $outfile, $touch_exit_status);
+	my $run_count = 0;
 	unless ($args{dry_run}) {
 		# initiate a file to hold job metrics (ensures that an existing file isn't overwritten by concurrent jobs)
 		opendir(LOGFILES, $log_directory) or die "Cannot open $log_directory";
@@ -248,6 +251,7 @@ sub main {
 
 	# start logging
 	open (my $log, '>', $log_file) or die "Could not open $log_file for writing.";
+	$log->autoflush;
 
 	print $log "---\n";
 	print $log "Running STAR alignment pipeline.\n";
@@ -352,7 +356,7 @@ sub main {
 			my $readgroup = format_readgroup(
 				subject		=> $patient,
 				sample		=> $sample,
-				lane		=> join(',', @lanes),
+				lane		=> join(':', @lanes),
 				lib		=> $sample,
 				platform	=> $tool_data->{platform}
 				);
@@ -490,7 +494,7 @@ sub main {
 				log_dir	=> $log_directory,
 				name	=> 'run_cleanup_' . $patient,
 				cmd	=> $cleanup_cmd,
-				dependencies	=> join(',', @patient_jobs),
+				dependencies	=> join(':', @patient_jobs),
 				mem		=> '256M',
 				hpc_driver	=> $args{hpc_driver}
 				);
@@ -535,7 +539,7 @@ sub main {
 		name	=> 'run_rna_seqc_cohort',
 		cmd	=> $qc_cmd,
 		modules	=> [$rnaseqc],
-		dependencies	=> join(',', @all_jobs),
+		dependencies	=> join(':', @all_jobs),
 		max_time	=> $tool_data->{parameters}->{rna_seqc}->{time},
 		mem		=> $tool_data->{parameters}->{rna_seqc}->{mem},
 		hpc_driver	=> $args{hpc_driver}
@@ -590,7 +594,7 @@ sub main {
 			log_dir => $log_directory,
 			name    => 'output_job_metrics_' . $run_count,
 			cmd     => $collect_metrics,
-			dependencies	=> join(',', @all_jobs),
+			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver}
 			);
@@ -603,10 +607,20 @@ sub main {
 			log_file	=> $log
 			);
 
-		# print the final job id to stdout to be collected by the master pipeline
-		print $run_id;
-		} else {
-		print '000000';
+		# wait until it finishes
+		unless ($args{no_wait}) {
+
+			my $complete = 0;
+
+			while (!$complete) {
+				sleep(5);
+				my $status = `sacct --format='State' -j $run_id`;
+				if ($status =~ m/COMPLETED/s) { $complete = 1; }
+				elsif ($status !~ m/PENDING|RUNNING/) {
+					die("Final STAR accounting job: $run_id finished with errors.");
+					}
+				}
+			}
 		}
 
 	# finish up
@@ -618,9 +632,7 @@ sub main {
 # declare variables
 my ($data_config, $tool_config, $output_directory, $project_name, $output_config);
 my $hpc_driver = 'slurm';
-my ($remove_junk, $dry_run);
-
-my $help;
+my ($remove_junk, $dry_run, $help, $no_wait);
 
 # read in command line arguments
 GetOptions(
@@ -629,10 +641,11 @@ GetOptions(
 	'o|out_dir=s'	=> \$output_directory,
 	'b|out_yaml=s'	=> \$output_config,
 	't|tool=s'	=> \$tool_config,
+	'p|project=s'	=> \$project_name,
 	'c|cluster=s'	=> \$hpc_driver,
 	'remove'	=> \$remove_junk,
-	'p|project=s'	=> \$project_name,
-	'dry_run'	=> \$dry_run
+	'dry-run'	=> \$dry_run,
+	'no-wait'	=> \$no_wait
 	 );
 
 if ($help) {
@@ -645,10 +658,11 @@ if ($help) {
 		"\t--out_yaml|-b\t<string> path to output yaml (listing BWA-aligned BAMs)",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
-		"\t--dry_run\t<boolean> should jobs be submitted? (default: false)"
+		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
+		"\t--no-wait\t<boolean> should we exit after job submission (true) or wait until all jobs have completed (false)? (default: false)"
 		);
 
-	print $help_msg;
+	print "$help_msg\n";
 	exit;
 	}
 
@@ -661,8 +675,9 @@ main(
 	data_config		=> $data_config,
 	output_directory	=> $output_directory,
 	output_config		=> $output_config,
+	project			=> $project_name,
 	hpc_driver		=> $hpc_driver,
 	del_intermediates	=> $remove_junk,
-	project			=> $project_name,
-	dry_run			=> $dry_run
+	dry_run			=> $dry_run,
+	no_wait			=> $no_wait
 	);

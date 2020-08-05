@@ -10,6 +10,7 @@ use POSIX qw(strftime);
 use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
+use IO::Handle;
 
 my $cwd = dirname($0);
 require "$cwd/utilities.pl";
@@ -223,7 +224,7 @@ sub pon {
 		hpc_driver		=> undef,
 		del_intermediates	=> undef,
 		dry_run			=> undef,
-		dependencies		=> '',
+		no_wait			=> undef,
 		@_
 		);
 
@@ -264,6 +265,7 @@ sub pon {
 
 	# start logging
 	open (my $log, '>', $log_file) or die "Could not open $log_file for writing.";
+	$log->autoflush;
 
 	print $log "---\n";
 	print $log "Running MuTect Panel of Normals pipeline.\n";
@@ -334,7 +336,7 @@ sub pon {
 
 		# create an array to hold final outputs and all patient job ids
 		my (@final_outputs);
-		$run_id = $args{dependencies};
+		$run_id = '';
 		$java_check = '';
 
 		# run each available sample
@@ -377,7 +379,6 @@ sub pon {
 					name	=> 'run_mutect_artifact_detection_mode_' . $sample,
 					cmd	=> $mutect_command,
 					modules	=> [$mutect],
-					dependencies	=> $run_id,
 					max_time	=> $tool_data->{parameters}->{mutect}->{time},
 					mem		=> $tool_data->{parameters}->{mutect}->{mem},
 					hpc_driver	=> $args{hpc_driver}
@@ -470,7 +471,7 @@ sub pon {
 			name	=> 'run_combine_vcfs_full_output',
 			cmd	=> $full_merge_command,
 			modules	=> [$gatk],
-			dependencies	=> join(',', @all_jobs),
+			dependencies	=> join(':', @all_jobs),
 			max_time	=> $tool_data->{parameters}->{combine}->{time},
 			mem		=> $tool_data->{parameters}->{combine}->{mem},
 			hpc_driver	=> $args{hpc_driver}
@@ -526,7 +527,7 @@ sub pon {
 			name	=> 'run_combine_vcfs_and_trim',
 			cmd	=> $trimmed_merge_command,
 			modules	=> [$gatk],
-			dependencies	=> join(',', @all_jobs),
+			dependencies	=> join(':', @all_jobs),
 			max_time	=> $tool_data->{parameters}->{combine}->{time},
 			mem		=> $tool_data->{parameters}->{combine}->{mem},
 			hpc_driver	=> $args{hpc_driver}
@@ -564,7 +565,7 @@ sub pon {
 			log_dir	=> $log_directory,
 			name	=> 'run_cleanup',
 			cmd	=> $cleanup_cmd,
-			dependencies	=> join(',', @all_jobs),
+			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver}
 			);
@@ -594,8 +595,8 @@ sub pon {
 			log_dir	=> $log_directory,
 			name	=> 'output_job_metrics_' . $run_count,
 			cmd	=> $collect_metrics,
-			dependencies	=> join(',', @all_jobs),
-			mem		=> '1G',
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver}
 			);
 
@@ -607,10 +608,20 @@ sub pon {
 			log_file	=> $log
 			);
 
-		# print the final job id to stdout to be collected by the master pipeline
-		print $run_id;
-		} else {
-		print '000000';
+		# wait until it finishes
+		unless ($args{no_wait}) {
+
+			my $complete = 0;
+
+			while (!$complete) {
+				sleep(5);
+				my $status = `sacct --format='State' -j $run_id`;
+				if ($status =~ m/COMPLETED/s) { $complete = 1; }
+				elsif ($status !~ m/PENDING|RUNNING/) {
+					die("Final MuTect PoN accounting job: $run_id finished with errors.");
+					}
+				}
+			}
 		}
 
 	# finish up
@@ -630,7 +641,7 @@ sub main {
 		del_intermediates	=> undef,
 		dry_run			=> undef,
 		pon			=> undef,
-		dependencies		=> '',
+		no_wait			=> undef,
 		@_
 		);
 
@@ -670,6 +681,7 @@ sub main {
 
 	# start logging
 	open (my $log, '>', $log_file) or die "Could not open $log_file for writing.";
+	$log->autoflush;
 
 	print $log "---\n";
 	print $log "Running MuTect variant calling pipeline.\n";
@@ -768,7 +780,7 @@ sub main {
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
 
-			$run_id = $args{dependencies};
+			$run_id = '';
 			$java_check = '';
 
 			# run MuTect
@@ -826,7 +838,6 @@ sub main {
 					name	=> 'run_mutect_' . $sample,
 					cmd	=> $mutect_command,
 					modules	=> [$mutect],
-					dependencies	=> $run_id,
 					max_time	=> $tool_data->{parameters}->{mutect}->{time},
 					mem		=> $tool_data->{parameters}->{mutect}->{mem},
 					hpc_driver	=> $args{hpc_driver}
@@ -1015,7 +1026,7 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> 'run_cleanup_' . $patient,
 					cmd	=> $cleanup_cmd,
-					dependencies	=> join(',', @patient_jobs),
+					dependencies	=> join(':', @patient_jobs),
 					mem		=> '256M',
 					hpc_driver	=> $args{hpc_driver}
 					);
@@ -1047,7 +1058,7 @@ sub main {
 		name	=> 'combine_variant_calls',
 		cmd	=> $collect_output,
 		modules	=> [$r_version],
-		dependencies	=> join(',', @all_jobs),
+		dependencies	=> join(':', @all_jobs),
 		mem		=> '16G',
 		max_time	=> '24:00:00',
 		hpc_driver	=> $args{hpc_driver}
@@ -1074,8 +1085,8 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'output_job_metrics_' . $run_count,
 			cmd	=> $collect_metrics,
-			dependencies	=> join(',', @all_jobs),
-			mem		=> '1G',
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver}
 			);
 
@@ -1086,26 +1097,34 @@ sub main {
 			dry_run		=> $args{dry_run},
 			log_file	=> $log
 			);
+
+		# wait until it finishes
+		unless ($args{no_wait}) {
+
+			my $complete = 0;
+
+			while (!$complete) {
+				sleep(5);
+				my $status = `sacct --format='State' -j $run_id`;
+				if ($status =~ m/COMPLETED/s) { $complete = 1; }
+				elsif ($status !~ m/PENDING|RUNNING/) {
+					die("Final MuTect accounting job: $run_id finished with errors.");
+					}
+				}
+			}
 		}
 
 	# finish up
 	print $log "\nProgramming terminated successfully.\n\n";
 	close $log;
-
-	# print the final job id to stdout to be collected by the master pipeline
-	print $run_id;
-
 	}
 
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
 my ($tool_config, $data_config, $create_pon, $output_directory, $project_id);
 my $hpc_driver = 'slurm';
-my ($remove_junk, $dry_run);
-my $dependencies = '';
+my ($remove_junk, $dry_run, $help, $no_wait);
 my $panel_of_normals = undef;
-
-my $help;
 
 # get command line arguments
 GetOptions(
@@ -1116,8 +1135,8 @@ GetOptions(
 	'p|project=s'			=> \$project_id,
 	'c|cluster=s'			=> \$hpc_driver,
 	'remove'			=> \$remove_junk,
-	'dry_run'			=> \$dry_run,
-	'depends=s'			=> \$dependencies,
+	'dry-run'			=> \$dry_run,
+	'no-wait'			=> \$no_wait,
 	'create-panel-of-normals'	=> \$create_pon,
 	'pon=s'				=> \$panel_of_normals
 	);
@@ -1134,11 +1153,11 @@ if ($help) {
 		"\t--project|-p\t<string> project name",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
-		"\t--dry_run\t<boolean> should jobs be submitted? (default: false)",
-		"\t--depends\t<string> comma separated list of dependencies (optional)"
+		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
+		"\t--no-wait\t<boolean> should we exit after job submission (true) or wait until all jobs have completed (false)? (default: false)"
 		);
 
-	print $help_msg;
+	print "$help_msg\n";
 	exit;
 	}
 
@@ -1155,7 +1174,7 @@ if ($create_pon) {
 		hpc_driver		=> $hpc_driver,
 		del_intermediates	=> $remove_junk,
 		dry_run			=> $dry_run,
-		dependencies		=> $dependencies
+		no_wait			=> $no_wait
 		);
 } else {
 	 main(
@@ -1166,7 +1185,7 @@ if ($create_pon) {
 		hpc_driver		=> $hpc_driver,
 		del_intermediates	=> $remove_junk,
 		dry_run			=> $dry_run,
-		pon			=> $panel_of_normals,
-		dependencies		=> $dependencies
+		no_wait			=> $no_wait,
+		pon			=> $panel_of_normals
 		);
 }

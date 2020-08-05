@@ -74,9 +74,10 @@ sub main {
 
 	### MAIN ###########################################################################################
 
-	my ($bwa_run_id, $gatk_run_id, $contest_run_id, $coverage_run_id, $hc_run_id) = '';
-	my ($strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id, $delly_run_id) = '';
-	my ($mavis_run_id) = '';
+	my $run_script;
+	my ($bwa_run_id, $gatk_run_id, $contest_run_id, $coverage_run_id, $hc_run_id);
+	my ($strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id, $delly_run_id);
+	my ($mavis_run_id);
 
 	# prepare directory structure
 	my $bwa_directory = join('/', $output_directory, 'BWA');
@@ -97,7 +98,6 @@ sub main {
 
 	if ( (!$args{step1}) && ($args{step2}) ) {
 		$gatk_output_yaml = $data_config;
-		$gatk_run_id = '000000';
 		}
 
 	# Should pre-processing (alignment + GATK indel realignment/recalibration + QC) be performed?
@@ -120,19 +120,37 @@ sub main {
 			if ($args{cleanup}) {
 				$bwa_command .= " --remove";
 				}
-			if ($args{dry_run}) {
-				$bwa_command .= " --dry_run";
-				}
 
 			# record command (in log directory) and then run job
 			print $log "Submitting job for bwa.pl\n";
 			print $log "  COMMAND: $bwa_command\n\n";
 
-			$bwa_run_id = `$bwa_command`;
-			sleep(5);
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_bwa',
+				cmd	=> $bwa_command,
+				modules	=> ['perl'],
+				mem		=> '256M',
+				hpc_driver	=> $args{cluster}
+				);
 
-			print $log ">>> Final BWA job id: $bwa_run_id\n\n";
+			if ($args{dry_run}) {
 
+				$bwa_command .= " --dry-run";
+				`$bwa_command`;
+
+				} else {
+
+				$bwa_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> BWA job id: $bwa_run_id\n\n";
+				}
 			}
 
 		## run GATK indel realignment/recalibration pipeline
@@ -146,26 +164,44 @@ sub main {
 				"-t", $tool_data->{gatk_config},
 				"-d", $bwa_output_yaml,
 				"-c", $args{cluster},
-				"-b", $gatk_output_yaml,
-				"--depends", $bwa_run_id
+				"-b", $gatk_output_yaml
 				);
 
 			if ($args{cleanup}) {
 				$gatk_command .= " --remove";
-				}
-			if ($args{dry_run}) {
-				$gatk_command .= " --dry_run";
 				}
 
 			# record command (in log directory) and then run job
 			print $log "Submitting job for gatk.pl\n";
 			print $log "  COMMAND: $gatk_command\n\n";
 
-			$gatk_run_id = `$gatk_command`;
-			sleep(5);
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_gatk',
+				cmd	=> $gatk_command,
+				modules	=> ['perl'],
+				dependencies	=> $bwa_run_id,
+				mem		=> '256M',
+				hpc_driver	=> $args{cluster}
+				);
 
-			print $log ">>> Final GATK job id: $gatk_run_id\n\n";
+			if ($args{dry_run}) {
 
+				$gatk_command .= " --dry-run";
+				`$gatk_command`;
+
+				} else {
+
+				$gatk_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> GATK job id: $gatk_run_id\n\n";
+				}
 			}
 
 		## run GATK's ContEst for contamination estimation (T/N only)
@@ -181,25 +217,44 @@ sub main {
 				"-t", $tool_data->{bamqc_config},
 				"-d", $gatk_output_yaml,
 				"-p", $tool_data->{project_name},
-				"-c", $args{cluster},
-				"--depends", $gatk_run_id
+				"-c", $args{cluster}
 				);
 
 			if ($args{cleanup}) {
 				$contest_command .= " --remove";
-				}
-			if ($args{dry_run}) {
-				$contest_command .= " --dry_run";
 				}
 
 			# record command (in log directory) and then run job
 			print $log "Submitting job for contest.pl\n";
 			print $log "  COMMAND: $contest_command\n\n";
 
-			$contest_run_id = `$contest_command`;
-			sleep(5);
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_contest',
+				cmd	=> $contest_command,
+				modules	=> ['perl'],
+				dependencies	=> $gatk_run_id,
+				mem		=> '256M',
+				hpc_driver	=> $args{cluster}
+				);
 
-			print $log ">>> Final ContEst job id: $contest_run_id\n\n";
+			if ($args{dry_run}) {
+
+				$contest_command .= " --dry-run";
+				`$contest_command`;
+
+				} else {
+
+				$contest_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> ContEst job id: $contest_run_id\n\n";
+				}
 
 			my $coverage_command = join(' ',
 				"perl $cwd/scripts/get_coverage.pl",
@@ -207,25 +262,44 @@ sub main {
 				"-t", $tool_data->{bamqc_config},
 				"-d", $gatk_output_yaml,
 				"-p", $tool_data->{project_name},
-				"-c", $args{cluster},
-				"--depends", $gatk_run_id
+				"-c", $args{cluster}
 				);
 
 			if ($args{cleanup}) {
 				$coverage_command .= " --remove";
-				}
-			if ($args{dry_run}) {
-				$coverage_command .= " --dry_run";
 				}
 
 			# record command (in log directory) and then run job
 			print $log "Submitting job for get_coverage.pl\n";
 			print $log "  COMMAND: $coverage_command\n\n";
 
-			$coverage_run_id = `$coverage_command`;
-			sleep(5);
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_coverage',
+				cmd	=> $coverage_command,
+				modules	=> ['perl'],
+				dependencies	=> $gatk_run_id,
+				mem		=> '256M',
+				hpc_driver	=> $args{cluster}
+				);
 
-			print $log ">>> Final ContEst job id: $coverage_run_id\n\n";
+			if ($args{dry_run}) {
+
+				$coverage_command .= " --dry-run";
+				`$coverage_command`;
+
+				} else {
+
+				$coverage_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> ContEst job id: $coverage_run_id\n\n";
+				}
 			}
 		}
 
@@ -242,25 +316,44 @@ sub main {
 				"-o", $hc_directory,
 				"-t", $tool_data->{haplotype_caller_config},
 				"-d", $gatk_output_yaml,
-				"-c", $args{cluster},
-				"--depends", $gatk_run_id
+				"-c", $args{cluster}
 				);
 
 			if ($args{cleanup}) {
 				$hc_command .= " --remove";
-				}
-			if ($args{dry_run}) {
-				$hc_command .= " --dry_run";
 				}
 
 			# record command (in log directory) and then run job
 			print $log "Submitting job for haplotype_caller.pl\n";
 			print $log "  COMMAND: $hc_command\n\n";
 
-			$hc_run_id = `$hc_command`;
-			sleep(5);
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_haplotypecaller',
+				cmd	=> $hc_command,
+				modules	=> ['perl'],
+				dependencies	=> $gatk_run_id,
+				mem		=> '256M',
+				hpc_driver	=> $args{cluster}
+				);
 
-			print $log ">>> Final HaplotypeCaller job id: $hc_run_id\n\n";
+			if ($args{dry_run}) {
+
+				$hc_command .= " --dry-run";
+				`$hc_command`;
+
+				} else {
+
+				$hc_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> HaplotypeCaller job id: $hc_run_id\n\n";
+				}
 
 			# next step will run Genotype GVCFs, and filter final output
 			$hc_command = join(' ',
@@ -269,23 +362,44 @@ sub main {
 				"-t", $tool_data->{haplotype_caller_config},
 				"-d", $gatk_output_yaml,
 				"-p", $tool_data->{project_name},
-				"-c", $args{cluster},
-				"--depends", $hc_run_id
+				"-c", $args{cluster}
 				);
 
 			if ($args{cleanup}) {
 				$hc_command .= " --remove";
 				}
-			if ($args{dry_run}) {
-				$hc_command .= " --dry_run";
-				}
 
 			# record command (in log directory) and then run job
 			print $log "Submitting job for genotype_gvcfs.pl\n";
 			print $log "  COMMAND: $hc_command\n\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_genotype_gvcfs',
+				cmd	=> $hc_command,
+				modules	=> ['perl'],
+				dependencies	=> $hc_run_id,
+				mem		=> '256M',
+				hpc_driver	=> $args{cluster}
+				);
 		
-			$hc_run_id = `$hc_command`;
-			sleep(5);
+			if ($args{dry_run}) {
+
+				$hc_command .= " --dry-run";
+				`$hc_command`;
+
+				} else {
+
+				$hc_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> GenotypeGVCFs job id: $hc_run_id\n\n";
+				}
 			}
 
 		## run STRELKA/MANTA pipeline
@@ -300,25 +414,44 @@ sub main {
 				"-t", $tool_data->{strelka_config},
 				"-d", $gatk_output_yaml,
 				"-p", $tool_data->{project_name},
-				"-c", $args{cluster},
-				"--depends", $gatk_run_id
+				"-c", $args{cluster}
 				);
 
 			if ($args{cleanup}) {
 				$strelka_command .= " --remove";
-				}
-			if ($args{dry_run}) {
-				$strelka_command .= " --dry_run";
 				}
 
 			# record command (in log directory) and then run job
 			print $log "Submitting job for strelka.pl\n";
 			print $log "  COMMAND: $strelka_command\n\n";
 
-			$strelka_run_id = `$strelka_command`;
-			sleep(5);
-			
-			print $log ">>> Final Strelka job id: $strelka_run_id\n\n";
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_strelka',
+				cmd	=> $strelka_command,
+				modules	=> ['perl'],
+				dependencies	=> $gatk_run_id,
+				mem		=> '256M',
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
+
+				$strelka_command .= " --dry-run";
+				`$strelka_command`;
+
+				} else {
+
+				$strelka_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> Strelka job id: $strelka_run_id\n\n";
+				}
 			}
 
 		## run GATK's MuTect pipeline
@@ -333,25 +466,44 @@ sub main {
 				"-t", $tool_data->{mutect_config},
 				"-d", $gatk_output_yaml,
 				"-c", $args{cluster},
-				"--depends", $gatk_run_id,
 				"--create-panel-of-normals"
 				);
 
 			if ($args{cleanup}) {
 				$mutect_command .= " --remove";
 				}
-			if ($args{dry_run}) {
-				$mutect_command .= " --dry_run";
-				}
 
 			# record command (in log directory) and then run job
 			print $log "Submitting job for mutect.pl --create-panel-of-normals\n";
 			print $log "  COMMAND: $mutect_command\n\n";
 
-			$mutect_run_id = `$mutect_command`;
-			sleep(5);
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_mutect_pon',
+				cmd	=> $mutect_command,
+				modules	=> ['perl'],
+				dependencies	=> $gatk_run_id,
+				mem		=> '256M',
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
+
+				$mutect_command .= " --dry-run";
+				`$mutect_command`;
+
+				} else {
+
+				$mutect_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
 			
-			print $log ">>> Final MuTect PoN job id: $mutect_run_id\n\n";
+				print $log ">>> MuTect PoN job id: $mutect_run_id\n\n";
+				}
 
 			# next run variant calling
 			$mutect_command = join(' ',
@@ -361,23 +513,44 @@ sub main {
 				"-d", $gatk_output_yaml,
 				"-p", $tool_data->{project_name},
 				"-c", $args{cluster},
-				"--pon", join('/', $mutect_directory, 'panel_of_normals.vcf'),
-				"--depends", $mutect_run_id
+				"--pon", join('/', $mutect_directory, 'panel_of_normals.vcf')
 				);
 
 			if ($args{cleanup}) {
 				$mutect_command .= " --remove";
-				}
-			if ($args{dry_run}) {
-				$mutect_command .= " --dry_run";
 				}
 
 			# record command (in log directory) and then run job
 			print $log "Submitting job for mutect.pl\n";
 			print $log "  COMMAND: $mutect_command\n\n";
 
-			$mutect_run_id = `$mutect_command`;
-			sleep(5);
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_mutect',
+				cmd	=> $mutect_command,
+				modules	=> ['perl'],
+				dependencies	=> $mutect_run_id,
+				mem		=> '256M',
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
+
+				$mutect_command .= " --dry-run";
+				`$mutect_command`;
+
+				} else {
+
+				$mutect_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> MuTect job id: $mutect_run_id\n\n";
+				}
 			}
 
 		## also run GATK's newer MuTect2 pipeline
@@ -392,25 +565,44 @@ sub main {
 				"-t", $tool_data->{mutect2_config},
 				"-d", $gatk_output_yaml,
 				"-c", $args{cluster},
-				"--depends", $gatk_run_id,
 				"--create-panel-of-normals"
 				);
 
 			if ($args{cleanup}) {
 				$mutect2_command .= " --remove";
 				}
-			if ($args{dry_run}) {
-				$mutect2_command .= " --dry_run";
-				}
 
 			# record command (in log directory) and then run job
 			print $log "Submitting job for mutect2.pl --create-panel-of-normals\n";
 			print $log "  COMMAND: $mutect2_command\n\n";
 
-			$mutect2_run_id = `$mutect2_command`;
-			sleep(5);
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_mutect2_pon',
+				cmd	=> $mutect2_command,
+				modules	=> ['perl'],
+				dependencies	=> $gatk_run_id,
+				mem		=> '256M',
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
+
+				$mutect2_command .= " --dry-run";
+				`$mutect2_command`;
+
+				} else {
+
+				$mutect2_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
 			
-			print $log ">>> Final MuTect2 PoN job id: $mutect2_run_id\n\n";
+				print $log ">>> MuTect2 PoN job id: $mutect2_run_id\n\n";
+				}
 
 			# now run the actual somatic variant calling
 			$mutect2_command = join(' ',
@@ -420,23 +612,44 @@ sub main {
 				"-d", $gatk_output_yaml,
 				"-p", $tool_data->{project_name},
 				"-c", $args{cluster},
-				"--pon", join('/', $mutect2_directory, 'panel_of_normals.vcf'),
-				"--depends", $mutect2_run_id
+				"--pon", join('/', $mutect2_directory, 'panel_of_normals.vcf')
 				);
 
 			if ($args{cleanup}) {
 				$mutect2_command .= " --remove";
-				}
-			if ($args{dry_run}) {
-				$mutect2_command .= " --dry_run";
 				}
 
 			# record command (in log directory) and then run job
 			print $log "Submitting job for mutect2.pl\n";
 			print $log "  COMMAND: $mutect2_command\n\n";
 
-			$mutect2_run_id = `$mutect2_command`;
-			sleep(5);
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_mutect2',
+				cmd	=> $mutect2_command,
+				modules	=> ['perl'],
+				dependencies	=> $mutect2_run_id,
+				mem		=> '256M',
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
+
+				$mutect2_command .= " --dry-run";
+				`$mutect2_command`;
+
+				} else {
+
+				$mutect2_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> MuTect2 job id: $mutect2_run_id\n\n";
+				}
 			}
 
 		## run VarScan SNV/CNV pipeline
@@ -452,25 +665,44 @@ sub main {
 				"-d", $gatk_output_yaml,
 				"-p", $tool_data->{project_name},
 				"-c", $args{cluster},
-				"--mode paired",
-				"--depends", $gatk_run_id
+				"--mode paired"
 				);
 
 			if ($args{cleanup}) {
 				$varscan_command .= " --remove";
-				}
-			if ($args{dry_run}) {
-				$varscan_command .= " --dry_run";
 				}
 
 			# record command (in log directory) and then run job
 			print $log "Submitting job for varscan.pl (T/N mode)\n";
 			print $log "  COMMAND: $varscan_command\n\n";
 
-			$varscan_run_id = `$varscan_command`;
-			sleep(5);
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_varscan_paired',
+				cmd	=> $varscan_command,
+				modules	=> ['perl'],
+				dependencies	=> $gatk_run_id,
+				mem		=> '256M',
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
 			
-			print $log ">>> Final VarScan T/N job id: $varscan_run_id\n\n";
+				$varscan_command .= " --dry-run";
+				`$varscan_command`;
+
+				} else {
+
+				$varscan_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> VarScan T/N job id: $varscan_run_id\n\n";
+				}
 
 			# now run on T-only, using germline variants from T/N pairs to filter
 			$varscan_command = join(' ',
@@ -481,23 +713,44 @@ sub main {
 				"-p", $tool_data->{project_name},
 				"-c", $args{cluster},
 				"--mode unpaired",
-				"--pon", join('/', $varscan_directory, 'panel_of_normals.vcf'),
-				"--depends", $varscan_run_id
+				"--pon", join('/', $varscan_directory, 'panel_of_normals.vcf')
 				);
 
 			if ($args{cleanup}) {
 				$varscan_command .= " --remove";
-				}
-			if ($args{dry_run}) {
-				$varscan_command .= " --dry_run";
 				}
 
 			# record command (in log directory) and then run job
 			print $log "Submitting job for varscan.pl\n";
 			print $log "  COMMAND: $varscan_command\n\n";
 
-			$varscan_run_id = `$varscan_command`;
-			sleep(5);
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_varscan_unpaired',
+				cmd	=> $varscan_command,
+				modules	=> ['perl'],
+				dependencies	=> $varscan_run_id,
+				mem		=> '256M',
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
+
+				$varscan_command .= " --dry-run";
+				`$varscan_command`;
+
+				} else {
+
+				$varscan_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> VarScan tumour-only job id: $varscan_run_id\n\n";
+				}
 			}
 
 		## run Delly SV pipeline
@@ -510,25 +763,44 @@ sub main {
 				"-o", $delly_directory,
 				"-t", $tool_data->{delly_config},
 				"-d", $gatk_output_yaml,
-				"-c", $args{cluster},
-				"--depends", $gatk_run_id
+				"-c", $args{cluster}
 				);
 
 			if ($args{cleanup}) {
 				$delly_command .= " --remove";
-				}
-			if ($args{dry_run}) {
-				$delly_command .= " --dry_run";
 				}
 
 			# record command (in log directory) and then run job
 			print $log "Submitting job for delly.pl\n";
 			print $log "  COMMAND: $delly_command\n\n";
 
-			$delly_run_id = `$delly_command`;
-			sleep(5);
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_delly',
+				cmd	=> $delly_command,
+				modules	=> ['perl'],
+				dependencies	=> $gatk_run_id,
+				mem		=> '256M',
+				hpc_driver	=> $args{cluster}
+				);
 
-			print $log ">>> Final Delly job id: $delly_run_id\n\n";
+			if ($args{dry_run}) {
+
+				$delly_command .= " --dry-run";
+				`$delly_command`;
+
+				} else {
+
+				$delly_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> Delly job id: $delly_run_id\n\n";
+				}
 			}
 
 		## run Mavis SV annotation pipeline
@@ -549,36 +821,45 @@ sub main {
 			if ($args{cleanup}) {
 				$mavis_command .= " --remove";
 				}
-			if ($args{dry_run}) {
-				$mavis_command .= " --dry_run";
-				}
 
 			# record command (in log directory) and then run job
 			print $log "Submitting job for mavis.pl\n";
 			print $log "  COMMAND: $mavis_command\n\n";
 
+			my $depends;
+			if ( (defined($delly_run_id)) && (defined($strelka_run_id)) ) {
+				$depends = join(',', $delly_run_id, $strelka_run_id);
+				} elsif ( (defined($delly_run_id)) && !(defined($strelka_run_id)) ) {
+				$depends = $delly_run_id;
+				} elsif ( !(defined($delly_run_id)) && (defined($strelka_run_id)) ) {
+				$depends = $strelka_run_id;
+				}
+
 			# because mavis.pl will search provided directories and run based on what it finds
 			# (Manta/Delly resuts), this can only be run AFTER these respective jobs finish
 			# so, we will submit this with dependencies
-			my $run_script = write_script(
+			$run_script = write_script(
 				log_dir	=> $log_directory,
 				name	=> 'pughlab_dna_pipeline__run_mavis',
 				cmd	=> $mavis_command,
 				modules	=> ['perl'],
-				dependencies	=> join(',', $delly_run_id, $strelka_run_id),
+				dependencies	=> $depends,
 				mem		=> '256M',
 				hpc_driver	=> $args{cluster}
 				);
 
-			$mavis_run_id = submit_job(
-				jobname		=> $log_directory,
-				shell_command	=> $run_script,
-				hpc_driver	=> $args{cluster},
-				dry_run		=> $args{dry_run},
-				log_file	=> $log
-				);
+			unless ($args{dry_run}) {
 
-			print $log ">>> MAVIS job id: $mavis_run_id\n\n";
+				$mavis_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> MAVIS job id: $mavis_run_id\n\n";
+				}
 			}
 		}
 
@@ -605,7 +886,7 @@ GetOptions(
 	'variant_calling'	=> \$variant_calling,
 	'c|cluster=s'		=> \$hpc_driver,
 	'remove'		=> \$remove_junk,
-	'dry_run'		=> \$dry_run,
+	'dry-run'		=> \$dry_run,
 	 );
 
 if ($help) {
@@ -618,10 +899,10 @@ if ($help) {
 		"\t--variant_calling\t<boolean> should variant calling be performed? (default: false)",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
-		"\t--dry_run\t<boolean> should jobs be submitted? (default: false)"
+		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)"
 		);
 
-	print $help_msg;
+	print "$help_msg\n";
 	exit;
 	}
 

@@ -11,6 +11,7 @@ use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
 use List::Util qw(any);
+use IO::Handle;
 
 my $cwd = dirname($0);
 require "$cwd/utilities.pl";
@@ -173,7 +174,7 @@ sub main {
 		hpc_driver		=> undef,
 		del_intermediates	=> undef,
 		dry_run			=> undef,
-		dependencies		=> '',
+		no_wait			=> undef,
 		@_
 		);
 
@@ -213,6 +214,7 @@ sub main {
 
 	# start logging
 	open (my $log, '>', $log_file) or die "Could not open $log_file for writing.";
+	$log->autoflush;
 
 	print $log "---\n";
 	print $log "Running Coverage pipeline.\n";
@@ -321,7 +323,6 @@ sub main {
 					name	=> 'run_depth_of_coverage_' . $sample,
 					cmd	=> $cov_command,
 					modules	=> [$gatk],
-					dependencies	=> $args{dependencies},
 					cpus_per_taks	=> 2,
 					max_time	=> $tool_data->{parameters}->{coverage}->{time},
 					mem		=> $tool_data->{parameters}->{coverage}->{mem},
@@ -376,7 +377,6 @@ sub main {
 					name	=> 'run_get_callable_bases_' . $sample,
 					cmd	=> $cb_command,
 					modules	=> [$samtools, $bedtools],
-					dependencies	=> $args{dependencies},
 					max_time	=> $tool_data->{parameters}->{callable_bases}->{time},
 					mem		=> $tool_data->{parameters}->{callable_bases}->{mem},
 					hpc_driver	=> $args{hpc_driver}
@@ -424,7 +424,7 @@ sub main {
 					name	=> 'run_callable_bases_intersect_' . $patient,
 					cmd	=> $cb_command2,
 					modules	=> [$samtools, $bedtools],
-					dependencies	=> join(',', @cb_jobs),
+					dependencies	=> join(':', @cb_jobs),
 					max_time	=> $tool_data->{parameters}->{callable_bases}->{time},
 					mem		=> $tool_data->{parameters}->{callable_bases}->{mem},
 					hpc_driver	=> $args{hpc_driver}
@@ -448,42 +448,47 @@ sub main {
 
 		# should intermediate files be removed
 		# run per patient
-		if ( ($args{del_intermediates}) && (scalar(@patient_jobs) > 0) ) {
+		if ($args{del_intermediates}) {
 
-			print $log "Submitting job to clean up temporary/intermediate files...\n";
+			if (scalar(@patient_jobs) == 0) ) {
+				`rm rf $tmp_directory`;
+				} else {
 
-			# make sure final output exists before removing intermediate files!
-			my @files_to_check;
-			foreach my $tmp ( @final_outputs ) {
-				$tmp .= '.md5';
-				push @files_to_check, $tmp;
+				print $log "Submitting job to clean up temporary/intermediate files...\n";
+
+				# make sure final output exists before removing intermediate files!
+				my @files_to_check;
+				foreach my $tmp ( @final_outputs ) {
+					$tmp .= '.md5';
+					push @files_to_check, $tmp;
+					}
+
+				$cleanup_cmd = join("\n",
+					"if [ -s " . join(" ] && [ -s ", @files_to_check) . " ]; then",
+					"  $cleanup_cmd",
+					"else",
+					'  echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
+					"fi"
+					);
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_cleanup_' . $patient,
+					cmd	=> $cleanup_cmd,
+					dependencies	=> join(':', @patient_jobs),
+					mem		=> '256M',
+					hpc_driver	=> $args{hpc_driver}
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_cleanup_' . $patient,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
 				}
-
-			$cleanup_cmd = join("\n",
-				"if [ -s " . join(" ] && [ -s ", @files_to_check) . " ]; then",
-				"  $cleanup_cmd",
-				"else",
-				'  echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
-				"fi"
-				);
-
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'run_cleanup_' . $patient,
-				cmd	=> $cleanup_cmd,
-				dependencies	=> join(',', @patient_jobs),
-				mem		=> '256M',
-				hpc_driver	=> $args{hpc_driver}
-				);
-
-			$run_id = submit_job(
-				jobname		=> 'run_cleanup_' . $patient,
-				shell_command	=> $run_script,
-				hpc_driver	=> $args{hpc_driver},
-				dry_run		=> $args{dry_run},
-				log_file	=> $log
-				);
-			}	
+			}
 
 		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
 		print $log "---\n";
@@ -501,7 +506,7 @@ sub main {
 		name	=> 'combine_coverage_output',
 		cmd	=> $collect_output,
 		modules	=> [$r_version],
-		dependencies	=> join(',', @all_jobs),
+		dependencies	=> join(':', @all_jobs),
 		mem		=> '4G',
 		max_time	=> '12:00:00',
 		hpc_driver	=> $args{hpc_driver}
@@ -528,8 +533,8 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'output_job_metrics_' . $run_count,
 			cmd	=> $collect_metrics,
-			dependencies	=> join(',', @all_jobs),
-			mem		=> '1G',
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver}
 			);
 
@@ -540,6 +545,21 @@ sub main {
 			dry_run		=> $args{dry_run},
 			log_file	=> $log
 			);
+
+		# wait until it finishes
+		unless ($args{no_wait}) {
+
+			my $complete = 0;
+
+			while (!$complete) {
+				sleep(5);
+				my $status = `sacct --format='State' -j $run_id`;
+				if ($status =~ m/COMPLETED/s) { $complete = 1; }
+				elsif ($status !~ m/PENDING|RUNNING/) {
+					die("Final Coverage accounting job: $run_id finished with errors.");
+					}
+				}
+			}
 		}
 
 	# finish up
@@ -551,21 +571,20 @@ sub main {
 # declare variables
 my ($tool_config, $data_config, $output_directory);
 my $hpc_driver = 'slurm';
-my ($remove_junk, $dry_run);
-my ($dependencies, $project_id) = '';
-my $help;
+my ($remove_junk, $dry_run, $help, $no_wait);
+my $project_id = '';
 
 # get command line arguments
 GetOptions(
+	'h|help'	=> \$help,
 	'd|data=s'	=> \$data_config,
 	't|tool=s'	=> \$tool_config,
 	'o|out_dir=s'	=> \$output_directory,
 	'p|project=s'	=> \$project_id,
 	'c|cluster=s'	=> \$hpc_driver,
 	'remove'	=> \$remove_junk,
-	'dry_run'	=> \$dry_run,
-	'depends=s'	=> \$dependencies,
-	'h|help'	=> \$help
+	'dry-run'	=> \$dry_run,
+	'no-wait'	=> \$no_wait
 	);
 
 if ($help) {
@@ -578,11 +597,11 @@ if ($help) {
 		"\t--project|-p\t<string> project name",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
-		"\t--dry_run\t<boolean> should jobs be submitted? (default: false)",
-		"\t--depends\t<string> comma separated list of dependencies (optional)"
+		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
+		"\t--no-wait\t<boolean> should we exit after job submission (true) or wait until all jobs have completed (false)? (default: false)"
 		);
 
-	print $help_msg;
+	print "$help_msg\n";
 	exit;
 	}
 
@@ -599,5 +618,5 @@ main(
 	hpc_driver		=> $hpc_driver,
 	del_intermediates	=> $remove_junk,
 	dry_run			=> $dry_run,
-	dependencies		=> $dependencies
+	no_wait			=> $no_wait
 	);

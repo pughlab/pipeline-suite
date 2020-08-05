@@ -10,6 +10,8 @@ use POSIX qw(strftime);
 use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
+use List::Util 'any';
+use IO::Handle;
 
 my $cwd = dirname($0);
 require "$cwd/utilities.pl";
@@ -84,7 +86,7 @@ sub main {
 		del_intermediates	=> undef,
 		dry_run			=> undef,
 		project			=> undef,
-		dependencies		=> '',
+		no_wait			=> undef,
 		@_
 		);
 
@@ -127,6 +129,7 @@ sub main {
 
 	# start logging
 	open (my $log, '>', $log_file) or die "Could not open $log_file for writing.";
+	$log->autoflush;
 
 	print $log "---\n";
 	print $log "Running STAR-fusion pipeline.\n";
@@ -266,7 +269,7 @@ sub main {
 						log_dir	=> $log_directory,
 						name	=> 'run_prepare_fastq_for_FusionInspector_' . $sample,
 						cmd	=> $cat_fq_cmd . "\n" . $gzip_fq_cmd,
-						max_time	=> '04:00:00',
+						max_time	=> '08:00:00',
 						mem		=> '1G',
 						hpc_driver	=> $args{hpc_driver}
 						);
@@ -313,7 +316,7 @@ sub main {
 					cmd	=> $fusion_cmd,
 					modules => [$star, $perl, $samtools, 'tabix', 'python', $star_fusion],
 					# requires python igv-reports
-					dependencies	=> join(',', $args{dependencies}, $run_id),
+					dependencies	=> $run_id,
 					max_time	=> $tool_data->{parameters}->{star_fusion}->{time},
 					mem		=> $tool_data->{parameters}->{star_fusion}->{mem},
 					hpc_driver	=> $args{hpc_driver},
@@ -355,33 +358,38 @@ sub main {
 		# remove temporary directories (once per patient)
 		if ($args{del_intermediates}) {
 
-			print $log "Submitting job to clean up temporary/intermediate files...\n";
+			if (scalar(@patient_jobs) == 0) {
+				`$cleanup_cmd`;
+				} else {
 
-			# make sure final output exists before removing intermediate files!
-			$cleanup_cmd = join("\n",
-				"if [ -s " . join(" ] && [ -s ", @final_outputs) . " ]; then",
-				$cleanup_cmd,
-				"else",
-				'echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
-				"fi"
-				);
+				print $log "Submitting job to clean up temporary/intermediate files...\n";
 
-			$run_script = write_script(
-				log_dir => $log_directory,
-				name    => 'run_cleanup_' . $patient,
-				cmd     => $cleanup_cmd,
-				dependencies	=> join(',', @patient_jobs),
-				mem		=> '256M',
-				hpc_driver	=> $args{hpc_driver}
-				);
+				# make sure final output exists before removing intermediate files!
+				$cleanup_cmd = join("\n",
+					"if [ -s " . join(" ] && [ -s ", @final_outputs) . " ]; then",
+					$cleanup_cmd,
+					"else",
+					'echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
+					"fi"
+					);
 
-			$run_id = submit_job(
-				jobname		=> 'run_cleanup_' . $patient,
-				shell_command	=> $run_script,
-				hpc_driver	=> $args{hpc_driver},
-				dry_run		=> $args{dry_run},
-				log_file	=> $log
-				);
+				$run_script = write_script(
+					log_dir => $log_directory,
+					name    => 'run_cleanup_' . $patient,
+					cmd     => $cleanup_cmd,
+					dependencies	=> join(':', @patient_jobs),
+					mem		=> '256M',
+					hpc_driver	=> $args{hpc_driver}
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_cleanup_' . $patient,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+				}
 			}
 
 		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
@@ -400,7 +408,7 @@ sub main {
 		name	=> 'combine_and_format_results',
 		cmd	=> $collect_results,
 		modules		=> [$r_version],
-		dependencies	=> join(',', @all_jobs),
+		dependencies	=> join(':', @all_jobs),
 		max_time	=> $tool_data->{parameters}->{combine_results}->{time},
 		mem		=> $tool_data->{parameters}->{combine_results}->{mem},
 		hpc_driver	=> $args{hpc_driver}
@@ -427,7 +435,7 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'output_job_metrics_' . $run_count,
 			cmd	=> $collect_metrics,
-			dependencies	=> join(',', @all_jobs),
+			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver}
 			);
@@ -436,25 +444,36 @@ sub main {
 			jobname		=> 'output_job_metrics',
 			shell_command	=> $run_script,
 			hpc_driver	=> $args{hpc_driver},
-			dry_run		=> 'N',
+			dry_run		=> $args{dry_run},
 			log_file	=> $log
 			);
+
+		# wait until it finishes
+		unless ($args{no_wait}) {
+
+			my $complete = 0;
+
+			while (!$complete) {
+				sleep(5);
+				my $status = `sacct --format='State' -j $run_id`;
+				if ($status =~ m/COMPLETED/s) { $complete = 1; }
+				elsif ($status !~ m/PENDING|RUNNING/) {
+					die("Final STAR-FUSION accounting job: $run_id finished with errors.");
+					}
+				}
+			}
 		}
 
 	# finish up
 	print $log "\nProgramming terminated successfully.\n\n";
 	close $log;
-
-	# print the final job id to stdout to be collected by the master pipeline
-	print $run_id;
 	}
 
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
 my ($data_config, $tool_config, $output_directory, $project_name);
 my $hpc_driver = 'slurm';
-my ($remove_junk, $dry_run, $help);
-my $dependencies = '';
+my ($remove_junk, $dry_run, $help, $no_wait);
 
 # get command line arguments
 GetOptions(
@@ -462,11 +481,11 @@ GetOptions(
 	't|tool=s'	=> \$tool_config,
 	'd|data=s'	=> \$data_config,
 	'o|out_dir=s'	=> \$output_directory,
+	'p|project=s'	=> \$project_name,
 	'c|cluster=s'	=> \$hpc_driver,
 	'remove'	=> \$remove_junk,
-	'dry_run'	=> \$dry_run,
-	'p|project=s'	=> \$project_name,
-	'depends=s'	=> \$dependencies
+	'dry-run'	=> \$dry_run,
+	'no-wait'	=> \$no_wait
 	);
 
 if ($help) {
@@ -479,11 +498,11 @@ if ($help) {
 		"\t--project|-p\t<string> project name",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
-		"\t--dry_run\t<boolean> should jobs be submitted? (default: false)",
-		"\t--depends\t<string> comma separated list of dependencies (optional)"
+		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
+		"\t--no-wait\t<boolean> should we exit after job submission (true) or wait until all jobs have completed (false)? (default: false)"
 		);
 
-	print $help_msg;
+	print "$help_msg\n";
 	exit;
 	}
 
@@ -496,9 +515,9 @@ main(
 	tool_config		=> $tool_config,
 	data_config		=> $data_config,
 	output_directory	=> $output_directory,
+	project			=> $project_name,
 	hpc_driver		=> $hpc_driver,
 	del_intermediates	=> $remove_junk,
 	dry_run			=> $dry_run,
-	project			=> $project_name,
-	dependencies		=> $dependencies
+	no_wait			=> $no_wait
 	);

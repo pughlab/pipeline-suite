@@ -11,6 +11,7 @@ use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
 use List::Util qw(any);
+use IO::Handle;
 
 my $cwd = dirname($0);
 require "$cwd/utilities.pl";
@@ -250,7 +251,7 @@ sub pon {
 		hpc_driver		=> undef,
 		del_intermediates	=> undef,
 		dry_run			=> undef,
-		dependencies		=> '',
+		no_wait			=> undef,
 		@_
 		);
 
@@ -291,6 +292,7 @@ sub pon {
 
 	# start logging
 	open (my $log, '>', $log_file) or die "Could not open $log_file for writing.";
+	$log->autoflush;
 
 	print $log "---\n";
 	print $log "Running Delly (germline) SV calling pipeline.\n";
@@ -352,7 +354,7 @@ sub pon {
 			$link = join('/', $link_directory, $tmp[-1]);
 			symlink($smp_data->{$patient}->{normal}->{$norm}, $link);
 
-			$run_id = $args{dependencies};
+			$run_id = '';
 
 			# run germline snv caller
 			my $germline_output = join('/', $intermediate_directory, $norm . '_Delly_SV.bcf');
@@ -375,7 +377,6 @@ sub pon {
 					name	=> 'run_delly_germline_' . $norm,
 					cmd	=> $germline_command,
 					modules	=> [$delly],
-					dependencies	=> $run_id,
 					max_time	=> $tool_data->{parameters}->{call}->{time},
 					mem		=> $tool_data->{parameters}->{call}->{mem},
 					hpc_driver	=> $args{hpc_driver}
@@ -432,7 +433,7 @@ sub pon {
 			name	=> 'merge_called_sites_PoN',
 			cmd	=> $pon_command,
 			modules	=> [$delly],
-			dependencies	=> join(',', @part1_jobs),
+			dependencies	=> join(':', @part1_jobs),
 			max_time	=> $tool_data->{parameters}->{merge}->{time},
 			mem		=> $tool_data->{parameters}->{merge}->{mem},
 			hpc_driver	=> $args{hpc_driver}
@@ -460,6 +461,8 @@ sub pon {
 		foreach my $norm (@normal_ids) {
 
 			print $log ">>NORMAL: $norm\n";
+
+			$run_id = '';
 
 			# run delly genotype on called sites
 			my $genotype_output = join('/', $intermediate_directory, $norm . '_Delly_SV_genotyped.bcf');
@@ -526,7 +529,7 @@ sub pon {
 			log_dir	=> $log_directory,
 			name	=> 'create_panel_of_normals',
 			cmd	=> $pon_command,
-			dependencies	=> join(',', @part2_jobs),
+			dependencies	=> join(':', @part2_jobs),
 			modules		=> [$delly, $bcftools],
 			max_time	=> $tool_data->{parameters}->{filter}->{time},
 			mem		=> $tool_data->{parameters}->{filter}->{mem},
@@ -563,7 +566,7 @@ sub pon {
 			log_dir	=> $log_directory,
 			name	=> 'run_pon_cleanup',
 			cmd	=> $cleanup_cmd,
-			dependencies	=> join(',', @all_jobs),
+			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver}
 			);
@@ -593,8 +596,8 @@ sub pon {
 			log_dir	=> $log_directory,
 			name	=> 'output_job_metrics_' . $run_count,
 			cmd	=> $collect_metrics,
-			dependencies	=> join(',', @all_jobs),
-			mem		=> '1G',
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver}
 			);
 
@@ -606,10 +609,20 @@ sub pon {
 			log_file	=> $log
 			);
 
-		# print the final job id to stdout to be collected by the master pipeline
-		print $run_id;
-		} else {
-		print '000000';
+		# wait until it finishes
+		unless ($args{no_wait}) {
+
+			my $complete = 0;
+
+			while (!$complete) {
+				sleep(5);
+				my $status = `sacct --format='State' -j $run_id`;
+				if ($status =~ m/COMPLETED/s) { $complete = 1; }
+				elsif ($status !~ m/PENDING|RUNNING/) {
+					die("Final DELLY accounting job: $run_id finished with errors.");
+					}
+				}
+			}
 		}
 
 	# finish up
@@ -626,7 +639,7 @@ sub main {
 		hpc_driver		=> undef,
 		del_intermediates	=> undef,
 		dry_run			=> undef,
-		dependencies		=> '',
+		no_wait			=> undef,
 		@_
 		);
 
@@ -751,7 +764,7 @@ sub main {
 
 		close $fh;
 
-		$run_id = $args{dependencies};
+		$run_id = '';
 
 		my $delly_cmd;
 		my $delly_output = join('/', $patient_directory, $patient . '_Delly_SVs.bcf');
@@ -790,7 +803,6 @@ sub main {
 				name	=> 'run_delly_somatic_SV_caller_' . $patient,
 				cmd	=> $delly_cmd,
 				modules	=> [$delly],
-				dependencies	=> $run_id,
 				max_time	=> $tool_data->{parameters}->{call}->{time},
 				mem		=> $tool_data->{parameters}->{call}->{mem},
 				hpc_driver	=> $args{hpc_driver}
@@ -891,7 +903,7 @@ sub main {
 			name	=> 'run_delly_merge_somatic_candidateSVs',
 			cmd	=> $merge_cmd,
 			modules	=> [$delly],
-			dependencies	=> join(',', @part1_jobs),
+			dependencies	=> join(':', @part1_jobs),
 			max_time	=> $tool_data->{parameters}->{merge}->{time},
 			mem		=> $tool_data->{parameters}->{merge}->{mem},
 			hpc_driver	=> $args{hpc_driver}
@@ -1024,7 +1036,7 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'merge_genotyped_somatic_svs',
 			cmd	=> $merge_somatic_svs,
-			dependencies	=> join(',', @part2_jobs),
+			dependencies	=> join(':', @part2_jobs),
 			modules		=> [$delly, $bcftools],
 			max_time	=> $tool_data->{parameters}->{merge}->{time},
 			mem		=> $tool_data->{parameters}->{merge}->{mem},
@@ -1115,7 +1127,7 @@ sub main {
 			}
 
 		# should intermediate files be removed
-		if ($args{del_intermediates}) {
+		if ( ($args{del_intermediates}) && (scalar(@{$patient_jobs{$patient}}) > 0) ) {
 
 			print $log "\nSubmitting job to clean up temporary/intermediate files...\n";
 
@@ -1132,7 +1144,7 @@ sub main {
 				log_dir	=> $log_directory,
 				name	=> 'run_somatic_cleanup_' . $patient,
 				cmd	=> $cleanup_cmd,
-				dependencies	=> join(',', @{$patient_jobs{$patient}}),
+				dependencies	=> join(':', @{$patient_jobs{$patient}}),
 				mem		=> '256M',
 				hpc_driver	=> $args{hpc_driver}
 				);
@@ -1163,7 +1175,7 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'output_job_metrics_' . $run_count,
 			cmd	=> $collect_metrics,
-			dependencies	=> join(',', @all_jobs),
+			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver}
 			);
@@ -1176,10 +1188,20 @@ sub main {
 			log_file	=> $log
 			);
 
-		# print the final job id to stdout to be collected by the master pipeline
-		print $run_id;
-		} else {
-		print '000000';
+		# wait until it finishes
+		unless ($args{no_wait}) {
+
+			my $complete = 0;
+
+			while (!$complete) {
+				sleep(5);
+				my $status = `sacct --format='State' -j $run_id`;
+				if ($status =~ m/COMPLETED/s) { $complete = 1; }
+				elsif ($status !~ m/PENDING|RUNNING/) {
+					die("Final DELLY accounting job: $run_id finished with errors.");
+					}
+				}
+			}
 		}
 
 	# finish up
@@ -1191,8 +1213,7 @@ sub main {
 # declare variables
 my ($tool_config, $data_config, $output_directory);
 my $hpc_driver = 'slurm';
-my ($remove_junk, $dry_run, $germline, $help);
-my $dependencies = '';
+my ($remove_junk, $dry_run, $germline, $help, $no_wait);
 
 # get command line arguments
 GetOptions(
@@ -1202,8 +1223,8 @@ GetOptions(
 	'o|out_dir=s'	=> \$output_directory,
 	'c|cluster=s'	=> \$hpc_driver,
 	'remove'	=> \$remove_junk,
-	'dry_run'	=> \$dry_run,
-	'depends=s'	=> \$dependencies,
+	'dry-run'	=> \$dry_run,
+	'no-wait'	=> \$no_wait,
 	'germline'	=> \$germline
 	);
 
@@ -1217,11 +1238,11 @@ if ($help) {
 		"\t--germline\t<boolean> look for germline variants (only looks at normal samples)? (NOT TESTED!! default: false)",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
-		"\t--dry_run\t<boolean> should jobs be submitted? (default: false)",
-		"\t--depends\t<string> comma separated list of dependencies (optional)"
+		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
+		"\t--no-wait\t<boolean> should we exit after job submission (true) or wait until all jobs have completed (false)? (default: false)"
 		);
 
-	print $help_msg;
+	print "$help_msg\n";
 	exit;
 	}
 
@@ -1238,7 +1259,7 @@ if ($germline) {
 		hpc_driver		=> $hpc_driver,
 		del_intermediates	=> $remove_junk,
 		dry_run			=> $dry_run,
-		dependencies		=> $dependencies
+		no_wait			=> $no_wait
 		);
 
 	} else {
@@ -1250,6 +1271,6 @@ if ($germline) {
 		hpc_driver		=> $hpc_driver,
 		del_intermediates	=> $remove_junk,
 		dry_run			=> $dry_run,
-		dependencies		=> $dependencies
+		no_wait			=> $no_wait
 		);
 	}

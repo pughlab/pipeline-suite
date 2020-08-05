@@ -10,6 +10,7 @@ use Getopt::Long;
 use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
+use IO::Handle;
 
 my $cwd = dirname($0);
 require "$cwd/utilities.pl";
@@ -168,6 +169,7 @@ sub main {
 		hpc_driver		=> undef,
 		del_intermediates	=> undef,
 		dry_run			=> undef,
+		no_wait			=> undef,
 		@_
 		);
 
@@ -207,6 +209,7 @@ sub main {
 
 	# start logging
 	open (my $log, '>', $log_file) or die "Could not open $log_file for writing.";
+	$log->autoflush;
 
 	print $log "---\n";
 	print $log "Running BWA-MEM alignment pipeline.\n";
@@ -490,7 +493,7 @@ sub main {
 					name	=> $jobname,
 					cmd	=> $merge_cmd,
 					modules	=> [$picard],
-					dependencies	=> join(',', @lane_holds),
+					dependencies	=> join(':', @lane_holds),
 					mem 		=> $tool_data->{parameters}->{merge}->{mem}->{$type},
 					max_time 	=> $tool_data->{parameters}->{merge}->{time}->{$type},
 					hpc_driver	=> $args{hpc_driver}
@@ -516,28 +519,29 @@ sub main {
 			# clean up/remove intermediate files (once per sample)
 			if ($args{del_intermediates}) {
 
-				print $log "Submitting job to clean up temporary/intermediate files...\n";
+				if (scalar(@smp_jobs) == 0) {
+					`rm -rf $tmp_directory`;
+					} else {
 
-				# make sure final output exists before removing intermediate files!
-				$cleanup_cmd = join("\n",
-					"if [ -s $smp_output ]; then",
-					$cleanup_cmd,
-					"else",
-					'echo "FINAL OUTPUT: $smp_output is missing; not removing intermediates"',
-					"fi"
-					);
+					print $log "Submitting job to clean up temporary/intermediate files...\n";
 
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_cleanup_' . $sample,
-					cmd	=> $cleanup_cmd,
-					dependencies	=> join(',', @smp_jobs),
-					mem		=> '256M',
-					hpc_driver	=> $args{hpc_driver}
-					);
+					# make sure final output exists before removing intermediate files!
+					$cleanup_cmd = join("\n",
+						"if [ -s $smp_output ]; then",
+						$cleanup_cmd,
+						"else",
+						'echo "FINAL OUTPUT: $smp_output is missing; not removing intermediates"',
+						"fi"
+						);
 
-				# don't submit a job if there is nothing to cleanup, because all above jobs were skipped!
-				if (scalar(@smp_jobs) > 0) {
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_cleanup_' . $sample,
+						cmd	=> $cleanup_cmd,
+						dependencies	=> join(':', @smp_jobs),
+						mem		=> '256M',
+						hpc_driver	=> $args{hpc_driver}
+						);
 
 					$run_id_extra = submit_job(
 						jobname		=> 'run_cleanup_' . $sample,
@@ -580,7 +584,7 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'output_job_metrics_' . $run_count,
 			cmd	=> $collect_metrics,
-			dependencies	=> join(',', @all_jobs),
+			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver}
 			);
@@ -593,10 +597,20 @@ sub main {
 			log_file	=> $log
 			);
 
-		# print the final job id to stdout to be collected by the master pipeline
-		print $run_id;
-		} else {
-		print '000000';
+		# wait until it finishes
+		unless ($args{no_wait}) {
+
+			my $complete = 0;
+
+			while (!$complete) {
+				sleep(5);
+				my $status = `sacct --format='State' -j $run_id`;
+				if ($status =~ m/COMPLETED/s) { $complete = 1; }
+				elsif ($status !~ m/PENDING|RUNNING/) {
+					die("Final BWA accounting job: $run_id finished with errors.");
+					}
+				}
+			}
 		}
 
 	# finish up
@@ -609,7 +623,7 @@ sub main {
 # declare variables
 my ($data_config, $tool_config, $output_directory, $output_config) = undef;
 my $hpc_driver = 'slurm';
-my ($remove_junk, $dry_run);
+my ($remove_junk, $dry_run, $no_wait);
 my $help;
 
 # read in command line arguments
@@ -621,7 +635,8 @@ GetOptions(
 	'b|out_yaml=s'	=> \$output_config,
 	'c|cluster=s'	=> \$hpc_driver,
 	'remove'	=> \$remove_junk,
-	'dry_run'	=> \$dry_run
+	'dry-run'	=> \$dry_run,
+	'no-wait'	=> \$no_wait
 	);
 
 if ($help) {
@@ -634,10 +649,11 @@ if ($help) {
 		"\t--out_yaml|-b\t<string> path to output yaml (listing BWA-aligned BAMs)",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
-		"\t--dry_run\t<boolean> should jobs be submitted? (default: false)"
+		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
+		"\t--no-wait\t<boolean> should we exit after job submission (true) or wait until all jobs have completed (false)? (default: false)"
 		);
 
-	print $help_msg;
+	print "$help_msg\n";
 	exit;
 	}
 
@@ -652,5 +668,6 @@ main(
 	output_config		=> $output_config,
 	hpc_driver		=> $hpc_driver,
 	del_intermediates	=> $remove_junk,
-	dry_run			=> $dry_run
+	dry_run			=> $dry_run,
+	no_wait			=> $no_wait
 	);

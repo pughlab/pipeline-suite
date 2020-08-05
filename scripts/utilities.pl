@@ -86,9 +86,11 @@ sub error_checking {
 				}
 			}
 
-			elsif (!defined($tool_data->{intervals_bed})) {
-				print "WARNING: no target intervals provided.\n";
-				print ">>If this is exome data, please provide the target regions!\n";
+			elsif ('varscan' eq $pipeline) {
+				if (!defined($tool_data->{intervals_bed})) {
+					print "WARNING: no target intervals provided.\n";
+					print ">>If this is exome data, please provide the target regions!\n";
+				}
 			}
 
 		} elsif (('rna' eq $data_type) && ('strelka' eq $pipeline)) {
@@ -187,7 +189,7 @@ sub write_script {
 		name		=> undef,
 		cmd		=> undef,
 		modules 	=> [],
-		dependencies	=> '',
+		dependencies	=> undef,
 		max_time	=> '01:00:00',
 		mem		=> '1G',
 		cpus_per_task	=> 1,
@@ -252,33 +254,40 @@ sub write_script {
 			$sbatch_params .= "\n#SBATCH " . $args{extra_args};
 			}
 
-		if ($args{dependencies} =~ m/,/) {
-			my @depends;
-			my @parts = split(/,/, $args{dependencies});
-			foreach my $part (@parts) {
-				next if ('' eq $part);
-				push @depends, $part;
+		if (defined($args{dependencies})) {
+
+			# change any , to :
+			$args{dependencies} =~ s/,/:/g;
+
+			if ($args{dependencies} =~ m/:/) {
+				my @depends;
+				my @parts = split(/:/, $args{dependencies});
+				foreach my $part (@parts) {
+					next if ('' eq $part);
+					push @depends, $part;
+					}
+
+				if (scalar(@depends) > 1) { $args{dependencies} = join(':', @depends); }
+				elsif (scalar(@depends) == 1) { $args{dependencies} = $depends[0]; }
+				else { $args{dependencies} = ''; }
 				}
 
-			if (scalar(@depends) > 1) { $args{dependencies} = join(',', @depends); }
-			elsif (scalar(@depends) == 1) { $args{dependencies} = $depends[0]; }
-			else { $args{dependencies} = ''; }
-			}
+			if ('' ne $args{dependencies}) {
 
-		if ('' ne $args{dependencies}) {
-
-			if ($args{name} =~ m/job_metrics/) {
-				$sbatch_params .= "\n#SBATCH --dependency=afterany:" . $args{dependencies};
-				} else {
-				$sbatch_params .= "\n#SBATCH --dependency=afterok:" . $args{dependencies};
-				$sbatch_params .= "\n#SBATCH --kill-on-invalid-dep=yes";
+				if ($args{name} =~ m/job_metrics/) {
+					$sbatch_params .= "\n#SBATCH --dependency=afterany:" . $args{dependencies};
+					} else {
+					$sbatch_params .= "\n#SBATCH --dependency=afterok:" . $args{dependencies};
+					$sbatch_params .= "\n#SBATCH --kill-on-invalid-dep=yes";
+					}
 				}
 			}
 
 		print $fh_script $sbatch_params . "\n\n";
 		}
-
-	print $fh_script $modules_to_load . "\n";
+	if (scalar(@modules_list) > 0) {
+		print $fh_script $modules_to_load . "\n\n";
+		}
 	print $fh_script $args{cmd};
 	close($fh_script);
 
@@ -369,6 +378,17 @@ sub collect_job_stats {
 		'-j', $args{job_ids},
 		'>', $args{outfile} . ';',
 		'sed -i "s/,/\t/g"', $args{outfile}
+		);
+
+	$sacct_command .= "\n\n" . join(' ',
+		'$STATUS_COUNT=$(cut -f9', $args{outfile},
+		"| awk '", '\$1 != "0:0" { print $0 }', "' | wc -l)",
+		);
+
+	$sacct_command .= "\n\n" . join("\n",
+		'if (( $STATUS_COUNT > 1 )); then',
+		'  exit 1;',
+		'fi'
 		);
 
 	return($sacct_command);

@@ -11,6 +11,7 @@ use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
 use List::Util qw(any);
+use IO::Handle;
 
 my $cwd = dirname($0);
 require "$cwd/utilities.pl";
@@ -147,7 +148,7 @@ sub main{
 		del_intermediates	=> undef,
 		dry_run			=> undef,
 		project			=> undef,
-		dependencies		=> '',
+		no_wait			=> undef,
 		@_
 		);
 
@@ -188,6 +189,7 @@ sub main{
 
 	# start logging
 	open (my $log, '>', $log_file) or die "Could not open $log_file for writing.";
+	$log->autoflush;
 
 	print $log "---\n";
 	print $log "Running Variant Call (HaplotypeCaller) pipeline.\n";
@@ -314,7 +316,6 @@ sub main{
 					name	=> 'run_haplotype_caller_' . $sample,
 					cmd	=> $call_variants_cmd,
 					modules	=> [$gatk],
-					dependencies	=> $args{dependencies},
 					max_time	=> $tool_data->{parameters}->{haplotype_call}->{time},
 					mem		=> $tool_data->{parameters}->{haplotype_call}->{mem},
 					hpc_driver	=> $args{hpc_driver}
@@ -469,40 +470,45 @@ sub main{
 		# run per patient
 		if ($args{del_intermediates}) {
 
-			print $log "Submitting job to clean up temporary/intermediate files...\n";
+			if (scalar(@patient_jobs) == 0) {
+				`rm -rf $tmp_directory`;
+				} else {
 
-			# make sure final output exists before removing intermediate files!
-			my @files_to_check;
-			foreach my $tmp ( @final_outputs ) {
-				$tmp .= '.md5';
-				push @files_to_check, $tmp;
+				print $log "Submitting job to clean up temporary/intermediate files...\n";
+
+				# make sure final output exists before removing intermediate files!
+				my @files_to_check;
+				foreach my $tmp ( @final_outputs ) {
+					$tmp .= '.md5';
+					push @files_to_check, $tmp;
+					}
+
+				$cleanup_cmd_rna = join("\n",
+					"if [ -s " . join(" ] && [ -s ", @files_to_check) . " ]; then",
+					$cleanup_cmd_rna,
+					"else",
+					'echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
+					"fi"
+					);
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_cleanup_' . $patient,
+					cmd	=> $cleanup_cmd_rna,
+					dependencies	=> join(':', @patient_jobs),
+					max_time	=> '00:05:00',
+					mem		=> '256M',
+					hpc_driver	=> $args{hpc_driver}
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_cleanup_' . $patient,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
 				}
-
-			$cleanup_cmd_rna = join("\n",
-				"if [ -s " . join(" ] && [ -s ", @files_to_check) . " ]; then",
-				$cleanup_cmd_rna,
-				"else",
-				'echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
-				"fi"
-				);
-
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'run_cleanup_' . $patient,
-				cmd	=> $cleanup_cmd_rna,
-				dependencies	=> join(',', @patient_jobs),
-				max_time	=> '00:05:00',
-				mem		=> '256M',
-				hpc_driver	=> $args{hpc_driver}
-				);
-
-			$run_id = submit_job(
-				jobname		=> 'run_cleanup_' . $patient,
-				shell_command	=> $run_script,
-				hpc_driver	=> $args{hpc_driver},
-				dry_run		=> $args{dry_run},
-				log_file	=> $log
-				);
 			}
 
 		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
@@ -571,7 +577,7 @@ sub main{
 					name	=> 'run_combine_gvcfs_batch_' . $batch_idx,
 					cmd	=> $combine_cmd,
 					modules	=> [$gatk, 'tabix'],
-					dependencies	=> join(',', @all_jobs),
+					dependencies	=> join(':', @all_jobs),
 					max_time	=> $tool_data->{parameters}->{combine_gvcfs}->{time},
 					mem		=> $tool_data->{parameters}->{combine_gvcfs}->{mem},
 					hpc_driver	=> $args{hpc_driver}
@@ -611,7 +617,7 @@ sub main{
 				log_dir	=> $log_directory,
 				name	=> 'run_final_cleanup',
 				cmd	=> $cleanup_cmd_dna,
-				dependencies	=> join(',', @all_jobs),
+				dependencies	=> join(':', @all_jobs),
 				mem		=> '256M',
 				hpc_driver	=> $args{hpc_driver}
 				);
@@ -640,7 +646,7 @@ sub main{
 			name	=> 'combine_and_format_results',
 			cmd	=> $collect_results,
 			modules		=> [$r_version],
-			dependencies	=> join(',', @all_jobs),
+			dependencies	=> join(':', @all_jobs),
 			max_time	=> $tool_data->{parameters}->{combine_results}->{time},
 			mem		=> $tool_data->{parameters}->{combine_results}->{mem},
 			hpc_driver	=> $args{hpc_driver}
@@ -668,7 +674,8 @@ sub main{
 			log_dir	=> $log_directory,
 			name	=> 'output_job_metrics_' . $run_count,
 			cmd	=> $collect_metrics,
-			dependencies	=> join(',', @all_jobs),
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver}
 			);
 
@@ -680,10 +687,20 @@ sub main{
 			log_file	=> $log
 			);
 
-		# print the final job id to stdout to be collected by the master pipeline
-		print $run_id;
-		} else {
-		print '0000000';
+		# wait until it finishes
+		unless ($args{no_wait}) {
+
+			my $complete = 0;
+
+			while (!$complete) {
+				sleep(5);
+				my $status = `sacct --format='State' -j $run_id`;
+				if ($status =~ m/COMPLETED/s) { $complete = 1; }
+				elsif ($status !~ m/PENDING|RUNNING/) {
+					die("Final HaplotypeCaller accounting job: $run_id finished with errors.");
+					}
+				}
+			}
 		}
 
 	# finish up
@@ -695,11 +712,7 @@ sub main{
 # declare variables
 my ($data_config, $tool_config, $output_directory, $project_name);
 my $hpc_driver = 'slurm';
-my ($remove_junk, $dry_run);
-my $dependencies = '';
-
-my $rna;
-my $help;
+my ($remove_junk, $dry_run, $rna, $help, $no_wait);
 
 # get command line arguments
 GetOptions(
@@ -707,13 +720,32 @@ GetOptions(
 	'd|data=s'	=> \$data_config,
 	't|tool=s'	=> \$tool_config,
 	'o|out_dir=s'	=> \$output_directory,
+	'p|project=s'	=> \$project_name,
 	'c|cluster=s'	=> \$hpc_driver,
 	'remove'	=> \$remove_junk,
-	'dry_run'	=> \$dry_run,
-	'p|project=s'	=> \$project_name,
-	'depends=s'	=> \$dependencies,
+	'dry-run'	=> \$dry_run,
+	'no-wait'	=> \$no_wait,
 	'rna'		=> \$rna
 	);
+
+if ($help) {
+	my $help_msg = join("\n",
+		"Options:",
+		"\t--help|-h\tPrint this help message",
+		"\t--data|-d\t<string> data config (yaml format)",
+		"\t--tool|-t\t<string> tool config (yaml format)",
+		"\t--out_dir|-o\t<string> path to output directory",
+		"\t--project|-p\t<string> project name",
+		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
+		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
+		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
+		"\t--no-wait\t<boolean> should we exit after job submission (true) or wait until all jobs have completed (false)? (default: false)",
+		"\t--rna\t<boolean> is the input RNA (STAR-aligned BAMs)? (default: false)"
+		);
+
+	print "$help_msg\n";
+	exit;
+	}
 
 # do some quick error checks to confirm valid arguments	
 if (!defined($tool_config)) { die("No tool config file defined; please provide -t | --tool (ie, tool_config.yaml)"); }
@@ -727,10 +759,10 @@ main(
 	tool_config		=> $tool_config,
 	data_config		=> $data_config,
 	output_directory	=> $output_directory,
+	project			=> $project_name,
 	hpc_driver		=> $hpc_driver,
 	del_intermediates	=> $remove_junk,
 	dry_run			=> $dry_run,
-	project			=> $project_name,
-	data_type		=> $data_type,
-	dependencies		=> $dependencies
+	no_wait			=> $no_wait,
+	data_type		=> $data_type
 	);

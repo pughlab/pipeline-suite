@@ -10,6 +10,7 @@ use Getopt::Long;
 use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
+use List::Util 'any';
 
 my $cwd = dirname($0);
 require "$cwd/scripts/utilities.pl";
@@ -72,6 +73,7 @@ sub main {
 	### MAIN ###########################################################################################
 
 	my ($fc_run_id, $star_run_id, $gatk_run_id, $vc_run_id, $rsem_run_id, $starfus_run_id) = '';
+	my $run_script;
 
 	# prepare directory structure
 	my $fc_directory = join('/', $output_directory, 'FusionCatcher');
@@ -102,16 +104,37 @@ sub main {
 		if ($args{cleanup}) {
 			$fc_command .= " --remove";
 			}
-		if ($args{dry_run}) {
-			$fc_command .= " --dry_run";
-			}
 
 		# record command (in log directory) and then run job
 		print $log "\n\nSubmitting job for fusioncatcher.pl\n";
 		print $log "  COMMAND: $fc_command\n\n";
 
-		$fc_run_id = `$fc_command`;
-		sleep(5);
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'pughlab_rna_pipeline__run_fusioncatcher',
+			cmd	=> $fc_command,
+			modules	=> ['perl'],
+			mem		=> '256M',
+			hpc_driver	=> $args{cluster}
+			);
+
+		if ($args{dry_run}) {
+
+			$fc_command .= " --dry-run";
+			`$fc_command`;
+
+			} else {
+
+			$fc_run_id = submit_job(
+				jobname		=> $log_directory,
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			print $log ">>> FUSIONCATCHER job id: $fc_run_id\n\n";
+			}
 		}
 
 	## run STAR-alignment pipeline
@@ -132,19 +155,37 @@ sub main {
 		if ($args{cleanup}) {
 			$star_command .= " --remove";
 			}
-		if ($args{dry_run}) {
-			$star_command .= " --dry_run";
-			}
 
 		# record command (in log directory) and then run job
 		print $log "Submitting job for star.pl\n";
 		print $log "  COMMAND: $star_command\n\n";
 
-		$star_run_id = `$star_command`;
-		sleep(5);
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'pughlab_rna_pipeline__run_star',
+			cmd	=> $star_command,
+			modules	=> ['perl'],
+			mem		=> '256M',
+			hpc_driver	=> $args{cluster}
+			);
 
-		print $log ">>> Final STAR job id: $star_run_id\n\n";
+		if ($args{dry_run}) {
 
+			$star_command .= " --dry-run";
+			`$star_command`;
+
+			} else {
+
+			$star_run_id = submit_job(
+				jobname		=> $log_directory,
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			print $log ">>> STAR job id: $star_run_id\n\n";
+			}
 		}
 
 	## run STAR-Fusion pipeline
@@ -158,23 +199,44 @@ sub main {
 			"-t", $tool_data->{star_fusion_config},
 			"-d", $star_output_yaml,
 			"-c", $args{cluster},
-			"-p", $tool_data->{project_name},
-			"--depends", $star_run_id
+			"-p", $tool_data->{project_name}
 			);
 
 		if ($args{cleanup}) {
 			$starfus_command .= " --remove";
-			}
-		if ($args{dry_run}) {
-			$starfus_command .= " --dry_run";
 			}
 
 		# record command (in log directory) and then run job
 		print $log "Submitting job for star_fusion.pl\n";
 		print $log "  COMMAND: $starfus_command\n\n";
 
-		$starfus_run_id = `$starfus_command`;
-		sleep(5);
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'pughlab_rna_pipeline__run_star_fusion',
+			cmd	=> $starfus_command,
+			modules	=> ['perl'],
+			dependencies	=> $star_run_id,
+			mem		=> '256M',
+			hpc_driver	=> $args{cluster}
+			);
+
+		if ($args{dry_run}) {
+
+			$starfus_command .= " --dry-run";
+			`$starfus_command`;
+
+			} else {
+
+			$starfus_run_id = submit_job(
+				jobname		=> $log_directory,
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			print $log ">>> STAR-FUSION job id: $starfus_run_id\n\n";
+			}
 		}
 
 	## run RSEM pipeline
@@ -188,22 +250,44 @@ sub main {
 			"-t", $tool_data->{rsem_config},
 			"-d", $star_output_yaml,
 			"-c", $args{cluster},
-			"-p", $tool_data->{project_name},
-			"--depends", $star_run_id
+			"-p", $tool_data->{project_name}
 			);
 
 		if ($args{cleanup}) {
 			$rsem_command .= " --remove";
 			}
-		if ($args{dry_run}) {
-			$rsem_command .= " --dry_run";
-			}
 
 		# record command (in log directory) and then run job
 		print $log "Submitting job for rsem.pl\n";
 		print $log "  COMMAND: $rsem_command\n\n";
-		$rsem_run_id = `$rsem_command`;
-		sleep(5);
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'pughlab_rna_pipeline__run_rsem',
+			cmd	=> $rsem_command,
+			modules	=> ['perl'],
+			dependencies	=> $star_run_id,
+			mem		=> '256M',
+			hpc_driver	=> $args{cluster}
+			);
+
+		if ($args{dry_run}) {
+
+			$rsem_command .= " --dry-run";
+			`$rsem_command`;
+
+			} else {
+
+			$rsem_run_id = submit_job(
+				jobname		=> $log_directory,
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			print $log ">>> RSEM job id: $rsem_run_id\n\n";
+			}
 		}
 
 	## run GATK indel realignment/recalibration pipeline
@@ -218,24 +302,44 @@ sub main {
 			"-t", $tool_data->{gatk_config},
 			"-d", $star_output_yaml,
 			"-b", $gatk_output_yaml,
-			"-c", $args{cluster},
-			"--depends", $star_run_id
+			"-c", $args{cluster}
 			);
 
 		if ($args{cleanup}) {
 			$gatk_command .= " --remove";
 			}
-		if ($args{dry_run}) {
-			$gatk_command .= " --dry_run";
-			}
 
 		# record command (in log directory) and then run job
 		print $log "Submitting job for gatk.pl\n";
 		print $log "  COMMAND: $gatk_command\n\n";
-		$gatk_run_id = `$gatk_command`;
-		sleep(5);
-		print $log ">>> Final GATK job id: $gatk_run_id\n\n";
 
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'pughlab_rna_pipeline__run_gatk',
+			cmd	=> $gatk_command,
+			modules	=> ['perl'],
+			dependencies	=> $star_run_id,
+			mem		=> '256M',
+			hpc_driver	=> $args{cluster}
+			);
+
+		if ($args{dry_run}) {
+
+			$gatk_command .= " --dry-run";
+			`$gatk_command`;
+
+			} else {
+
+			$gatk_run_id = submit_job(
+				jobname		=> $log_directory,
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			print $log ">>> GATK job id: $gatk_run_id\n\n";
+			}
 		}
 
 	## run GATK's HaplotypeCaller pipeline
@@ -250,22 +354,44 @@ sub main {
 			"-t", $tool_data->{haplotype_caller_config},
 			"-d", $gatk_output_yaml,
 			"-c", $args{cluster},
-			"-p", $tool_data->{project_name},
-			"--depends", $gatk_run_id
+			"-p", $tool_data->{project_name}
 			);
 
 		if ($args{cleanup}) {
 			$vc_command .= " --remove";
 			}
-		if ($args{dry_run}) {
-			$vc_command .= " --dry_run";
-			}
 
 		# record command (in log directory) and then run job
 		print $log "Submitting job for haplotype_caller.pl\n";
 		print $log "  COMMAND: $vc_command\n\n";
-		$vc_run_id = `$vc_command`;
-		sleep(5);
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'pughlab_rna_pipeline__run_haplotypecaller',
+			cmd	=> $vc_command,
+			modules	=> ['perl'],
+			dependencies	=> $gatk_run_id,
+			mem		=> '256M',
+			hpc_driver	=> $args{cluster}
+			);
+
+		if ($args{dry_run}) {
+
+			$vc_command .= " --dry-run";
+			`$vc_command`;
+
+			} else {
+
+			$vc_run_id = submit_job(
+				jobname		=> $log_directory,
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			print $log ">>> HaplotypeCaller job id: $vc_run_id\n\n";
+			}
 		}
 
 	# finish up
@@ -289,7 +415,7 @@ GetOptions(
 	'd|data=s'	=> \$data_config,
 	'c|cluster=s'	=> \$hpc_driver,
 	'remove'	=> \$remove_junk,
-	'dry_run'	=> \$dry_run
+	'dry-run'	=> \$dry_run
 	 );
 
 if ($help) {
@@ -300,10 +426,10 @@ if ($help) {
 		"\t--tool|-t\t<string> tool config (yaml format)",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
-		"\t--dry_run\t<boolean> should jobs be submitted? (default: false)"
+		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)"
 		);
 
-	print $help_msg;
+	print "$help_msg\n";
 	exit;
 	}
 

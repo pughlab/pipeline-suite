@@ -1,4 +1,4 @@
-# PughLab pipeline-suite (version 2.0)
+# PughLab pipeline-suite (version 2.1)
 
 ## Introduction
 This is a collection of pipelines to be used for NGS (both DNA and RNA) analyses, from alignment to variant calling.
@@ -19,7 +19,7 @@ There are example config files located in the "configs" folder:
   - master configs must specify common parameters, including:
     - project name
     - path to desired output directory (will be created if this is the initial run)
-    - path to individual tool configs
+    - paths to individual tool configs
  
 - individual tool configs:
   - all tool configs must specify:
@@ -66,6 +66,11 @@ There are example config files located in the "configs" folder:
     - path to target intervals (such as bed file for exome capture kit)
     - path to dbSNP file (if undefined, a default will be used)
 
+   - bamqc_config.yaml, specifies:
+    - path to reference genome (requires .fa, .dict and .fai files)
+    - path to hapmap/SNP file with population frequencies
+    - path to target intervals (such as bed file for exome capture kit)
+
    - haplotype_caller_config.yaml, specifies:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to target intervals (exome capture kit [bed], if defined)
@@ -79,6 +84,7 @@ There are example config files located in the "configs" folder:
     - path to target intervals (exome capture kit [bed], if defined)
     - path to dbSNP file (if undefined, a default will be used)
     - path to COSMIC file (if desired)
+    - path to GTF file (if desired)
     - path to panel of normals (optional if developed elsewhere)
 
    - mutect2_config.yaml, specifies:
@@ -90,14 +96,33 @@ There are example config files located in the "configs" folder:
     - path to target intervals (exome capture kit [bed], if defined)
     - path to dbSNP file (if undefined, a default will be used)
     - path to COSMIC file (if desired)
+    - path to GTF file (if desired)
     - path to panel of normals (optional if developed elsewhere)
 
-   - varscan_config.yaml, specifies:
+   - strelka_config.yaml, specifies:
+    - sequence type (one of exome, targeted, rna or wgs)
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to vcf2maf.pl
     - path to VEP (tool/version, cache data)
     - path to ExAC data (for filtering/annotating with population allele frequencies)
+    - path to GTF file (if desired)
+    - path to target intervals (exome capture kit [bed; bgzipped and tabix indexed], if defined)
+
+   - varscan_config.yaml, specifies:
+    - path to reference genome (requires .fa, .dict and .fai files)
+    - path to sequenza.R script
     - path to target intervals (exome capture kit [bed], if defined)
+    - path to GTF file (if desired)
+    - path to vcf2maf.pl
+    - path to VEP (tool/version, cache data)
+    - path to ExAC data (for filtering/annotating with population allele frequencies)
+
+   - delly_config.yaml, specifies:
+    - path to reference genome (requires .fa, .dict and .fai files)
+
+   - mavis_config.yaml, specifies:
+    - path to reference genome (requires .fa, .dict and .fai files)
+    - paths to mavis references (annotations, masking, aligner, etc.)
 
 ## Running a pipeline
 If you are running these pipelines on the cluster, be sure to first load perl!
@@ -149,10 +174,10 @@ perl pughlab_dnaseq_pipeline.pl \
 --variant_calling \
 -c slurm \
 --remove \
---dry_run
+--dry-run
 </code></pre>
 
-This will generate the directory structure in the output directory (provided in /path/to/dna_pipeline_config.yaml), including a "logs/run_DNA_pipeline_TIMESTAMP/" directory containing a file "run_DNASeq_pipeline.log" which lists the individual tool commands; these can be run separately if "--dry_run" is set, or in the event of a failure at any stage and you don't need to re-run the entire thing (***Note:*** doing so would not regenerate files that already exist).
+This will generate the directory structure in the output directory (provided in /path/to/dna_pipeline_config.yaml), including a "logs/run_DNA_pipeline_TIMESTAMP/" directory containing a file "run_DNASeq_pipeline.log" which lists the individual tool commands; these can be run separately if "--dry-run" is set, or in the event of a failure at any stage and you don't need to re-run the entire thing (***Note:*** doing so would not regenerate files that already exist).
 
 If your project is quite large (>20 samples), you may prefer to run the alignments and variant calling steps separately (ie, produce the final GATK-processed bams and remove BWA intermediates to free up space). To accomplish this, simply indicate --preprocessing or --variant_calling in the command. However, since the variant calling steps are best run as a single cohort, be sure to combine all of the gatk_bam_config.yamls prior to running variant calling:
 
@@ -171,7 +196,7 @@ perl bwa.pl \
 -b /path/to/output/bam.yaml \
 -c slurm \
 --remove \
---dry_run
+--dry-run
 </code></pre>
 
 This will again write individual commands to file: /path/to/output/directory/BWA/logs/run_BWA_pipeline.log
@@ -186,7 +211,7 @@ perl gatk.pl \
 -b /path/to/output/bam.yaml \
 -c slurm \
 --remove \
---dry_run
+--dry-run
 </code></pre>
 
 ### get BAM QC metrics, including coverage, contamination estimates and callable bases
@@ -199,7 +224,7 @@ perl contest.pl \
 -p PROJECTID \
 -c slurm \
 --remove \
---dry_run
+--dry-run
 
 perl get_coverage.pl \
 --depends { optional: final job ID from gatk.pl } \
@@ -209,7 +234,7 @@ perl get_coverage.pl \
 -p PROJECTID \
 -c slurm \
 --remove \
---dry_run
+--dry-run
 </code></pre>
 
 ### Variant calling steps:
@@ -222,7 +247,7 @@ perl haplotype_caller.pl \
 -o /path/to/output/directory \
 -c slurm \
 --remove \
---dry_run
+--dry-run
 
 perl genotype_gvcfs.pl \
 --depends { optional: final job ID from haplotype_caller.pl } \
@@ -232,7 +257,7 @@ perl genotype_gvcfs.pl \
 -p PROJECTID \
 -c slurm \
 --remove \
---dry_run
+--dry-run
 </code></pre>
 
 ### run GATK's MuTect (v1) to produce somatic SNV calls
@@ -246,7 +271,7 @@ perl mutect.pl \
 -o /path/to/output/directory \
 -c slurm \
 --remove \
---dry_run
+--dry-run
 
 Generate somatic SNV calls:
 perl mutect.pl \
@@ -258,7 +283,7 @@ perl mutect.pl \
 -p PROJECTID \
 -c slurm \
 --remove \
---dry_run
+--dry-run
 </code></pre>
 
 ### run GATK's MuTect2 to produce somatic SNV calls
@@ -272,7 +297,7 @@ perl mutect2.pl \
 -o /path/to/output/directory \
 -c slurm \
 --remove \
---dry_run
+--dry-run
 
 Generate somatic SNV calls:
 perl mutect2.pl \
@@ -284,7 +309,7 @@ perl mutect2.pl \
 -p PROJECTID \
 -c slurm \
 --remove \
---dry_run
+--dry-run
 </code></pre>
 
 ### run VarScan to produce SNV and CNA calls
@@ -299,7 +324,7 @@ perl varscan.pl \
 -p PROJECTID \
 -c slurm \
 --remove \
---dry_run
+--dry-run
 
 Run tumour-only samples with a panel of normals (can also be run without, but germline filtering will not be performed):
 perl varscan.pl \
@@ -312,7 +337,7 @@ perl varscan.pl \
 -p PROJECTID \
 -c slurm \
 --remove \
---dry_run
+--dry-run
 </code></pre>
 
 ### run Strelka to produce SNV and Manta SV calls
@@ -326,7 +351,7 @@ perl strelka.pl \
 -p PROJECTID \
 -c slurm \
 --remove \
---dry_run
+--dry-run
 </code></pre>
 
 ### run Delly to produce SV calls
@@ -338,7 +363,7 @@ perl delly.pl \
 -o /path/to/output/directory \
 -c slurm \
 --remove \
---dry_run
+--dry-run
 </code></pre>
 
 ### run Mavis to annotate Delly and Manta SV calls
@@ -352,7 +377,7 @@ perl mavis.pl \
 --delly /path/to/delly/directory \
 -c slurm \
 --remove \
---dry_run
+--dry-run
 </code></pre>
 
 ***Note:*** mavis.pl is the only step that is not immediately run, as it relies on previous steps (delly, manta) having already been completed in order to find input files.
@@ -367,10 +392,10 @@ perl pughlab_rnaseq_pipeline.pl \
 -d /path/to/fastq_rna_config.yaml\
 -c slurm \
 --remove \
---dry_run
+--dry-run
 </code></pre>
 
-This will generate the directory structure in the output directory (provided in /path/to/master_rna_config.yaml), including a "logs/run_RNA_pipeline_TIMESTAMP/" directory containing a file "run_RNASeq_pipeline.log" which lists the individual tool commands; these can be run separately if "--dry_run" or in the event of a failure at any stage and you don't need to re-run the entire thing (although doing so would not regenerate files that already exist).
+This will generate the directory structure in the output directory (provided in /path/to/master_rna_config.yaml), including a "logs/run_RNA_pipeline_TIMESTAMP/" directory containing a file "run_RNASeq_pipeline.log" which lists the individual tool commands; these can be run separately if "--dry-run" or in the event of a failure at any stage and you don't need to re-run the entire thing (although doing so would not regenerate files that already exist).
 
 ### run STAR to align to a reference genome
 </code></pre>
@@ -382,7 +407,7 @@ perl star.pl \
 -p PROJECTID \
 -c slurm \
 --remove \
---dry_run
+--dry-run
 </code></pre>
 
 This will again write individual commands to file: /path/to/output/directory/STAR/logs/run_STAR_pipeline.log
@@ -396,7 +421,7 @@ perl fusioncatcher.pl \
 -p PROJECTID \
 -c slurm \
 --remove \
---dry_run
+--dry-run
 </code></pre>
 
 ### run RSEM on STAR-aligned BAMs
@@ -409,7 +434,7 @@ perl rsem.pl \
 -p PROJECTID \
 -c slurm \
 --remove \
---dry_run
+--dry-run
 </code></pre>
 
 ### run STAR-Fusion on STAR-aligned BAMs
@@ -422,7 +447,7 @@ perl star_fusion.pl \
 -p PROJECTID \
 -c slurm \
 --remove \
---dry_run
+--dry-run
 </code></pre>
 
 ### run GATK split CIGAR, indel realignment and base quality score recalibration on MarkDup BAMs
@@ -436,7 +461,7 @@ perl gatk.pl \
 -b /path/to/output/bam.yaml \
 -c slurm \
 --remove \
---dry_run
+--dry-run
 </code></pre>
 
 ### run GATK HaplotypeCaller, variant filtration and annotataion
@@ -450,7 +475,7 @@ perl haplotype_caller.pl \
 -p PROJECTID \
 -c slurm \
 --remove \
---dry_run
+--dry-run
 </code></pre>
 
 These will again write individual commands to file: /path/to/output/directory/TOOL/logs/run_TOOL_pipeline.log
