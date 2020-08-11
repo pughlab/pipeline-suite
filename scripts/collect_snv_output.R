@@ -157,6 +157,10 @@ for (i in 1:length(maf.files)) {
 	tmp <- tmp[which(tmp$FILTER == 'PASS'),];
 	tmp <- tmp[which(tmp$t_depth > 20),];
 
+	if (!all(is.na(tmp$n_depth))) {
+		tmp <- tmp[which(tmp$n_depth > 15),];
+		}
+
 	# filter out known (dbSNP) variants
 	#tmp <- tmp[!grepl('rs', tmp$dbSNP_RS),];
 
