@@ -131,5 +131,14 @@ for (i in rownames(cor.data)) {
 	print(paste("Sample", i, "shows high similarity to sample(s):", paste(similar.smps, collapse = ', ')));
 	}
 
+# and write to file for future use (ie, plotting)
+write.table(
+	cor.data,
+	file = generate.filename(arguments$project, 'germline_correlation', 'tsv'),
+	row.names = TRUE,
+	col.names = NA,
+	sep = '\t'
+	);
+
 ### SAVE SESSION INFO ##############################################################################
 save.session.profile(generate.filename('CollectVariantData','SessionProfile','txt'));
