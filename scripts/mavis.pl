@@ -57,9 +57,9 @@ sub _get_files {
 # format command to run Manta
 sub get_mavis_command {
 	my %args = (
-		tumour_id	=> undef,
+		tumour_ids	=> undef,
+		tumour_bams	=> undef,
 		normal_id	=> undef,
-		tumour_bam	=> undef,
 		normal_bam	=> undef,
 		manta		=> undef,
 		delly		=> undef,
@@ -67,22 +67,36 @@ sub get_mavis_command {
 		@_
 		);
 
-	if ($args{tumour_id} =~ m/^\d/) { $args{tumour_id} = 'X' . $args{tumour_id}; }
-	if ($args{normal_id} =~ m/^\d/) { $args{normal_id} = 'X' . $args{normal_id}; }
-
 	my $mavis_cmd = join(' ',
 		'mavis config',
 		'-w', $args{output},
-		'--library', $args{tumour_id}, 'genome diseased False', $args{tumour_bam},
 		'--convert delly', $args{delly}, 'delly',
-		'--convert manta', $args{manta}, 'manta',
-		'--assign', $args{tumour_id}, 'manta delly'
+		'--convert manta', $args{manta}, 'manta'
 		);
 
-	if (defined($args{normal_id})) {
+	foreach my $smp ( @{$args{tumour_ids}} ) {
+
+		my $id = $smp;
+		if ($smp =~ m/^\d/) {
+			$id = 'X' . $smp;
+			}
+
 		$mavis_cmd .= ' ' . join(' ',
-			'--library', $args{normal_id}, 'genome normal False', $args{normal_bam},
-			'--assign', $args{normal_id}, 'manta delly'
+			'--library', $id, 'genome diseased False', $args{tumour_bams}->{$smp},
+			'--assign', $id, 'manta delly'
+			);
+		}
+
+	if (defined($args{normal_id})) {
+
+		my $id = $args{normal_id};
+		if ($args{normal_id} =~ m/^\d/) {
+			$id = 'X' . $args{normal_id};
+			}
+
+		$mavis_cmd .= ' ' . join(' ',
+			'--library', $id, 'genome normal False', $args{normal_bam},
+			'--assign', $id, 'manta delly'
 			);
 		}
 
@@ -215,6 +229,10 @@ sub main {
 			symlink($smp_data->{$patient}->{normal}->{$normal}, $link);
 			}
 
+		# and format input files
+		my (@manta_svs_formatted, @format_jobs, @delly_svs_patient);
+		my $format_command;
+
 		foreach my $tumour (@tumour_ids) {
 
 			my @tmp = split /\//, $smp_data->{$patient}->{tumour}->{$tumour};
@@ -225,34 +243,17 @@ sub main {
 			$link = join('/', $link_directory, $tumour . '_Delly_SVs.bcf');
 			symlink($delly_svs[0], $link);
 
+			push @delly_svs_patient, $delly_svs[0];
+
 			my @manta_svs = grep { /$tumour/ } @manta_files;
 			foreach my $file ( @manta_svs ) {
 				my @tmp = split /\//, $file;
 				$link = join('/', $link_directory, $tumour . '_Manta_' . $tmp[-1]);
 				symlink($file, $link);
-				}
-			}
 
-		# run mavis commands over each tumour
-		foreach my $sample ( @tumour_ids ) {
-
-			print $log "  SAMPLE: $sample\n\n";
-
-			my $sample_directory = join('/', $patient_directory, $sample);
-			unless(-e $sample_directory) { make_path($sample_directory); }
-
-			my @manta_svs = grep { /$sample/ } @manta_files;
-			my @delly_svs = grep { /$sample/ } @delly_files;
-
-			# first, format input files
-			my (@manta_svs_formatted, @format_jobs);
-			my $format_command;
-
-			foreach my $file ( @manta_svs ) {
-				my @tmp = split /\//, $file;
 				my $stem = $tmp[-1];
 				$stem =~ s/.gz//;
-				my $formatted_vcf = join('/', $sample_directory, 'Manta_formatted_' . $stem);
+				my $formatted_vcf = join('/', $patient_directory, $tumour . '_Manta_formatted_' . $stem);
 
 				# write command to format manta SVs (older version of Manta required for mavis)
 				$format_command .= "\n\n" . join(' ',
@@ -265,122 +266,116 @@ sub main {
 
 				push @manta_svs_formatted, $formatted_vcf;
 				}
+			}
 
-			# check if this should be run
-			if ('Y' eq missing_file(@manta_svs_formatted)) {
+		# check if this should be run
+		if ('Y' eq missing_file(@manta_svs_formatted)) {
 
-				# record command (in log directory) and then run job
-				print $log "Submitting job to format Manta SVs...\n";
+			# record command (in log directory) and then run job
+			print $log "Submitting job to format Manta SVs...\n";
 
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_format_manta_svs_for_mavis_' . $sample,
-					cmd	=> $format_command,
-					modules	=> ['python/2.7'],
-					hpc_driver	=> $args{hpc_driver}
-					);
-
-				$run_id = submit_job(
-					jobname		=> 'run_format_manta_svs_for_mavis_' . $sample,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{hpc_driver},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
-					);
-
-				push @format_jobs, $run_id;
-				push @all_jobs, $run_id;
-				}
-			else {
-				print $log "Skipping format manta step because this has already been completed!\n";
-				}
-
-			# now, run mavis (config, setup, schedule)
-			my $mavis_cmd = "\n" . $mavis_export;
-			my $mavis_cfg = join('/', $sample_directory, 'mavis.cfg');
-			my $mavis_output;
-
-			# run on tumour-only
-			if (scalar(@normal_ids) == 0) {
-
-				$mavis_output = join('/',
-					$sample_directory,
-					'summary',
-					"mavis_summary_all\_$sample.tab"
-					);
-
-				$mavis_cmd .= "\n\n" . get_mavis_command(
-					tumour_id	=> $sample,
-					tumour_bam	=> $smp_data->{$patient}->{tumour}->{$sample},
-					delly		=> $delly_svs[0],
-					manta		=> join(' ', @manta_svs_formatted),
-					output		=> $mavis_cfg
-					);
-
-				} else { # run on T/N pairs
-
-				$mavis_output = join('/',
-					$sample_directory,
-					'summary',
-					"mavis_summary_all_$normal_ids[0]\_$sample.tab"
-					);
-
-				$mavis_cmd .= "\n\n" . get_mavis_command(
-					tumour_id	=> $sample,
-					normal_id	=> $normal_ids[0],
-					tumour_bam	=> $smp_data->{$patient}->{tumour}->{$sample},
-					normal_bam	=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
-					manta		=> join(' ', @manta_svs_formatted),
-					delly		=> $delly_svs[0],
-					output		=> $mavis_cfg
-					);
-				}
-
-			$mavis_cmd .= "\n\n" . "mavis setup $mavis_cfg -o $sample_directory";
-
-			# if build.cfg already exists, then try resubmitting
-			if ('N' eq missing_file("$sample_directory/build.cfg")) {
-				$mavis_cmd .= "\n\n" . "mavis schedule -o $sample_directory --resubmit";
-				} else {
-				$mavis_cmd .= "\n\n" . "mavis schedule -o $sample_directory --submit";
-				}
-
-			$mavis_cmd .= "\n\n" . join("\n",
-				"if [ -s $mavis_output ]; then",
-				"  exit 0",
-				"else",
-				"  exit 1",
-				"fi"
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'run_format_manta_svs_for_mavis_' . $patient,
+				cmd	=> $format_command,
+				modules	=> ['python/2.7'],
+				hpc_driver	=> $args{hpc_driver}
 				);
 
-			# check if this should be run
-			if ('Y' eq missing_file($mavis_output)) {
+			$run_id = submit_job(
+				jobname		=> 'run_format_manta_svs_for_mavis_' . $patient,
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
 
-				# record command (in log directory) and then run job
-				print $log "Submitting job for MAVIS SV annotator...\n";
+			push @format_jobs, $run_id;
+			push @all_jobs, $run_id;
+			}
+		else {
+			print $log "Skipping format manta step because this has already been completed!\n";
+			}
 
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_mavis_sv_annotator_' . $sample,
-					cmd	=> $mavis_cmd,
-					modules	=> [$mavis, $bwa],
-					dependencies	=> join(':', @format_jobs),
-					hpc_driver	=> $args{hpc_driver}
-					);
+		# now, run mavis (config, setup, schedule)
+		my $mavis_cmd = "\n" . $mavis_export;
+		my $mavis_cfg = join('/', $patient_directory, 'mavis.cfg');
+		my $mavis_output = join('/',
+			$patient_directory,
+			'summary',
+			'MAVIS*.COMPLETE'
+			);
 
-				$run_id = submit_job(
-					jobname		=> 'run_mavis_sv_annotator_' . $sample,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{hpc_driver},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
-					);
+		# run on tumour-only
+		if (scalar(@normal_ids) == 0) {
 
-				push @all_jobs, $run_id;
-				}
-			else {
-				print $log "Skipping MAVIS because this has already been completed!\n";
-				}
+			$mavis_cmd .= "\n\n" . get_mavis_command(
+				tumour_ids	=> \@tumour_ids,
+				tumour_bams	=> $smp_data->{$patient}->{tumour},
+				delly		=> join(' ', @delly_svs_patient),
+				manta		=> join(' ', @manta_svs_formatted),
+				output		=> $mavis_cfg
+				);
+
+			} else { # run on T/N pairs
+
+			$mavis_cmd .= "\n\n" . get_mavis_command(
+				tumour_ids	=> \@tumour_ids,
+				normal_id	=> $normal_ids[0],
+				tumour_bams	=> $smp_data->{$patient}->{tumour},
+				normal_bam	=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
+				manta		=> join(' ', @manta_svs_formatted),
+				delly		=> join(' ', @delly_svs_patient),
+				output		=> $mavis_cfg
+				);
+			}
+
+		$mavis_cmd .= "\n\n" . "mavis setup $mavis_cfg -o $patient_directory";
+
+		# if build.cfg already exists, then try resubmitting
+		if ('Y' eq missing_file("$patient_directory/build.cfg")) {
+			$mavis_cmd .= "\n\n" . "mavis schedule -o $patient_directory --submit";
+			} else {
+			$mavis_cmd =~ s/mavis config/#mavis config/;
+			$mavis_cmd =~ s/mavis setup/#mavis setup/;
+			$mavis_cmd .= "\n\n" . "mavis schedule -o $patient_directory --resubmit";
+			}
+
+		$mavis_cmd .= "\n\n" . join("\n",
+			"if [ -s $mavis_output ]; then",
+			"  exit 0",
+			"else",
+			"  exit 1",
+			"fi"
+			);
+
+		# check if this should be run
+		if ('Y' eq missing_file($mavis_output)) {
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for MAVIS SV annotator...\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'run_mavis_sv_annotator_' . $patient,
+				cmd	=> $mavis_cmd,
+				modules	=> [$mavis, $bwa],
+				dependencies	=> join(':', @format_jobs),
+				hpc_driver	=> $args{hpc_driver}
+				);
+
+			$run_id = submit_job(
+				jobname		=> 'run_mavis_sv_annotator_' . $patient,
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @all_jobs, $run_id;
+			}
+		else {
+			print $log "Skipping MAVIS because this has already been completed!\n";
 			}
 		}
 
