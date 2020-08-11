@@ -62,7 +62,7 @@ sv.list <- list();
 
 for (file in mavis.files) {
 	# extract sample ID
-	smp <- unlist(strsplit(file, '\\/'))[2];
+	smp <- unlist(strsplit(file, '\\/'))[1];
 	# read in and store data in list
 	sv.list[[smp]] <- read.delim(file, as.is = TRUE);
 	}
