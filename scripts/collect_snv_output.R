@@ -61,8 +61,8 @@ setwd(arguments$directory);
 
 
 ### VARIANT CODING
-# 1 = missense, 2 = stop gain/loss, 3 = splicing, 4 = frameshift, 5 = in frame indel, 6 = tss
-# 7 = RNA, 8 = other (up/downstream, UTR, intergenic, silent, intron)
+# 1 = missense, 2 = stop gain, 3 = stop loss, 4 = splicing, 5 = frameshift, 6 = in frame indel, 7 = tss
+# 8 = RNA, 9 = other (up/downstream, UTR, intergenic, silent, intron), 10 = ITD
 variant.codes <- data.frame(
 	Classification = c("3'Flank", "5'Flank", "Intron", "RNA", "IGR", "3'UTR", "5'UTR", "Silent", "Missense_Mutation",
 		"Splice_Region", "Splice_Site", "In_Frame_Del", "In_Frame_Ins", "Frame_Shift_Del", "Frame_Shift_Ins",
