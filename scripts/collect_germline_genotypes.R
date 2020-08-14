@@ -123,14 +123,6 @@ for (i in 1:ncol(plot.data)) {
 
 cor.data <- cor(plot.data, method = 'spearman', use = 'pairwise');
 
-for (i in rownames(cor.data)) {
-
-	cor.data[i,i] <- NA;
-	similar.smps <- colnames(cor.data)[which(cor.data[i,] > 0.8 & cor.data[i,] < 1)];
-
-	print(paste("Sample", i, "shows high similarity to sample(s):", paste(similar.smps, collapse = ', ')));
-	}
-
 # and write to file for future use (ie, plotting)
 write.table(
 	cor.data,
@@ -139,6 +131,15 @@ write.table(
 	col.names = NA,
 	sep = '\t'
 	);
+
+# print significant findings to screen
+for (i in rownames(cor.data)) {
+
+	cor.data[i,i] <- NA;
+	similar.smps <- colnames(cor.data)[which(cor.data[i,] > 0.8 & cor.data[i,] < 1)];
+
+	print(paste("Sample", i, "shows high similarity to sample(s):", paste(similar.smps, collapse = ', ')));
+	}
 
 ### SAVE SESSION INFO ##############################################################################
 save.session.profile(generate.filename('CollectVariantData','SessionProfile','txt'));
