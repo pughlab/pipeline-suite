@@ -144,15 +144,23 @@ sub find_callable_bases_step2 {
 		input_files	=> undef,
 		sample_names	=> undef,
 		output		=> undef,
+		intervals	=> undef,
 		@_
 		);
 
-	my $n_samples = scalar(@{$args{input_files}});
+	my ($input, $smps);
+	if (defined($args{intervals})) {
+		$input = join(' ', $args{intervals}, @{$args{input_files}});
+		$smps = join(' ', 'TargetRegions', @{$args{sample_names}});
+		} else {
+		$input = join(' ', @{$args{input_files}});
+		$smps = join(' ', @{$args{sample_names}});
+		}
+
 	my $cb_command = join(' ',
 		'bedtools multiinter',
-		'-i', join(' ', @{$args{input_files}}),
-		"| awk '$n_samples == \$4 { print \$0 }'",
-		'| cut -f1-3',
+		'-i', $input,
+		'-header -names', $smps,
 		'>', $args{output}
 		);
 
@@ -356,15 +364,7 @@ sub main {
 				tmp_dir		=> $tmp_directory
 				);
 
-			if (scalar(@sample_ids) > 1) {
-				push @patient_cb_files, $sample . "_mincov_collapsed_sorted.bed";
-				} else {
-				$cb_command .= join(' ',
-					"\nmv", $cb_output . "*",
-					$patient_directory . "/"
-					);
-				push @final_outputs, $patient_directory . "/$sample\_mincov_collapsed_sorted.bed";
-				}
+			push @patient_cb_files, $sample . "_mincov_collapsed_sorted.bed";
 
 			# check if this should be run
 			if ('Y' eq missing_file($cb_output . '.md5')) {
@@ -400,14 +400,19 @@ sub main {
 			}
 
 		# run callable bases per patient (intersect) ONLY IF there are multiple samples for this patient
-		if (scalar(@sample_ids) > 1) {
+		my $cb_intersect = join('/', $patient_directory, $patient . '_CallableBases.tsv');
 
-			my $cb_intersect = join('/', $patient_directory, $patient . '_CallableBases_intersect.tsv');
+		if ( (scalar(@sample_ids) == 1) && (!defined($tool_data->{intervals_bed})) ) {
+			`mv $patient_cb_files[0] $cb_intersect`;
+			`mv $patient_cb_files[0].md5 $cb_intersect.md5`;
+			} elsif ( (scalar(@sample_ids) > 1) || (defined($tool_data->{intervals_bed})) ) {
 
 			my $cb_command2 = "\ncd $tmp_directory\n\n";
 			$cb_command2 .= find_callable_bases_step2(
 				input_files	=> \@patient_cb_files,
-				output		=> $cb_intersect
+				sample_names	=> \@sample_ids,
+				output		=> $cb_intersect,
+				intervals	=> $tool_data->{intervals_bed}
 				);
 
 			$cb_command2 .= "\n\n" . join(' ',
