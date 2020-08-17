@@ -27,35 +27,35 @@ There are example config files located in the "configs" folder:
     - reference (file or directory) and ref_type (hg19 or hg38)
     - memory and run time parameters for each step
 
-### RNA-Seq
+- RNA-Seq
   - star_aligner_config.yaml, specifies:
     - path to STAR reference directory
     - sequencing centre and platform information (for BAM header)
     - optional step: mark_dup (either Y or N)
-
+    
   - fusioncatcher_config.yaml, specifies:
     - path to Fusioncatcher reference directory
-
-   - rsem_tool_config.yaml, specifies:
+    
+  - rsem_tool_config.yaml, specifies:
     - path/stem to RSEM reference directory
     - strandedness type (probably reverse, other options: forward or none)
 
-   - star_fusion_tool_config.yaml, specifies:
+  - star_fusion_tool_config.yaml, specifies:
     - path/stem to STAR-Fusion reference directory
     - path to tool (because it isn't currently installed as a module)
     - optional step: FusionInspect (either inspect, validate; if not wanted, leave blank)
   
-   - gatk_tool_config.yaml, specifies:
+  - gatk_tool_config.yaml, specifies:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to dbSNP file (if undefined, a default will be used)
 
-   - haplotype_caller_config.yaml, specifies:
+  - haplotype_caller_config.yaml, specifies:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to vcf2maf.pl
     - path to VEP (tool/version, cache data)
     - path to ExAC data (for filtering/annotating with population allele frequencies)
 
-### DNA-Seq
+- DNA-Seq
   - bwa_aligner_config.yaml, specifies:
     - path to bwa-indexed reference
     - sequencing centre and platform information (for BAM header)
@@ -66,17 +66,17 @@ There are example config files located in the "configs" folder:
     - path to target intervals (such as bed file for exome capture kit)
     - path to dbSNP file (if undefined, a default will be used)
 
-   - bamqc_config.yaml, specifies:
+  - bamqc_config.yaml, specifies:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to hapmap/SNP file with population frequencies
     - path to target intervals (such as bed file for exome capture kit)
 
-   - haplotype_caller_config.yaml, specifies:
+  - haplotype_caller_config.yaml, specifies:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to target intervals (exome capture kit [bed], if defined)
     - path to dbSNP file (if undefined, a default will be used)
 
-   - mutect_config.yaml, specifies:
+  - mutect_config.yaml, specifies:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to vcf2maf.pl
     - path to VEP (tool/version, cache data)
@@ -87,7 +87,7 @@ There are example config files located in the "configs" folder:
     - path to GTF file (if desired)
     - path to panel of normals (optional if developed elsewhere)
 
-   - mutect2_config.yaml, specifies:
+  - mutect2_config.yaml, specifies:
     - path to reference genome (requires .fa, .dict and .fai files)
     - comma separated list of chromosomes to run (optional)
     - path to vcf2maf.pl
@@ -99,7 +99,7 @@ There are example config files located in the "configs" folder:
     - path to GTF file (if desired)
     - path to panel of normals (optional if developed elsewhere)
 
-   - strelka_config.yaml, specifies:
+  - strelka_config.yaml, specifies:
     - sequence type (one of exome, targeted, rna or wgs)
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to vcf2maf.pl
@@ -108,7 +108,7 @@ There are example config files located in the "configs" folder:
     - path to GTF file (if desired)
     - path to target intervals (exome capture kit [bed; bgzipped and tabix indexed], if defined)
 
-   - varscan_config.yaml, specifies:
+  - varscan_config.yaml, specifies:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to sequenza.R script
     - path to target intervals (exome capture kit [bed], if defined)
@@ -117,10 +117,10 @@ There are example config files located in the "configs" folder:
     - path to VEP (tool/version, cache data)
     - path to ExAC data (for filtering/annotating with population allele frequencies)
 
-   - delly_config.yaml, specifies:
+  - delly_config.yaml, specifies:
     - path to reference genome (requires .fa, .dict and .fai files)
 
-   - mavis_config.yaml, specifies:
+  - mavis_config.yaml, specifies:
     - path to reference genome (requires .fa, .dict and .fai files)
     - paths to mavis references (annotations, masking, aligner, etc.)
 
@@ -188,8 +188,7 @@ cat gatk_bam_config\*.yaml | awk 'NR <= 1 || !/^---/' > combined_gatk_bam_config
 
 ### Preprocessing steps:
 ### run BWA to align to a reference genome
-</code></pre>
-perl bwa.pl \
+<pre><code>perl bwa.pl \
 -t /path/to/bwa_aligner_config.yaml \
 -d /path/to/fastq_dna_config.yaml \
 -o /path/to/output/directory \
@@ -202,8 +201,7 @@ perl bwa.pl \
 This will again write individual commands to file: /path/to/output/directory/BWA/logs/run_BWA_pipeline.log
 
 ### run GATK indel realignment and base quality score recalibration
-</code></pre>
-perl gatk.pl \
+<pre><code>perl gatk.pl \
 --depends { optional: final job ID from bwa.pl } \
 -t /path/to/gatk_tool_config.yaml \
 -d /path/to/bwa_bam_config.yaml \
@@ -215,8 +213,7 @@ perl gatk.pl \
 </code></pre>
 
 ### get BAM QC metrics, including coverage, contamination estimates and callable bases
-</code></pre>
-perl contest.pl \
+<pre><code>perl contest.pl \
 --depends { optional: final job ID from gatk.pl } \
 -t /path/to/bamqc_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
@@ -239,8 +236,7 @@ perl get_coverage.pl \
 
 ### Variant calling steps:
 ### run GATK's HaplotypeCaller to produce gvcfs
-</code></pre>
-perl haplotype_caller.pl \
+<pre><code>perl haplotype_caller.pl \
 --depends { optional: final job ID from gatk.pl } \
 -t /path/to/haplotype_caller_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
@@ -261,8 +257,7 @@ perl genotype_gvcfs.pl \
 </code></pre>
 
 ### run GATK's MuTect (v1) to produce somatic SNV calls
-</code></pre>
-Create a panel of normals:
+<pre><code>Create a panel of normals:
 perl mutect.pl \
 --create-panel-of-normals \
 --depends { optional: final job ID from gatk.pl } \
@@ -287,8 +282,7 @@ perl mutect.pl \
 </code></pre>
 
 ### run GATK's MuTect2 to produce somatic SNV calls
-</code></pre>
-Create a panel of normals:
+<pre><code>Create a panel of normals:
 perl mutect2.pl \
 --create-panel-of-normals \
 --depends { optional: final job ID from gatk.pl } \
@@ -313,8 +307,7 @@ perl mutect2.pl \
 </code></pre>
 
 ### run VarScan to produce SNV and CNA calls
-</code></pre>
-Run T/N pairs and create a panel of normals:
+<pre><code>Run T/N pairs and create a panel of normals:
 perl varscan.pl \
 --mode paired \
 --depends { optional: final job ID from gatk.pl } \
@@ -341,8 +334,7 @@ perl varscan.pl \
 </code></pre>
 
 ### run Strelka to produce SNV and Manta SV calls
-</code></pre>
-perl strelka.pl \
+<pre><code>perl strelka.pl \
 --depends { optional: final job ID from gatk.pl } \
 -t /path/to/strelka_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
@@ -355,8 +347,7 @@ perl strelka.pl \
 </code></pre>
 
 ### run Delly to produce SV calls
-</code></pre>
-perl delly.pl \
+<pre><code>perl delly.pl \
 --depends { optional: final job ID from gatk.pl } \
 -t /path/to/delly_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
@@ -367,8 +358,7 @@ perl delly.pl \
 </code></pre>
 
 ### run Mavis to annotate Delly and Manta SV calls
-</code></pre>
-perl mavis.pl \
+<pre><code>perl mavis.pl \
 --depends { optional: final job ID from strelka.pl and delly.pl } \
 -t /path/to/mavis_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
@@ -398,8 +388,7 @@ perl pughlab_rnaseq_pipeline.pl \
 This will generate the directory structure in the output directory (provided in /path/to/master_rna_config.yaml), including a "logs/run_RNA_pipeline_TIMESTAMP/" directory containing a file "run_RNASeq_pipeline.log" which lists the individual tool commands; these can be run separately if "--dry-run" or in the event of a failure at any stage and you don't need to re-run the entire thing (although doing so would not regenerate files that already exist).
 
 ### run STAR to align to a reference genome
-</code></pre>
-perl star.pl \
+<pre><code>perl star.pl \
 -t /path/to/star_aligner_config.yaml \
 -d /path/to/fastq_rna_config.yaml \
 -o /path/to/output/directory \
@@ -413,8 +402,7 @@ perl star.pl \
 This will again write individual commands to file: /path/to/output/directory/STAR/logs/run_STAR_pipeline.log
 
 ### run Fusioncatcher on raw FASTQ data
-</code></pre>
-perl fusioncatcher.pl \
+<pre><code>perl fusioncatcher.pl \
 -t /path/to/fusioncatcher_config.yaml \
 -d /path/to/fastq_rna_config.yaml \
 -o /path/to/output/directory \
@@ -425,8 +413,7 @@ perl fusioncatcher.pl \
 </code></pre>
 
 ### run RSEM on STAR-aligned BAMs
-</code></pre>
-perl rsem.pl \
+<pre><code>perl rsem.pl \
 --depends { optional: final job ID from star.pl } \
 -t /path/to/rsem_expression_config.yaml \
 -d /path/to/star_bam_config.yaml \
@@ -438,8 +425,7 @@ perl rsem.pl \
 </code></pre>
 
 ### run STAR-Fusion on STAR-aligned BAMs
-</code></pre>
-perl star_fusion.pl \
+<pre><code>perl star_fusion.pl \
 --depends { optional: final job ID from star.pl } \
 -t /path/to/star_fusion_config.yaml \
 -d /path/to/star_bam_config.yaml \
@@ -451,8 +437,7 @@ perl star_fusion.pl \
 </code></pre>
 
 ### run GATK split CIGAR, indel realignment and base quality score recalibration on MarkDup BAMs
-</code></pre>
-perl gatk.pl \
+<pre><code>perl gatk.pl \
 --rna \
 --depends { optional: final job ID from star.pl } \
 -t /path/to/gatk_tool_config.yaml \
@@ -465,8 +450,7 @@ perl gatk.pl \
 </code></pre>
 
 ### run GATK HaplotypeCaller, variant filtration and annotataion
-</code></pre>
-perl haplotype_caller.pl \
+<pre><code>perl haplotype_caller.pl \
 --rna \
 --depends { optional: final job ID from gatk.pl } \
 -t /path/to/haplotype_caller_config.yaml \
