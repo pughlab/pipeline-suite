@@ -176,8 +176,7 @@ cat gatk_bam_config\*.yaml | awk 'NR <= 1 || !/^---/' > combined_gatk_bam_config
 
 ### Preprocessing steps:
 ### run BWA to align to a reference genome
-</code></pre>
-perl bwa.pl \
+<pre><code>perl bwa.pl \
 -t /path/to/dna_pipeline_config.yaml \
 -d /path/to/fastq_dna_config.yaml \
 -o /path/to/output/directory \
@@ -190,8 +189,7 @@ perl bwa.pl \
 This will again write individual commands to file: /path/to/output/directory/BWA/logs/run_BWA_pipeline.log
 
 ### run GATK indel realignment and base quality score recalibration
-</code></pre>
-perl gatk.pl \
+<pre><code>perl gatk.pl \
 --depends { optional: final job ID from bwa.pl } \
 -t /path/to/dna_pipeline_config.yaml \
 -d /path/to/bwa_bam_config.yaml \
@@ -203,8 +201,7 @@ perl gatk.pl \
 </code></pre>
 
 ### get BAM QC metrics, including coverage, contamination estimates and callable bases
-</code></pre>
-perl contest.pl \
+<pre><code>perl contest.pl \
 --depends { optional: final job ID from gatk.pl } \
 -t /path/to/dna_pipeline_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
@@ -225,8 +222,7 @@ perl get_coverage.pl \
 
 ### Variant calling steps:
 ### run GATK's HaplotypeCaller to produce gvcfs
-</code></pre>
-perl haplotype_caller.pl \
+<pre><code>perl haplotype_caller.pl \
 --depends { optional: final job ID from gatk.pl } \
 -t /path/to/dna_pipeline_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
@@ -246,8 +242,7 @@ perl genotype_gvcfs.pl \
 </code></pre>
 
 ### run GATK's MuTect (v1) to produce somatic SNV calls
-</code></pre>
-Create a panel of normals:
+<pre><code>Create a panel of normals:
 perl mutect.pl \
 --create-panel-of-normals \
 --depends { optional: final job ID from gatk.pl } \
@@ -271,8 +266,7 @@ perl mutect.pl \
 </code></pre>
 
 ### run GATK's MuTect2 to produce somatic SNV calls
-</code></pre>
-Create a panel of normals:
+<pre><code>Create a panel of normals:
 perl mutect2.pl \
 --create-panel-of-normals \
 --depends { optional: final job ID from gatk.pl } \
@@ -296,8 +290,7 @@ perl mutect2.pl \
 </code></pre>
 
 ### run VarScan to produce SNV and CNA calls
-</code></pre>
-Run T/N pairs and create a panel of normals:
+<pre><code>Run T/N pairs and create a panel of normals:
 perl varscan.pl \
 --mode paired \
 --depends { optional: final job ID from gatk.pl } \
@@ -322,8 +315,7 @@ perl varscan.pl \
 </code></pre>
 
 ### run Strelka to produce SNV and Manta SV calls
-</code></pre>
-perl strelka.pl \
+<pre><code>perl strelka.pl \
 --depends { optional: final job ID from gatk.pl } \
 -t /path/to/dna_pipeline_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
@@ -335,8 +327,7 @@ perl strelka.pl \
 </code></pre>
 
 ### run Delly to produce SV calls
-</code></pre>
-perl delly.pl \
+<pre><code>perl delly.pl \
 --depends { optional: final job ID from gatk.pl } \
 -t /path/to/dna_pipeline_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
@@ -347,8 +338,7 @@ perl delly.pl \
 </code></pre>
 
 ### run Mavis to annotate Delly and Manta SV calls
-</code></pre>
-perl mavis.pl \
+<pre><code>perl mavis.pl \
 --depends { optional: final job ID from strelka.pl and delly.pl } \
 -t /path/to/dna_pipeline_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
@@ -376,8 +366,7 @@ perl pughlab_rnaseq_pipeline.pl \
 This will generate the directory structure in the output directory (provided in /path/to/master_rna_config.yaml), including a "logs/run_RNA_pipeline_TIMESTAMP/" directory containing a file "run_RNASeq_pipeline.log" which lists the individual tool commands; these can be run separately if "--dry-run" or in the event of a failure at any stage and you don't need to re-run the entire thing (although doing so would not regenerate files that already exist).
 
 ### run STAR to align to a reference genome
-</code></pre>
-perl star.pl \
+<pre><code>perl star.pl \
 -t /path/to/star_aligner_config.yaml \
 -d /path/to/fastq_rna_config.yaml \
 -o /path/to/output/directory \
@@ -391,8 +380,7 @@ perl star.pl \
 This will again write individual commands to file: /path/to/output/directory/STAR/logs/run_STAR_pipeline.log
 
 ### run Fusioncatcher on raw FASTQ data
-</code></pre>
-perl fusioncatcher.pl \
+<pre><code>perl fusioncatcher.pl \
 -t /path/to/fusioncatcher_config.yaml \
 -d /path/to/fastq_rna_config.yaml \
 -o /path/to/output/directory \
@@ -403,8 +391,7 @@ perl fusioncatcher.pl \
 </code></pre>
 
 ### run RSEM on STAR-aligned BAMs
-</code></pre>
-perl rsem.pl \
+<pre><code>perl rsem.pl \
 --depends { optional: final job ID from star.pl } \
 -t /path/to/rsem_expression_config.yaml \
 -d /path/to/star_bam_config.yaml \
@@ -416,8 +403,7 @@ perl rsem.pl \
 </code></pre>
 
 ### run STAR-Fusion on STAR-aligned BAMs
-</code></pre>
-perl star_fusion.pl \
+<pre><code>perl star_fusion.pl \
 --depends { optional: final job ID from star.pl } \
 -t /path/to/star_fusion_config.yaml \
 -d /path/to/star_bam_config.yaml \
@@ -429,8 +415,7 @@ perl star_fusion.pl \
 </code></pre>
 
 ### run GATK split CIGAR, indel realignment and base quality score recalibration on MarkDup BAMs
-</code></pre>
-perl gatk.pl \
+<pre><code>perl gatk.pl \
 --rna \
 --depends { optional: final job ID from star.pl } \
 -t /path/to/gatk_tool_config.yaml \
@@ -443,8 +428,7 @@ perl gatk.pl \
 </code></pre>
 
 ### run GATK HaplotypeCaller, variant filtration and annotataion
-</code></pre>
-perl haplotype_caller.pl \
+<pre><code>perl haplotype_caller.pl \
 --rna \
 --depends { optional: final job ID from gatk.pl } \
 -t /path/to/haplotype_caller_config.yaml \
