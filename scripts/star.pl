@@ -20,6 +20,7 @@ require "$cwd/utilities.pl";
 # 1.0		sprokopec       script to run STAR alignment on RNASeq data
 # 1.1		sprokopec	minor updates for compatibility with larger pipeline
 # 1.2		sprokopec	added help message and cleaned up code
+# 1.3           sprokopec       minor updates for tool config
 
 ### USAGE ##########################################################################################
 # star.pl -t tool_config.yaml -d data_config.yaml -o /path/to/output/dir -c slurm --remove --dry_run
@@ -204,7 +205,6 @@ sub main {
 		hpc_driver		=> undef,
 		del_intermediates	=> undef,
 		dry_run			=> undef,
-		project			=> undef,
 		no_wait			=> undef,
 		@_
 		);
@@ -256,17 +256,20 @@ sub main {
 	print $log "---\n";
 	print $log "Running STAR alignment pipeline.\n";
 	print $log "\n  Tool config used: $tool_config";
-	print $log "\n    STAR reference directory: $tool_data->{reference_dir}";
+	print $log "\n    STAR reference directory: $tool_data->{star_reference_dir}";
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n---";
 
 	# set tools and versions
-	my $star_version	= 'STAR/' . $tool_data->{tool_version};
+	my $star_version	= 'STAR/' . $tool_data->{star_version};
 	my $samtools		= 'samtools/' . $tool_data->{samtools_version};
 	my $picard		= 'picard/' . $tool_data->{picard_version};
 	my $rnaseqc		= 'rna_seqc/' . $tool_data->{rna_seqc_version};
 	my $r_version		= 'R/' . $tool_data->{r_version};
+
+	# get user-specified tool parameters
+	my $parameters = $tool_data->{star}->{parameters};
 
 	### MAIN ###########################################################################################
 	# get sample data
@@ -370,7 +373,7 @@ sub main {
 			$star .= get_star_command_devel(
 				r1		=> join(',', @r1_fastqs),
 				r2		=> join(',', @r2_fastqs),
-				reference_dir	=> $tool_data->{reference_dir},
+				reference_dir	=> $tool_data->{star_reference_dir},
 				readgroup	=> $readgroup,
 				tmp_dir		=> $temp_star
 				);
@@ -388,8 +391,8 @@ sub main {
 					cmd	=> $star,
 					modules	=> [$star_version],
 					dependencies	=> $run_id,
-					max_time	=> $tool_data->{parameters}->{star}->{time},
-					mem		=> $tool_data->{parameters}->{star}->{mem},
+					max_time	=> $parameters->{star}->{time},
+					mem		=> $parameters->{star}->{mem},
 					hpc_driver	=> $args{hpc_driver}
 					);
 
@@ -418,7 +421,7 @@ sub main {
 			my $markdup_cmd = get_markdup_command(
 				input		=> $input_file,
 				output		=> $dedup_bam,
-				java_mem	=> $tool_data->{parameters}->{markdup}->{java_mem},
+				java_mem	=> $parameters->{markdup}->{java_mem},
 				tmp_dir		=> $tmp_directory
 				);
 	
@@ -441,8 +444,8 @@ sub main {
 					cmd	=> $markdup_cmd,
 					modules	=> [$picard, $samtools],
 					dependencies	=> $run_id,
-					max_time	=> $tool_data->{parameters}->{markdup}->{time},
-					mem		=> $tool_data->{parameters}->{markdup}->{mem},
+					max_time	=> $parameters->{markdup}->{time},
+					mem		=> $parameters->{markdup}->{mem},
 					hpc_driver	=> $args{hpc_driver}
 					);
 
@@ -519,10 +522,10 @@ sub main {
 	my $qc_cmd = get_rnaseqc_cmd(
 		input		=> $sample_sheet,
 		output_dir	=> $qc_directory,
-		bwa		=> $tool_data->{parameters}->{rna_seqc}->{bwa_path},
-		reference	=> $tool_data->{parameters}->{rna_seqc}->{reference},
-		gtf		=> $tool_data->{parameters}->{rna_seqc}->{reference_gtf},
-		java_mem	=> $tool_data->{parameters}->{rna_seqc}->{java_mem},
+		bwa		=> $tool_data->{bwa_path},
+		reference	=> $tool_data->{reference},
+		gtf		=> $tool_data->{reference_gtf},
+		java_mem	=> $parameters->{rna_seqc}->{java_mem},
 		tmp_dir		=> $qc_directory
 		);
 
@@ -540,8 +543,8 @@ sub main {
 		cmd	=> $qc_cmd,
 		modules	=> [$rnaseqc],
 		dependencies	=> join(':', @all_jobs),
-		max_time	=> $tool_data->{parameters}->{rna_seqc}->{time},
-		mem		=> $tool_data->{parameters}->{rna_seqc}->{mem},
+		max_time	=> $parameters->{rna_seqc}->{time},
+		mem		=> $parameters->{rna_seqc}->{mem},
 		hpc_driver	=> $args{hpc_driver}
 		);
 
@@ -559,7 +562,7 @@ sub main {
 	my $collect_results = join(' ',
 		"Rscript $cwd/collect_rnaseqc_output.R",
 		'-d', $output_directory,
-		'-p', $args{project}
+		'-p', $tool_data->{project_name}
 		);
 
 	$run_script = write_script(
@@ -568,8 +571,8 @@ sub main {
 		cmd	=> $collect_results,
 		modules		=> [$r_version],
 		dependencies	=> $run_id,
-		max_time	=> $tool_data->{parameters}->{combine_results}->{time},
-		mem		=> $tool_data->{parameters}->{combine_results}->{mem},
+		max_time	=> $parameters->{combine_results}->{time},
+		mem		=> $parameters->{combine_results}->{mem},
 		hpc_driver	=> $args{hpc_driver}
 		);
 
@@ -630,7 +633,7 @@ sub main {
 
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
-my ($data_config, $tool_config, $output_directory, $project_name, $output_config);
+my ($data_config, $tool_config, $output_directory, $output_config);
 my $hpc_driver = 'slurm';
 my ($remove_junk, $dry_run, $help, $no_wait);
 
@@ -641,7 +644,6 @@ GetOptions(
 	'o|out_dir=s'	=> \$output_directory,
 	'b|out_yaml=s'	=> \$output_config,
 	't|tool=s'	=> \$tool_config,
-	'p|project=s'	=> \$project_name,
 	'c|cluster=s'	=> \$hpc_driver,
 	'remove'	=> \$remove_junk,
 	'dry-run'	=> \$dry_run,
@@ -675,7 +677,6 @@ main(
 	data_config		=> $data_config,
 	output_directory	=> $output_directory,
 	output_config		=> $output_config,
-	project			=> $project_name,
 	hpc_driver		=> $hpc_driver,
 	del_intermediates	=> $remove_junk,
 	dry_run			=> $dry_run,

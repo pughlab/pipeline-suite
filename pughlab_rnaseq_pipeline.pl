@@ -35,6 +35,7 @@ sub main {
 	my %args = (
 		tool_config	=> undef,
 		data_config	=> undef,
+		report		=> undef,
 		cleanup		=> undef,
 		cluster		=> undef,
 		dry_run		=> undef,
@@ -68,12 +69,14 @@ sub main {
 	print $log "\n  Tool config used: $tool_config";
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
-	print $log "\n---";
+	print $log "\n---\n\n";
 
 	### MAIN ###########################################################################################
 
-	my ($fc_run_id, $star_run_id, $gatk_run_id, $vc_run_id, $rsem_run_id, $starfus_run_id) = '';
-	my $run_script;
+	my ($fc_run_id, $star_run_id, $gatk_run_id, $vc_run_id, $rsem_run_id, $starfus_run_id);
+	my ($run_script, $report_run_id);
+
+	my @job_ids;
 
 	# prepare directory structure
 	my $fc_directory = join('/', $output_directory, 'FusionCatcher');
@@ -90,15 +93,14 @@ sub main {
 	## run FusionCatcher pipeline
 	unless(-e $fc_directory) { make_path($fc_directory); }
 
-	if (defined($tool_data->{fusioncatcher_config})) {
+	if ('Y' eq $tool_data->{fusioncatcher}->{run}) {
 
 		my $fc_command = join(' ',
 			"perl $cwd/scripts/fusioncatcher.pl",
 			"-o", $fc_directory,
-			"-t", $tool_data->{fusioncatcher_config},
+			"-t", $tool_config,
 			"-d", $data_config,
-			"-c", $args{cluster},
-			"-p", $tool_data->{project_name}
+			"-c", $args{cluster}
 			);
 
 		if ($args{cleanup}) {
@@ -115,6 +117,7 @@ sub main {
 			cmd	=> $fc_command,
 			modules	=> ['perl'],
 			mem		=> '256M',
+			max_time	=> '7-00:00:00',
 			hpc_driver	=> $args{cluster}
 			);
 
@@ -134,22 +137,22 @@ sub main {
 				);
 
 			print $log ">>> FUSIONCATCHER job id: $fc_run_id\n\n";
+			push @job_ids, $fc_run_id;
 			}
 		}
 
 	## run STAR-alignment pipeline
 	unless(-e $star_directory) { make_path($star_directory); }
 
-	if (defined($tool_data->{star_config})) {
+	if ('Y' eq $tool_data->{star}->{run}) {
 
 		my $star_command = join(' ',
 			"perl $cwd/scripts/star.pl",
 			"-o", $star_directory,
-			"-t", $tool_data->{star_config},
+			"-t", $tool_config},
 			"-d", $data_config,
 			"-b", $star_output_yaml,
-			"-c", $args{cluster},
-			"-p", $tool_data->{project_name}
+			"-c", $args{cluster}
 			);
 
 		if ($args{cleanup}) {
@@ -166,6 +169,7 @@ sub main {
 			cmd	=> $star_command,
 			modules	=> ['perl'],
 			mem		=> '256M',
+			max_time	=> '7-00:00:00',
 			hpc_driver	=> $args{cluster}
 			);
 
@@ -185,21 +189,21 @@ sub main {
 				);
 
 			print $log ">>> STAR job id: $star_run_id\n\n";
+			push @job_ids, $star_run_id;
 			}
 		}
 
 	## run STAR-Fusion pipeline
 	unless(-e $starfus_directory) { make_path($starfus_directory); }
 
-	if (defined($tool_data->{star_fusion_config})) {
+	if ('Y' eq $tool_data->{star_fusion}->{run}) {
 
 		my $starfus_command = join(' ',
 			"perl $cwd/scripts/star_fusion.pl",
 			"-o", $starfus_directory,
-			"-t", $tool_data->{star_fusion_config},
+			"-t", $tool_config,
 			"-d", $star_output_yaml,
-			"-c", $args{cluster},
-			"-p", $tool_data->{project_name}
+			"-c", $args{cluster}
 			);
 
 		if ($args{cleanup}) {
@@ -217,6 +221,7 @@ sub main {
 			modules	=> ['perl'],
 			dependencies	=> $star_run_id,
 			mem		=> '256M',
+			max_time	=> '7-00:00:00',
 			hpc_driver	=> $args{cluster}
 			);
 
@@ -236,21 +241,21 @@ sub main {
 				);
 
 			print $log ">>> STAR-FUSION job id: $starfus_run_id\n\n";
+			push @job_ids, $starfus_run_id;
 			}
 		}
 
 	## run RSEM pipeline
 	unless(-e $rsem_directory) { make_path($rsem_directory); }
 
-	if (defined($tool_data->{rsem_config})) {
+	if ('Y' eq $tool_data->{rsem}->{run}) {
 
 		my $rsem_command = join(' ',
 			"perl $cwd/scripts/rsem.pl",
 			"-o", $rsem_directory,
-			"-t", $tool_data->{rsem_config},
+			"-t", $tool_config,
 			"-d", $star_output_yaml,
-			"-c", $args{cluster},
-			"-p", $tool_data->{project_name}
+			"-c", $args{cluster}
 			);
 
 		if ($args{cleanup}) {
@@ -268,6 +273,7 @@ sub main {
 			modules	=> ['perl'],
 			dependencies	=> $star_run_id,
 			mem		=> '256M',
+			max_time	=> '7-00:00:00',
 			hpc_driver	=> $args{cluster}
 			);
 
@@ -287,19 +293,20 @@ sub main {
 				);
 
 			print $log ">>> RSEM job id: $rsem_run_id\n\n";
+			push @job_ids, $rsem_run_id;
 			}
 		}
 
 	## run GATK indel realignment/recalibration pipeline
 	unless(-e $gatk_directory) { make_path($gatk_directory); }
 
-	if (defined($tool_data->{gatk_config})) {
+	if ('Y' eq $tool_data->{gatk}->{run}) {
 
 		my $gatk_command = join(' ',
 			"perl $cwd/scripts/gatk.pl",
 			"--rna",
 			"-o", $gatk_directory,
-			"-t", $tool_data->{gatk_config},
+			"-t", $tool_config,
 			"-d", $star_output_yaml,
 			"-b", $gatk_output_yaml,
 			"-c", $args{cluster}
@@ -320,6 +327,7 @@ sub main {
 			modules	=> ['perl'],
 			dependencies	=> $star_run_id,
 			mem		=> '256M',
+			max_time	=> '7-00:00:00',
 			hpc_driver	=> $args{cluster}
 			);
 
@@ -339,22 +347,22 @@ sub main {
 				);
 
 			print $log ">>> GATK job id: $gatk_run_id\n\n";
+			push @job_ids, $gatk_run_id;
 			}
 		}
 
 	## run GATK's HaplotypeCaller pipeline
 	unless(-e $vc_directory) { make_path($vc_directory); }
 
-	if (defined($tool_data->{haplotype_caller_config})) {
+	if ('Y' eq $tool_data->{haplotype_caller}->{run}) {
 
 		my $vc_command = join(' ',
 			"perl $cwd/scripts/haplotype_caller.pl",
 			"--rna",
 			"-o", $vc_directory,
-			"-t", $tool_data->{haplotype_caller_config},
+			"-t", $tool_config,
 			"-d", $gatk_output_yaml,
-			"-c", $args{cluster},
-			"-p", $tool_data->{project_name}
+			"-c", $args{cluster}
 			);
 
 		if ($args{cleanup}) {
@@ -372,6 +380,7 @@ sub main {
 			modules	=> ['perl'],
 			dependencies	=> $gatk_run_id,
 			mem		=> '256M',
+			max_time	=> '7-00:00:00',
 			hpc_driver	=> $args{cluster}
 			);
 
@@ -391,6 +400,53 @@ sub main {
 				);
 
 			print $log ">>> HaplotypeCaller job id: $vc_run_id\n\n";
+			push @job_ids, $vc_run_id;
+			}
+		}
+
+	########################################################################################
+	# Create a final report for the project.
+	########################################################################################
+	if ($args{report}) {
+
+		my $report_command = join(' ',
+			"perl $cwd/scripts/generate_report.pl",
+			"-t", $tool_config,
+			"-c", $args{cluster},
+			"-r", $timestamp
+			);
+	
+		# record command (in log directory) and then run job
+		print $log "Submitting job for generate_report.pl\n";
+		print $log "  COMMAND: $report_command\n\n";
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'pughlab_rna_pipeline__run_report',
+			cmd	=> $report_command,
+			modules	=> ['perl'],
+			dependencies	=> join(':', @job_ids),
+			mem		=> '256M',
+			max_time	=> '12:00:00',
+			hpc_driver	=> $args{cluster}
+			);
+
+		if ($args{dry_run}) {
+
+			$report_command .= " --dry-run";
+			`$report_command`;
+
+			} else {
+
+			$report_run_id = submit_job(
+				jobname		=> $log_directory,
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			print $log ">>> Report job id: $report_run_id\n\n";
 			}
 		}
 
@@ -402,7 +458,7 @@ sub main {
 
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
-my ($tool_config, $data_config);
+my ($tool_config, $data_config, $report);
 my $hpc_driver = 'slurm';
 my ($remove_junk, $dry_run);
 
@@ -415,6 +471,7 @@ GetOptions(
 	'd|data=s'	=> \$data_config,
 	'c|cluster=s'	=> \$hpc_driver,
 	'remove'	=> \$remove_junk,
+	'create-report'	=> \$report,
 	'dry-run'	=> \$dry_run
 	 );
 
@@ -426,6 +483,7 @@ if ($help) {
 		"\t--tool|-t\t<string> tool config (yaml format)",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
+		"\t--create-report\t<boolean> should final report be generated? (default: false)",
 		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)"
 		);
 
@@ -448,5 +506,6 @@ main(
 	data_config	=> $data_config,
 	cluster		=> $hpc_driver,
 	cleanup		=> $remove_junk,
+	report		=> $report,
 	dry_run		=> $dry_run
 	);

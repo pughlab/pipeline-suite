@@ -20,9 +20,10 @@ require "$cwd/utilities.pl";
 our ($reference, $exclude_regions) = undef;
 
 ####################################################################################################
-# version       author		comment
-# 1.0		sprokopec       script to run Delly SV caller
+# version	author		comment
+# 1.0		sprokopec	script to run Delly SV caller
 # 1.1		sprokopec	added help msg and cleaned up code
+# 1.2		sprokopec	minor updates for tool config
 
 ### USAGE ##########################################################################################
 # delly.pl -t tool_config.yaml -d data_config.yaml -o /path/to/output/dir -c slurm --remove --dry_run
@@ -311,11 +312,14 @@ sub pon {
 	print $log "\n---";
 
 	# set tools and versions
-	my $delly	= 'delly/' . $tool_data->{tool_version};
+	my $delly	= 'delly/' . $tool_data->{delly_version};
 	my $bcftools 	= 'bcftools/' . $tool_data->{bcftools_version};
 	if (defined($tool_data->{bcftools_path})) {
 		$bcftools = '';
 		}
+
+	# get user-specified tool parameters
+	my $parameters = $tool_data->{delly}->{parameters};
 
 	### RUN ###########################################################################################
 	# get sample data
@@ -377,8 +381,8 @@ sub pon {
 					name	=> 'run_delly_germline_' . $norm,
 					cmd	=> $germline_command,
 					modules	=> [$delly],
-					max_time	=> $tool_data->{parameters}->{call}->{time},
-					mem		=> $tool_data->{parameters}->{call}->{mem},
+					max_time	=> $parameters->{call}->{time},
+					mem		=> $parameters->{call}->{mem},
 					hpc_driver	=> $args{hpc_driver}
 					);
 
@@ -434,8 +438,8 @@ sub pon {
 			cmd	=> $pon_command,
 			modules	=> [$delly],
 			dependencies	=> join(':', @part1_jobs),
-			max_time	=> $tool_data->{parameters}->{merge}->{time},
-			mem		=> $tool_data->{parameters}->{merge}->{mem},
+			max_time	=> $parameters->{merge}->{time},
+			mem		=> $parameters->{merge}->{mem},
 			hpc_driver	=> $args{hpc_driver}
 			);
 
@@ -487,8 +491,8 @@ sub pon {
 					cmd	=> $genotype_command,
 					modules	=> [$delly],
 					dependencies	=> $pon_run_id,
-					max_time	=> $tool_data->{parameters}->{genotype}->{time},
-					mem		=> $tool_data->{parameters}->{genotype}->{mem},
+					max_time	=> $parameters->{genotype}->{time},
+					mem		=> $parameters->{genotype}->{mem},
 					hpc_driver	=> $args{hpc_driver}
 					);
 
@@ -531,8 +535,8 @@ sub pon {
 			cmd	=> $pon_command,
 			dependencies	=> join(':', @part2_jobs),
 			modules		=> [$delly, $bcftools],
-			max_time	=> $tool_data->{parameters}->{filter}->{time},
-			mem		=> $tool_data->{parameters}->{filter}->{mem},
+			max_time	=> $parameters->{filter}->{time},
+			mem		=> $parameters->{filter}->{mem},
 			hpc_driver	=> $args{hpc_driver}
 			);
 
@@ -697,11 +701,14 @@ sub main {
 	print $log "\n---";
 
 	# set tools and versions
-	my $delly	= 'delly/' . $tool_data->{tool_version};
+	my $delly	= 'delly/' . $tool_data->{delly_version};
 	my $bcftools 	= 'bcftools/' . $tool_data->{bcftools_version};
 	if (defined($tool_data->{bcftools_path})) {
 		$bcftools = '';
 		}
+
+	# get user-specified tool parameters
+	my $parameters = $tool_data->{delly}->{parameters};
 
 	### RUN ###########################################################################################
 	# get sample data
@@ -803,8 +810,8 @@ sub main {
 				name	=> 'run_delly_somatic_SV_caller_' . $patient,
 				cmd	=> $delly_cmd,
 				modules	=> [$delly],
-				max_time	=> $tool_data->{parameters}->{call}->{time},
-				mem		=> $tool_data->{parameters}->{call}->{mem},
+				max_time	=> $parameters->{call}->{time},
+				mem		=> $parameters->{call}->{mem},
 				hpc_driver	=> $args{hpc_driver}
 				);
 
@@ -851,8 +858,8 @@ sub main {
 					cmd	=> $filter_cmd,
 					modules	=> [$delly],
 					dependencies	=> $run_id,
-					max_time	=> $tool_data->{parameters}->{filter}->{time},
-					mem		=> $tool_data->{parameters}->{filter}->{mem},
+					max_time	=> $parameters->{filter}->{time},
+					mem		=> $parameters->{filter}->{mem},
 					hpc_driver	=> $args{hpc_driver}
 					);
 
@@ -904,8 +911,8 @@ sub main {
 			cmd	=> $merge_cmd,
 			modules	=> [$delly],
 			dependencies	=> join(':', @part1_jobs),
-			max_time	=> $tool_data->{parameters}->{merge}->{time},
-			mem		=> $tool_data->{parameters}->{merge}->{mem},
+			max_time	=> $parameters->{merge}->{time},
+			mem		=> $parameters->{merge}->{mem},
 			hpc_driver	=> $args{hpc_driver}
 			);
 
@@ -991,8 +998,8 @@ sub main {
 					cmd	=> $genotype_command,
 					modules	=> [$delly],
 					dependencies	=> $merge_run_id,
-					max_time	=> $tool_data->{parameters}->{genotype}->{time},
-					mem		=> $tool_data->{parameters}->{genotype}->{mem},
+					max_time	=> $parameters->{genotype}->{time},
+					mem		=> $parameters->{genotype}->{mem},
 					hpc_driver	=> $args{hpc_driver}
 					);
 
@@ -1038,8 +1045,8 @@ sub main {
 			cmd	=> $merge_somatic_svs,
 			dependencies	=> join(':', @part2_jobs),
 			modules		=> [$delly, $bcftools],
-			max_time	=> $tool_data->{parameters}->{merge}->{time},
-			mem		=> $tool_data->{parameters}->{merge}->{mem},
+			max_time	=> $parameters->{merge}->{time},
+			mem		=> $parameters->{merge}->{mem},
 			hpc_driver	=> $args{hpc_driver}
 			);
 
@@ -1106,8 +1113,8 @@ sub main {
 					cmd	=> $finalize_somatic_svs,
 					dependencies	=> $merge_run_id,
 					modules		=> [$delly, $bcftools],
-					max_time	=> $tool_data->{parameters}->{filter}->{time},
-					mem		=> $tool_data->{parameters}->{filter}->{mem},
+					max_time	=> $parameters->{filter}->{time},
+					mem		=> $parameters->{filter}->{mem},
 					hpc_driver	=> $args{hpc_driver}
 					);
 

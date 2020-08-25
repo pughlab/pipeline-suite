@@ -24,6 +24,7 @@ our ($reference, $exclude_regions) = undef;
 ####################################################################################################
 # version       author		comment
 # 1.0		sprokopec       script to run MAVIS SV annotator
+# 1.1           sprokopec       minor updates for tool config
 
 ### USAGE ##########################################################################################
 # mavis.pl -t tool_config.yaml -d data_config.yaml -o /path/to/output/dir -c slurm --remove --dry_run \
@@ -166,17 +167,17 @@ sub main {
 	print $log "\n---";
 
 	# set tools and versions
-	my $mavis	= 'mavis/' . $tool_data->{tool_version};
+	my $mavis	= 'mavis/' . $tool_data->{mavis_version};
 	my $bwa		= 'bwa/' . $tool_data->{bwa_version};
 
 	my $mavis_export = join("\n",
-		"export MAVIS_ANNOTATIONS=$tool_data->{mavis_annotations}",
-		"export MAVIS_MASKING=$tool_data->{mavis_masking}",
-		"export MAVIS_DGV_ANNOTATION=$tool_data->{mavis_dgv_anno}",
-		"export MAVIS_TEMPLATE_METADATA=$tool_data->{mavis_cytoband}",
+		"export MAVIS_ANNOTATIONS=$tool_data->{mavis}->{mavis_annotations}",
+		"export MAVIS_MASKING=$tool_data->{mavis}->{mavis_masking}",
+		"export MAVIS_DGV_ANNOTATION=$tool_data->{mavis}->{mavis_dgv_anno}",
+		"export MAVIS_TEMPLATE_METADATA=$tool_data->{mavis}->{mavis_cytoband}",
 		"export MAVIS_REFERENCE_GENOME=$tool_data->{reference}",
-		"export MAVIS_ALIGNER='$tool_data->{mavis_aligner}'",
-		"export MAVIS_ALIGNER_REFERENCE=$tool_data->{bwa_ref}",
+		"export MAVIS_ALIGNER='$tool_data->{mavis}->{mavis_aligner}'",
+		"export MAVIS_ALIGNER_REFERENCE=$tool_data->{bwa}->{reference}",
 		"export MAVIS_DRAW_FUSIONS_ONLY=False",
 		"export MAVIS_SCHEDULER=" . uc($args{hpc_driver})
 		);

@@ -21,6 +21,7 @@ require "$cwd/utilities.pl";
 # 1.0		sprokopec       script to run STAR-fusion on RNASeq data aligned with STAR
 # 1.1		sprokopec	minor updates for compatibility with larger pipeline
 # 1.2		sprokopec	added help message and cleaned up code
+# 1.3           sprokopec       minor updates for tool config
 
 ### USAGE ##########################################################################################
 # star_fusion.pl -t tool_config.yaml -c data_config.yaml -o /path/to/output/dir -c slurm --remove --dry_run
@@ -85,7 +86,6 @@ sub main {
 		hpc_driver		=> undef,
 		del_intermediates	=> undef,
 		dry_run			=> undef,
-		project			=> undef,
 		no_wait			=> undef,
 		@_
 		);
@@ -100,7 +100,7 @@ sub main {
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'star-fusion');
 
 	# clean up reference_dir (aesthetic reasons only)
-	$tool_data->{reference_dir} =~ s/\/$//;
+	$tool_data->{star_fusion_reference_dir} =~ s/\/$//;
 
 	# organize output and log directories
 	my $output_directory = $args{output_directory};
@@ -134,23 +134,26 @@ sub main {
 	print $log "---\n";
 	print $log "Running STAR-fusion pipeline.\n";
 	print $log "\n  Tool config used: $tool_config";
-	if (defined($tool_data->{tool_path})) {
-		print $log "\n    STAR-fusion path: $tool_data->{tool_path}";
+	if (defined($tool_data->{star_fusion_path})) {
+		print $log "\n    STAR-fusion path: $tool_data->{star_fusion_path}";
 		}
-	print $log "\n    STAR-fusion reference directory: $tool_data->{reference_dir}";
+	print $log "\n    STAR-fusion reference directory: $tool_data->{star_fusion_reference_dir}";
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n---";
 
 	# set tools and versions
-	my $star_fusion = $tool_data->{tool} . '/' . $tool_data->{tool_version};
-	if (defined($tool_data->{tool_path})) {
+	my $star_fusion = 'STAR-Fusion/' . $tool_data->{star_fusion_version};
+	if (defined($tool_data->{star_fusion_path})) {
 		$star_fusion = '';
 		}
 	my $star	= 'STAR/' . $tool_data->{star_version};
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $perl	= 'perl/5.30.0';
 	my $r_version	= 'R/' . $tool_data->{r_version};
+
+	# get user-specified tool parameters
+	my $parameters = $tool_data->{star_fusion}->{parameters};
 
 	### RUN ############################################################################################
 	# get sample data
@@ -221,7 +224,7 @@ sub main {
 			# if we will be running FusionInspect validate, we will need the fastq files as well
 			my ($r1, $r2);
 			my (@r1_fastq_files, @r2_fastq_files);
-			if (defined($tool_data->{FusionInspect})) {
+			if (defined($parameters->{FusionInspect})) {
 
 				$data_dir = join('/', $data_dir, $sample, 'fastq_links');
 				opendir(RAWFILES, $data_dir) or die "Cannot open $data_dir !";
@@ -294,12 +297,12 @@ sub main {
 			my $fusion_output = join('/', $sample_directory, 'star-fusion.fusion_predictions.abridged.tsv');
 
 			my $fusion_cmd = get_star_fusion_command(
-				fusion_call	=> $tool_data->{tool_path},
-				reference	=> $tool_data->{reference_dir},
+				fusion_call	=> $tool_data->{star_fusion_path},
+				reference	=> $tool_data->{star_fusion_reference_dir},
 				input		=> $junctions_file,
 				output_dir	=> $sample_directory,
 				tmp_dir		=> $tmp_directory,
-				fusion_inspect	=> $tool_data->{FusionInspect},
+				fusion_inspect	=> $parameters->{FusionInspect},
 				r1		=> $r1,
 				r2		=> $r2
 				);
@@ -317,8 +320,8 @@ sub main {
 					modules => [$star, $perl, $samtools, 'tabix', 'python', $star_fusion],
 					# requires python igv-reports
 					dependencies	=> $run_id,
-					max_time	=> $tool_data->{parameters}->{star_fusion}->{time},
-					mem		=> $tool_data->{parameters}->{star_fusion}->{mem},
+					max_time	=> $parameters->{star_fusion}->{time},
+					mem		=> $parameters->{star_fusion}->{mem},
 					hpc_driver	=> $args{hpc_driver},
 					cpus_per_task	=> 4
 					);
@@ -400,7 +403,7 @@ sub main {
 	my $collect_results = join(' ',
 		"Rscript $cwd/collect_star-fusion_output.R",
 		'-d', $output_directory,
-		'-p', $args{project}
+		'-p', $tool_data->{project_name}
 		);
 
 	$run_script = write_script(
@@ -409,8 +412,8 @@ sub main {
 		cmd	=> $collect_results,
 		modules		=> [$r_version],
 		dependencies	=> join(':', @all_jobs),
-		max_time	=> $tool_data->{parameters}->{combine_results}->{time},
-		mem		=> $tool_data->{parameters}->{combine_results}->{mem},
+		max_time	=> $parameters->{combine_results}->{time},
+		mem		=> $parameters->{combine_results}->{mem},
 		hpc_driver	=> $args{hpc_driver}
 		);
 
@@ -471,7 +474,7 @@ sub main {
 
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
-my ($data_config, $tool_config, $output_directory, $project_name);
+my ($data_config, $tool_config, $output_directory);
 my $hpc_driver = 'slurm';
 my ($remove_junk, $dry_run, $help, $no_wait);
 
@@ -481,7 +484,6 @@ GetOptions(
 	't|tool=s'	=> \$tool_config,
 	'd|data=s'	=> \$data_config,
 	'o|out_dir=s'	=> \$output_directory,
-	'p|project=s'	=> \$project_name,
 	'c|cluster=s'	=> \$hpc_driver,
 	'remove'	=> \$remove_junk,
 	'dry-run'	=> \$dry_run,
@@ -495,7 +497,6 @@ if ($help) {
 		"\t--data|-d\t<string> data config (yaml format)",
 		"\t--tool|-t\t<string> tool config (yaml format)",
 		"\t--out_dir|-o\t<string> path to output directory",
-		"\t--project|-p\t<string> project name",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
 		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
@@ -515,7 +516,6 @@ main(
 	tool_config		=> $tool_config,
 	data_config		=> $data_config,
 	output_directory	=> $output_directory,
-	project			=> $project_name,
 	hpc_driver		=> $hpc_driver,
 	del_intermediates	=> $remove_junk,
 	dry_run			=> $dry_run,

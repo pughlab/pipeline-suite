@@ -20,12 +20,13 @@ require "$cwd/utilities.pl";
 our ($data_type, $reference, $known_1000g, $known_indels, $known_mills, $dbsnp);
 
 ####################################################################################################
-# version       author	  	comment
+# version	author	  	comment
 # 1.1		sprokopec	run GATKs indel realignment and recalibration on BWA aligned bams
 # 1.2		sprokopec	added functionality for processing of STAR-aligned RNA-Seq bams
 # 1.3		sprokopec	minor updates for compatibility with larger pipeline
 # 1.4		sprokopec	added help msg and cleaned up code
-
+# 1.5		sprokopec	minor updates for tool config
+#
 ### USAGE ##########################################################################################
 # gatk.pl -t tool.yaml -d data.yaml -o /path/to/output/dir -b /path/to/output/yaml -c slurm --remove --dry_ryn --rna
 #
@@ -96,7 +97,7 @@ sub get_target_intervals_command {
 			'-dt None'
 			);
 
-		if ('' ne $args{intervals}) {
+		if (defined($args{intervals})) {
 			$target_command = join(' ',
 				$target_command,
 				'--intervals', $args{intervals},
@@ -189,7 +190,7 @@ sub create_recalibration_table {
 			'-dt None'
 			);
 
-		if ('' ne $args{intervals}) {
+		if (defined($args{intervals})) {
 			$bqsr_command = join(' ',
 				$bqsr_command,
 				'--intervals', $args{intervals},
@@ -259,7 +260,11 @@ sub main {
 
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
-	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'gatk', data_type => $data_type);
+	my $tool_data = error_checking(
+		tool_data	=> $tool_data_orig,
+		pipeline	=> 'gatk',
+		data_type	=> $data_type
+		);
 
 	# organize output and log directories
 	my $output_directory = $args{output_directory};
@@ -334,9 +339,12 @@ sub main {
 	print $log "\n---";
 
 	# set tools and versions
-	my $gatk	= $tool_data->{tool} . '/' . $tool_data->{tool_version};
+	my $gatk	= 'gatk/' . $tool_data->{gatk_version};
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $picard	= 'picard/' . $tool_data->{picard_version};
+
+	# get user-specified tool parameters
+	my $parameters = $tool_data->{gatk}->{parameters};
 
 	### HANDLING FILES #################################################################################
 	# get sample data
@@ -429,7 +437,7 @@ sub main {
 				n_samples	=> scalar(@input_bams),
 				output		=> $target_intervals,
 				intervals	=> $tool_data->{intervals_bed},
-				java_mem	=> $tool_data->{parameters}->{target_creator}->{java_mem},
+				java_mem	=> $parameters->{target_creator}->{java_mem},
 				tmp_dir		=> $tmp_directory
 				);
 
@@ -446,8 +454,8 @@ sub main {
 					name	=> 'run_indel_realigner_target_creator_' . $patient,
 					cmd	=> $stage1_cmd,
 					modules	=> [$gatk],
-					max_time	=> $tool_data->{parameters}->{target_creator}->{time},
-					mem		=> $tool_data->{parameters}->{target_creator}->{mem},
+					max_time	=> $parameters->{target_creator}->{time},
+					mem		=> $parameters->{target_creator}->{mem},
 					cpus_per_task	=> scalar(@input_bams),
 					hpc_driver	=> $args{hpc_driver}
 					);
@@ -471,7 +479,7 @@ sub main {
 			$stage2_cmd = get_indelrealign_command(
 				input		=> $input_string,
 				intervals	=> $target_intervals,
-				java_mem	=> $tool_data->{parameters}->{realign}->{java_mem},
+				java_mem	=> $parameters->{realign}->{java_mem},
 				tmp_dir		=> $tmp_directory
 				);
 
@@ -511,8 +519,8 @@ sub main {
 					cmd	=> $stage2_cmd,
 					modules	=> [$gatk, $samtools],
 					dependencies	=> $run_id_patient,
-					max_time	=> $tool_data->{parameters}->{realign}->{time},
-					mem		=> $tool_data->{parameters}->{realign}->{mem},
+					max_time	=> $parameters->{realign}->{time},
+					mem		=> $parameters->{realign}->{mem},
 					hpc_driver	=> $args{hpc_driver}
 					);
 
@@ -563,7 +571,7 @@ sub main {
 				my $split_cmd = get_split_command(
 					input		=> $aligned_bam,
 					output		=> $split_bam,
-					java_mem	=> $tool_data->{parameters}->{split_cigar}->{java_mem},
+					java_mem	=> $parameters->{split_cigar}->{java_mem},
 					tmp_dir		=> $tmp_directory
 					);
 
@@ -587,8 +595,8 @@ sub main {
 						name	=> 'run_split_cigar_' . $sample,
 						cmd	=> $split_cmd,
 						modules	=> [$gatk, $samtools],
-						max_time	=> $tool_data->{parameters}->{split_cigar}->{time},
-						mem		=> $tool_data->{parameters}->{split_cigar}->{mem},
+						max_time	=> $parameters->{split_cigar}->{time},
+						mem		=> $parameters->{split_cigar}->{mem},
 						hpc_driver	=> $args{hpc_driver}
 						);
 
@@ -613,7 +621,7 @@ sub main {
 				$stage1_cmd = get_target_intervals_command(
 					input		=> $split_bam,
 					output		=> $target_intervals,
-					java_mem	=> $tool_data->{parameters}->{target_creator}->{java_mem},
+					java_mem	=> $parameters->{target_creator}->{java_mem},
 					tmp_dir		=> $tmp_directory
 					);
 
@@ -631,8 +639,8 @@ sub main {
 						cmd	=> $stage1_cmd,
 						modules	=> [$gatk],
 						dependencies	=> $run_id_sample,
-						max_time	=> $tool_data->{parameters}->{target_creator}->{time},
-						mem		=> $tool_data->{parameters}->{target_creator}->{mem},
+						max_time	=> $parameters->{target_creator}->{time},
+						mem		=> $parameters->{target_creator}->{mem},
 						hpc_driver	=> $args{hpc_driver}
 						);
 
@@ -659,7 +667,7 @@ sub main {
 					input		=> $split_bam,
 					output		=> $realigned_bam,
 					intervals	=> $target_intervals,
-					java_mem	=> $tool_data->{parameters}->{realign}->{java_mem},
+					java_mem	=> $parameters->{realign}->{java_mem},
 					tmp_dir		=> $tmp_directory
 					);
 
@@ -684,8 +692,8 @@ sub main {
 						cmd	=> $stage2_cmd,
 						modules	=> [$gatk, $samtools],
 						dependencies	=> $run_id_sample,
-						max_time	=> $tool_data->{parameters}->{realign}->{time},
-						mem		=> $tool_data->{parameters}->{realign}->{mem},
+						max_time	=> $parameters->{realign}->{time},
+						mem		=> $parameters->{realign}->{mem},
 						hpc_driver	=> $args{hpc_driver}
 						);
 
@@ -719,7 +727,7 @@ sub main {
 				input		=> $realigned_bam,
 				output		=> $bqsr_file,
 				intervals	=> $tool_data->{intervals_bed},
-				java_mem	=> $tool_data->{parameters}->{bqsr}->{java_mem},
+				java_mem	=> $parameters->{bqsr}->{java_mem},
 				tmp_dir		=> $tmp_directory
 				);
 
@@ -739,8 +747,8 @@ sub main {
 						cmd	=> $stage3_cmd,
 						modules	=> [$gatk],
 						dependencies	=> $run_id_patient,
-						max_time	=> $tool_data->{parameters}->{bqsr}->{time}->{$type},
-						mem		=> $tool_data->{parameters}->{bqsr}->{mem},
+						max_time	=> $parameters->{bqsr}->{time}->{$type},
+						mem		=> $parameters->{bqsr}->{mem},
 						cpus_per_task	=> 8,
 						hpc_driver	=> $args{hpc_driver}
 						);
@@ -754,8 +762,8 @@ sub main {
 						cmd	=> $stage3_cmd,
 						modules	=> [$gatk],
 						dependencies	=> $run_id_sample,
-						max_time	=> $tool_data->{parameters}->{bqsr}->{time}->{$type},
-						mem		=> $tool_data->{parameters}->{bqsr}->{mem},
+						max_time	=> $parameters->{bqsr}->{time}->{$type},
+						mem		=> $parameters->{bqsr}->{mem},
 						cpus_per_task	=> 1,
 						hpc_driver	=> $args{hpc_driver}
 						);
@@ -783,7 +791,7 @@ sub main {
 				input		=> $realigned_bam,
 				bqsr		=> $bqsr_file,
 				output		=> $recal_bam,
-				java_mem	=> $tool_data->{parameters}->{recalibrate}->{java_mem},
+				java_mem	=> $parameters->{recalibrate}->{java_mem},
 				tmp_dir		=> $tmp_directory
 				);
 
@@ -815,8 +823,8 @@ sub main {
 					cmd	=> $stage4_cmd,
 					modules	=> [$gatk, $samtools],
 					dependencies	=> $run_id_sample,
-					max_time	=> $tool_data->{parameters}->{recalibrate}->{time}->{$type},
-					mem		=> $tool_data->{parameters}->{recalibrate}->{mem},
+					max_time	=> $parameters->{recalibrate}->{time}->{$type},
+					mem		=> $parameters->{recalibrate}->{mem},
 					cpus_per_task	=> $n_cpus,
 					hpc_driver	=> $args{hpc_driver}
 					);

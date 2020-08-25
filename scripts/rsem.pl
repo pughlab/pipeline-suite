@@ -21,6 +21,7 @@ require "$cwd/utilities.pl";
 # 1.0		sprokopec       script to run RSEM on STAR-aligned RNASeq data
 # 1.1		sprokopec	minor updates for compatibility with larger pipeline
 # 1.2		sprokopec	added help message and cleaned up code
+# 1.3           sprokopec       minor updates for tool config
 
 ### USAGE ##########################################################################################
 # rsem.pl -t tool_config.yaml -d data_config.yaml -o /path/to/output/dir -c slurm --remove --dry_run
@@ -78,7 +79,6 @@ sub main {
 		hpc_driver		=> undef,
 		del_intermediates	=> undef,
 		dry_run			=> undef,
-		project			=> undef,
 		no_wait			=> undef,
 		@_
 		);
@@ -124,15 +124,18 @@ sub main {
 	print $log "---\n";
 	print $log "Running RNASeq RSEM pipeline.\n";
 	print $log "\n  Tool config used: $tool_config";
-	print $log "\n    Reference used: $tool_data->{reference}";
+	print $log "\n    Reference used: $tool_data->{rsem_reference}";
 	print $log "\n    Output directory: $output_directory";
-	print $log "\n    Strandedness: $tool_data->{strandedness}";
+	print $log "\n    Strandedness: $tool_data->{rsem}->{strandedness}";
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n---";
 
 	# set tools and versions
-	my $rsem = $tool_data->{tool} . '/' . $tool_data->{tool_version};
+	my $rsem = 'rsem/' . $tool_data->{rsem_version};
 	my $r_version = 'R/' . $tool_data->{r_version};
+
+	# get user-specified tool parameters
+	my $parameters = $tool_data->{rsem}->{parameters};
 
 	### RUN ###########################################################################################
 	# get sample data
@@ -205,9 +208,9 @@ sub main {
 			$rsem_cmd .= get_rsem_command( 
 				input		=> $aligned_bam,
 				output_stem	=> $sample,
-				ref_dir		=> $tool_data->{reference},
+				ref_dir		=> $tool_data->{rsem_reference},
 				tmp_dir		=> $tmp_directory,
-				strand		=> $tool_data->{strandedness}
+				strand		=> $tool_data->{rsem}->{strandedness}
 				);
 
 			my $genes_file = join('/', $sample_directory, $sample . '.genes.results');
@@ -227,8 +230,8 @@ sub main {
 					name	=> 'run_RSEM_' . $sample,
 					cmd	=> $rsem_cmd,
 					modules	=> [$rsem],
-					max_time	=> $tool_data->{parameters}->{rsem}->{time},
-					mem		=> $tool_data->{parameters}->{rsem}->{mem},
+					max_time	=> $parameters->{rsem}->{time},
+					mem		=> $parameters->{rsem}->{mem},
 					hpc_driver	=> $args{hpc_driver}
 					);
 
@@ -296,7 +299,7 @@ sub main {
 	my $collect_results = join(' ',
 		"Rscript $cwd/collect_rsem_output.R",
 		'-d', $output_directory,
-		'-p', $args{project}
+		'-p', $tool_data->{project_name}
 		);
 
 	$run_script = write_script(
@@ -305,8 +308,8 @@ sub main {
 		cmd	=> $collect_results,
 		modules		=> [$r_version],
 		dependencies	=> join(':', @all_jobs),
-		max_time	=> $tool_data->{parameters}->{combine_results}->{time},
-		mem		=> $tool_data->{parameters}->{combine_results}->{mem},
+		max_time	=> $parameters->{combine_results}->{time},
+		mem		=> $parameters->{combine_results}->{mem},
 		hpc_driver	=> $args{hpc_driver}
 		);
 
@@ -367,7 +370,7 @@ sub main {
 
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
-my ($data_config, $tool_config, $output_directory, $project_name);
+my ($data_config, $tool_config, $output_directory);
 my $hpc_driver = 'slurm';
 my ($remove_junk, $dry_run, $help, $no_wait);
 
@@ -377,7 +380,6 @@ GetOptions(
 	'd|data=s'	=> \$data_config,
 	't|tool=s'	=> \$tool_config,
 	'o|out_dir=s'	=> \$output_directory,
-	'p|project=s'	=> \$project_name,
 	'c|cluster=s'	=> \$hpc_driver,
 	'remove'	=> \$remove_junk,
 	'dry-run'	=> \$dry_run,
@@ -391,7 +393,6 @@ if ($help) {
 		"\t--data|-d\t<string> data config (yaml format)",
 		"\t--tool|-t\t<string> tool config (yaml format)",
 		"\t--out_dir|-o\t<string> path to output directory",
-		"\t--project|-p\t<string> project name",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
 		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
@@ -412,7 +413,6 @@ main(
 	tool_config		=> $tool_config,
 	data_config		=> $data_config,
 	output_directory	=> $output_directory,
-	project			=> $project_name,
 	hpc_driver		=> $hpc_driver,
 	del_intermediates	=> $remove_junk,
 	dry_run			=> $dry_run,

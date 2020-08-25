@@ -37,6 +37,7 @@ sub main {
 		data_config	=> undef,
 		step1		=> undef,
 		step2		=> undef,
+		step3		=> undef,
 		cleanup		=> undef,
 		cluster		=> undef,
 		dry_run		=> undef,
@@ -77,7 +78,9 @@ sub main {
 	my $run_script;
 	my ($bwa_run_id, $gatk_run_id, $contest_run_id, $coverage_run_id, $hc_run_id);
 	my ($strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id, $delly_run_id);
-	my ($mavis_run_id);
+	my ($mavis_run_id, $report_run_id);
+
+	my @job_ids;
 
 	# prepare directory structure
 	my $bwa_directory = join('/', $output_directory, 'BWA');
@@ -106,12 +109,12 @@ sub main {
 		## run BWA-alignment pipeline
 		unless(-e $bwa_directory) { make_path($bwa_directory); }
 
-		if (defined($tool_data->{bwa_config})) {
+		if ('Y' eq $tool_data->{bwa}->{run}) {
 
 			my $bwa_command = join(' ',
 				"perl $cwd/scripts/bwa.pl",
 				"-o", $bwa_directory,
-				"-t", $tool_data->{bwa_config},
+				"-t", $tool_config,
 				"-d", $data_config,
 				"-b", $bwa_output_yaml,
 				"-c", $args{cluster}
@@ -131,6 +134,7 @@ sub main {
 				cmd	=> $bwa_command,
 				modules	=> ['perl'],
 				mem		=> '256M',
+				max_time	=> '7-00:00:00',
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -150,18 +154,19 @@ sub main {
 					);
 
 				print $log ">>> BWA job id: $bwa_run_id\n\n";
+				push @job_ids, $bwa_run_id;
 				}
 			}
 
 		## run GATK indel realignment/recalibration pipeline
 		unless(-e $gatk_directory) { make_path($gatk_directory); }
 
-		if (defined($tool_data->{gatk_config})) {
+		if ('Y' eq $tool_data->{gatk}->{run}) {
 
 			my $gatk_command = join(' ',
 				"perl $cwd/scripts/gatk.pl",
 				"-o", $gatk_directory,
-				"-t", $tool_data->{gatk_config},
+				"-t", $tool_config,
 				"-d", $bwa_output_yaml,
 				"-c", $args{cluster},
 				"-b", $gatk_output_yaml
@@ -182,6 +187,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $bwa_run_id,
 				mem		=> '256M',
+				max_time	=> '14-00:00:00',
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -201,6 +207,7 @@ sub main {
 					);
 
 				print $log ">>> GATK job id: $gatk_run_id\n\n";
+				push @job_ids, $gatk_run_id;
 				}
 			}
 
@@ -209,14 +216,13 @@ sub main {
 		unless(-e $contest_directory) { make_path($contest_directory); }
 		unless(-e $coverage_directory) { make_path($coverage_directory); }
 
-		if (defined($tool_data->{bamqc_config})) {
+		if ('Y' eq $tool_data->{bamqc}->{run}) {
 
 			my $contest_command = join(' ',
 				"perl $cwd/scripts/contest.pl",
 				"-o", $contest_directory,
-				"-t", $tool_data->{bamqc_config},
+				"-t", $tool_config,
 				"-d", $gatk_output_yaml,
-				"-p", $tool_data->{project_name},
 				"-c", $args{cluster}
 				);
 
@@ -235,6 +241,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $gatk_run_id,
 				mem		=> '256M',
+				max_time	=> '2-00:00:00',
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -254,14 +261,14 @@ sub main {
 					);
 
 				print $log ">>> ContEst job id: $contest_run_id\n\n";
+				push @job_ids, $contest_run_id;
 				}
 
 			my $coverage_command = join(' ',
 				"perl $cwd/scripts/get_coverage.pl",
 				"-o", $coverage_directory,
-				"-t", $tool_data->{bamqc_config},
+				"-t", $tool_config,
 				"-d", $gatk_output_yaml,
-				"-p", $tool_data->{project_name},
 				"-c", $args{cluster}
 				);
 
@@ -280,6 +287,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $gatk_run_id,
 				mem		=> '256M',
+				max_time	=> '4-00:00:00',
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -299,6 +307,7 @@ sub main {
 					);
 
 				print $log ">>> ContEst job id: $coverage_run_id\n\n";
+				push @job_ids, $coverage_run_id;
 				}
 			}
 		}
@@ -309,12 +318,12 @@ sub main {
 	if ($args{step2}) {
 
 		## run GATK's HaplotypeCaller pipeline
-		if (defined($tool_data->{haplotype_caller_config})) {
+		if ('Y' eq $tool_data->{haplotype_caller}->{run}) {
 	 
 			my $hc_command = join(' ',
 				"perl $cwd/scripts/haplotype_caller.pl",
 				"-o", $hc_directory,
-				"-t", $tool_data->{haplotype_caller_config},
+				"-t", $tool_config,
 				"-d", $gatk_output_yaml,
 				"-c", $args{cluster}
 				);
@@ -334,6 +343,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $gatk_run_id,
 				mem		=> '256M',
+				max_time	=> '12-00:00:00',
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -353,15 +363,15 @@ sub main {
 					);
 
 				print $log ">>> HaplotypeCaller job id: $hc_run_id\n\n";
+				push @job_ids, $hc_run_id;
 				}
 
 			# next step will run Genotype GVCFs, and filter final output
 			$hc_command = join(' ',
 				"perl $cwd/scripts/genotype_gvcfs.pl",
 				"-o", $hc_directory,
-				"-t", $tool_data->{haplotype_caller_config},
+				"-t", $tool_config,
 				"-d", $gatk_output_yaml,
-				"-p", $tool_data->{project_name},
 				"-c", $args{cluster}
 				);
 
@@ -380,6 +390,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $hc_run_id,
 				mem		=> '256M',
+				max_time	=> '7-00:00:00',
 				hpc_driver	=> $args{cluster}
 				);
 		
@@ -399,11 +410,12 @@ sub main {
 					);
 
 				print $log ">>> GenotypeGVCFs job id: $hc_run_id\n\n";
+				push @job_ids, $hc_run_id;
 				}
 			}
 
 		## run STRELKA/MANTA pipeline
-		if (defined($tool_data->{strelka_config})) {
+		if ('Y' eq $tool_data->{strelka}->{run}) {
 
 			unless(-e $strelka_directory) { make_path($strelka_directory); }
 
@@ -411,9 +423,8 @@ sub main {
 			my $strelka_command = join(' ',
 				"perl $cwd/scripts/strelka.pl",
 				"-o", $strelka_directory,
-				"-t", $tool_data->{strelka_config},
+				"-t", $tool_config,
 				"-d", $gatk_output_yaml,
-				"-p", $tool_data->{project_name},
 				"-c", $args{cluster}
 				);
 
@@ -432,6 +443,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $gatk_run_id,
 				mem		=> '256M',
+				max_time	=> '7-00:00:00',
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -451,11 +463,12 @@ sub main {
 					);
 
 				print $log ">>> Strelka job id: $strelka_run_id\n\n";
+				push @job_ids, $strelka_run_id;
 				}
 			}
 
 		## run GATK's MuTect pipeline
-		if (defined($tool_data->{mutect_config})) {
+		if ('Y' eq $tool_data->{mutect}->{run}) {
 
 			unless(-e $mutect_directory) { make_path($mutect_directory); }
 
@@ -463,7 +476,7 @@ sub main {
 			my $mutect_command = join(' ',
 				"perl $cwd/scripts/mutect.pl",
 				"-o", join('/', $mutect_directory, 'PanelOfNormals'),
-				"-t", $tool_data->{mutect_config},
+				"-t", $tool_config,
 				"-d", $gatk_output_yaml,
 				"-c", $args{cluster},
 				"--create-panel-of-normals"
@@ -484,6 +497,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $gatk_run_id,
 				mem		=> '256M',
+				max_time	=> '14-00:00:00',
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -503,15 +517,15 @@ sub main {
 					);
 			
 				print $log ">>> MuTect PoN job id: $mutect_run_id\n\n";
+				push @job_ids, $mutect_run_id;
 				}
 
 			# next run variant calling
 			$mutect_command = join(' ',
 				"perl $cwd/scripts/mutect.pl",
 				"-o", $mutect_directory,
-				"-t", $tool_data->{mutect_config},
+				"-t", $tool_config,
 				"-d", $gatk_output_yaml,
-				"-p", $tool_data->{project_name},
 				"-c", $args{cluster},
 				"--pon", join('/', $mutect_directory, 'panel_of_normals.vcf')
 				);
@@ -531,6 +545,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $mutect_run_id,
 				mem		=> '256M',
+				max_time	=> '14-00:00:00',
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -550,11 +565,12 @@ sub main {
 					);
 
 				print $log ">>> MuTect job id: $mutect_run_id\n\n";
+				push @job_ids, $mutect_run_id;
 				}
 			}
 
 		## also run GATK's newer MuTect2 pipeline
-		if (defined($tool_data->{mutect2_config})) {
+		if ('Y' eq $tool_data->{mutect2}->{run}) {
 
 			unless(-e $mutect2_directory) { make_path($mutect2_directory); }
 
@@ -562,7 +578,7 @@ sub main {
 			my $mutect2_command = join(' ',
 				"perl $cwd/scripts/mutect2.pl",
 				"-o", join('/', $mutect2_directory, 'PanelOfNormals'),
-				"-t", $tool_data->{mutect2_config},
+				"-t", $tool_config,
 				"-d", $gatk_output_yaml,
 				"-c", $args{cluster},
 				"--create-panel-of-normals"
@@ -583,6 +599,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $gatk_run_id,
 				mem		=> '256M',
+				max_time	=> '14-00:00:00',
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -602,15 +619,15 @@ sub main {
 					);
 			
 				print $log ">>> MuTect2 PoN job id: $mutect2_run_id\n\n";
+				push @job_ids, $mutect2_run_id;
 				}
 
 			# now run the actual somatic variant calling
 			$mutect2_command = join(' ',
 				"perl $cwd/scripts/mutect2.pl",
 				"-o", $mutect2_directory,
-				"-t", $tool_data->{mutect2_config},
+				"-t", $tool_config,
 				"-d", $gatk_output_yaml,
-				"-p", $tool_data->{project_name},
 				"-c", $args{cluster},
 				"--pon", join('/', $mutect2_directory, 'panel_of_normals.vcf')
 				);
@@ -630,6 +647,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $mutect2_run_id,
 				mem		=> '256M',
+				max_time	=> '14-00:00:00',
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -649,11 +667,12 @@ sub main {
 					);
 
 				print $log ">>> MuTect2 job id: $mutect2_run_id\n\n";
+				push @job_ids, $mutect2_run_id;
 				}
 			}
 
 		## run VarScan SNV/CNV pipeline
-		if (defined($tool_data->{varscan_config})) {
+		if ('Y' eq $tool_data->{varscan}->{run}) {
 
 			unless(-e $varscan_directory) { make_path($varscan_directory); }
 
@@ -661,9 +680,8 @@ sub main {
 			my $varscan_command = join(' ',
 				"perl $cwd/scripts/varscan.pl",
 				"-o", $varscan_directory,
-				"-t", $tool_data->{varscan_config},
+				"-t", $tool_config,
 				"-d", $gatk_output_yaml,
-				"-p", $tool_data->{project_name},
 				"-c", $args{cluster},
 				"--mode paired"
 				);
@@ -683,6 +701,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $gatk_run_id,
 				mem		=> '256M',
+				max_time	=> '7-00:00:00',
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -702,15 +721,15 @@ sub main {
 					);
 
 				print $log ">>> VarScan T/N job id: $varscan_run_id\n\n";
+				push @job_ids, $varscan_run_id;
 				}
 
 			# now run on T-only, using germline variants from T/N pairs to filter
 			$varscan_command = join(' ',
 				"perl $cwd/scripts/varscan.pl",
 				"-o", $varscan_directory,
-				"-t", $tool_data->{varscan_config},
+				"-t", $tool_config,
 				"-d", $gatk_output_yaml,
-				"-p", $tool_data->{project_name},
 				"-c", $args{cluster},
 				"--mode unpaired",
 				"--pon", join('/', $varscan_directory, 'panel_of_normals.vcf')
@@ -731,6 +750,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $varscan_run_id,
 				mem		=> '256M',
+				max_time	=> '7-00:00:00',
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -750,18 +770,19 @@ sub main {
 					);
 
 				print $log ">>> VarScan tumour-only job id: $varscan_run_id\n\n";
+				push @job_ids, $varscan_run_id;
 				}
 			}
 
 		## run Delly SV pipeline
-		if (defined($tool_data->{delly_config})) {
+		if ('Y' eq $tool_data->{delly}->{run}) {
 
 			unless(-e $delly_directory) { make_path($delly_directory); }
 
 			my $delly_command = join(' ',
 				"perl $cwd/scripts/delly.pl",
 				"-o", $delly_directory,
-				"-t", $tool_data->{delly_config},
+				"-t", $tool_config,
 				"-d", $gatk_output_yaml,
 				"-c", $args{cluster}
 				);
@@ -781,6 +802,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $gatk_run_id,
 				mem		=> '256M',
+				max_time	=> '14-00:00:00',
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -800,18 +822,19 @@ sub main {
 					);
 
 				print $log ">>> Delly job id: $delly_run_id\n\n";
+				push @job_ids, $delly_run_id;
 				}
 			}
 
 		## run Mavis SV annotation pipeline
-		if (defined($tool_data->{mavis_config})) {
+		if ('Y' eq $tool_data->{mavis}->{run}) {
 
 			unless(-e $mavis_directory) { make_path($mavis_directory); }
 
 			my $mavis_command = join(' ',
 				"perl $cwd/scripts/mavis.pl",
 				"-o", $mavis_directory,
-				"-t", $tool_data->{mavis_config},
+				"-t", $tool_config,
 				"-d", $gatk_output_yaml,
 				"--manta", $strelka_directory,
 				"--delly", $delly_directory,
@@ -828,7 +851,7 @@ sub main {
 
 			my $depends;
 			if ( (defined($delly_run_id)) && (defined($strelka_run_id)) ) {
-				$depends = join(',', $delly_run_id, $strelka_run_id);
+				$depends = join(':', $delly_run_id, $strelka_run_id);
 				} elsif ( (defined($delly_run_id)) && !(defined($strelka_run_id)) ) {
 				$depends = $delly_run_id;
 				} elsif ( !(defined($delly_run_id)) && (defined($strelka_run_id)) ) {
@@ -845,6 +868,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $depends,
 				mem		=> '256M',
+				max_time	=> '2-00:00:00',
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -859,7 +883,54 @@ sub main {
 					);
 
 				print $log ">>> MAVIS job id: $mavis_run_id\n\n";
+				push @job_ids, $mavis_run_id;
 				}
+			}
+		}
+
+	########################################################################################
+	# Create a final report for the project.
+	########################################################################################
+	if ($args{step3}) {
+
+		my $report_command = join(' ',
+			"perl $cwd/scripts/generate_report.pl",
+			"-t", $tool_config,
+			"-c", $args{cluster},
+			"-d", $timestamp
+			);
+
+		# record command (in log directory) and then run job
+		print $log "Submitting job for generate_report.pl\n";
+		print $log "  COMMAND: $report_command\n\n";
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'pughlab_dna_pipeline__run_report',
+			cmd	=> $report_command,
+			modules	=> ['perl'],
+			dependencies	=> join(':', @job_ids),
+			mem		=> '256M',
+			max_time	=> '12:00:00',
+			hpc_driver	=> $args{cluster}
+			);
+
+		if ($args{dry_run}) {
+
+			$report_command .= " --dry-run";
+			`$report_command`;
+
+			} else {
+
+			$report_run_id = submit_job(
+				jobname		=> $log_directory,
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> 1, #$args{dry_run},
+				log_file	=> $log
+				);
+
+			print $log ">>> Report job id: $report_run_id\n\n";
 			}
 		}
 
@@ -872,7 +943,7 @@ sub main {
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
 my ($tool_config, $data_config);
-my ($preprocessing, $variant_calling);
+my ($preprocessing, $variant_calling, $create_report);
 my $hpc_driver = 'slurm';
 my ($remove_junk, $dry_run);
 my $help;
@@ -884,9 +955,10 @@ GetOptions(
 	'd|data=s'		=> \$data_config,
 	'preprocessing'		=> \$preprocessing,
 	'variant_calling'	=> \$variant_calling,
+	'create_report'		=> \$create_report,
 	'c|cluster=s'		=> \$hpc_driver,
 	'remove'		=> \$remove_junk,
-	'dry-run'		=> \$dry_run,
+	'dry-run'		=> \$dry_run
 	 );
 
 if ($help) {
@@ -897,6 +969,7 @@ if ($help) {
 		"\t--tool|-t\t<string> tool config (yaml format)",
 		"\t--preprocessing\t<boolean> should data pre-processing be performed? (default: false)",
 		"\t--variant_calling\t<boolean> should variant calling be performed? (default: false)",
+		"\t--create_report\t<boolean> should a report be generated? (default: false)",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
 		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)"
@@ -924,6 +997,7 @@ main(
 	data_config	=> $data_config,
 	step1		=> $preprocessing,
 	step2		=> $variant_calling,
+	step3		=> $create_report,
 	cluster		=> $hpc_driver,
 	cleanup		=> $remove_junk,
 	dry_run		=> $dry_run

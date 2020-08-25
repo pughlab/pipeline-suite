@@ -23,7 +23,6 @@ sub error_checking {
 	my $data_type = $args{data_type};
 
 	# check to see if tool-specific arguments are supplied and/or are correct
-	#
 	# is ref_type either hg38 or hg19?
 	if ( ('hg38' ne $tool_data->{ref_type}) && ('hg19' ne $tool_data->{ref_type}) ) {
 		die("Unrecognized ref_type; must be one of hg19 or hg38.");
@@ -33,19 +32,25 @@ sub error_checking {
 
 	# BWA (DNA only)
 	if ('bwa' eq $pipeline) {
-		if ('bwamem' ne $tool_data->{aligner}) {
+		if ('bwamem' ne $tool_data->{bwa}->{aligner}) {
 			die("This pipeline is currently only compatible with BWA-MEM!");
 		}
 
-		if (('Y' ne $tool_data->{mark_dup}) & ('N' ne $tool_data->{mark_dup})) {
+		if (
+			('Y' ne $tool_data->{bwa}->{parameters}->{merge}->{mark_dup}) && 
+			('N' ne $tool_data->{bwa}->{parameters}->{merge}->{mark_dup})
+			) {
 			print "bwa_config: Option mark_dup must be either Y or N, defaulting to N\n";
-			$tool_data->{mark_dup} = 'N';
+			$tool_data->{bwa}->{parameters}->{merge}->{mark_dup} = 'N';
 		}
 
-		if (!defined($tool_data->{reference}))  { die("Must supply path to reference genome!"); }
+		if (!defined($tool_data->{bwa}->{reference}))  {
+			die("Must supply path to reference genome!");
+		}
+
 		$is_ref_valid = validate_ref(
-			reference	=> $tool_data->{reference},
-			pipeline	=> $pipeline,
+			reference	=> $tool_data->{bwa}->{reference},
+			pipeline	=> 'bwa',
 			exts		=> [qw(.fa .fa.amb .fa.ann .fa.bwt .fa.fai .fa.pac .fa.sa)]
 		);
 	}
@@ -56,14 +61,14 @@ sub error_checking {
 		if (!defined($tool_data->{reference})) { die("Must supply path to reference genome!"); }
 		$is_ref_valid = validate_ref(
 			reference	=> $tool_data->{reference},
-			pipeline	=> $pipeline,
+			pipeline	=> 'gatk',
 			exts		=> [qw(.fa .dict .fa.fai)]
 		);
 
 		if ('dna' eq $data_type) {
 			if (!defined($tool_data->{intervals_bed})) {
 				print "gatk_config: WARNING: no target intervals provided.\n";
-				print ">>If this is exome data, please provide the target regions!\n";
+				print ">>If this is exome data, target regions are recommended!\n";
 			}
 		}
 	}
@@ -77,19 +82,29 @@ sub error_checking {
 
 			if ('strelka' eq $pipeline) {
 				if ( any { /$tool_data->{seq_type}/ } qw(exome targeted) ) {
-					if (!defined($tool_data->{intervals_bed})) {
+					if ( 
+						(!defined($tool_data->{intervals_bed})) && 
+						(!defined($tool_data->{strelka}->{parameters}->{intervals}))
+						) {
 						die("Must supply path to target intervals!");
+					} elsif (defined($tool_data->{strelka}->{parameters}->{intervals})) {
+						if ($tool_data->{strelka}->{parameters}->{intervals} !~ m/.gz$/) {
+							die("ERROR: target intervals (for exome or target-seq) must be bgzipped and tabix indexed.");
+						}
+					} elsif (defined($tool_data->{intervals_bed})) {
+						if ($tool_data->{intervals_bed} !~ m/.gz$/) {
+							die("ERROR: target intervals (for exome or target-seq) must be bgzipped and tabix indexed.");
+						} elsif ($tool_data->{intervals_bed} =~ m/.gz$/) {
+							$tool_data->{strelka}->{parameters}->{intervals} = $tool_data->{intervals_bed};
+						}
 					}
-					elsif ($tool_data->{intervals_bed} !~ m/.gz$/) {
-						print "WARNING: target intervals (if provided) must be bgzipped and tabix indexed.\n";
-					}	
 				}
 			}
 
 			elsif ('varscan' eq $pipeline) {
 				if (!defined($tool_data->{intervals_bed})) {
 					print "WARNING: no target intervals provided.\n";
-					print ">>If this is exome data, please provide the target regions!\n";
+					print ">>If this is exome data, target regions are recommend!\n";
 				}
 			}
 
@@ -97,47 +112,42 @@ sub error_checking {
 
 			if ('rna' ne $tool_data->{seq_type}) {
 				$tool_data->{seq_type} = 'rna';
-				}
+			}
 		}
 	}
 
 	# STAR (RNA only)
 	if ('star' eq $pipeline) {
-		if (!defined($tool_data->{reference_dir}))  {
+		if (!defined($tool_data->{star_reference_dir}))  {
 			die("star_config: Must supply path to reference genome directory!");
-		}
-
-		if (('Y' ne $tool_data->{mark_dup}) && ('N' ne $tool_data->{mark_dup})) {
-			print "star_config: Option mark_dup is neither Y or N, defaulting to N\n";
-			$tool_data->{mark_dup} = 'N';
 		}
 	}
 
 	# STAR-Fusion (RNA only)
 	if ('star-fusion' eq $pipeline) {
-		if (!defined($tool_data->{reference_dir}))  {
+		if (!defined($tool_data->{star_fusion_reference_dir}))  {
 			die("star_fusion_config: Must supply path to reference genome directory!");
 		}
 	}
 
 	# RSEM (RNA only)
 	if ('rsem' eq $pipeline) {
-		if (!defined($tool_data->{reference}))  { die("rsem_config: Must supply path/to/reference/stem !"); }
+		if (!defined($tool_data->{rsem_reference}))  { die("rsem_config: Must supply path/to/reference/stem !"); }
 		$is_ref_valid = validate_ref(
-			reference	=> $tool_data->{reference},
+			reference	=> $tool_data->{rsem_reference},
 			pipeline	=> 'rsem',
 			exts		=> [qw(.idx.fa .grp .transcripts.fa .seq .chrlist)]
 		);
 
 		my @strand_options = qw(none forward reverse);
-		if (!defined($tool_data->{strandedness})) {
+		if (!defined($tool_data->{rsem}->{strandedness})) {
 			print "rsem_config: No option provided for 'strandedness'; setting to default: none.\n";
-			$tool_data->{strandedness} = 'none';
+			$tool_data->{rsem}->{strandedness} = 'none';
 		}
 
-		if ( !any { /$tool_data->{strandedness}/ } @strand_options ) {
+		if ( !any { /$tool_data->{rsem}->{strandedness}/ } @strand_options ) {
 			print "rsem_config: Unrecognized 'strandedness' option: must be one of none, forward or reverse! Setting to default: none.\n";
-			$tool_data->{strandedness} = 'none';
+			$tool_data->{rsem}->{strandedness} = 'none';
 		}
 	}
 

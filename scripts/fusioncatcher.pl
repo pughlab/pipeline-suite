@@ -16,10 +16,11 @@ my $cwd = dirname($0);
 require "$cwd/utilities.pl";
 
 ####################################################################################################
-# version       author	  	comment
-# 1.0		sprokopec       script to run FusionCatcher on RNA-Seq data
+# version	author	  	comment
+# 1.0		sprokopec	script to run FusionCatcher on RNA-Seq data
 # 1.1		sprokopec	minor updates for compatibility with larger pipeline	
 # 1.2		sprokopec	added help message and cleaned up code
+# 1.3		sprokopec	minor updates for tool config
 
 ### USAGE ##########################################################################################
 # fusioncatcher.pl -t tool_config.yaml -d data_config.yaml -o /path/to/output/dir -c slurm --remove --dry_run
@@ -74,7 +75,6 @@ sub main {
 		hpc_driver		=> undef,
 		del_intermediates	=> undef,
 		dry_run			=> undef,
-		project			=> undef,
 		no_wait			=> undef,
 		@_
 		);
@@ -89,7 +89,7 @@ sub main {
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'fusioncatcher');
 
 	# clean up reference_dir (aesthetic reasons only)
-	$tool_data->{reference_dir} =~ s/\/$//;
+	$tool_data->{fusioncatcher_reference_dir} =~ s/\/$//;
 
 	# organize output and log directories
 	my $output_directory = $args{output_directory};
@@ -124,13 +124,13 @@ sub main {
 	print $log "---\n";
 	print $log "Running FusionCatcher (+ViralAlignment) pipeline.\n";
 	print $log "\n  Tool config used: $tool_config";
-	print $log "\n    FusionCatcher reference directory: $tool_data->{reference_dir}";
+	print $log "\n    FusionCatcher reference directory: $tool_data->{fusioncatcher_reference_dir}";
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n---";
 
 	# set tools and versions
-	my $fusioncatcher	= $tool_data->{tool} . '/' . $tool_data->{tool_version};
+	my $fusioncatcher	= 'fusioncatcher/' . $tool_data->{fusioncatcher_version};
 	my $perl		= 'perl/5.30.0';
 	my $r_version		= 'R/' . $tool_data->{r_version};
 
@@ -206,12 +206,12 @@ sub main {
 			my $fusion_output = join('/', $sample_directory, 'final-list_candidate-fusion-genes.txt');
 
 			my $fusion_cmd = get_fusion_command(
-				ref_dir		=> $tool_data->{reference_dir},
+				ref_dir		=> $tool_data->{fusioncatcher_reference_dir},
 				input		=> join(',', @fastqs),
 				output_dir	=> $sample_directory,
 				tmp_dir		=> $tmp_directory,
 				ref_type	=> $tool_data->{ref_type},
-				java_mem	=> $tool_data->{parameters}->{fusioncatcher}->{java_mem}
+				java_mem	=> $parameters->{fusioncatcher}->{java_mem}
 				);
 
 			# check if this should be run
@@ -225,8 +225,8 @@ sub main {
 					name	=> 'run_FusionCatcher_' . $sample,
 					cmd	=> $fusion_cmd,
 					modules => [$fusioncatcher],
-					max_time	=> $tool_data->{parameters}->{fusioncatcher}->{time},
-					mem		=> $tool_data->{parameters}->{fusioncatcher}->{mem},
+					max_time	=> $parameters->{fusioncatcher}->{time},
+					mem		=> $parameters->{fusioncatcher}->{mem},
 					hpc_driver	=> $args{hpc_driver}
 					);
 
@@ -294,7 +294,7 @@ sub main {
 	my $collect_results = join(' ',
 		"Rscript $cwd/collect_fusioncatcher_output.R",
 		'-d', $output_directory,
-		'-p', $args{project}
+		'-p', $tool_data->{project_name}
 		);
 
 	$run_script = write_script(
@@ -303,8 +303,8 @@ sub main {
 		cmd	=> $collect_results,
 		modules		=> [$r_version],
 		dependencies	=> join(':', @all_jobs),
-		max_time	=> $tool_data->{parameters}->{combine_results}->{time},
-		mem		=> $tool_data->{parameters}->{combine_results}->{mem},
+		max_time	=> $parameters->{combine_results}->{time},
+		mem		=> $parameters->{combine_results}->{mem},
 		hpc_driver	=> $args{hpc_driver}
 		);
 
@@ -365,7 +365,7 @@ sub main {
 
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
-my ($data_config, $tool_config, $output_directory, $project_name);
+my ($data_config, $tool_config, $output_directory);
 my $hpc_driver = 'slurm';
 my ($remove_junk, $dry_run, $help, $no_wait);
 
@@ -375,7 +375,6 @@ GetOptions(
 	'd|data=s'	=> \$data_config,
 	't|tool=s'	=> \$tool_config,
 	'o|out_dir=s'	=> \$output_directory,
-	'p|project=s'	=> \$project_name,
 	'c|cluster=s'	=> \$hpc_driver,
 	'remove'	=> \$remove_junk,
 	'dry-run'	=> \$dry_run,
@@ -389,7 +388,6 @@ if ($help) {
 		"\t--data|-d\t<string> data config (yaml format)",
 		"\t--tool|-t\t<string> tool config (yaml format)",
 		"\t--out_dir|-o\t<string> path to output directory",
-		"\t--project|-p\t<string> project name",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
 		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
@@ -409,7 +407,6 @@ main(
 	tool_config		=> $tool_config,
 	data_config		=> $data_config,
 	output_directory 	=> $output_directory,
-	project			=> $project_name,
 	hpc_driver		=> $hpc_driver,
 	del_intermediates	=> $remove_junk,
 	dry_run			=> $dry_run,

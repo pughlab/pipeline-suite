@@ -2,10 +2,123 @@
 # common parameters
 project_name: PROJECTNAME
 output_dir: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/
-# tool parameters
-star_config: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/configs/star_aligner_config.yaml
-star_fusion_config: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/configs/star_fusion_config.yaml
-rsem_config: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/configs/rsem_expression_config.yaml
-gatk_config: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/configs/gatk_tool_config.yaml
-haplotype_caller_config: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/configs/haplotype_caller_config.yaml
-fusioncatcher_config: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/configs/fusioncatcher_config.yaml
+seq_center: PMGC
+platform: Illumina
+# reference files
+ref_type: hg38
+star_reference_dir: /cluster/projects/pughlab/references/STAR/STAR_2.7.2b_GRCh38_gencode_v31/
+reference: /cluster/tools/data/genomes/human/hg38/iGenomes/Sequence/WholeGenomeFasta/genome.fa
+reference_gtf: /cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.GRCh38.genes.gtf
+star_fusion_reference_dir: /cluster/projects/pughlab/references/STAR-Fusion/GRCh38_gencode_v31_CTAT_lib_Oct012019/ctat_genome_lib_build_dir/
+rsem_reference: /cluster/projects/pughlab/references/RSEM/GRCh38/v31/grch38.v31
+fusioncatcher_reference_dir: /cluster/tools/software/centos7/fusioncatcher/1.20/fusioncatcher/data/current/ 
+# tool versions
+star_version: 2.7.2b
+samtools_version: 1.9
+picard_version: 2.6.0
+rna_seqc_version: 1.1.8
+r_version: 3.6.1
+bwa_path: /cluster/tools/software/bwa/0.7.15/
+star_fusion_version: 1.8.1
+star_fusion_path: /cluster/projects/pughlab/bin/STAR-Fusion-1.8.1/STAR-Fusion
+rsem_version: 1.3.0
+gatk_version: 3.8
+fusioncatcher_version: 1.20
+# tool specific parameters
+star:
+    run: Y
+    parameters:
+        star:
+            mem: 22G
+            time: '48:00:00'
+        markdup:
+            run: Y
+            java_mem: 6g
+            mem: 8G
+            time: '08:00:00'
+        rna_seqc:
+            java_mem: 4g
+            mem: 6G
+            time: '48:00:00'
+        combine_results:
+            mem: 4G
+            time: '04:00:00'
+star_fusion:
+    run: Y
+    parameters:
+        FusionInspect: inspect
+        star_fusion:
+            mem: 6G
+            time: '24:00:00'
+        combine_results:
+            mem: 4G
+            time: '04:00:00'
+rsem:
+    run: Y
+    # For Illumina TruSeq Stranded protocols, please use 'reverse'
+    strandedness: reverse
+    parameters:
+        rsem:
+            mem: 4G
+            time: '12:00:00'
+        combine_results:
+            mem: 4G
+            time: '04:00:00'
+gatk:
+    run: Y
+    parameters:
+        split_cigar:
+            java_mem: 11g
+            mem: 12G
+            time: '24:00:00'
+        target_creator:
+            java_mem: 7g
+            mem: 8G
+            time: '24:00:00'
+        realign:
+            java_mem: 11g
+            mem: 12G
+            time: '24:00:00'
+        bqsr:
+            java_mem: 11g
+            mem: 12G
+            time:
+                normal: '24:00:00'
+                tumour: '48:00:00'
+        recalibrate:
+            java_mem: 11g
+            mem: 12G
+            time:
+                normal: '24:00:00'
+                tumour: '48:00:00'
+fusioncatcher:
+    run: Y
+    parameters:
+        fusioncatcher:
+            java_mem: 35g
+            mem: 36G
+            time: '72:00:00'
+        combine_results:
+            mem: 4G
+            time: '04:00:00'
+haplotype_caller:
+    run: Y
+    parameters:
+        haplotype_call:
+            java_mem: 11g
+            mem: 12G
+            time: '72:00:00'
+        filter_raw:
+            java_mem: 3g
+            mem: 4G
+            time: '12:00:00'
+        annotate:
+            vcf2maf_path: /cluster/projects/pughlab/bin/vcf2maf-1.6.17/vcf2maf.pl
+            vep_path: /cluster/tools/software/centos7/vep/98
+            vep_data: /cluster/projects/pughlab/references/VEP_cache/98
+            filter_vcf: /cluster/projects/pughlab/references/VEP_cache/ExAC_nonTCGA.r1.sites.hg19ToHg38.vep.vcf.gz
+            mem: 12G
+            time: '24:00:00'
+        combine_results:
+            mem: 12G
+            time: '08:00:00'

@@ -25,6 +25,7 @@ our ($reference, $dbsnp, $cosmic, $pon) = undef;
 # 1.2		sprokopec	MuTect2 runs very slowly (even on exome data); therefore, we will
 # 				now run each chromosome independently and then merge the output
 # 1.3		sprokopec	added help msg and cleaned up code
+# 1.4           sprokopec       minor updates for tool config
 
 ### USAGE ##########################################################################################
 # mutect2.pl -t tool.yaml -d data.yaml { --create-panel-of-normals } -o /path/to/output/dir -c slurm --remove --dry_run
@@ -257,7 +258,7 @@ sub pon {
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'gatk');
 	my $date = strftime "%F", localtime;
 
-	if ($tool_data->{tool_version} =~ m/^4/) {
+	if ($tool_data->{gatk_version} =~ m/^4/) {
 		die("Incompatible GATK version requested! MuTect2 pipeline is currently only compatible with GATK 3.x");
 		}
 
@@ -320,8 +321,11 @@ sub pon {
 	print $log "\n---";
 
 	# set tools and versions
-	my $gatk	= 'gatk/' . $tool_data->{tool_version};
+	my $gatk	= 'gatk/' . $tool_data->{gatk_version};
 	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
+
+	# get user-specified tool parameters
+	my $parameters = $tool_data->{mutect2}->{parameters};
 
 	### RUN ###########################################################################################
 	# get sample data
@@ -378,7 +382,7 @@ sub pon {
 			my $mutect_command = get_mutect_pon_command(
 				normal		=> $smp_data->{$patient}->{normal}->{$sample},
 				output		=> $mutect_vcf,
-				java_mem	=> $tool_data->{parameters}->{mutect}->{java_mem},
+				java_mem	=> $parameters->{mutect}->{java_mem},
 				tmp_dir		=> $tmp_directory,
 				intervals	=> $tool_data->{intervals_bed}
 				);
@@ -401,8 +405,8 @@ sub pon {
 					name	=> 'run_mutect2_artifact_detection_mode_' . $sample,
 					cmd	=> $mutect_command,
 					modules	=> [$gatk],
-					max_time	=> $tool_data->{parameters}->{mutect}->{time},
-					mem		=> $tool_data->{parameters}->{mutect}->{mem},
+					max_time	=> $parameters->{mutect}->{time},
+					mem		=> $parameters->{mutect}->{mem},
 					hpc_driver	=> $args{hpc_driver}
 					);
 
@@ -435,7 +439,7 @@ sub pon {
 				);
 
 			# check if this should be run
-			if ('Y' eq missing_file($filtered_stem . '.md5')) {
+			if ('Y' eq missing_file("$filtered_stem.vcf.md5")) {
 
 				# record command (in log directory) and then run job
 				print $log "Submitting job for VCF-filter...\n";
@@ -446,8 +450,8 @@ sub pon {
 					cmd	=> $filter_command,
 					modules	=> [$vcftools],
 					dependencies	=> $run_id,
-					max_time	=> $tool_data->{parameters}->{filter}->{time},
-					mem		=> $tool_data->{parameters}->{filter}->{mem},
+					max_time	=> $parameters->{filter}->{time},
+					mem		=> $parameters->{filter}->{mem},
 					hpc_driver	=> $args{hpc_driver}
 					);
 
@@ -477,7 +481,7 @@ sub pon {
 	my $full_merge_command = generate_pon(
 		input		=> join(' ', @pon_vcfs),
 		output		=> $pon_tmp,
-		java_mem	=> $tool_data->{parameters}->{combine}->{java_mem}, 
+		java_mem	=> $parameters->{combine}->{java_mem}, 
 		tmp_dir		=> $tmp_directory
 		);
 
@@ -497,8 +501,8 @@ sub pon {
 			cmd	=> $full_merge_command,
 			modules	=> [$gatk],
 			dependencies	=> join(':', @all_jobs),
-			max_time	=> $tool_data->{parameters}->{combine}->{time},
-			mem		=> $tool_data->{parameters}->{combine}->{mem},
+			max_time	=> $parameters->{combine}->{time},
+			mem		=> $parameters->{combine}->{mem},
 			hpc_driver	=> $args{hpc_driver}
 			);
 
@@ -520,7 +524,7 @@ sub pon {
 	my $trimmed_merge_command = generate_pon(
 		input		=> join(' ', @pon_vcfs),
 		output		=> $pon,
-		java_mem	=> $tool_data->{parameters}->{combine}->{java_mem}, 
+		java_mem	=> $parameters->{combine}->{java_mem}, 
 		tmp_dir		=> $tmp_directory,
 		out_type	=> 'trimmed'
 		);
@@ -548,8 +552,8 @@ sub pon {
 			cmd	=> $trimmed_merge_command,
 			modules	=> [$gatk],
 			dependencies	=> join(':', @all_jobs),
-			max_time	=> $tool_data->{parameters}->{combine}->{time},
-			mem		=> $tool_data->{parameters}->{combine}->{mem},
+			max_time	=> $parameters->{combine}->{time},
+			mem		=> $parameters->{combine}->{mem},
 			hpc_driver	=> $args{hpc_driver}
 			);
 
@@ -656,7 +660,6 @@ sub main {
 		tool_config		=> undef,
 		data_config		=> undef,
 		output_directory	=> undef,
-		project			=> undef,
 		hpc_driver		=> undef,
 		del_intermediates	=> undef,
 		dry_run			=> undef,
@@ -674,7 +677,7 @@ sub main {
 	my $tool_data_orig = LoadFile($tool_config);
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'gatk');
 
-	if ($tool_data->{tool_version} =~ m/^4/) {
+	if ($tool_data->{gatk_version} =~ m/^4/) {
 		die("Incompatible GATK version requested! MuTect2 pipeline is currently only compatible with GATK 3.x");
 		}
 
@@ -715,8 +718,8 @@ sub main {
 	$reference = $tool_data->{reference};
 
 	my $string;
-	if (defined($tool_data->{chromosomes})) {
-		$string = $tool_data->{chromosomes};
+	if (defined($tool_data->{mutect2}->{chromosomes})) {
+		$string = $tool_data->{mutect2}->{chromosomes};
 		} elsif ( ('hg38' eq $tool_data->{ref_type}) || ('hg19' eq $tool_data->{ref_type})) {
 		$string = 'chr' . join(',chr', 1..22) . ',chrX,chrY';
 		} elsif (defined($tool_data->{intervals_bed})) {
@@ -727,7 +730,7 @@ sub main {
 		print $log "  >> Will run full genome, however this will be very very slow!\n";
 		$string = 'genome';
 		}
-	
+
 	my @chroms = split(',', $string); 
 	
 	if (defined($tool_data->{dbsnp})) {
@@ -744,9 +747,9 @@ sub main {
 		$cosmic = $tool_data->{cosmic};
 		}
 
-	if (defined($tool_data->{pon})) {
-		print $log "\n      Panel of Normals: $tool_data->{pon}";
-		$pon = $tool_data->{pon};
+	if (defined($tool_data->{mutect2}->{pon})) {
+		print $log "\n      Panel of Normals: $tool_data->{mutect2}->{pon}";
+		$pon = $tool_data->{mutect2}->{pon};
 		} elsif (defined($args{pon})) {
 		print $log "\n      Panel of Normals: $args{pon}";
 		$pon = $args{pon};
@@ -763,10 +766,13 @@ sub main {
 	print $log "\n---\n";
 
 	# set tools and versions
-	my $gatk	= 'gatk/' . $tool_data->{tool_version};
+	my $gatk	= 'gatk/' . $tool_data->{gatk_version};
 	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $r_version	= 'R/'. $tool_data->{r_version};
+
+	# get user-specified tool parameters
+	my $parameters = $tool_data->{mutect2}->{parameters};
 
 	### RUN ###########################################################################################
 	# get sample data
@@ -845,14 +851,14 @@ sub main {
 						$mutect_commands{$chr} = get_mutect_tonly_command(
 							tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
 							output		=> "$output_stem\_$chr.vcf",
-							java_mem	=> $tool_data->{parameters}->{mutect}->{java_mem},
+							java_mem	=> $parameters->{mutect}->{java_mem},
 							tmp_dir		=> $tmp_directory
 							);
 						} elsif ('exome' eq $chr) {	
 						$mutect_commands{$chr} = get_mutect_tonly_command(
 							tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
 							output		=> "$output_stem\_$chr.vcf",
-							java_mem	=> $tool_data->{parameters}->{mutect}->{java_mem},
+							java_mem	=> $parameters->{mutect}->{java_mem},
 							tmp_dir		=> $tmp_directory,
 							intervals	=> $tool_data->{intervals_bed}
 							);
@@ -860,7 +866,7 @@ sub main {
 						$mutect_commands{$chr} = get_mutect_tonly_command(
 							tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
 							output		=> "$output_stem\_$chr.vcf",
-							java_mem	=> $tool_data->{parameters}->{mutect}->{java_mem},
+							java_mem	=> $parameters->{mutect}->{java_mem},
 							tmp_dir		=> $tmp_directory,
 							intervals	=> $chr
 							);
@@ -883,7 +889,7 @@ sub main {
 							tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
 							normal		=> $smp_data->{$patient}->{normal}->{$norm},
 							output		=> "$output_stem\_$chr.vcf",
-							java_mem	=> $tool_data->{parameters}->{mutect}->{java_mem},
+							java_mem	=> $parameters->{mutect}->{java_mem},
 							tmp_dir		=> $tmp_directory
 							);
 						} elsif ('exome' eq $chr) {
@@ -891,7 +897,7 @@ sub main {
 							tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
 							normal		=> $smp_data->{$patient}->{normal}->{$norm},
 							output		=> "$output_stem\_$chr.vcf",
-							java_mem	=> $tool_data->{parameters}->{mutect}->{java_mem},
+							java_mem	=> $parameters->{mutect}->{java_mem},
 							tmp_dir		=> $tmp_directory,
 							intervals	=> $tool_data->{intervals_bed}
 							);
@@ -900,7 +906,7 @@ sub main {
 							tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
 							normal		=> $smp_data->{$patient}->{normal}->{$norm},
 							output		=> "$output_stem\_$chr.vcf",
-							java_mem	=> $tool_data->{parameters}->{mutect}->{java_mem},
+							java_mem	=> $parameters->{mutect}->{java_mem},
 							tmp_dir		=> $tmp_directory,
 							intervals	=> $chr
 							);
@@ -944,8 +950,8 @@ sub main {
 						name	=> 'run_mutect2_' . $sample . '_' . $chr,
 						cmd	=> $mutect_command,
 						modules	=> [$gatk],
-						max_time	=> $tool_data->{parameters}->{mutect}->{time},
-						mem		=> $tool_data->{parameters}->{mutect}->{mem},
+						max_time	=> $parameters->{mutect}->{time},
+						mem		=> $parameters->{mutect}->{mem},
 						cpus_per_task	=> 4,
 						hpc_driver	=> $args{hpc_driver}
 						);
@@ -994,8 +1000,8 @@ sub main {
 						cmd	=> $merge_chr_command,
 						modules	=> [$vcftools],
 						dependencies	=> join(':', @chr_jobs),
-						max_time	=> $tool_data->{parameters}->{merge}->{time},
-						mem		=> $tool_data->{parameters}->{merge}->{mem},
+						max_time	=> $parameters->{merge}->{time},
+						mem		=> $parameters->{merge}->{mem},
 						cpus_per_task	=> 1,
 						hpc_driver	=> $args{hpc_driver}
 						);
@@ -1052,8 +1058,8 @@ sub main {
 					cmd	=> $filter_command,
 					modules	=> [$vcftools],
 					dependencies	=> $run_id,
-					max_time	=> $tool_data->{parameters}->{filter}->{time},
-					mem		=> $tool_data->{parameters}->{filter}->{mem},
+					max_time	=> $parameters->{filter}->{time},
+					mem		=> $parameters->{filter}->{mem},
 					hpc_driver	=> $args{hpc_driver}
 					);
 
@@ -1091,10 +1097,10 @@ sub main {
 						ref_type        => $tool_data->{ref_type},
 						output          => $final_maf,
 						tmp_dir         => $tmp_directory,
-						vcf2maf         => $tool_data->{parameters}->{annotate}->{vcf2maf_path},
-						vep_path        => $tool_data->{parameters}->{annotate}->{vep_path},
-						vep_data        => $tool_data->{parameters}->{annotate}->{vep_data},
-						filter_vcf      => $tool_data->{parameters}->{annotate}->{filter_vcf}
+						vcf2maf         => $tool_data->{annotate}->{vcf2maf_path},
+						vep_path        => $tool_data->{annotate}->{vep_path},
+						vep_data        => $tool_data->{annotate}->{vep_data},
+						filter_vcf      => $tool_data->{annotate}->{filter_vcf}
 						);
 
 					# paired tumour/normal
@@ -1108,10 +1114,10 @@ sub main {
 						ref_type        => $tool_data->{ref_type},
 						output          => $final_maf,
 						tmp_dir         => $tmp_directory,
-						vcf2maf         => $tool_data->{parameters}->{annotate}->{vcf2maf_path},
-						vep_path        => $tool_data->{parameters}->{annotate}->{vep_path},
-						vep_data        => $tool_data->{parameters}->{annotate}->{vep_data},
-						filter_vcf      => $tool_data->{parameters}->{annotate}->{filter_vcf}
+						vcf2maf         => $tool_data->{annotate}->{vcf2maf_path},
+						vep_path        => $tool_data->{annotate}->{vep_path},
+						vep_data        => $tool_data->{annotate}->{vep_data},
+						filter_vcf      => $tool_data->{annotate}->{filter_vcf}
 						);
 
 					} else {
@@ -1153,8 +1159,8 @@ sub main {
 						cmd     => $vcf2maf_cmd,
 						modules => ['perl', $samtools, 'tabix'],
 						dependencies    => $run_id,
-						max_time        => $tool_data->{parameters}->{annotate}->{time},
-						mem             => $tool_data->{parameters}->{annotate}->{mem}->{$vtype},
+						max_time        => $tool_data->{annotate}->{time},
+						mem             => $tool_data->{annotate}->{mem}->{$vtype},
 						hpc_driver      => $args{hpc_driver}
 						);
 
@@ -1229,7 +1235,7 @@ sub main {
 	my $collect_output = join(' ',
 		"Rscript $cwd/collect_snv_output.R",
 		'-d', $output_directory,
-		'-p', $args{project},
+		'-p', $tool_data->{project_name},
 		'-g', $tool_data->{gtf}
 		);
 
@@ -1301,7 +1307,7 @@ sub main {
 
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
-my ($tool_config, $data_config, $create_pon, $output_directory, $project_id);
+my ($tool_config, $data_config, $create_pon, $output_directory);
 my $hpc_driver = 'slurm';
 my ($remove_junk, $dry_run, $help, $no_wait);
 my $panel_of_normals = undef;
@@ -1314,7 +1320,6 @@ GetOptions(
 	'd|data=s'			=> \$data_config,
 	'create-panel-of-normals'	=> \$create_pon,
 	'pon=s'				=> \$panel_of_normals,
-	'p|project=s'			=> \$project_id,
 	'o|out_dir=s'			=> \$output_directory,
 	'c|cluster=s'			=> \$hpc_driver,
 	'remove'			=> \$remove_junk,
@@ -1331,7 +1336,6 @@ if ($help) {
 		"\t--out_dir|-o\t<string> path to output directory",
 		"\t--pon\t<string> path to panel of normals (optional)",
 		"\t--create-panel-of-normals\t<boolean> generate a panel of normals? (default: false)",
-		"\t--project|-p\t<string> project name",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
 		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
@@ -1362,7 +1366,6 @@ if ($create_pon) {
 		tool_config		=> $tool_config,
 		data_config		=> $data_config,
 		output_directory	=> $output_directory,
-		project			=> $project_id,
 		hpc_driver		=> $hpc_driver,
 		del_intermediates	=> $remove_junk,
 		dry_run			=> $dry_run,

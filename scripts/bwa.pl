@@ -20,6 +20,7 @@ require "$cwd/utilities.pl";
 # 1.0           sprokopec	run BWA-MEM on raw FASTQ files (paired end only!)
 # 1.1		sprokopec	minor updates for compatibility with larger pipeline
 # 1.2		sprokopec	added help msg and cleaned up code
+# 1.3		sprokopec	minor updates for tool config
 
 #### USAGE ##########################################################################################
 # bwa.pl -t tool_config.yaml -d data_config.yaml -o /path/to/output/dir -b /path/to/output/yaml -c slurm --remove --dry_run
@@ -214,15 +215,18 @@ sub main {
 	print $log "---\n";
 	print $log "Running BWA-MEM alignment pipeline.\n";
 	print $log "\n  Tool config used: $tool_config";
-	print $log "\n    Reference: $tool_data->{reference}";
+	print $log "\n    Reference: $tool_data->{bwa}->{reference}";
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config\n";
 	print $log "\n---";
 
 	# set tools and versions
-	my $bwa_version	= $tool_data->{tool} . '/' . $tool_data->{tool_version};
+	my $bwa_version	= 'bwa/' . $tool_data->{bwa_version};
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $picard	= 'picard/' . $tool_data->{picard_version};
+
+	# get user-specified tool parameters
+	my $parameters = $tool_data->{bwa}->{parameters};
 
 	### HANDLING FILES #################################################################################
 	# get sample data
@@ -317,7 +321,7 @@ sub main {
 						r2		=> $r2,
 						stem		=> $filestem,
 						readgroup	=> $readgroup,
-						reference	=> $tool_data->{reference}
+						reference	=> $tool_data->{bwa}->{reference}
 						);
 
 					$bwa = 'cd ' . $lane_directory . ";\n" . $bwa ;
@@ -336,8 +340,8 @@ sub main {
 							name	=> 'run_bwa_mem_' . $filestem,
 							cmd	=> $bwa,
 							modules => [$bwa_version, $samtools],
-							max_time	=> $tool_data->{parameters}->{bwa}->{time}->{$type},
-							mem		=> $tool_data->{parameters}->{bwa}->{mem}->{$type},
+							max_time	=> $parameters->{bwa}->{time}->{$type},
+							mem		=> $parameters->{bwa}->{mem}->{$type},
 							cpus_per_task	=> 4,
 							hpc_driver	=> $args{hpc_driver}
 							);
@@ -378,8 +382,8 @@ sub main {
 							cmd	=> $sort_cmd,
 							modules	=> [$samtools],
 							dependencies	=> $run_id,
-							max_time	=> $tool_data->{parameters}->{sort}->{time}->{$type},
-							mem		=> $tool_data->{parameters}->{sort}->{mem}->{$type},
+							max_time	=> $parameters->{sort}->{time}->{$type},
+							mem		=> $parameters->{sort}->{mem}->{$type},
 							hpc_driver	=> $args{hpc_driver}
 							);
 
@@ -419,8 +423,8 @@ sub main {
 							cmd	=> $index_lane_cmd,
 							modules	=> [$samtools],
 							dependencies	=> $run_id,
-							max_time	=> $tool_data->{parameters}->{index}->{time}->{$type},
-							mem		=> $tool_data->{parameters}->{index}->{mem}->{$type},
+							max_time	=> $parameters->{index}->{time}->{$type},
+							mem		=> $parameters->{index}->{mem}->{$type},
 							hpc_driver	=> $args{hpc_driver}
 							);
 
@@ -450,7 +454,7 @@ sub main {
 			my ($smp_output, $jobname, $merge_cmd);
 			my $input_files = join(' INPUT=', @lane_intermediates);
 
-			if ('N' eq $tool_data->{mark_dup}) {
+			if ('N' eq $parameters->{merge}->{mark_dup}) {
 
 				$smp_output = $patient_directory . '/' . $sample . '_bwamem_aligned_sorted_merged.bam';
 				$jobname = 'run_merge_lanes_' . $sample;
@@ -459,11 +463,11 @@ sub main {
 					input		=> $input_files,
 					output		=> $smp_output,
 					tmp_dir		=> $tmp_directory,
-					java_mem	=> $tool_data->{parameters}->{merge}->{java_mem}->{$type}
+					java_mem	=> $parameters->{merge}->{java_mem}->{$type}
 					);
 				}
 
-			elsif ('Y' eq $tool_data->{mark_dup}) {
+			elsif ('Y' eq $parameters->{merge}->{mark_dup}) {
 
 				$smp_output = join('/', $patient_directory, $sample . '_bwamem_aligned_sorted_merged_markdup.bam');
 				$jobname = 'run_merge_markdup_' . $sample;
@@ -472,7 +476,7 @@ sub main {
 					input		=> $input_files,
 					output		=> $smp_output,
 					tmp_dir		=> $tmp_directory,
-					java_mem	=> $tool_data->{parameters}->{merge}->{java_mem}->{$type}
+					java_mem	=> $parameters->{merge}->{java_mem}->{$type}
 					);
 				}
 
@@ -494,8 +498,8 @@ sub main {
 					cmd	=> $merge_cmd,
 					modules	=> [$picard],
 					dependencies	=> join(':', @lane_holds),
-					mem 		=> $tool_data->{parameters}->{merge}->{mem}->{$type},
-					max_time 	=> $tool_data->{parameters}->{merge}->{time}->{$type},
+					mem 		=> $parameters->{merge}->{mem}->{$type},
+					max_time 	=> $parameters->{merge}->{time}->{$type},
 					hpc_driver	=> $args{hpc_driver}
 					);
 

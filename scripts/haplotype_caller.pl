@@ -27,16 +27,16 @@ our ($reference, $dbsnp);
 # 1.3		sprokopec	added DNA-compatible options
 # 1.4		sprokopec	minor updates for compatibility with larger pipeline
 # 1.5		sprokopec	added help msg and cleaned up code
+# 1.6           sprokopec       minor updates for tool config
 
 ### USAGE ##########################################################################################
-# haplotype_caller.pl -t tool.yaml -d data.yaml -o /path/to/output/dir -p PROJECTID -h slurm -r Y -n Y --rna
+# haplotype_caller.pl -t tool.yaml -d data.yaml -o /path/to/output/dir -h slurm -r Y -n Y --rna
 #
 # where:
 # 	-t (tool.yaml) contains tool versions and parameters, reference information, etc.
 # 	-d (data.yaml) contains sample information (YAML file containing paths to BWA-aligned,
 # 	or STAR-aligned BAMs, post gatk processing)
 # 	-o (/path/to/output/dir) indicates tool-specific output directory
-# 	-p indicates project ID
 # 	-c indicates hpc driver (ie, slurm)
 # 	--remove indicates that intermediates will be removed
 # 	--dry_run indicates that this is a dry run
@@ -147,7 +147,6 @@ sub main{
 		hpc_driver		=> undef,
 		del_intermediates	=> undef,
 		dry_run			=> undef,
-		project			=> undef,
 		no_wait			=> undef,
 		@_
 		);
@@ -160,7 +159,11 @@ sub main{
 
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
-	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'gatk', data_type => $data_type);
+	my $tool_data = error_checking(
+		tool_data	=> $tool_data_orig,
+		pipeline	=> 'gatk',
+		data_type	=> $data_type
+		);
 
 	# organize output and log directories
 	my $output_directory = $args{output_directory};
@@ -216,11 +219,14 @@ sub main{
 	print $log "\n---";
 
 	# set tools and versions
-	my $gatk	= 'gatk/' . $tool_data->{tool_version};
+	my $gatk	= 'gatk/' . $tool_data->{gatk_version};
 	my $picard	= 'picard/' . $tool_data->{picard_version};
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $r_version	= 'R/' . $tool_data->{r_version};
 
+	# get user-specified tool parameters
+	my $parameters = $tool_data->{haplotype_caller}->{parameters};
+	
 	### RUN ###########################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
@@ -294,7 +300,7 @@ sub main{
 				output		=> $hc_vcf,
 				data_type	=> $data_type,
 				intervals	=> $tool_data->{intervals_bed},
-				java_mem	=> $tool_data->{parameters}->{haplotype_call}->{java_mem},
+				java_mem	=> $parameters->{haplotype_call}->{java_mem},
 				tmp_dir		=> $tmp_directory
 				);
 
@@ -316,8 +322,8 @@ sub main{
 					name	=> 'run_haplotype_caller_' . $sample,
 					cmd	=> $call_variants_cmd,
 					modules	=> [$gatk],
-					max_time	=> $tool_data->{parameters}->{haplotype_call}->{time},
-					mem		=> $tool_data->{parameters}->{haplotype_call}->{mem},
+					max_time	=> $parameters->{haplotype_call}->{time},
+					mem		=> $parameters->{haplotype_call}->{mem},
 					hpc_driver	=> $args{hpc_driver}
 					);
 
@@ -355,7 +361,7 @@ sub main{
 					input		=> $hc_vcf,
 					output		=> $filtered_vcf,
 					reference	=> $tool_data->{reference},
-					java_mem	=> $tool_data->{parameters}->{filter_raw}->{java_mem},
+					java_mem	=> $parameters->{filter_raw}->{java_mem},
 					tmp_dir		=> $tmp_directory
 					);
 
@@ -373,8 +379,8 @@ sub main{
 						cmd	=> $filter_cmd,
 						modules	=> [$gatk],
 						dependencies	=> $run_id,
-						max_time	=> $tool_data->{parameters}->{filter_raw}->{time},
-						mem		=> $tool_data->{parameters}->{filter_raw}->{mem},
+						max_time	=> $parameters->{filter_raw}->{time},
+						mem		=> $parameters->{filter_raw}->{mem},
 						hpc_driver	=> $args{hpc_driver}
 						);
 
@@ -411,10 +417,10 @@ sub main{
 					ref_type	=> $tool_data->{ref_type},
 					output		=> $final_maf,
 					tmp_dir		=> $tmp_directory,
-					vcf2maf		=> $tool_data->{parameters}->{annotate}->{vcf2maf_path},
-					vep_path	=> $tool_data->{parameters}->{annotate}->{vep_path},
-					vep_data	=> $tool_data->{parameters}->{annotate}->{vep_data},
-					filter_vcf	=> $tool_data->{parameters}->{annotate}->{filter_vcf}
+					vcf2maf		=> $tool_data->{annotate}->{vcf2maf_path},
+					vep_path	=> $tool_data->{annotate}->{vep_path},
+					vep_data	=> $tool_data->{annotate}->{vep_data},
+					filter_vcf	=> $tool_data->{annotate}->{filter_vcf}
 					);
 
 				# check if this should be run
@@ -442,8 +448,8 @@ sub main{
 						cmd	=> $vcf2maf_cmd,
 						modules	=> ['perl', $samtools, 'tabix'],
 						dependencies	=> $run_id,
-						max_time	=> $tool_data->{parameters}->{annotate}->{time},
-						mem		=> $tool_data->{parameters}->{annotate}->{mem},
+						max_time	=> $tool_data->{annotate}->{time},
+						mem		=> $tool_data->{annotate}->{mem},
 						hpc_driver	=> $args{hpc_driver}
 						);
 
@@ -549,7 +555,7 @@ sub main{
 			my $combine_cmd = get_combine_gvcf_command(
 				input		=> join(' ', @{$batch}),
 				output		=> $combined_gvcf,
-				java_mem	=> $tool_data->{parameters}->{combine_gvcfs}->{java_mem},
+				java_mem	=> $parameters->{combine_gvcfs}->{java_mem},
 				tmp_dir		=> $output_directory
 				);
 
@@ -578,8 +584,8 @@ sub main{
 					cmd	=> $combine_cmd,
 					modules	=> [$gatk, 'tabix'],
 					dependencies	=> join(':', @all_jobs),
-					max_time	=> $tool_data->{parameters}->{combine_gvcfs}->{time},
-					mem		=> $tool_data->{parameters}->{combine_gvcfs}->{mem},
+					max_time	=> $parameters->{combine_gvcfs}->{time},
+					mem		=> $parameters->{combine_gvcfs}->{mem},
 					hpc_driver	=> $args{hpc_driver}
 					);
 
@@ -638,7 +644,7 @@ sub main{
 		my $collect_results = join(' ',
 			"Rscript $cwd/collect_snv_output.R",
 			'-d', $output_directory,
-			'-p', $args{project}
+			'-p', $tool_data->{project_name}
 			);
 
 		$run_script = write_script(
@@ -647,8 +653,8 @@ sub main{
 			cmd	=> $collect_results,
 			modules		=> [$r_version],
 			dependencies	=> join(':', @all_jobs),
-			max_time	=> $tool_data->{parameters}->{combine_results}->{time},
-			mem		=> $tool_data->{parameters}->{combine_results}->{mem},
+			max_time	=> $parameters->{combine_results}->{time},
+			mem		=> $parameters->{combine_results}->{mem},
 			hpc_driver	=> $args{hpc_driver}
 			);
 
@@ -710,7 +716,7 @@ sub main{
 
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
-my ($data_config, $tool_config, $output_directory, $project_name);
+my ($data_config, $tool_config, $output_directory);
 my $hpc_driver = 'slurm';
 my ($remove_junk, $dry_run, $rna, $help, $no_wait);
 
@@ -720,7 +726,6 @@ GetOptions(
 	'd|data=s'	=> \$data_config,
 	't|tool=s'	=> \$tool_config,
 	'o|out_dir=s'	=> \$output_directory,
-	'p|project=s'	=> \$project_name,
 	'c|cluster=s'	=> \$hpc_driver,
 	'remove'	=> \$remove_junk,
 	'dry-run'	=> \$dry_run,
@@ -735,7 +740,6 @@ if ($help) {
 		"\t--data|-d\t<string> data config (yaml format)",
 		"\t--tool|-t\t<string> tool config (yaml format)",
 		"\t--out_dir|-o\t<string> path to output directory",
-		"\t--project|-p\t<string> project name",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
 		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
@@ -759,7 +763,6 @@ main(
 	tool_config		=> $tool_config,
 	data_config		=> $data_config,
 	output_directory	=> $output_directory,
-	project			=> $project_name,
 	hpc_driver		=> $hpc_driver,
 	del_intermediates	=> $remove_junk,
 	dry_run			=> $dry_run,
