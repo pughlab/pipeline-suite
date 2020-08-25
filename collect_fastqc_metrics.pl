@@ -9,6 +9,7 @@ use Getopt::Long;
 use POSIX qw(strftime);
 use File::Basename;
 use File::Path qw(make_path);
+use List::Util 'any';
 use YAML qw(LoadFile);
 
 my $cwd = dirname($0);
@@ -73,6 +74,8 @@ sub main{
 		tool_config	=> undef,
 		data_config	=> undef,
 		data_type	=> undef,
+		cluster		=> undef,
+		dry_run		=> undef,
 		@_
 		);
 
@@ -87,7 +90,7 @@ sub main{
 
 	# organize output directories
 	$tool_data->{output_dir} =~ s/\/$//;
-	my $output_directory = join('/', $tool_data->{output_dir}, $date . '_fastqc');
+	my $output_directory = $tool_data->{output_dir};
 	my $log_directory = join('/', $output_directory, 'logs');
 
 	unless(-e $output_directory) { make_path($output_directory); }
@@ -98,7 +101,7 @@ sub main{
 
 	# create a file to hold job metrics
 	my (@files, $run_count, $outfile, $touch_exit_status);
-	if ('N' eq $tool_data->{dry_run}) {
+	unless ($args{dry_run}) {
 		# initiate a file to hold job metrics (ensures that an existing file isn't overwritten by concurrent jobs)
 		opendir(LOGFILES, $log_directory) or die "Cannot open $log_directory";
 		@files = grep { /slurm_job_metrics/ } readdir(LOGFILES);
@@ -182,14 +185,14 @@ sub main{
 				modules	=> ['fastqc'],
 				max_time	=> $tool_data->{parameters}->{fastqc}->{time},
 				mem		=> $tool_data->{parameters}->{fastqc}->{mem},
-				hpc_driver	=> $tool_data->{HPC_driver}
+				hpc_driver	=> $args{cluster}
 				);
 
 			$run_id = submit_job(
 				jobname		=> 'run_fastqc_' . $sample,
 				shell_command	=> $run_script,
-				hpc_driver	=> $tool_data->{HPC_driver},
-				dry_run		=> $tool_data->{dry_run},
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
 				log_file	=> $log
 				);
 
@@ -212,14 +215,14 @@ sub main{
 				cmd	=> $md5_cmd,
 				max_time	=> $tool_data->{parameters}->{md5sum}->{time},
 				mem		=> $tool_data->{parameters}->{md5sum}->{mem},
-				hpc_driver	=> $tool_data->{HPC_driver}
+				hpc_driver	=> $args{cluster}
 				);
 
 			$run_id = submit_job(
 				jobname		=> 'run_md5sums_' . $sample,
 				shell_command	=> $run_script,
-				hpc_driver	=> $tool_data->{HPC_driver},
-				dry_run		=> $tool_data->{dry_run},
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
 				log_file	=> $log
 				);
 
@@ -248,14 +251,14 @@ sub main{
 		dependencies	=> join(',', @all_jobs),
 		max_time	=> '01:00:00',
 		mem		=> '1G',
-		hpc_driver	=> $tool_data->{HPC_driver}
+		hpc_driver	=> $args{cluster}
 		);
 
 	$run_id = submit_job(
 		jobname		=> 'run_collate_results',
 		shell_command	=> $run_script,
-		hpc_driver	=> $tool_data->{HPC_driver},
-		dry_run		=> $tool_data->{dry_run},
+		hpc_driver	=> $args{cluster},
+		dry_run		=> $args{dry_run},
 		log_file	=> $log
 		);
 
@@ -265,7 +268,7 @@ sub main{
 	print $log "---\n";
 
 	# collect job metrics if not dry_run
-	if ('N' eq $tool_data->{dry_run}) {
+	unless ($args{dry_run}) {
 
 		# collect job stats
 		my $collect_metrics = collect_job_stats(
@@ -280,14 +283,14 @@ sub main{
 			dependencies	=> join(',', @all_jobs),
 			max_time	=> '0:10:00',
 			mem		=> '1G',
-			hpc_driver	=> $tool_data->{HPC_driver}
+			hpc_driver	=> $args{cluster}
 			);
 
 		$run_id = submit_job(
 			jobname		=> 'output_job_metrics',
 			shell_command	=> $run_script,
-			hpc_driver	=> $tool_data->{HPC_driver},
-			dry_run		=> $tool_data->{dry_run},
+			hpc_driver	=> $args{cluster},
+			dry_run		=> $args{dry_run},
 			log_file	=> $log
 			);
 		}
@@ -300,32 +303,54 @@ sub main{
 
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
-my $tool_config;
-my $data_config;
-my ($dna, $rna);
+my ($tool_config, $data_config);
+my $hpc_driver = 'slurm';
+my ($help, $rna, $dry_run);
 
 # get command line arguments
 GetOptions(
+	'h|help'	=> \$help,
 	't|tool=s'	=> \$tool_config,
-	'c|config=s'	=> \$data_config,
-	'dna'		=> \$dna,
-	'rna'		=> \$rna
+	'd|data=s'	=> \$data_config,
+	'rna'		=> \$rna,
+	'c|cluster=s'	=> \$hpc_driver,
+	'dry-run'	=> \$dry_run
 	);
+
+if ($help) {
+	my $help_msg = join("\n",
+		"Options:",
+		"\t--help|-h\tPrint this help message",
+		"\t--data|-d\t<string> data config (yaml format)",
+		"\t--tool|-t\t<string> tool config (yaml format)",
+		"\t--rna\t<boolean> is this RNA?",
+		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
+		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)"
+		);
+
+	print "$help_msg\n";
+	exit;
+	}
 
 # do some quick error checks to confirm valid arguments	
 if (!defined($tool_config)) { die("No tool config file defined; please provide -t | --tool (ie, tool_config.yaml)"); }
-if (!defined($data_config)) { die("No data config file defined; please provide -c | --config (ie, sample_config.yaml)"); }
+if (!defined($data_config)) { die("No data config file defined; please provide -d | --data (ie, sample_config.yaml)"); }
 
-# check if input is DNA or RNA
-my $data_type;
-if ($dna && $rna) {
-	die("Please don't set both --dna and --rna; can only be one of these!");
-	} elsif ($dna) {
-	$data_type = 'dna';
-	} elsif ($rna) {
-	$data_type = 'rna';
-	} else {
-	die("No data type set; please set one of --dna or --rna to proceed!");
+# check for compatible HPC driver; if not found, change dry_run to Y
+my @compatible_drivers = qw(slurm);
+if ( (!any { /$hpc_driver/ } @compatible_drivers ) && (!$dry_run) ) {
+	print "Unrecognized HPC driver requested: setting dry_run to true -- jobs will not be submitted but commands will be written to file.\n";
+	$dry_run = 1;
 	}
 
-main(tool_config => $tool_config, data_config => $data_config, data_type => $data_type);
+# check if input is DNA or RNA
+my $data_type = 'dna';
+if ($rna) { $data_type = 'rna'; }
+
+main(
+	tool_config	=> $tool_config,
+	data_config	=> $data_config,
+	data_type	=> $data_type,
+	cluster		=> $hpc_driver,
+	dry_run		=> $dry_run
+	);
