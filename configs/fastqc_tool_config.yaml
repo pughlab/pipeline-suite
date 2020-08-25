@@ -1,7 +1,5 @@
 ---
 output_dir: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/fastqc/
-HPC_driver: slurm
-dry_run: N 
 # and indicate some parameters for job submission
 parameters:
     fastqc:
