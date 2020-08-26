@@ -945,7 +945,7 @@ sub main {
 		# let's create a command and write script to combine variants for a PoN
 		my $pon_tmp	= join('/', $pon_directory, $date . "_merged_panelOfNormals.vcf");
 		my $pon		= join('/', $pon_directory, $date . "_merged_panelOfNormals_trimmed.vcf");
-		my $final_pon_link = join('/', $output_directory, 'panelOfNormals.vcf');
+		my $final_pon_link = join('/', $output_directory, 'panel_of_normals.vcf');
 
 		# create a fully merged output (useful for combining with other studies later)
 		my $pon_command = generate_pon(
@@ -1470,6 +1470,13 @@ sub unpaired_mode {
 		'-p', $tool_data->{project_name},
 		'-g', $tool_data->{gtf}
 		);
+
+	if (defined($tool_data->{bamqc}->{callable_bases}->{min_depth}->{tumour})) {
+		$collect_output .= " -t $tool_data->{bamqc}->{callable_bases}->{min_depth}->{tumour}";
+		}
+	if (defined($tool_data->{bamqc}->{callable_bases}->{min_depth}->{normal})) {
+		$collect_output .= " -n $tool_data->{bamqc}->{callable_bases}->{min_depth}->{normal}";
+		}
 
 	$run_script = write_script(
 		log_dir	=> $log_directory,

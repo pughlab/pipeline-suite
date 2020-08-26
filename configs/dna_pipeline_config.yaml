@@ -36,33 +36,33 @@ bwa:
     parameters:
         bwa:
             mem:
-                normal: 12G
-                tumour: 16G
+                normal: 8G
+                tumour: 8G
             time:
                 normal: '24:00:00'
                 tumour: '48:00:00'
         sort:
             mem:
-                normal: 12G
-                tumour: 16G
+                normal: 4G
+                tumour: 4G
             time:
                 normal: '24:00:00'
                 tumour: '48:00:00'
         index:
             mem:
-                normal: 6G
-                tumour: 6G
+                normal: 2G
+                tumour: 2G
             time:
                 normal: '05:00:00'
                 tumour: '05:00:00'
         merge:
             mark_dup: Y
             java_mem:
-                normal: 15g
-                tumour: 15g
+                normal: 7g
+                tumour: 11g
             mem:
-                normal: 16G
-                tumour: 16G
+                normal: 8G
+                tumour: 12G
             time:
                 normal: '48:00:00'
                 tumour: '48:00:00'
@@ -70,22 +70,22 @@ gatk:
     run: Y
     parameters:
         target_creator:
-            java_mem: 15g
-            mem: 17G
+            java_mem: 5g
+            mem: 6G
             time: '48:00:00'
         realign:
-            java_mem: 15g
-            mem: 16G
+            java_mem: 3g
+            mem: 4G
             time: '72:00:00'
         bqsr:
-            java_mem: 15g
-            mem: 16G
+            java_mem: 11g
+            mem: 12G
             time:
                 normal: '48:00:00'
                 tumour: '72:00:00'
         recalibrate:
-            java_mem: 15g
-            mem: 16G
+            java_mem: 11g
+            mem: 12G
             time:
                 normal: '48:00:00'
                 tumour: '72:00:00'
@@ -94,48 +94,44 @@ bamqc:
     parameters:
         contest:
             threshold: '3.0'
-            java_mem: 5g
-            mem: 6G
+            java_mem: 1g
+            mem: 2G
             time: '24:00:00'
         coverage:
-            java_mem: 7g
-            mem: 8G
+            java_mem: 3g
+            mem: 4G
             time: '48:00:00'
         callable_bases:
             min_depth:
                 tumour: 20
                 normal: 15
-            mem: 6G
+            mem: 4G
             time: '48:00:00'
 haplotype_caller:
     run: Y
     parameters:
         haplotype_call:
-            java_mem: 15g
-            mem: 16G
-            time: '72:00:00'
-        filter_raw:
-            java_mem: 7g
-            mem: 8G
-            time: '12:00:00'
-        combine_gvcfs:
-            java_mem: 15g
-            mem: 16G
-            time: '5-00:00:00'
-        genotype_gvcfs:
-            java_mem: 15g
-            mem: 16G
-            time: '5-00:00:00'
-        vqsr:
-            java_mem: 15g
-            mem: 16G
-            time: '24:00:00'
-        apply_vqsr:
             java_mem: 3g
             mem: 4G
+            time: '72:00:00'
+        combine_gvcfs:
+            java_mem: 5g
+            mem: 6G
+            time: '5-00:00:00'
+        genotype_gvcfs:
+            java_mem: 5g
+            mem: 6G
+            time: '5-00:00:00'
+        vqsr:
+            java_mem: 7g
+            mem: 8G
+            time: '24:00:00'
+        apply_vqsr:
+            java_mem: 1g
+            mem: 2G
             time: '24:00:00'
         filter_recalibrated:
-            mem: 4G
+            mem: 2G
             time: '24:00:00'
 annotate:
     vcf2maf_path: /cluster/projects/pughlab/bin/vcf2maf-1.6.17/vcf2maf.pl
@@ -143,24 +139,24 @@ annotate:
     vep_data: /cluster/projects/pughlab/references/VEP_cache/98
     filter_vcf: /cluster/projects/pughlab/references/VEP_cache/ExAC_nonTCGA.r1.sites.hg19ToHg38.vep.vcf.gz 
     mem:
-        snps: 48G
-        indels: 28G
+        snps: 28G
+        indels: 16G
     time: '72:00:00'
 mutect:
     run: Y
     pon:
     parameters:
         mutect:
-            java_mem: 15g
-            mem: 16G
+            java_mem: 11g
+            mem: 12G
             time: '4-00:00:00'
         filter:
-            java_mem: 5g
-            mem: 6G
+            java_mem: 3g
+            mem: 4G
             time: '12:00:00'
         combine:
-            java_mem: 7g
-            mem: 8G
+            java_mem: 3g
+            mem: 4G
             time: '24:00:00'
 mutect2:
     run: Y
@@ -168,72 +164,72 @@ mutect2:
     chromosomes: chr1,chr2,chr3,chr4,chr5,chr6,chr7,chr8,chr9,chr10,chr11,chr12,chr13,chr14,chr15,chr16,chr17,chr18,chr19,chr20,chr21,chr22,chrX
     parameters:
         mutect:
-            java_mem: 7g
-            mem: 8G
+            java_mem: 3g
+            mem: 4G
             time: '5-00:00:00'
         merge:
-            mem: 4G
+            mem: 2G
             time: '12:00:00'
         filter:
-            java_mem: 5g
-            mem: 6G
+            java_mem: 3g
+            mem: 4G
             time: '12:00:00'
         combine:
-            java_mem: 7g
-            mem: 8G
+            java_mem: 3g
+            mem: 4G
             time: '24:00:00'
 strelka:
     run: Y
     parameters:
         intervals:
         strelka:
-            mem: 16G
+            mem: 8G
             time: '24:00:00'
         manta:
-            mem: 16G
+            mem: 8G
             time: '24:00:00'
         filter:
-            mem: 4G
+            mem: 2G
             time: '12:00:00'
         combine:
-            java_mem: 7g
-            mem: 8G
+            java_mem: 3g
+            mem: 4G
             time: '96:00:00'
 varscan:
     run: Y
     pon:
     parameters:
         varscan:
-            java_mem: 15g
-            mem: 17G
+            java_mem: 3g
+            mem: 4G
             time: '24:00:00'
         sequenza:
             r: 3.3.0
             path: /cluster/projects/pughlab/src/sequenza_wrapper/SequenzaSingleSample_v2.1.R
-            mem: 16G
+            mem: 6G
             time: '24:00:00'
         filter:
-            java_mem: 3g
-            mem: 4G
+            java_mem: 1g
+            mem: 2G
             time: '12:00:00'
         combine:
-            java_mem: 7g
-            mem: 8G
+            java_mem: 3g
+            mem: 4G
             time: '24:00:00'
 delly:
     run: Y
     parameters:
         call:
-            mem: 16G
+            mem: 8G
             time: '72:00:00'
         genotype:
-            mem: 12G
+            mem: 6G
             time: '48:00:00'
         merge:
-            mem: 6G
+            mem: 2G
             time: '24:00:00'
         filter:
-            mem: 6G
+            mem: 2G
             time: '12:00:00'
 mavis:
     run: Y

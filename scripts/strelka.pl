@@ -501,7 +501,7 @@ sub main {
 		my $pon_directory = join('/', $output_directory, 'PanelOfNormals');
 		my $pon_tmp	= join('/', $pon_directory, $date . "_merged_panelOfNormals.vcf");
 		$pon		= join('/', $pon_directory, $date . "_merged_panelOfNormals_trimmed.vcf");
-		my $final_pon_link = join('/', $output_directory, 'panelOfNormals.vcf');
+		my $final_pon_link = join('/', $output_directory, 'panel_of_normals.vcf');
 
 		# create a trimmed (sites only) output (this is the panel of normals)
 		my $pon_command = generate_pon(
@@ -1071,6 +1071,13 @@ sub main {
 		'-p', $tool_data->{project_name},
 		'-g', $tool_data->{gtf}
 		);
+
+	if (defined($tool_data->{bamqc}->{callable_bases}->{min_depth}->{tumour})) {
+		$collect_output .= " -t $tool_data->{bamqc}->{callable_bases}->{min_depth}->{tumour}";
+		}
+	if (defined($tool_data->{bamqc}->{callable_bases}->{min_depth}->{normal})) {
+		$collect_output .= " -n $tool_data->{bamqc}->{callable_bases}->{min_depth}->{normal}";
+		}
 
 	$run_script = write_script(
 		log_dir	=> $log_directory,

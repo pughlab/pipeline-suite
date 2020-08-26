@@ -315,7 +315,7 @@ sub check_java_output {
 
 	my $java_check .= "\n" . join("\n",
 		'if [ $? == 0 ]; then',
-		'  echo "java task completed successfully!"'
+		'  echo "java task completed successfully"'
 		);
 
 	if (defined($args{extra_cmd})) {
@@ -324,7 +324,7 @@ sub check_java_output {
 
 	$java_check .= "\n" . join("\n",
 		'else',
-		'  echo "java task failed!"',
+		'  echo "java task failed"',
 		'  exit 1',
 		'fi'
 		);
@@ -391,7 +391,7 @@ sub collect_job_stats {
 		);
 
 	$sacct_command .= "\n\n" . join(' ',
-		'$STATUS_COUNT=$(cut -f9', $args{outfile},
+		'STATUS_COUNT=$(cut -f9', $args{outfile},
 		"| awk '", '\$1 != "0:0" { print $0 }', "' | wc -l)",
 		);
 

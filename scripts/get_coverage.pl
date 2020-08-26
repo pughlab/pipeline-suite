@@ -402,7 +402,7 @@ sub main {
 			}
 
 		# run callable bases per patient (intersect) ONLY IF there are multiple samples for this patient
-		my $cb_intersect = join('/', $patient_directory, $patient . '_CallableBases.tsv');
+		my $cb_intersect = join('/', $patient_directory, 'CallableBases.tsv');
 
 		if ( (scalar(@sample_ids) == 1) && (!defined($tool_data->{intervals_bed})) ) {
 			`mv $patient_cb_files[0] $cb_intersect`;

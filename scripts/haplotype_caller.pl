@@ -474,7 +474,7 @@ sub main{
 
 		# should intermediate files be removed
 		# run per patient
-		if ($args{del_intermediates}) {
+		if ( ($args{del_intermediates}) && ('rna' eq $data_type) ) {
 
 			if (scalar(@patient_jobs) == 0) {
 				`rm -rf $tmp_directory`;

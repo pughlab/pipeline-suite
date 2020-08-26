@@ -1059,6 +1059,13 @@ sub main {
 		'-g', $tool_data->{gtf}
 		);
 
+	if (defined($tool_data->{bamqc}->{callable_bases}->{min_depth}->{tumour})) {
+		$collect_output .= " -t $tool_data->{bamqc}->{callable_bases}->{min_depth}->{tumour}";
+		}
+	if (defined($tool_data->{bamqc}->{callable_bases}->{min_depth}->{normal})) {
+		$collect_output .= " -n $tool_data->{bamqc}->{callable_bases}->{min_depth}->{normal}";
+		}
+
 	$run_script = write_script(
 		log_dir	=> $log_directory,
 		name	=> 'combine_variant_calls',

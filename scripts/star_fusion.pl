@@ -263,7 +263,7 @@ sub main {
 
 					$gzip_fq_cmd .= "\ngzip " . $r1;
 					$gzip_fq_cmd .= "\ngzip " . $r2;
-					$gzip_fq_cmd .= "\necho Finished compressing fastq files. Now ready for FusionInspector!";
+					$gzip_fq_cmd .= "\necho Finished compressing fastq files. Now ready for FusionInspector";
 
 					# record command (in log directory) and then run job
 					print $log "Submitting job to prepare input for FusionInspector...\n";

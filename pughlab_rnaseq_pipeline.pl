@@ -149,7 +149,7 @@ sub main {
 		my $star_command = join(' ',
 			"perl $cwd/scripts/star.pl",
 			"-o", $star_directory,
-			"-t", $tool_config},
+			"-t", $tool_config,
 			"-d", $data_config,
 			"-b", $star_output_yaml,
 			"-c", $args{cluster}
