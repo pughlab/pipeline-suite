@@ -49,8 +49,11 @@ parser <- ArgumentParser();
 
 parser$add_argument('-d', '--directory', type = 'character', help = 'path to data directory');
 parser$add_argument('-p', '--project', type = 'character', help = 'project name');
+parser$add_argument('-t', '--t_depth', type = 'integer', help = 'minimum tumour depth', default = 20);
+parser$add_argument('-n', '--n_depth', type = 'integer', help = 'minimum normal depth', default = 15);
 parser$add_argument('-g', '--gtf', type = 'character', help = 'annotation gtf (refGene)',
 	default = '/cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.GRCh38.genes.gtf');
+parser$add_argument('-c', '--contamination', type = 'logical', help = 'should we try to find contest ouput?', default = TRUE);
 
 arguments <- parser$parse_args();
 
@@ -120,6 +123,23 @@ refGene$Symbol <- sapply(
 refGene$Chromosome <- factor(refGene$Chromosome, levels = paste0('chr',c(1:22,'X','Y','M')));
 
 ### MAIN ###########################################################################################
+# first, if requested, try to find per-sample contest output
+if (arguments$contamination) {
+	contest.files <- rev(sort(list.files(
+		path = '../BAMQC/ContEst',
+		pattern = 'ContEst_output.tsv',
+		recursive = TRUE,
+		full.names = TRUE
+		)));
+
+	if (length(contest.files) > 0) {
+		contest <- read.delim(contest.files[1]);
+		contest <- contest[which(contest$name == 'META'),];
+		} else {
+		contest <- NA;
+		}
+	}
+
 # find results files
 maf.files <- list.files(pattern = '*.maf$', recursive = TRUE);
 maf.files <- maf.files[!sapply(maf.files, is.symlink)]; 
@@ -154,16 +174,23 @@ for (i in 1:length(maf.files)) {
 	if (is.rnaseq || is.exome) {
 		tmp <- tmp[which(tmp$Variant_Classification %in% classes.to.keep),];
 		}
+
+	# remove any poor quality variants
 	tmp <- tmp[which(tmp$FILTER == 'PASS'),];
-	tmp <- tmp[which(tmp$t_depth > 20),];
+	tmp <- tmp[which(tmp$t_depth > arguments$t_depth),];
 
 	if (!all(is.na(tmp$n_depth))) {
-		tmp <- tmp[which(tmp$n_depth > 15),];
+		tmp <- tmp[which(tmp$n_depth > arguments$n_depth),];
 		}
 
-	# filter out known (dbSNP) variants
-	#tmp <- tmp[!grepl('rs', tmp$dbSNP_RS),];
+	# try applying the contamination filter
+	if ( !is.na(contest) && (smp %in% contest$Sample) ) {
+		contam_fraction <- contest[which(contest$Sample == smp),]$contamination/100;
+		vafs <- tmp$t_alt_count/tmp$t_depth;
+		tmp <- tmp[which(vafs > contam_fraction),];
+		]
 
+	# if no variants remain after filtering, move on to next sample	
 	if (nrow(tmp) == 0) {
 		next;
 		}
