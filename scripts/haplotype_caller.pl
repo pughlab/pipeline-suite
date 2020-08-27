@@ -600,7 +600,7 @@ sub main{
 				push @batch_jobs, $run_id;
 				}
 
-			push @combined_gvcfs, $combined_gvcf;
+			push @combined_gvcfs, "$combined_gvcf.gz";
 			}
 
 		push @all_jobs, @batch_jobs;
