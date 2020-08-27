@@ -188,7 +188,7 @@ for (i in 1:length(maf.files)) {
 		contam_fraction <- contest[which(contest$Sample == smp),]$contamination/100;
 		vafs <- tmp$t_alt_count/tmp$t_depth;
 		tmp <- tmp[which(vafs > contam_fraction),];
-		]
+		}
 
 	# if no variants remain after filtering, move on to next sample	
 	if (nrow(tmp) == 0) {
