@@ -384,15 +384,15 @@ sub collect_job_stats {
 
 	my $sacct_command = join(' ',
 		'sacct -P --delimiter=","',
-		'--format="User,JobID,Start,End,AllocCPUS,Elapsed,CPUTime,MaxRSS,ExitCode"',
+		'--format="User,JobID,Start,End,AllocCPUS,CPUTime,MaxRSS,State,ExitCode"',
 		'-j', $args{job_ids},
 		'>', $args{outfile} . ';',
 		'sed -i "s/,/\t/g"', $args{outfile}
 		);
 
 	$sacct_command .= "\n\n" . join(' ',
-		'STATUS_COUNT=$(cut -f9', $args{outfile},
-		"| awk '", '\$1 != "0:0" { print $0 }', "' | wc -l)",
+		'STATUS_COUNT=$(cut -f8', $args{outfile},
+		"| awk '", '$1 != "COMPLETED" { print $0 }', "' | wc -l)",
 		);
 
 	$sacct_command .= "\n\n" . join("\n",
