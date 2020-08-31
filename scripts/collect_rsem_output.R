@@ -75,7 +75,7 @@ isoforms.list <- list();
 
 for (file in genes.files) {
 	# extract sample ID
-	smp <- unlist(strsplit(file, '\\/'))[3];
+	smp <- unlist(strsplit(file, '\\/'))[2];
 	# read in data
 	tmp <- read.delim(file);
 	# store data in list
@@ -85,7 +85,7 @@ for (file in genes.files) {
 
 for (file in isoforms.files) {
 	# extract sample ID
-	smp <- unlist(strsplit(file, '\\/'))[3];
+	smp <- unlist(strsplit(file, '\\/'))[2];
 	# read in data
 	tmp <- read.delim(file);
 	# store

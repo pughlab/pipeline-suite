@@ -1,5 +1,5 @@
 ### collect_star-fusion_output.R ###################################################################
-# find, collate and format output from STAR-FUsion
+# find, collate and format output from STAR-Fusion
 
 ### FUNCTIONS ######################################################################################
 # function to generate a standardized filename
@@ -64,7 +64,7 @@ fusions.empty.samples <- c();
 for (file in fusion.files) {
 
 	# extract sample ID
-	smp <- unlist(strsplit(file,'\\/'))[3];
+	smp <- unlist(strsplit(file,'\\/'))[2];
 	# read in data
 	tmp <- read.delim(file);
 

@@ -163,7 +163,7 @@ for (i in 1:length(maf.files)) {
 	file <- maf.files[i];
 
 	# extract sample ID
-	if (is.rnaseq) { smp <- unlist(strsplit(file,'\\/'))[3]; } else { smp <- unlist(strsplit(file,'\\/'))[2]; }
+	smp <- unlist(strsplit(file,'\\/'))[2];
 	samples <- unique(c(samples, smp));
 
 	# read in data

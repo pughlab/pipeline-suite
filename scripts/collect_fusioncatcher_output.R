@@ -66,7 +66,7 @@ fusions.empty.samples <- c();
 for (file in fusion.files) {
 
 	# extract sample ID
-	smp <- unlist(strsplit(file,'\\/'))[3];
+	smp <- unlist(strsplit(file,'\\/'))[2];
 	# read in data
 	tmp <- read.delim(file);
 
@@ -85,7 +85,7 @@ viral.empty.samples <- c();
 for (file in virus.files) {
 
 	# extract sample ID
-	smp <- unlist(strsplit(file,'\\/'))[3];
+	smp <- unlist(strsplit(file,'\\/'))[2];
 	# read in data
 	tmp <- read.table(file, header = TRUE);
 
