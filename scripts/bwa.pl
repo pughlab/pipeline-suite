@@ -445,8 +445,6 @@ sub main {
 
 					push @lane_intermediates, $lane_directory . '/' . $filestem . '.bam';
 					push @lane_holds, $run_id;
-					push @smp_jobs, $run_id;
-					push @all_jobs, $run_id;
 					}
 				}
 
