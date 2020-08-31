@@ -284,7 +284,7 @@ sub main {
 	print $yaml "---\n";
 
 	# create sample sheet (tab-delim file with id/path/group)
-	my $qc_directory = join('/', $output_directory, 'RNASeQC_', $run_count);
+	my $qc_directory = join('/', $output_directory, 'RNASeQC_' . $run_count);
 	unless ( -e $qc_directory ) { make_path($qc_directory); }
 
 	my $sample_sheet = join('/', $qc_directory, 'sample_sheet.tsv');
@@ -321,11 +321,11 @@ sub main {
 			unless(-e $raw_directory) { make_path($raw_directory); }
 
 			my $temp_star = join('/', $sample_directory, 'intermediate_files');
-			$cleanup_cmd .= "rm -rf $temp_star";
+			$cleanup_cmd .= "\nrm -rf $temp_star";
 
 			my $tmp_directory = join('/', $sample_directory, 'TEMP');
 			unless(-e $tmp_directory) { make_path($tmp_directory); }
-			$cleanup_cmd .= "; rm -rf $tmp_directory";
+			$cleanup_cmd .= "\nrm -rf $tmp_directory";
 
 			my @lanes = keys %{$smp_data->{$patient}->{$sample}->{runlanes}};
 			my (@r1_fastqs, @r2_fastqs);
