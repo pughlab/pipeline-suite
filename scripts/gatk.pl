@@ -441,7 +441,9 @@ sub main {
 				tmp_dir		=> $tmp_directory
 				);
 
-			$stage1_cmd .= ";\nmd5sum $target_intervals > $target_intervals.md5";
+			$stage1_cmd .= "\n" . check_java_output(
+				extra_cmd => "md5sum $target_intervals > $target_intervals.md5"
+				);
 
 			# check if this should be run
 			if ('Y' eq missing_file($target_intervals . '.md5')) {
