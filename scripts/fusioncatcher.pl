@@ -134,6 +134,9 @@ sub main {
 	my $perl		= 'perl/5.30.0';
 	my $r_version		= 'R/' . $tool_data->{r_version};
 
+	# get user-specified tool parameters
+	my $parameters = $tool_data->{fusioncatcher}->{parameters};
+
 	### RUN ############################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
