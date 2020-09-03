@@ -46,7 +46,7 @@ star:
 star_fusion:
     run: Y
     parameters:
-        FusionInspect: inspect
+        FusionInspect:
         star_fusion:
             mem: 6G
             time: '24:00:00'

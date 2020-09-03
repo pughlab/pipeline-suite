@@ -180,8 +180,8 @@ mutect2:
             time: '24:00:00'
 strelka:
     run: Y
+    pon:
     parameters:
-        intervals:
         strelka:
             mem: 8G
             time: '24:00:00'
