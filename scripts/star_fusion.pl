@@ -1,4 +1,4 @@
-#!/usr/bin/env perl
+/!/usr/bin/env perl
 ### star_fusion.pl #################################################################################
 use AutoLoader 'AUTOLOAD';
 use strict;
@@ -265,36 +265,42 @@ sub main {
 					$gzip_fq_cmd .= "\ngzip " . $r2;
 					$gzip_fq_cmd .= "\necho Finished compressing fastq files. Now ready for FusionInspector";
 
-					# record command (in log directory) and then run job
-					print $log "Submitting job to prepare input for FusionInspector...\n";
-
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> 'run_prepare_fastq_for_FusionInspector_' . $sample,
-						cmd	=> $cat_fq_cmd . "\n" . $gzip_fq_cmd,
-						max_time	=> '08:00:00',
-						mem		=> '1G',
-						hpc_driver	=> $args{hpc_driver}
-						);
-
-					$run_id = submit_job(
-						jobname		=> 'run_prepare_fastq_for_FusionInspector_' . $sample,
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
-						);
-
 					$r1 .= '.gz';
 					$r2 .= '.gz';
 
-					push @smp_jobs, $run_id;
-					push @all_jobs, $run_id;
+					if ('Y' eq missing_file($r2)) {
+
+						# record command (in log directory) and then run job
+						print $log "Submitting job to prepare input for FusionInspector...\n";
+
+						$run_script = write_script(
+							log_dir	=> $log_directory,
+							name	=> 'run_prepare_fastq_for_FusionInspector_' . $sample,
+							cmd	=> $cat_fq_cmd . "\n" . $gzip_fq_cmd,
+							max_time	=> '08:00:00',
+							mem		=> '1G',
+							hpc_driver	=> $args{hpc_driver}
+							);
+
+						$run_id = submit_job(
+							jobname		=> 'run_prepare_fastq_for_FusionInspector_' . $sample,
+							shell_command	=> $run_script,
+							hpc_driver	=> $args{hpc_driver},
+							dry_run		=> $args{dry_run},
+							log_file	=> $log
+							);
+
+						push @smp_jobs, $run_id;
+						push @all_jobs, $run_id;
+						}
 					}
 				}
 
 			## run STAR-Fusion on these junctions
-			my $fusion_output = join('/', $sample_directory, 'star-fusion.fusion_predictions.abridged.tsv');
+			my $fusion_output = join('/',
+				$sample_directory,
+				'star-fusion.fusion_predictions.abridged.tsv'
+				);
 
 			my $fusion_cmd = get_star_fusion_command(
 				fusion_call	=> $tool_data->{star_fusion_path},
@@ -356,6 +362,10 @@ sub main {
 				'star-fusion.preliminary',
 				'star-fusion.filter.intermediates_dir'
 				);
+
+			$cleanup_cmd .= "\ntar -czvf $sample_directory/star-fusion.preliminary.tar.gz" .
+				"$sample_directory/star-fusion.preliminary/ --remove-files";
+
 			}
 
 		# remove temporary directories (once per patient)
@@ -425,8 +435,9 @@ sub main {
 		log_file	=> $log
 		);
 
-	# collect job metrics if any were run
-	unless ($args{dry_run}) {
+	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
+	# collect job metrics (exit status, mem, run time)
+	unless ( ($args{dry_run}) || (scalar(@all_jobs) == 0) ) {
 
 		# collect job stats
 		my $collect_metrics = collect_job_stats(
@@ -455,12 +466,26 @@ sub main {
 		unless ($args{no_wait}) {
 
 			my $complete = 0;
+			my $timeouts = 0;
 
-			while (!$complete) {
-				sleep(5);
+			while (!$complete && $timeouts < 20 ) {
+				sleep(30);
 				my $status = `sacct --format='State' -j $run_id`;
+
+				# if final job has finished successfully:
 				if ($status =~ m/COMPLETED/s) { $complete = 1; }
-				elsif ($status !~ m/PENDING|RUNNING/) {
+				# if we run into a server connection error (happens rarely with sacct)
+				# increment timeouts (if we continue to repeatedly timeout, we will exit)
+				elsif ($status =~ m/Connection timed out/) {
+					$timeouts++;
+					}
+				# if the job is still pending or running, try again in a bit
+				# but also reset timeouts, because we only care about consecutive timeouts
+				elsif ($status =~ m/PENDING|RUNNING/) {
+					$timeouts = 0;
+					}
+				# if none of the above, we will exit with an error
+				else {
 					die("Final STAR-FUSION accounting job: $run_id finished with errors.");
 					}
 				}
