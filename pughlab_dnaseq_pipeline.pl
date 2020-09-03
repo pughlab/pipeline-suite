@@ -428,6 +428,10 @@ sub main {
 				"-c", $args{cluster}
 				);
 
+			if (defined($tool_data->{strelka}->{pon})) {
+				$strelka_command .= " --pon $tool_data->{strelka}->{pon}";
+				}
+
 			if ($args{cleanup}) {
 				$strelka_command .= " --remove";
 				}
@@ -471,53 +475,61 @@ sub main {
 		if ('Y' eq $tool_data->{mutect}->{run}) {
 
 			unless(-e $mutect_directory) { make_path($mutect_directory); }
+ 
+			my $pon = $tool_data->{mutect}->{pon};
+			my $mutect_command;
 
-			# first create a panel of normals
-			my $mutect_command = join(' ',
-				"perl $cwd/scripts/mutect.pl",
-				"-o", join('/', $mutect_directory, 'PanelOfNormals'),
-				"-t", $tool_config,
-				"-d", $gatk_output_yaml,
-				"-c", $args{cluster},
-				"--create-panel-of-normals"
-				);
+			if (!defined($tool_data->{mutect}->{pon})) {
 
-			if ($args{cleanup}) {
-				$mutect_command .= " --remove";
-				}
+				$pon = join('/', $mutect_directory, 'panel_of_normals.vcf');
 
-			# record command (in log directory) and then run job
-			print $log "Submitting job for mutect.pl --create-panel-of-normals\n";
-			print $log "  COMMAND: $mutect_command\n\n";
-
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'pughlab_dna_pipeline__run_mutect_pon',
-				cmd	=> $mutect_command,
-				modules	=> ['perl'],
-				dependencies	=> $gatk_run_id,
-				mem		=> '256M',
-				max_time	=> '14-00:00:00',
-				hpc_driver	=> $args{cluster}
-				);
-
-			if ($args{dry_run}) {
-
-				$mutect_command .= " --dry-run";
-				`$mutect_command`;
-
-				} else {
-
-				$mutect_run_id = submit_job(
-					jobname		=> $log_directory,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{cluster},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
+				# first create a panel of normals
+				$mutect_command = join(' ',
+					"perl $cwd/scripts/mutect.pl",
+					"-o", join('/', $mutect_directory, 'PanelOfNormals'),
+					"-t", $tool_config,
+					"-d", $gatk_output_yaml,
+					"-c", $args{cluster},
+					"--create-panel-of-normals"
 					);
-			
-				print $log ">>> MuTect PoN job id: $mutect_run_id\n\n";
-				push @job_ids, $mutect_run_id;
+
+				if ($args{cleanup}) {
+					$mutect_command .= " --remove";
+					}
+
+				# record command (in log directory) and then run job
+				print $log "Submitting job for mutect.pl --create-panel-of-normals\n";
+				print $log "  COMMAND: $mutect_command\n\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'pughlab_dna_pipeline__run_mutect_pon',
+					cmd	=> $mutect_command,
+					modules	=> ['perl'],
+					dependencies	=> $gatk_run_id,
+					mem		=> '256M',
+					max_time	=> '14-00:00:00',
+					hpc_driver	=> $args{cluster}
+					);
+
+				if ($args{dry_run}) {
+
+					$mutect_command .= " --dry-run";
+					`$mutect_command`;
+
+					} else {
+
+					$mutect_run_id = submit_job(
+						jobname		=> $log_directory,
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{cluster},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+				
+					print $log ">>> MuTect PoN job id: $mutect_run_id\n\n";
+					push @job_ids, $mutect_run_id;
+					}
 				}
 
 			# next run variant calling
@@ -527,7 +539,7 @@ sub main {
 				"-t", $tool_config,
 				"-d", $gatk_output_yaml,
 				"-c", $args{cluster},
-				"--pon", join('/', $mutect_directory, 'panel_of_normals.vcf')
+				"--pon", $pon
 				);
 
 			if ($args{cleanup}) {
@@ -574,52 +586,60 @@ sub main {
 
 			unless(-e $mutect2_directory) { make_path($mutect2_directory); }
 
-			# first create a panel of normals
-			my $mutect2_command = join(' ',
-				"perl $cwd/scripts/mutect2.pl",
-				"-o", join('/', $mutect2_directory, 'PanelOfNormals'),
-				"-t", $tool_config,
-				"-d", $gatk_output_yaml,
-				"-c", $args{cluster},
-				"--create-panel-of-normals"
-				);
+			my $pon = $tool_data->{mutect2}->{pon};
+			my $mutect2_command;
 
-			if ($args{cleanup}) {
-				$mutect2_command .= " --remove";
-				}
+			if (!defined($tool_data->{mutect2}->{pon})) {
 
-			# record command (in log directory) and then run job
-			print $log "Submitting job for mutect2.pl --create-panel-of-normals\n";
-			print $log "  COMMAND: $mutect2_command\n\n";
+				$pon = join('/', $mutect2_directory, 'panel_of_normals.vcf');
 
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'pughlab_dna_pipeline__run_mutect2_pon',
-				cmd	=> $mutect2_command,
-				modules	=> ['perl'],
-				dependencies	=> $gatk_run_id,
-				mem		=> '256M',
-				max_time	=> '14-00:00:00',
-				hpc_driver	=> $args{cluster}
-				);
-
-			if ($args{dry_run}) {
-
-				$mutect2_command .= " --dry-run";
-				`$mutect2_command`;
-
-				} else {
-
-				$mutect2_run_id = submit_job(
-					jobname		=> $log_directory,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{cluster},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
+				# first create a panel of normals
+				$mutect2_command = join(' ',
+					"perl $cwd/scripts/mutect2.pl",
+					"-o", join('/', $mutect2_directory, 'PanelOfNormals'),
+					"-t", $tool_config,
+					"-d", $gatk_output_yaml,
+					"-c", $args{cluster},
+					"--create-panel-of-normals"
 					);
-			
-				print $log ">>> MuTect2 PoN job id: $mutect2_run_id\n\n";
-				push @job_ids, $mutect2_run_id;
+
+				if ($args{cleanup}) {
+					$mutect2_command .= " --remove";
+					}
+
+				# record command (in log directory) and then run job
+				print $log "Submitting job for mutect2.pl --create-panel-of-normals\n";
+				print $log "  COMMAND: $mutect2_command\n\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'pughlab_dna_pipeline__run_mutect2_pon',
+					cmd	=> $mutect2_command,
+					modules	=> ['perl'],
+					dependencies	=> $gatk_run_id,
+					mem		=> '256M',
+					max_time	=> '14-00:00:00',
+					hpc_driver	=> $args{cluster}
+					);
+
+				if ($args{dry_run}) {
+
+					$mutect2_command .= " --dry-run";
+					`$mutect2_command`;
+
+					} else {
+
+					$mutect2_run_id = submit_job(
+						jobname		=> $log_directory,
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{cluster},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+				
+					print $log ">>> MuTect2 PoN job id: $mutect2_run_id\n\n";
+					push @job_ids, $mutect2_run_id;
+					}
 				}
 
 			# now run the actual somatic variant calling
@@ -629,7 +649,7 @@ sub main {
 				"-t", $tool_config,
 				"-d", $gatk_output_yaml,
 				"-c", $args{cluster},
-				"--pon", join('/', $mutect2_directory, 'panel_of_normals.vcf')
+				"--pon", $pon
 				);
 
 			if ($args{cleanup}) {
@@ -686,6 +706,10 @@ sub main {
 				"--mode paired"
 				);
 
+			if (defined($tool_data->{varscan}->{pon})) {
+				$varscan_command .= " --pon $tool_data->{varscan}->{pon}";
+				}
+
 			if ($args{cleanup}) {
 				$varscan_command .= " --remove";
 				}
@@ -724,6 +748,11 @@ sub main {
 				push @job_ids, $varscan_run_id;
 				}
 
+			my $pon = $tool_data->{varscan}->{pon};
+			if (!defined($tool_data->{varscan}->{pon})) {
+				$pon = join('/', $varscan_directory, 'panel_of_normals.vcf');
+				}
+
 			# now run on T-only, using germline variants from T/N pairs to filter
 			$varscan_command = join(' ',
 				"perl $cwd/scripts/varscan.pl",
@@ -732,7 +761,7 @@ sub main {
 				"-d", $gatk_output_yaml,
 				"-c", $args{cluster},
 				"--mode unpaired",
-				"--pon", join('/', $varscan_directory, 'panel_of_normals.vcf')
+				"--pon", $pon
 				);
 
 			if ($args{cleanup}) {
