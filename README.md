@@ -9,6 +9,9 @@ Start by creating a clone of the repository:
 git clone https://github.com/pughlab/pipeline-suite/
 </code></pre>
 
+Additionally, the report generation portion of this tool requires installation of the BPG plotting package for R:
+https://CRAN.R-project.org/package=BoutrosLab.plotting.general
+
 ## Set up config files
 There are example config files located in the "configs" folder:
 - data configs:
@@ -96,13 +99,15 @@ There are example config files located in the "configs" folder:
     - sequence type (one of exome, targeted, rna or wgs)
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to GTF file (if desired)
-    - path to target intervals (exome capture kit [bed; bgzipped and tabix indexed], if defined)
+    - path to target intervals (exome capture kit [bed], if defined)
+    - path to panel of normals (optional if developed elsewhere)
 
    - varscan requires:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to sequenza.R script
     - path to target intervals (exome capture kit [bed], if defined)
     - path to GTF file (if desired)
+    - path to panel of normals (optional if developed elsewhere)
 
    - delly requires:
     - path to reference genome (requires .fa, .dict and .fai files)
