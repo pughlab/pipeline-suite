@@ -80,32 +80,18 @@ sub error_checking {
 
 		if ('dna' eq $data_type) {
 
-			if ('strelka' eq $pipeline) {
-				if ( any { /$tool_data->{seq_type}/ } qw(exome targeted) ) {
-					if ( 
-						(!defined($tool_data->{intervals_bed})) && 
-						(!defined($tool_data->{strelka}->{parameters}->{intervals}))
-						) {
-						die("Must supply path to target intervals!");
-					} elsif (defined($tool_data->{strelka}->{parameters}->{intervals})) {
-						if ($tool_data->{strelka}->{parameters}->{intervals} !~ m/.gz$/) {
-							die("ERROR: target intervals (for exome or target-seq) must be bgzipped and tabix indexed.");
-						}
-					} elsif (defined($tool_data->{intervals_bed})) {
-						if ($tool_data->{intervals_bed} !~ m/.gz$/) {
-							die("ERROR: target intervals (for exome or target-seq) must be bgzipped and tabix indexed.");
-						} elsif ($tool_data->{intervals_bed} =~ m/.gz$/) {
-							$tool_data->{strelka}->{parameters}->{intervals} = $tool_data->{intervals_bed};
-						}
-					}
-				}
+			if ( ('strelka' eq $pipeline) &&
+				(any { /$tool_data->{seq_type}/ } qw(exome targeted) ) && 
+				(!defined($tool_data->{intervals_bed}))
+				) {
+				die("Must supply path to target intervals!");
 			}
 
-			elsif ('varscan' eq $pipeline) {
-				if (!defined($tool_data->{intervals_bed})) {
-					print "WARNING: no target intervals provided.\n";
-					print ">>If this is exome data, target regions are recommend!\n";
-				}
+			elsif ( ('varscan' eq $pipeline) &&
+				(!defined($tool_data->{intervals_bed}))
+				) {
+				print "WARNING: no target intervals provided.\n";
+				print ">>If this is exome data, target regions are recommend!\n";
 			}
 
 		} elsif (('rna' eq $data_type) && ('strelka' eq $pipeline)) {
