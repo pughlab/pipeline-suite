@@ -797,6 +797,9 @@ sub main {
 				tmp_dir		=> $tmp_directory
 				);
 
+			if ('normal' eq $type) { $normals{$sample} = $recal_bam; }
+			if ('tumour' eq $type) { $tumours{$sample} = $recal_bam; } 
+
 			# check if this should be run
 			if ('Y' eq missing_file($recal_bam . '.md5')) {
 
@@ -807,9 +810,6 @@ sub main {
 
 				# record command (in log directory) and then run job
 				print $log "Submitting job for PrintReads (applying base recalibration)...\n";
-
-				if ('normal' eq $type) { $normals{$sample} = $recal_bam; }
-				if ('tumour' eq $type) { $tumours{$sample} = $recal_bam; } 
 
 				# determine number of cpus to request
 				my $n_cpus;
@@ -901,8 +901,9 @@ sub main {
 		print $log "---\n";
 		}
 
-	# if this is not a dry run, collect job metrics (exit status, mem, run time)
-	unless ($args{dry_run}) {
+	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
+	# collect job metrics (exit status, mem, run time)
+	unless ( ($args{dry_run}) || (scalar(@all_jobs) == 0) ) {
 
 		# collect job metrics
 		my $collect_metrics = collect_job_stats(
@@ -931,12 +932,26 @@ sub main {
 		unless ($args{no_wait}) {
 
 			my $complete = 0;
+			my $timeouts = 0;
 
-			while (!$complete) {
-				sleep(5);
+			while (!$complete && $timeouts < 20 ) {
+				sleep(30);
 				my $status = `sacct --format='State' -j $run_id_extra`;
+
+				# if final job has finished successfully:
 				if ($status =~ m/COMPLETED/s) { $complete = 1; }
-				elsif ($status !~ m/PENDING|RUNNING/) {
+				# if we run into a server connection error (happens rarely with sacct)
+				# increment timeouts (if we continue to repeatedly timeout, we will exit)
+				elsif ($status =~ m/Connection timed out/) {
+					$timeouts++;
+					}
+				# if the job is still pending or running, try again in a bit
+				# but also reset timeouts, because we only care about consecutive timeouts
+				elsif ($status =~ m/PENDING|RUNNING/) {
+					$timeouts = 0;
+					}
+				# if none of the above, we will exit with an error
+				else {
 					die("Final GATK accounting job: $run_id_extra finished with errors.");
 					}
 				}
