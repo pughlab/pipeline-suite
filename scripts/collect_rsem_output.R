@@ -37,9 +37,7 @@ save.session.profile <- function(file.name) {
 
 # function to identify symlinks
 is.symlink <- function(file) {
-
 	isTRUE(nzchar(Sys.readlink(file), keepNA = TRUE));
-
 	}
 
 ### PREPARE SESSION ################################################################################
@@ -52,6 +50,8 @@ parser <- ArgumentParser();
 
 parser$add_argument('-d', '--directory', type = 'character', help = 'path to data directory');
 parser$add_argument('-p', '--project', type = 'character', help = 'project name');
+parser$add_argument('-g', '--gtf', type = 'character', help = 'annotation gtf (refGene)',
+        default = '/cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.GRCh38.genes.gtf');
 
 arguments <- parser$parse_args();
 
@@ -59,6 +59,45 @@ arguments <- parser$parse_args();
 date <- Sys.Date();
 
 setwd(arguments$directory);
+
+### FORMAT ANNOTATION
+refGene <- read.delim(arguments$gtf, header = F, comment.char = '#');
+refGene <- refGene[which(refGene$V3 == 'gene'),c(1,4,5,9)];
+colnames(refGene) <- c('Chromosome','Start','End','INFO');
+
+refGene$GeneID <- sapply(
+        refGene$INFO,
+        function(i) {
+                parts <- unlist(strsplit(as.character(i), ';'));
+                gene_name <- unlist(strsplit(parts[grepl('gene_id', parts)], ' '));
+                gene_id  <- gene_name[length(gene_name)];
+                return(gene_id);
+                }
+        );
+
+refGene$Symbol <- sapply(
+        refGene$INFO,
+        function(i) {
+                parts <- unlist(strsplit(as.character(i), ';'));
+                gene_name <- unlist(strsplit(parts[grepl('gene_name', parts)], ' '));
+                gene_symbol <- gene_name[length(gene_name)];
+                return(gene_symbol);
+                }
+        );
+
+refGene$Type <- sapply(
+	refGene$INFO,
+	function(i) {
+		parts <- unlist(strsplit(as.character(i), ';'));
+		gene_type <- unlist(strsplit(parts[grepl('gene_type', parts)], ' '));
+		rna_type <- gene_type[length(gene_type)];
+		return(rna_type);
+		}
+	);
+
+refGene$Chromosome <- factor(refGene$Chromosome, levels = paste0('chr', c(1:22,'X','Y','M')));
+refGene <- refGene[order(refGene$Chromosome, refGene$Start, refGene$End),];
+refGene$GeneID <- factor(refGene$GeneID, levels = as.character(refGene$GeneID));
 
 ### MAIN ###########################################################################################
 # find results files
@@ -111,6 +150,17 @@ isoforms.tmp <- join_all(
 	match = 'first'
 	);
 
+# for gene data, clean up annotations
+genes.tmp <- merge(
+	refGene[,c('GeneID','Symbol','Type')],
+	genes.tmp,
+	by.x = 'GeneID',
+	by.y = 'gene_id'
+	);
+
+genes.tmp$GeneID <- factor(genes.tmp$GeneID, levels = levels(refGene$GeneID));
+genes.tmp <- genes.tmp[order(genes.tmp$GeneID),];
+
 genes.formatted$fpkm <- genes.tmp[,c(1,2, grep('FPKM', colnames(genes.tmp)))];
 genes.formatted$tpm  <- genes.tmp[,c(1,2, grep('TPM', colnames(genes.tmp)))];
 
@@ -125,14 +175,6 @@ colnames(isoforms.formatted$tpm)  <- gsub('.TPM', '', colnames(isoforms.formatte
 
 # save combined/formatted data to file
 write.table(
-	genes.formatted$fpkm,
-	file = generate.filename(arguments$project, 'gene_expression_FPKM','tsv'),
-	row.names = FALSE,
-	col.names = TRUE,
-	sep = '\t'
-	);
-
-write.table(
 	genes.formatted$tpm,
 	file = generate.filename(arguments$project, 'gene_expression_TPM','tsv'),
 	row.names = FALSE,
@@ -140,18 +182,54 @@ write.table(
 	sep = '\t'
 	);
 
-# save combined/formatted data to file
+save(
+	genes.formatted,
+	isoforms.formatted,
+	file = generate.filename(arguments$project, 'rsem_expression_results','RData')
+	);
+
+# prep or cBioportal
+cbio <- genes.tmp[which(genes.tmp$Type == 'protein_coding'), c(1,2, grep('TPM', colnames(genes.tmp)))];
+colnames(cbio) <- gsub('.TPM', '', colnames(cbio));
+
+#if (any(duplicated(cbio$Symbol))) {
+
+#	cbio$Symbol <- as.character(cbio$Symbol);
+
+#	dup.idx <- unique(cbio$Symbol[which(duplicated(cbio$Symbol))]);
+#	for (gene in dup.idx) {
+#		gene.idx <- which(cbio$Symbol == gene);
+#		cbio[gene.idx,]$Symbol <- apply(cbio[gene.idx,c('Symbol','GeneID')],1,paste,collapse = '_');
+#		}
+#	}
+
+#rownames(cbio) <- cbio$Symbol;
+#cbio <- cbio[,-c(1:2)];
+
+cbio[which(cbio == 0, arr.ind = TRUE)] <- 0.01;
+cbio <- cbind(
+	cbio[,1:2],
+	log2(cbio[,3:ncol(cbio)])
+	);
+
 write.table(
-	isoforms.formatted$fpkm,
-	file = generate.filename(arguments$project, 'isoform_expression_FPKM','tsv'),
+	cbio,
+	file = generate.filename(arguments$project, 'mRNA_expression_TPM_for_cbioportal','tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
 	sep = '\t'
 	);
 
+# and do a default scaling
+zscores <- data.frame(
+	cbio[,1:2],
+	t(apply(t(cbio[,3:ncol(cbio)]),2,scale))
+	);
+colnames(zscores) <- colnames(cbio);
+
 write.table(
-	isoforms.formatted$tpm,
-	file = generate.filename(arguments$project, 'isoform_expression_TPM','tsv'),
+	zscores,
+	file = generate.filename(arguments$project, 'mRNA_TPM_zscores_for_cbioportal','tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
 	sep = '\t'
