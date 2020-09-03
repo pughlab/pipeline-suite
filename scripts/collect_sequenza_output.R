@@ -35,6 +35,28 @@ save.session.profile <- function(file.name) {
 
 	}
 
+# function to fill gaps (provided by jbruce)
+fillgaps <- function(seg) {
+  
+	for (i in 1:(nrow(seg)-1)) {
+
+		chr <- as.character(seg[i,]$chromosome);
+		start <- seg[i,]$start.pos;
+		end <- seg[i,]$end.pos;
+
+		if (seg[i+1,"chromosome"] == chr & seg[i+1,"start.pos"] != (end + 1)) {
+
+      			if (abs(seg[i,"CNt"]) > abs(seg[i+1,"CNt"])) {
+				seg[i,"end.pos"] <- seg[i+1,"start.pos"]-1;
+				} else {
+				seg[i+1,"start.pos"] <- seg[i,"end.pos"]+1;
+				}
+			}
+		}
+
+	return(seg);
+	}
+
 ### PREPARE SESSION ################################################################################
 # import libraries
 library(GenomicRanges);
@@ -62,27 +84,16 @@ setwd(arguments$directory);
 refGene <- read.delim(arguments$gtf, header = F, comment.char = '#');
 
 refGene <- droplevels(refGene[which(refGene$V3 == 'gene'),c(1,4,5,9)]);
+refGene <- droplevels(refGene[which(refGene$V1 != 'chrM'),]);
 colnames(refGene) <- c('Chromosome','Start','End','INFO');
 
 refGene <- refGene[grepl('gene_type protein_coding', refGene$INFO),];
+refGene <- refGene[!grepl('tag PAR', refGene$INFO),];
 
 gene.widths <- refGene$End - refGene$Start;
 refGene <- droplevels(refGene[which(gene.widths > 20),]);
 
 refGene.gr <- GRanges(refGene);
-
-# if provided, filter to target intervals
-if (!is.null(arguments$targets)) {
-
-	target.intervals <- read.delim(arguments$targets, header = F);
-	colnames(target.intervals)[1:3] <- c('Chromosome','Start','End');
-
-	target.gr <- GRanges(target.intervals);
-
-	overlaps <- as.data.frame(findOverlaps(refGene.gr, target.gr));
-
-	refGene <- droplevels(refGene[unique(overlaps$queryHits),]);
-	}
 
 refGene$GeneID <- sapply(
         refGene$INFO,
@@ -104,14 +115,30 @@ refGene$Symbol <- sapply(
                 }
         );
 
-refGene$Chromosome <- factor(refGene$Chromosome, levels = paste0('chr',c(1:22,'X','Y','M')));
+refGene$Chromosome <- factor(refGene$Chromosome, levels = paste0('chr',c(1:22,'X','Y')));
 refGene <- refGene[,-4];
 
-gene.gr <- GRanges(refGene[,1:5]);
+gene.gr <- GRanges(refGene);
+
+# if provided, filter to target intervals
+refGene$Target <- NA;
+if (!is.null(arguments$targets)) {
+
+	target.intervals <- read.delim(arguments$targets, header = F);
+	colnames(target.intervals)[1:3] <- c('Chromosome','Start','End');
+
+	target.gr <- GRanges(target.intervals);
+
+	overlaps <- as.data.frame(findOverlaps(refGene.gr, target.gr));
+
+	refGene$Target <- 0;
+	refGene[unique(overlaps$queryHits),]$Target <- 1;
+	}
 
 ### MAIN ###########################################################################################
 # find results files
 ploidy.files <- list.files(pattern = 'alternative_solutions.txt$', recursive = TRUE);
+cn.files <- list.files(pattern = 'Total_CN.seg$', recursive = TRUE);
 seg.files <- list.files(pattern = 'segments.txt$', recursive = TRUE);
 
 # read them in
@@ -144,6 +171,31 @@ write.table(
 	sep = '\t'
 	);
 
+# read them in
+cn.list <- list();
+
+for (file in cn.files) {
+	# extract sample ID
+	smp <- unlist(strsplit(file, '\\/'));
+	smp <- unlist(strsplit(smp[length(smp)], '_'))[1];
+	# store data in list
+	tmp <- read.delim(file, as.is = TRUE);
+	tmp$ID <- smp;
+	cn.list[[smp]] <- tmp;
+	rm(tmp);
+	}
+
+cn.data <- do.call(rbind, cn.list);
+
+# save combined/formatted data to file
+write.table(
+	cn.data,
+	file = generate.filename(arguments$project, 'Sequenza_Total_CN', 'seg'),
+	row.names = FALSE,
+	col.names = TRUE,
+	sep = '\t'
+	);
+
 # and for segments
 seg.list <- list();
 
@@ -155,7 +207,8 @@ for (file in seg.files) {
 	# store data in list
 	if (smp %in% names(seg.list)) { next; }
 	segs <- read.delim(file);
-	seg.list[[smp]] <- segs[,c('chromosome','start.pos','end.pos','CNt')];
+	segs <- fillgaps(segs[!is.na(segs$CNt),c('chromosome','start.pos','end.pos','CNt')]);
+	seg.list[[smp]] <- segs;
 	}
 
 # define a results table
@@ -169,9 +222,22 @@ for (smp in names(seg.list)) {
 	# convert to GRanges
 	tmp <- seg.list[[smp]];
 	colnames(tmp) <- c('chrom','start','end','CN');
-	tmp$CN <- sign(tmp$CN-2);
+	tmp$AbsCN <- tmp$CN - 2;
 
-	tmp <- tmp[which(tmp$CN != 0),];
+	ploidy <- ploidy.formatted[which(ploidy.formatted$Sample == smp),]$ploidy;
+
+	# correct gains/amplifications
+	# first, assume all gains are heterozygous
+	tmp[which(tmp$CN >= 3),]$AbsCN <- 1;
+	if (ploidy > 2) {
+		# if ploidy is high AND CN is high, indicate amplification
+		tmp[which(tmp$CN - ploidy > 2),]$AbsCN <- 2;
+		} else {
+		# or, if ploidy is low/diploid AND CN is high, indicate amplification
+		tmp[which(tmp$CN >= 4),]$AbsCN <- 2;
+		}
+
+	tmp <- tmp[which(tmp$AbsCN != 0),];
 	if (nrow(tmp) == 0) { next; }
 	rownames(tmp) <- paste0('seg', 1:nrow(tmp));
 
@@ -183,7 +249,7 @@ for (smp in names(seg.list)) {
 
 	for (i in rownames(regionsWithHits)) {
 		genes <- gene.gr[overlapGenes[which(overlapGenes$queryHits == sub('seg','',i)),]$subjectHits,]$GeneID;
-		gene.data[which(gene.data$GeneID %in% genes),smp] <- tmp[i,]$CN;
+		gene.data[which(gene.data$GeneID %in% genes),smp] <- tmp[i,]$AbsCN;
 		}
 	}
 
@@ -192,6 +258,58 @@ write.table(
 	file = generate.filename(arguments$project, 'Sequenza_cna_gene_matrix', 'tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
+	sep = '\t'
+	);
+
+rownames(gene.data) <- 1:nrow(gene.data);
+
+# remove untargeted regions
+if (is.null(arguments$targets)) {
+	gene.data <- gene.data[,-which(colnames(gene.data) == 'Target')];
+#	} else { gene.data <- droplevels(gene.data[which(gene.data$Target == 1),]);
+	}
+
+# clean up any duplicates (2 or more gene entries with the same symbol that occur adjacent to each other)
+dup.idx <- gene.data$Symbol[which(duplicated(gene.data$Symbol))];
+
+for (gene in dup.idx) {
+
+	tmp <- gene.data[which(gene.data$Symbol == gene),];
+	if (nrow(tmp) < 2) { next; }
+
+	keep.all <- FALSE;
+	for (i in 2:nrow(tmp)) {
+		# if all entries have identical CN calls
+		if (tmp[i,]$Chromosome == tmp[i-1,]$Chromosome && all(tmp[i,7:ncol(tmp)] == tmp[i-1,7:ncol(tmp)])) {
+			keep.all <- TRUE;
+			}
+		}
+
+	# if they are all the same
+	if (keep.all) {
+		new.entry <- tmp[1,];
+		new.entry$End <- max(tmp$End);
+		new.entry$GeneID <- paste(tmp$GeneID, collapse = ';');
+		new.entry$Target <- max(tmp$Target);
+		} else if (any(tmp$Target == 1)) {
+		new.entry <- tmp[which(tmp$Target == 1),][1,];
+		} else {
+		new.entry <- tmp[1,];
+		}
+
+	gene.data <- gene.data[-which(gene.data$Symbol == gene),];
+	gene.data <- rbind(gene.data, new.entry);
+	}
+
+gene.data <- gene.data[order(gene.data$Chromosome, gene.data$Start, gene.data$End),];
+colnames(gene.data)[which(colnames(gene.data) == 'Symbol')] <- 'Hugo_Symbol';
+
+write.table(
+	gene.data[,c('Hugo_Symbol', names(seg.list))],
+	file = generate.filename(arguments$project, 'thresholded_CN_data_Absolute_Sequenza_for_cbioportal', 'tsv'),
+	row.names = FALSE,
+	col.names = TRUE,
+	quote = FALSE,
 	sep = '\t'
 	);
 
