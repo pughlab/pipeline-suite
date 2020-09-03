@@ -295,8 +295,8 @@ sub main {
 	$reference = $tool_data->{reference};
 	$seq_type = $tool_data->{seq_type};
 
-	if (defined($tool_data->{strelka}->{parameters}->{intervals})) {
-		$intervals = $tool_data->{strelka}->{parameters}->{intervals};
+	if (defined($tool_data->{intervals_bed})) {
+		$intervals = $tool_data->{intervals_bed};
 		print $log "\n    Target intervals: $intervals";
 		}
 
@@ -321,11 +321,52 @@ sub main {
 	my $parameters = $tool_data->{strelka}->{parameters};
 
 	### RUN ###########################################################################################
-	# get sample data
-	my $smp_data = LoadFile($data_config);
-
 	my ($run_script, $run_id, $link);
 	my (@all_jobs, @all_pon_jobs, @pon_vcfs);
+	my $interval_run_id = '';
+
+	# first, intervals file must be bgzipped and tabix indexed
+	if ($intervals !~ m/gz$/) {
+
+		my $old_intervals = $intervals;
+		my @parts = split(/\//, $old_intervals);
+		$intervals = join('/',
+			$output_directory,
+			$parts[-1]
+			);
+
+		if ( (-l $intervals) && ('Y' eq missing_file("$intervals.gz"))) {
+			unlink $intervals or die "Failed to remove previous symlink: $intervals";
+			}
+
+		symlink($old_intervals, $intervals);
+
+		if ('Y' eq missing_file("$intervals.gz")) {
+			my $format_intervals_command = "bgzip -c $intervals > $intervals.gz";
+			$format_intervals_command .= "\ntabix -p bed $intervals.gz";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'run_format_intervals_bed',
+				cmd	=> $format_intervals_command,
+				modules	=> ['tabix'],
+				hpc_driver	=> $args{hpc_driver}
+				);
+
+			$interval_run_id = submit_job(
+				jobname		=> 'run_format_intervals_bed',
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+			}
+
+		$intervals .= '.gz';
+		}
+
+	# get sample data
+	my $smp_data = LoadFile($data_config);
 
 	# create an array to hold final outputs and all patient job ids
 	my (%final_outputs, %patient_jobs, %cleanup);
@@ -376,7 +417,7 @@ sub main {
 			my $germline_directory = join('/', $patient_directory, $norm);
 			unless(-e $germline_directory) { make_path($germline_directory); }
 
-			$run_id = '';
+			$run_id = $interval_run_id;
 
 			# run germline snv caller
 			my $germline_snv_command = get_strelka_germline_command(
@@ -499,6 +540,8 @@ sub main {
 
 		# let's create a command and write script to combine variants for a PoN
 		my $pon_directory = join('/', $output_directory, 'PanelOfNormals');
+		unless(-e $pon_directory) { make_path($pon_directory); }
+
 		my $pon_tmp	= join('/', $pon_directory, $date . "_merged_panelOfNormals.vcf");
 		$pon		= join('/', $pon_directory, $date . "_merged_panelOfNormals_trimmed.vcf");
 		my $final_pon_link = join('/', $output_directory, 'panel_of_normals.vcf');
@@ -1098,8 +1141,9 @@ sub main {
 		log_file	=> $log
 		);
 
-	# should job metrics be collected
-	unless ($args{dry_run}) {
+	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
+	# collect job metrics (exit status, mem, run time)
+	unless ( ($args{dry_run}) || (scalar(@all_jobs) == 0) ) {
 
 		# collect job stats
 		my $collect_metrics = collect_job_stats(
@@ -1128,12 +1172,26 @@ sub main {
 		unless ($args{no_wait}) {
 
 			my $complete = 0;
+			my $timeouts = 0;
 
-			while (!$complete) {
-				sleep(5);
+			while (!$complete && $timeouts < 20 ) {
+				sleep(30);
 				my $status = `sacct --format='State' -j $run_id`;
+
+				# if final job has finished successfully:
 				if ($status =~ m/COMPLETED/s) { $complete = 1; }
-				elsif ($status !~ m/PENDING|RUNNING/) {
+				# if we run into a server connection error (happens rarely with sacct)
+				# increment timeouts (if we continue to repeatedly timeout, we will exit)
+				elsif ($status =~ m/Connection timed out/) {
+					$timeouts++;
+					}
+				# if the job is still pending or running, try again in a bit
+				# but also reset timeouts, because we only care about consecutive timeouts
+				elsif ($status =~ m/PENDING|RUNNING/) {
+					$timeouts = 0;
+					}
+				# if none of the above, we will exit with an error
+				else {
 					die("Final STRELKA accounting job: $run_id finished with errors.");
 					}
 				}
