@@ -302,6 +302,10 @@ sub main {
 		'-p', $tool_data->{project_name}
 		);
 
+	if (defined($tool_data->{reference_gtf})) {
+		$collect_results .= " -g $tool_data->{reference_gtf}";
+		}
+
 	$run_script = write_script(
 		log_dir	=> $log_directory,
 		name	=> 'combine_and_format_results',
