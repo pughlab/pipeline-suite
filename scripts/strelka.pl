@@ -326,7 +326,7 @@ sub main {
 	my $interval_run_id = '';
 
 	# first, intervals file must be bgzipped and tabix indexed
-	if ($intervals !~ m/gz$/) {
+	if ( ('exome' eq $seq_type) && ($intervals !~ m/gz$/) ) {
 
 		my $old_intervals = $intervals;
 		my @parts = split(/\//, $old_intervals);
@@ -417,7 +417,7 @@ sub main {
 			my $germline_directory = join('/', $patient_directory, $norm);
 			unless(-e $germline_directory) { make_path($germline_directory); }
 
-			$run_id = $interval_run_id;
+			$run_id = '';
 
 			# run germline snv caller
 			my $germline_snv_command = get_strelka_germline_command(
@@ -460,6 +460,7 @@ sub main {
 					name	=> 'run_strelka_germline_variant_caller_' . $norm,
 					cmd	=> $germline_snv_command,
 					modules	=> [$strelka],
+					dependencies	=> $interval_run_id,
 					max_time	=> $parameters->{strelka}->{time},
 					mem		=> $parameters->{strelka}->{mem},
 					hpc_driver	=> $args{hpc_driver}
