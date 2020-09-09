@@ -124,7 +124,7 @@ gene.gr <- GRanges(refGene);
 refGene$Target <- NA;
 if (!is.null(arguments$targets)) {
 
-	target.intervals <- read.delim(arguments$targets, header = F);
+	target.intervals <- read.delim(arguments$targets, header = F, comment.char = '#');
 	colnames(target.intervals)[1:3] <- c('Chromosome','Start','End');
 
 	target.gr <- GRanges(target.intervals);
