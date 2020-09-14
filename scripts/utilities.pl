@@ -256,12 +256,8 @@ sub write_script {
 			$args{dependencies} =~ s/,/:/g;
 
 			if ($args{dependencies} =~ m/:/) {
-				my @depends;
 				my @parts = split(/:/, $args{dependencies});
-				foreach my $part (@parts) {
-					next if ('' eq $part);
-					push @depends, $part;
-					}
+				my @depends = grep { $_ ne '' } @parts;
 
 				if (scalar(@depends) > 1) { $args{dependencies} = join(':', @depends); }
 				elsif (scalar(@depends) == 1) { $args{dependencies} = $depends[0]; }
