@@ -91,6 +91,8 @@ is.exome <- grepl('Exome', getwd());
 classes.to.keep <- c('RNA','Missense_Mutation','Splice_Region','Splice_Site','In_Frame_Del','In_Frame_Ins',
 	'Frame_Shift_Del','Frame_Shift_Ins','Nonsense_Mutation','Nonstop_Mutation','Translation_Start_Site');
 
+if (is.rnaseq) { arguments$contamination <- FALSE; }
+
 ###
 
 ### FORMAT ANNOTATION
@@ -124,21 +126,20 @@ refGene$Chromosome <- factor(refGene$Chromosome, levels = paste0('chr',c(1:22,'X
 
 ### MAIN ###########################################################################################
 # first, if requested, try to find per-sample contest output
-if (arguments$contamination) {
-	contest.files <- rev(sort(list.files(
-		path = '../BAMQC/ContEst',
-		pattern = 'ContEst_output.tsv',
-		recursive = TRUE,
-		full.names = TRUE
-		)));
+contest <- NA;
+#if (arguments$contamination) {
+#	contest.files <- rev(sort(list.files(
+#		path = '../BAMQC/ContEst',
+#		pattern = 'ContEst_output.tsv',
+#		recursive = TRUE,
+#		full.names = TRUE
+#		)));
 
-	if (length(contest.files) > 0) {
-		contest <- read.delim(contest.files[1]);
-		contest <- contest[which(contest$name == 'META'),];
-		} else {
-		contest <- NA;
-		}
-	}
+#	if (length(contest.files) > 0) {
+#		contest <- read.delim(contest.files[1]);
+#		contest <- contest[which(contest$name == 'META'),];
+#		}
+#	}
 
 # find results files
 maf.files <- list.files(pattern = '*.maf$', recursive = TRUE);
@@ -147,6 +148,7 @@ maf.files <- maf.files[!sapply(maf.files, is.symlink)];
 # read them in and store them
 samples <- c();
 
+maf.data <- list();
 variant.data <- data.frame();
 maf.fields <- c(
 	'Chromosome',
@@ -167,14 +169,9 @@ for (i in 1:length(maf.files)) {
 	samples <- unique(c(samples, smp));
 
 	# read in data
-	tmp <- read.delim(file, comment.char = "#");
+	tmp <- read.delim(file, comment.char = "#", as.is = TRUE);
 
 	## do some filtering
-	# if RNA-Seq or Exome-Seq, focus on genic regions only
-	if (is.rnaseq || is.exome) {
-		tmp <- tmp[which(tmp$Variant_Classification %in% classes.to.keep),];
-		}
-
 	# remove any poor quality variants
 	tmp <- tmp[which(tmp$FILTER == 'PASS'),];
 	tmp <- tmp[which(tmp$t_depth > arguments$t_depth),];
@@ -184,10 +181,17 @@ for (i in 1:length(maf.files)) {
 		}
 
 	# try applying the contamination filter
-	if ( !is.na(contest) && (smp %in% contest$Sample) ) {
-		contam_fraction <- contest[which(contest$Sample == smp),]$contamination/100;
-		vafs <- tmp$t_alt_count/tmp$t_depth;
-		tmp <- tmp[which(vafs > contam_fraction),];
+#	if ( !is.na(contest) && (smp %in% contest$Sample) ) {
+#		contam_fraction <- contest[which(contest$Sample == smp),]$contamination/100;
+#		vafs <- tmp$t_alt_count/tmp$t_depth;
+#		tmp <- tmp[which(vafs > contam_fraction),];
+#		}
+
+	maf.data[[i]] <- tmp;
+
+	# if RNA-Seq or Exome-Seq, focus on genic regions only
+	if (is.rnaseq || is.exome) {
+		tmp <- tmp[which(tmp$Variant_Classification %in% classes.to.keep),];
 		}
 
 	# if no variants remain after filtering, move on to next sample	
@@ -215,11 +219,27 @@ for (i in 1:length(maf.files)) {
 		}
 
 	rm(tmp);
-	print("");
-	print(file);
-	print(gc());
-	print("");
+	gc();
 	}
+
+# save full (combined) maf data to file
+full.maf.data <- do.call(rbind, maf.data);
+
+if (is.rnaseq) {
+	full.maf.data[,c('Matched_Norm_Sample_Barcode','Match_Norm_Seq_Allele1','Match_Norm_Seq_Allele2')] <- NA;
+	}
+colnames(full.maf.data) <- gsub('vcf','variant',colnames(full.maf.data));
+exclude.field <- which(colnames(full.maf.data) == 'variant_pos');
+
+write.table(
+	full.maf.data[,-exclude.field],
+	file = generate.filename(arguments$project, 'mutations_for_cbioportal', 'tsv'),
+	row.names = FALSE,
+	col.names = TRUE,
+	sep = '\t'
+	);
+
+gc();
 
 # add in empty samples
 for (smp in samples) {

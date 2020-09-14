@@ -131,5 +131,39 @@ write.table(
 	sep = '\t'
 	);
 
+# format data for cbioportal
+tmp <- formatted.fusions[which(formatted.fusions$SpanningFragCount > 0),];
+
+cbio.data <- data.frame(
+	Hugo_Symbol = c(
+		sapply(tmp$X.FusionName, function(i) { unlist(strsplit(as.character(i),'--'))[1] } ),
+		sapply(tmp$X.FusionName, function(i) { unlist(strsplit(as.character(i),'--'))[2] } )
+		),
+	Entrez_Gene_Id = NA,
+	Center = NA,
+	Tumor_Sample_Barcode = rep(tmp$Sample, times = 2),
+	Fusion = rep(tmp$X.FusionName, times = 2),
+	DNA_support = 'no',
+	RNA_support = 'yes',
+	Method = 'STAR-Fusion',
+	Frame = 'in-frame',
+	Fusion_Status = '',
+	stringsAsFactors = FALSE
+	);
+
+tmp <- tmp[which(tmp$SpliceType == 'INCL_NON_REF_SPLICE'),];
+for (i in 1:nrow(tmp)) {
+	idx <- which(cbio.data$Tumor_Sample_Barcode == tmp[i,]$Sample & cbio.data$Fusion == tmp[i,]$X.FusionName);
+	cbio.data[idx,]$Frame <- 'frameshift';
+	}
+
+write.table(
+	unique(cbio.data),
+	file = generate.filename(arguments$project, 'star-fusion_for_cbioportal', 'tsv'),
+	row.names = FALSE,
+	col.names = TRUE,
+	sep = '\t'
+	);
+
 ### SAVE SESSION INFO ##############################################################################
 save.session.profile(generate.filename('CollectSTARFusion','SessionProfile','txt'));

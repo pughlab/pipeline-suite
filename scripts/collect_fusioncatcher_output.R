@@ -104,7 +104,7 @@ combined.fusions <- do.call(rbind, fusion.data);
 combined.viral 	 <- do.call(rbind, viral.data);
 
 formatted.fusions <- unique(combined.fusions[,c(17,1:16)]);
-	
+
 tmp <- unique(formatted.fusions[,1:3]);
 tmp$Call <- 1;
 
@@ -155,6 +155,42 @@ write.table(
 write.table(
 	formatted.viral,
 	file = generate.filename(arguments$project, 'fusioncatcher_viral_counts', 'tsv'),
+	row.names = FALSE,
+	col.names = TRUE,
+	sep = '\t'
+	);
+
+# format for cbioportal
+tmp <- formatted.fusions[which(formatted.fusions$Spanning_unique_reads > 0),];
+tmp <- tmp[which(tmp$Predicted_effect %in% c('in-frame','out-of-frame')),];
+
+cbio.data <- data.frame(
+	Hugo_Symbol = c(
+		as.character(tmp$Gene_1_symbol.5end_fusion_partner.),
+		as.character(tmp$Gene_2_symbol.3end_fusion_partner.)
+		),
+	Entrez_Gene_Id = NA,
+	Center = NA,
+	Tumor_Sample_Barcode = rep(tmp$Sample, times = 2),
+	Fusion = NA,
+	DNA_support = 'no',
+	RNA_support = 'yes',
+	Method = 'Fusioncatcher',
+	Frame = rep(tmp$Predicted_effect, times = 2),
+	Fusion_Status = '',
+	stringsAsFactors = FALSE
+	);
+
+cbio.data$Fusion <- rep(
+	paste0(tmp$Gene_1_symbol.5end_fusion_partner., '--', tmp$Gene_2_symbol.3end_fusion_partner.),
+	times = 2
+	);
+
+cbio.data$Frame <- factor(cbio.data$Frame, levels = c('in-frame','out-of-frame'), labels = c('in-frame','frameshift'));
+
+write.table(
+	unique(cbio.data),
+	file = generate.filename(arguments$project, 'fusioncatcher_for_cbioportal', 'tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
 	sep = '\t'
