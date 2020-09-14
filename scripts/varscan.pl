@@ -51,21 +51,21 @@ sub get_varscan_snv_command {
 		@_
 		);
 
-	my $varscan_command;
+	my $varscan_command = join(' ',
+		'samtools mpileup -B -q1 -d10000',
+		'-f', $reference
+		);
+
+	if ( (defined($args{intervals})) && ($args{intervals} !~ m/chr/) ) {
+		$varscan_command .= " -l $args{intervals} ";
+		} elsif ( (defined($args{intervals})) && ($args{intervals} =~ m/chr/) ) {
+		$varscan_command .= " -r $args{intervals} ";
+		} else { $varscan_command .= ' '; }
 
 	if (defined($args{normal})) {
 
 		# because I don't have a script to convert this output to vcf, I use the output-vcf option
 		# BUT, because downstream tools (Sequenza) need the .snp format, I also run it without
-		$varscan_command = join(' ',
-			'samtools mpileup -B -q1 -d10000',
-			'-f', $reference
-			);
-
-		if (defined($args{intervals})) {
-			$varscan_command .= " -l $args{intervals} ";
-			}
-
 		$varscan_command .= join(' ',
 			$args{normal}, $args{tumour},
 			'|', 'awk -F"\\t"', "'\$4 > 0 && \$7 > 0'",
@@ -81,15 +81,6 @@ sub get_varscan_snv_command {
 			};
 
 		} else {
-
-		$varscan_command = join(' ',
-			'samtools mpileup -B -q1 -d10000',
-			'-f', $reference
-			);
-
-		if (defined($args{intervals})) {
-			$varscan_command .= " -l $args{intervals} ";
-			}
 
 		$varscan_command .= join(' ',
 			$args{tumour},
@@ -150,7 +141,7 @@ sub get_varscan_cnv_command {
 
 	if (defined($args{intervals})) {
 		$varscan_command .= " -l $args{intervals} ";
-		}
+		} else { $varscan_command .= ' '; }
 
 	$varscan_command .= join(' ',
 		$args{normal}, $args{tumour},
@@ -352,7 +343,24 @@ sub main {
 	print $log "\n    Reference used: $tool_data->{reference}";
 
 	$reference = $tool_data->{reference};
-	
+
+	my $string;
+
+	if (defined($tool_data->{varscan}->{chromosomes})) {
+		$string = $tool_data->{varscan}->{chromosomes};
+		} elsif ( ('hg38' eq $tool_data->{ref_type}) || ('hg19' eq $tool_data->{ref_type})) {
+		$string = 'chr' . join(',chr', 1..22) . ',chrX,chrY';
+		} elsif (defined($tool_data->{intervals_bed})) {
+		$string = 'exome';
+		} else {
+		# if no chromosomes can be determined, run as a whole (very very slow!)
+		print $log "  >> Could not determine chromosomes to run\n";
+		print $log "  >> Will run full genome, however this will be very very slow!\n";
+		$string = 'genome';
+		}
+
+	my @chroms = split(',', $string);
+
 	if (defined($tool_data->{intervals_bed})) {
 		print $log "\n    Target intervals (exome): $tool_data->{intervals_bed}";
 		}
@@ -446,24 +454,25 @@ sub main {
 			my @snp_jobs;
 
 			# create output stem
+			my $cnv_stem = join('/', $sequenza_directory, $sample . '_VarScan');
 			my $output_stem = join('/', $sample_directory, $sample . '_VarScan');
 			$cleanup_cmd .= "\nrm $output_stem";
 
 			# start with VarScan CNV caller
 			# only for paired tumour/normal
-			my $cnv_output = $output_stem . '.copynumber.called';
-			$cleanup_cmd .= "\nrm $output_stem.copynumber";
+			my $cnv_output = $cnv_stem . '.copynumber.called';
+			$cleanup_cmd .= "\nrm $cnv_stem.copynumber";
 
 			my $varscan_command = get_varscan_cnv_command(
 				tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
 				normal		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
-				output_stem	=> $output_stem,
+				output_stem	=> $cnv_stem,
 				java_mem	=> $parameters->{varscan}->{java_mem},
 				tmp_dir		=> $tmp_directory,
 				intervals	=> $tool_data->{intervals_bed}
 				);
 
-			$varscan_command .= "\n\nmd5sum $output_stem.copynumber > $output_stem.copynumber.md5";
+			$varscan_command .= "\n\nmd5sum $cnv_stem.copynumber > $cnv_stem.copynumber.md5";
 			$varscan_command .= "\n\nmd5sum $cnv_output > $cnv_output.md5";
 
 			# check if this should be run
@@ -498,59 +507,144 @@ sub main {
 				}
 
 			# next, I also need the .snp output format for Sequenza, so run that here
-			$varscan_command = get_varscan_snv_command(
-				tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
-				normal		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
-				output_stem	=> $output_stem,
-				java_mem	=> $parameters->{varscan}->{java_mem},
-				tmp_dir		=> $tmp_directory,
-				intervals	=> $tool_data->{intervals_bed}
-				);
+			my @chr_parts;
+			my @chr_jobs;
+			foreach my $chr ( @chroms ) {
 
-			$varscan_command .= "\n\nmd5sum $output_stem.snp > $output_stem.snp.md5";
-			$varscan_command .= "\nmd5sum $output_stem.indel > $output_stem.indel.md5";
+				if ( ('exome' eq $chr) || ('genome' eq $chr) ) {
+					$varscan_command = get_varscan_snv_command(
+						tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
+						normal		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
+						output_stem	=> $cnv_stem,
+						java_mem	=> $parameters->{varscan}->{java_mem},
+						tmp_dir		=> $tmp_directory,
+						intervals	=> $tool_data->{intervals_bed}
+						);
 
-			$cleanup_cmd .= "\nrm $output_stem.snp";
-			$cleanup_cmd .= "\nrm $output_stem.indel";
+					$varscan_command .= "\n\n" . join("\n",
+						"md5sum $cnv_stem.snp > $cnv_stem.snp.md5",
+						"md5sum $cnv_stem.indel > $cnv_stem.indel.md5",
+						"cp $cnv_stem.snp.md5 > $cnv_stem\_$chr.snp.md5"
+						);
 
-			# check if this should be run
-			if ('Y' eq missing_file("$output_stem.snp.md5")) {
+					$cleanup_cmd .= "\nrm $cnv_stem.snp;\nrm $output_stem.snp";
+					$cleanup_cmd .= "\nrm $cnv_stem\_$chr.snp.md5";
+					$cleanup_cmd .= "\nrm $cnv_stem.indel;\nrm $output_stem.indel";
 
-				# record command (in log directory) and then run job
-				print $log "Submitting job for VarScan (for Sequenza)...\n";
+					} else {
+					$varscan_command = get_varscan_snv_command(
+						tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
+						normal		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
+						output_stem	=> "$cnv_stem\_$chr",
+						java_mem	=> $parameters->{varscan}->{java_mem},
+						tmp_dir		=> $tmp_directory,
+						intervals	=> $chr
+						);
 
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_varscan_snv_for_sequenza_' . $sample,
-					cmd	=> $varscan_command,
-					modules	=> [$samtools, $varscan],
-					max_time	=> $parameters->{varscan}->{time},
-					mem		=> $parameters->{varscan}->{mem},
-					hpc_driver	=> $args{hpc_driver}
-					);
+					$varscan_command .= "\n\n" . join("\n",
+						"md5sum $cnv_stem\_$chr.snp > $cnv_stem\_$chr.snp.md5",
+						"md5sum $cnv_stem\_$chr.indel > $cnv_stem\_$chr.indel.md5"
+						);
 
-				$varscan_run_id = submit_job(
-					jobname		=> 'run_varscan_snv_for_sequenza_' . $sample,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{hpc_driver},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
-					);
+					push @chr_parts, "$cnv_stem\_$chr.snp";
+					push @chr_parts, "$cnv_stem\_$chr.indel";
+					}
 
-				push @snp_jobs, $varscan_run_id;
-				push @patient_jobs, $varscan_run_id;
-				push @all_jobs, $varscan_run_id;
+				# check if this should be run
+				if (
+					('Y' eq missing_file("$cnv_stem.snp.md5")) &&
+					('Y' eq missing_file("$cnv_stem\_$chr.snp.md5"))
+					) {
+
+					# record command (in log directory) and then run job
+					print $log "Submitting job for VarScan: $chr (for Sequenza)...\n";
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> "run_varscan_snv_for_sequenza\_$sample\_$chr",
+						cmd	=> $varscan_command,
+						modules	=> [$samtools, $varscan],
+						max_time	=> $parameters->{varscan}->{time},
+						mem		=> $parameters->{varscan}->{mem},
+						hpc_driver	=> $args{hpc_driver}
+						);
+
+					$varscan_run_id = submit_job(
+						jobname		=> "run_varscan_snv_for_sequenza\_$sample\_$chr",
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @chr_jobs, $varscan_run_id;
+					push @snp_jobs, $varscan_run_id;
+					push @patient_jobs, $varscan_run_id;
+					push @all_jobs, $varscan_run_id;
+					}
+				else {
+					print $log "Skipping VarScan: $chr (for Sequenza)  because this has already been completed!\n";
+					}
 				}
-			else {
-				print $log "Skipping VarScan (for Sequenza) because this has already been completed!\n";
+
+			# if necessary, merge per-chrom output into a single file
+			if (scalar(@chroms) > 1) {
+
+				my @snp_parts = grep { /snp/ } @chr_parts;
+				my @indel_parts = grep { /indel/ } @chr_parts;
+
+				my $merge_chr_command = join(' ',
+					'cat', @snp_parts,
+					'| sort -u -k1,1 -k2,2n',
+					'>', "$cnv_stem.snp;\n",
+					'cat', @indel_parts,
+					'| sort -u -k1,1 -k2,2n',
+					'>', "$cnv_stem.indel;\n\n",
+					"md5sum $cnv_stem.snp > $cnv_stem.snp.md5\n",
+					"md5sum $cnv_stem.indel > $cnv_stem.indel.md5\n"
+					);
+
+				$cleanup_cmd .= "\nrm $cnv_stem\_chr*";
+
+				# check if this should be run
+				if ('Y' eq missing_file("$cnv_stem.snp.md5")) {
+
+					# record command (in log directory) and then run job
+					print $log "Submitting job for Merge (for Sequenza) step...\n";
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> "run_combine_chromosome_output_sequenza\_$sample",
+						cmd	=> $merge_chr_command,
+						dependencies	=> join(':', @chr_jobs),
+						max_time	=> $parameters->{merge}->{time},
+						mem		=> $parameters->{merge}->{mem},
+						hpc_driver	=> $args{hpc_driver}
+						);
+
+					$varscan_run_id = submit_job(
+						jobname		=> "run_combine_chromosome_output_sequenza\_$sample",
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @snp_jobs, $varscan_run_id;
+					push @patient_jobs, $varscan_run_id;
+					push @all_jobs, $varscan_run_id;
+					}
+				else {
+					print $log "Skipping Merge (for Sequenza) because this has already been completed!\n";
+					}
 				}
 
 			# format command for sequenza (T/N only)
 			my $sequenza_output = join('/', $sequenza_directory, $sample . '_VarScan_Total_CN.seg');
 			my $sequenza_command = get_sequenza_command(
 				out_dir	=> $sequenza_directory,
-				snp	=> $output_stem . '.snp',
-				cnv	=> $output_stem . '.copynumber',
+				snp	=> $cnv_stem . '.snp',
+				cnv	=> $cnv_stem . '.copynumber',
 				tool	=> $sequenza
 				);
 
@@ -589,6 +683,18 @@ sub main {
 
 			# now, because we have it, process the .snp and .indel files to split into
 			# germline/somatic/loh, as well as high and low confidence calls
+			# but first, make symlinks in the SNV directory
+			if (-l "$output_stem.snp") {
+				unlink "$output_stem.snp" or die "Failed to remove previous symlink: $output_stem.snp";
+				}
+
+			if (-l "$output_stem.indel") {
+				unlink "$output_stem.indel" or die "Failed to remove previous symlink: $output_stem.indel";
+				}
+
+			symlink("$cnv_stem.snp", "$output_stem.snp");
+			symlink("$cnv_stem.indel", "$output_stem.indel");
+
 			$varscan_command = get_varscan_process_command(
 				output_stem	=> $output_stem,
 				java_mem	=> '256M',
@@ -635,49 +741,138 @@ sub main {
 				}
 
 			# Next, run VarScan SNV caller
-			$varscan_command = get_varscan_snv_command(
-				tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
-				normal		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
-				output_stem	=> $output_stem,
-				java_mem	=> $parameters->{varscan}->{java_mem},
-				tmp_dir		=> $tmp_directory,
-				intervals	=> $tool_data->{intervals_bed},
-				output_vcf	=> 1
-				);
+			@chr_parts = ();
+			@chr_jobs = ();
+			foreach my $chr ( @chroms ) {
 
-			$varscan_command .= "\n\nmd5sum $output_stem.snp.vcf > $output_stem.snp.vcf.md5";
-			$varscan_command .= "\n\nmd5sum $output_stem.indel.vcf > $output_stem.indel.vcf.md5";
+				if ( ('exome' eq $chr) || ('genome' eq $chr) ) {
+					$varscan_command = get_varscan_snv_command(
+						tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
+						normal		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
+						output_stem	=> $output_stem,
+						java_mem	=> $parameters->{varscan}->{java_mem},
+						tmp_dir		=> $tmp_directory,
+						intervals	=> $tool_data->{intervals_bed},
+						output_vcf	=> 1
+						);
 
-			# check if this should be run
-			if ('Y' eq missing_file($output_stem . '.snp.vcf.md5')) {
+					$varscan_command .= "\n\n" . join("\n",
+						"md5sum $output_stem.snp.vcf > $output_stem.snp.vcf.md5",
+						"md5sum $output_stem.indel.vcf > $output_stem.indel.vcf.md5",
+						"cp $output_stem.snp.md5 > $output_stem\_$chr.snp.vcf.md5"
+						);
 
-				# record command (in log directory) and then run job
-				print $log "Submitting job for VarScan SNV Caller...\n";
+					$cleanup_cmd .= "\nrm $output_stem.snp.vcf";
+					$cleanup_cmd .= "\nrm $output_stem\_$chr.snp.vcf.md5";
+					$cleanup_cmd .= "\nrm $output_stem.indel.vcf";
 
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_varscan_snv_' . $sample,
-					cmd	=> $varscan_command,
-					modules	=> [$samtools, $varscan],
-					max_time	=> $parameters->{varscan}->{time},
-					mem		=> $parameters->{varscan}->{mem},
-					hpc_driver	=> $args{hpc_driver}
-					);
+					} else {
+					$varscan_command = get_varscan_snv_command(
+						tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
+						normal		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
+						output_stem	=> "$output_stem\_$chr",
+						java_mem	=> $parameters->{varscan}->{java_mem},
+						tmp_dir		=> $tmp_directory,
+						intervals	=> $chr
+						);
 
-				$run_id = submit_job(
-					jobname		=> 'run_varscan_snv_' . $sample,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{hpc_driver},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
-					);
+					$varscan_command .= "\n\n" . join("\n",
+						"md5sum $output_stem\_$chr.snp.vcf > $output_stem\_$chr.snp.vcf.md5",
+						"md5sum $output_stem\_$chr.indel.vcf > $output_stem\_$chr.indel.vcf.md5"
+						);
 
-				push @snp_jobs, $run_id;
-				push @patient_jobs, $run_id;
-				push @all_jobs, $run_id;
+					push @chr_parts, "$output_stem\_$chr.snp.vcf";
+					push @chr_parts, "$output_stem\_$chr.indel.vcf";
+					}
+
+				# check if this should be run
+				if (
+					('Y' eq missing_file("$output_stem.snp.md5")) &&
+					('Y' eq missing_file("$output_stem\_$chr.snp.md5"))
+					) {
+
+					# record command (in log directory) and then run job
+					print $log "Submitting job for VarScan: $chr...\n";
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> "run_varscan_snv\_$sample\_$chr",
+						cmd	=> $varscan_command,
+						modules	=> [$samtools, $varscan],
+						max_time	=> $parameters->{varscan}->{time},
+						mem		=> $parameters->{varscan}->{mem},
+						hpc_driver	=> $args{hpc_driver}
+						);
+
+					$run_id = submit_job(
+						jobname		=> "run_varscan_snv_\_$sample\_$chr",
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @chr_jobs, $run_id;
+					push @snp_jobs, $run_id;
+					push @patient_jobs, $run_id;
+					push @all_jobs, $run_id;
+					}
+				else {
+					print $log "Skipping VarScan: $chr because this has already been completed!\n";
+					}
 				}
-			else {
-				print $log "Skipping VarScan SNV Caller because this has already been completed!\n";
+
+			# if necessary, merge per-chrom output into a single file
+			if (scalar(@chroms) > 1) {
+
+				my @snp_parts = grep { /snp/ } @chr_parts;
+				my @indel_parts = grep { /indel/ } @chr_parts;
+
+				my $merge_chr_command = join(' ',
+					'vcf-concat',
+					@snp_parts,
+					'>', "$output_stem.snp.vcf;\n",
+					'vcf-concat',
+					@indel_parts,
+					'>', "$output_stem.indel.vcf;\n\n",
+					"md5sum $output_stem.snp.vcf > $output_stem.snp.vcf.md5\n",
+					"md5sum $output_stem.indel.vcf > $output_stem.indel.vcf.md5\n"
+					);
+
+				$cleanup_cmd .= "\nrm $output_stem\_chr*";
+
+				# check if this should be run
+				if ('Y' eq missing_file("$output_stem.snp.vcf.md5")) {
+
+					# record command (in log directory) and then run job
+					print $log "Submitting job for Merge VCF step...\n";
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> "run_combine_chromosome_output_vcf\_$sample",
+						cmd	=> $merge_chr_command,
+						modules	=> ['vcftools/0.1.15'],
+						dependencies	=> join(':', @chr_jobs),
+						max_time	=> $parameters->{merge}->{time},
+						mem		=> $parameters->{merge}->{mem},
+						hpc_driver	=> $args{hpc_driver}
+						);
+
+					$run_id = submit_job(
+						jobname		=> "run_combine_chromosome_output_vcf\_$sample",
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @snp_jobs, $run_id;
+					push @patient_jobs, $run_id;
+					push @all_jobs, $run_id;
+					}
+				else {
+					print $log "Skipping Merge VCF because this has already been completed!\n";
+					}
 				}
 
 			# filter results
