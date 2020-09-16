@@ -386,7 +386,7 @@ sub main {
 	my $smp_data = LoadFile($data_config);
 
 	my ($run_script, $cnv_run_id, $varscan_run_id, $sequenza_run_id, $run_id, $link, $cleanup_cmd);
-	my (@all_jobs, @pon_vcfs);
+	my (@all_jobs, @pon_vcfs, @pon_dependencies, @sequenza_jobs);
 
 	my $pon_directory = join('/', $output_directory, 'PanelOfNormals');
 	unless(-e $pon_directory) { make_path($pon_directory); }
@@ -434,7 +434,7 @@ sub main {
 			}
 
 		# create an array to hold final outputs and all patient job ids
-		my (@germline_vcfs, @final_outputs, @patient_jobs);
+		my (@germline_vcfs, @final_outputs, @patient_jobs, @germline_jobs);
 
 		# for T/N pair
 		foreach my $sample (@tumour_ids) {
@@ -595,10 +595,10 @@ sub main {
 
 				my $merge_chr_command = join(' ',
 					'cat', @snp_parts,
-					'| sort -u -k1,1 -k2,2n',
+					"| awk 'NR <= 1 || !/^chrom/'",
 					'>', "$cnv_stem.snp;\n",
 					'cat', @indel_parts,
-					'| sort -u -k1,1 -k2,2n',
+					"| awk 'NR <= 1 || !/^chrom/'",
 					'>', "$cnv_stem.indel;\n\n",
 					"md5sum $cnv_stem.snp > $cnv_stem.snp.md5\n",
 					"md5sum $cnv_stem.indel > $cnv_stem.indel.md5\n"
@@ -659,7 +659,7 @@ sub main {
 					name	=> 'run_sequenza_' . $sample,
 					cmd	=> $sequenza_command,
 					modules	=> [$r_sequenza],
-					dependencies	=> join(':', $varscan_run_id, $cnv_run_id),
+					dependencies	=> join(':', @snp_jobs, $cnv_run_id),
 					max_time	=> $parameters->{sequenza}->{time},
 					mem		=> $parameters->{sequenza}->{mem},
 					hpc_driver	=> $args{hpc_driver}
@@ -673,7 +673,7 @@ sub main {
 					log_file	=> $log
 					);
 
-				push @snp_jobs, $sequenza_run_id;
+				push @sequenza_jobs, $sequenza_run_id;
 				push @patient_jobs, $sequenza_run_id;
 				push @all_jobs, $sequenza_run_id;
 				}
@@ -719,7 +719,7 @@ sub main {
 					name	=> 'run_varscan_processSomatic_' . $sample,
 					cmd	=> $varscan_command,
 					modules	=> [$samtools, $varscan],
-					dependencies	=> $varscan_run_id,
+					dependencies	=> join(':', @snp_jobs),
 					mem		=> '1G',
 					hpc_driver	=> $args{hpc_driver}
 					);
@@ -773,7 +773,8 @@ sub main {
 						output_stem	=> "$output_stem\_$chr",
 						java_mem	=> $parameters->{varscan}->{java_mem},
 						tmp_dir		=> $tmp_directory,
-						intervals	=> $chr
+						intervals	=> $chr,
+						output_vcf	=> 1
 						);
 
 					$varscan_command .= "\n\n" . join("\n",
@@ -787,8 +788,8 @@ sub main {
 
 				# check if this should be run
 				if (
-					('Y' eq missing_file("$output_stem.snp.md5")) &&
-					('Y' eq missing_file("$output_stem\_$chr.snp.md5"))
+					('Y' eq missing_file("$output_stem.snp.vcf.md5")) &&
+					('Y' eq missing_file("$output_stem\_$chr.snp.vcf.md5"))
 					) {
 
 					# record command (in log directory) and then run job
@@ -905,9 +906,6 @@ sub main {
 
 				$required = join('.', $output_stem, $vtype . "_somatic_hc.vcf.md5");
 
-				my @dependencies = grep { $_ ne '' } @snp_jobs;
-				if (scalar(@dependencies) == 0) { @dependencies[0] = ''; }
-
 				# check if this should be run
 				if ('Y' eq missing_file($required)) {
 
@@ -919,7 +917,7 @@ sub main {
 						name	=> join('_', 'run_vcf_filter', $vtype, $sample),
 						cmd	=> $filter_command,
 						modules	=> ['tabix'],
-						dependencies	=> join(':', @dependencies),
+						dependencies	=> join(':', @snp_jobs),
 						max_time	=> $parameters->{filter}->{time},
 						mem		=> $parameters->{filter}->{mem},
 						hpc_driver	=> $args{hpc_driver}
@@ -933,6 +931,7 @@ sub main {
 						log_file	=> $log
 						);
 
+					push @germline_jobs, $run_id;
 					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
 					}
@@ -1056,7 +1055,7 @@ sub main {
 					);
 				}
 
-			$format_germline_cmd .= "\n" . "md5sum $merged_germline > $merged_germline.md5";
+			$format_germline_cmd .= "\nmd5sum $merged_germline > $merged_germline.md5";
 
 			if ('Y' eq missing_file($merged_germline . '.md5')) {
 
@@ -1068,7 +1067,7 @@ sub main {
 					name	=> 'collapse_germline_calls_' . $patient,
 					cmd	=> $format_germline_cmd,
 					modules	=> ['perl', $vcftools, 'tabix'],
-					dependencies	=> join(':', @patient_jobs),
+					dependencies	=> join(':', @germline_jobs),
 					hpc_driver	=> $args{hpc_driver}
 					);
 
@@ -1080,6 +1079,7 @@ sub main {
 					log_file	=> $log
 					);
 
+				push @pon_dependencies, $run_id;
 				push @patient_jobs, $run_id;
 				}
 
@@ -1159,7 +1159,7 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'create_panel_of_normals',
 			cmd	=> $pon_command,
-			dependencies	=> join(':', @all_jobs),
+			dependencies	=> join(':', @pon_dependencies),
 			modules		=> [$gatk, 'tabix'],
 			max_time	=> $parameters->{combine}->{time},
 			mem		=> $parameters->{combine}->{mem},
@@ -1174,6 +1174,7 @@ sub main {
 			log_file	=> $log
 			);
 
+		push @pon_dependencies, $run_id;
 		push @all_jobs, $run_id;
 
 		# create a trimmed (sites only) output (this is the panel of normals)
@@ -1200,7 +1201,7 @@ sub main {
 			name	=> 'create_sitesOnly_trimmed_panel_of_normals',
 			cmd	=> $pon_command,
 			modules	=> [$gatk],
-			dependencies	=> join(':', @all_jobs),
+			dependencies	=> join(':', @pon_dependencies),
 			max_time	=> $parameters->{combine}->{time},
 			mem		=> $parameters->{combine}->{mem},
 			hpc_driver	=> $args{hpc_driver}
@@ -1232,7 +1233,7 @@ sub main {
 		name	=> 'combine_sequenza_segment_calls',
 		cmd	=> $collect_output,
 		modules	=> [$r_version],
-		dependencies	=> join(':', @all_jobs),
+		dependencies	=> join(':', @sequenza_jobs),
 		mem		=> '4G',
 		max_time	=> '12:00:00',
 		hpc_driver	=> $args{hpc_driver}
