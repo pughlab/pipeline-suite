@@ -805,6 +805,9 @@ sub main {
 				$required = $filtered_indels;
 				$depends  = join(':', $run_id, $pon_run_id, $manta_run_id);
 
+				$cleanup{$patient} .= "\nrm $filtered_snvs";
+				$cleanup{$patient} .= "\nrm $filtered_indels";
+
 				} else {
 
 				# filter results using PoN and keep confident calls (PASS)
@@ -838,6 +841,9 @@ sub main {
 
 				$required = $filtered_indels;
 				$depends  = join(':', $run_id, $pon_run_id, $manta_run_id);
+
+				$cleanup{$patient} .= "\nrm $filtered_snvs";
+				$cleanup{$patient} .= "\nrm $filtered_indels";
 				}
 
 			my $strelka_run_id = '';
