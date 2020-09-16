@@ -206,7 +206,10 @@ colnames(cbio) <- gsub('.TPM', '', colnames(cbio));
 #rownames(cbio) <- cbio$Symbol;
 #cbio <- cbio[,-c(1:2)];
 
-cbio[which(cbio == 0, arr.ind = TRUE)] <- 0.01;
+all.zero <- apply(cbio[,3:ncol(cbio)],1,sum);
+cbio <- cbio[which(all.zero > 0),];
+
+cbio[which(cbio == 0, arr.ind = TRUE)] <- NA;
 cbio <- cbind(
 	cbio[,1:2],
 	log2(cbio[,3:ncol(cbio)])
@@ -227,8 +230,10 @@ zscores <- data.frame(
 	);
 colnames(zscores) <- colnames(cbio);
 
+all.na <- apply(zscores[,3:ncol(zscores)],1,function(i) { all(is.na(i)) } );
+
 write.table(
-	zscores,
+	zscores[which(all.na == FALSE),],
 	file = generate.filename(arguments$project, 'mRNA_TPM_zscores_for_cbioportal','tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
