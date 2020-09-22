@@ -236,7 +236,7 @@ sub  generate_pon {
 	}
 
 ### MAIN ###########################################################################################
-sub main {
+sub pon {
 	my %args = (
 		tool_config		=> undef,
 		data_config		=> undef,
@@ -262,10 +262,10 @@ sub main {
 	my $output_directory = $args{output_directory};
 	$output_directory =~ s/\/$//;
 
-	my $log_directory = join('/', $output_directory, 'logs');
+	my $log_directory = join('/', $output_directory, 'logs', 'CREATE_PanelOfNormals');
 	unless(-e $log_directory) { make_path($log_directory); }
 
-	my $log_file = join('/', $log_directory, 'run_STRELKA_pipeline.log');
+	my $log_file = join('/', $log_directory, 'run_STRELKA_panel_of_normals_pipeline.log');
 
 	# create a file to hold job metrics
 	my (@files, $run_count, $outfile, $touch_exit_status);
@@ -280,7 +280,7 @@ sub main {
 		$touch_exit_status = system("touch $outfile");
 		if (0 != $touch_exit_status) { Carp::croak("Cannot touch file $outfile"); }
 
-		$log_file = join('/', $log_directory, 'run_STRELKA_pipeline_' . $run_count . '.log');
+		$log_file = join('/', $log_directory, 'run_STRELKA_panel_of_normals_pipeline_' . $run_count . '.log');
 		}
 
 	# start logging
@@ -288,7 +288,7 @@ sub main {
 	$log->autoflush;
 
 	print $log "---\n";
-	print $log "Running Strelka variant calling pipeline.\n";
+	print $log "Running Strelka germline variant calling pipeline.\n";
 	print $log "\n  Tool config used: $tool_config";
 	print $log "\n    Reference used: $tool_data->{reference}";
 
@@ -311,18 +311,15 @@ sub main {
 
 	# set tools and versions
 	my $strelka	= 'strelka/' . $tool_data->{strelka_version};
-	my $manta	= 'manta/' . $tool_data->{manta_version};
 	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
-	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $gatk	= 'gatk/' . $tool_data->{gatk_version};
-	my $r_version	= 'R/' . $tool_data->{r_version};
 
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{strelka}->{parameters};
 
 	### RUN ###########################################################################################
 	my ($run_script, $run_id, $link);
-	my (@all_jobs, @all_pon_jobs, @pon_vcfs);
+	my (@all_pon_jobs, @pon_vcfs);
 	my $interval_run_id = '';
 
 	# first, intervals file must be bgzipped and tabix indexed
@@ -371,6 +368,16 @@ sub main {
 	# create an array to hold final outputs and all patient job ids
 	my (%final_outputs, %patient_jobs, %cleanup);
 
+	# create some directories
+	my $pon_directory = join('/', $output_directory, 'PanelOfNormals');
+	unless(-e $pon_directory) { make_path($pon_directory); }
+
+	my $intermediate_directory = join('/', $pon_directory, 'intermediate_files');
+	unless(-e $intermediate_directory) { make_path($intermediate_directory); }
+
+	my $link_directory = join('/', $intermediate_directory, 'bam_links');
+	unless(-e $link_directory) { make_path($link_directory); }
+
 	# process each sample in $smp_data
 	print $log "\nCreating directory structure and running germline variant caller...\n";
 
@@ -387,19 +394,11 @@ sub main {
 		my $tmp_directory = join('/', $patient_directory, 'TEMP');
 		unless(-e $tmp_directory) { make_path($tmp_directory); }
 
-		my $link_directory = join('/', $patient_directory, 'bam_links');
-		unless(-e $link_directory) { make_path($link_directory); }
-
 		# create some symlinks
 		foreach my $normal (@normal_ids) {
 			my @tmp = split /\//, $smp_data->{$patient}->{normal}->{$normal};
 			$link = join('/', $link_directory, $tmp[-1]);
 			symlink($smp_data->{$patient}->{normal}->{$normal}, $link);
-			}
-		foreach my $tumour (@tumour_ids) {
-			my @tmp = split /\//, $smp_data->{$patient}->{tumour}->{$tumour};
-			$link = join('/', $link_directory, $tmp[-1]);
-			symlink($smp_data->{$patient}->{tumour}->{$tumour}, $link);
 			}
 
 		@patient_jobs{$patient} = [];
@@ -436,6 +435,11 @@ sub main {
 
 			# indicate output from next step
 			my $filtered_germline_output = join('/',
+				$intermediate_directory,
+				$norm . '_Strelka_germline_filtered.vcf'
+				);
+
+			my $link = join('/',
 				$germline_directory,
 				$norm . '_Strelka_germline_filtered.vcf'
 				);
@@ -490,6 +494,13 @@ sub main {
 
 			$filter_command .= "\n\nmd5sum $filtered_germline_output > $filtered_germline_output.md5";
 
+			# create symlinks in the pon directory
+			if (-l $link) {
+				unlink $link or die "Failed to remove previous symlink: $link";
+				}
+
+			symlink ($filtered_germline_output, $link);
+
 			# check if this should be run
 			if ('Y' eq missing_file($filtered_germline_output . '.md5')) {
 
@@ -523,104 +534,339 @@ sub main {
 				print $log "Skipping VCF-Filter (germline) because this has already been completed!\n";
 				}
 
+			push @{$final_outputs{$patient}}, $filtered_germline_output;
 			push @pon_vcfs, "-V:$norm $filtered_germline_output";
+			}
+
+		# should intermediate files be removed
+		if ($args{del_intermediates}) {
+
+			if (scalar(@{$patient_jobs{$patient}}) == 0) {
+				`rm -rf $tmp_directory`;
+
+				} else {
+
+				print $log "\nSubmitting job to clean up temporary/intermediate files...\n";
+
+				# make sure final output exists before removing intermediate files!
+				my @files_to_check;
+				foreach my $tmp ( @{$final_outputs{$patient}} ) {
+					$tmp .= '.md5';
+					push @files_to_check, $tmp;
+					}
+
+				my $cleanup_cmd = join("\n",
+					"if [ -s " . join(" ] && [ -s ", @files_to_check) . " ]; then",
+					"  $cleanup{$patient}",
+					"else",
+					'  echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
+					"fi"
+					);
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_cleanup_' . $patient,
+					cmd	=> $cleanup_cmd,
+					dependencies	=> join(':', @{$patient_jobs{$patient}}),
+					mem		=> '256M',
+					hpc_driver	=> $args{hpc_driver}
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_cleanup_' . $patient,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+				}
 			}
 		}
 
-	push @all_jobs, @all_pon_jobs;
-
-	# should the panel of normals be created?
+	# combine germline variants and create panel of normals
 	my $pon_run_id = '';
 
-	unless (
-		(defined($pon)) && (-s $pon) ||
-		('rna' eq $seq_type)
-		) {
+	print $log "\nCreating panel of normals...\n";
 
-		print $log "\nCreating panel of normals...\n";
+	# let's create a command and write script to combine variants for a PoN
+	my $pon_tmp	= join('/', $pon_directory, $date . "_merged_panelOfNormals.vcf");
+	$pon		= join('/', $pon_directory, $date . "_merged_panelOfNormals_trimmed.vcf");
+	my $final_pon_link = join('/', $output_directory, 'panel_of_normals.vcf');
 
-		# let's create a command and write script to combine variants for a PoN
-		my $pon_directory = join('/', $output_directory, 'PanelOfNormals');
-		unless(-e $pon_directory) { make_path($pon_directory); }
+	# create a trimmed (sites only) output (this is the panel of normals)
+	my $pon_command = generate_pon(
+		input		=> join(' ', @pon_vcfs),
+		output		=> $pon,
+		java_mem	=> $parameters->{combine}->{java_mem},
+		tmp_dir		=> $pon_directory,
+		out_type	=> 'trimmed'
+		);
 
-		my $pon_tmp	= join('/', $pon_directory, $date . "_merged_panelOfNormals.vcf");
-		$pon		= join('/', $pon_directory, $date . "_merged_panelOfNormals_trimmed.vcf");
-		my $final_pon_link = join('/', $output_directory, 'panel_of_normals.vcf');
+	if (-l $final_pon_link) {
+		unlink $final_pon_link or die "Failed to remove previous symlink: $final_pon_link";
+		}
 
-		# create a trimmed (sites only) output (this is the panel of normals)
-		my $pon_command = generate_pon(
-			input		=> join(' ', @pon_vcfs),
-			output		=> $pon,
-			java_mem	=> $parameters->{combine}->{java_mem},
-			tmp_dir		=> $pon_directory,
-			out_type	=> 'trimmed'
-			);
+	symlink($pon, $final_pon_link);
 
-		if (-l $final_pon_link) {
-			unlink $final_pon_link or die "Failed to remove previous symlink: $final_pon_link";
-			}
+	$pon_command .= "\n" . check_java_output(
+		extra_cmd => "  md5sum $pon > $pon.md5"
+		);
 
-		symlink($pon, $final_pon_link);
+	$run_script = write_script(
+		log_dir	=> $log_directory,
+		name	=> 'create_sitesOnly_trimmed_panel_of_normals',
+		cmd	=> $pon_command,
+		modules	=> [$gatk],
+		dependencies	=> join(':', @all_pon_jobs),
+		max_time	=> $parameters->{combine}->{time},
+		mem		=> $parameters->{combine}->{mem},
+		hpc_driver	=> $args{hpc_driver}
+		);
 
-		$pon_command .= "\n" . check_java_output(
-			extra_cmd => "  md5sum $pon > $pon.md5"
+	$pon_run_id = submit_job(
+		jobname		=> 'create_sitesOnly_trimmed_panel_of_normals',
+		shell_command	=> $run_script,
+		hpc_driver	=> $args{hpc_driver},
+		dry_run		=> $args{dry_run},
+		log_file	=> $log
+		);
+
+	push @all_pon_jobs, $pon_run_id;
+
+	# create a fully merged output (useful for combining with other studies later)
+	$pon_command = generate_pon(
+		input		=> join(' ', @pon_vcfs),
+		output		=> $pon_tmp,
+		java_mem	=> $parameters->{combine}->{java_mem},
+		tmp_dir		=> $pon_directory,
+		out_type	=> 'full'
+		);
+
+	$pon_command .= "\n" . check_java_output(
+		extra_cmd => "md5sum $pon_tmp > $pon_tmp.md5;\n  bgzip $pon_tmp;\n  tabix -p vcf $pon_tmp.gz;"
+		);
+
+	$run_script = write_script(
+		log_dir	=> $log_directory,
+		name	=> 'create_panel_of_normals',
+		cmd	=> $pon_command,
+		dependencies	=> join(':', @all_pon_jobs),
+		modules		=> [$gatk, 'tabix'],
+		max_time	=> $parameters->{combine}->{time},
+		mem		=> $parameters->{combine}->{mem},
+		hpc_driver	=> $args{hpc_driver}
+		);
+
+	$run_id = submit_job(
+		jobname		=> 'create_panel_of_normals',
+		shell_command	=> $run_script,
+		hpc_driver	=> $args{hpc_driver},
+		dry_run		=> $args{dry_run},
+		log_file	=> $log
+		);
+
+	push @all_pon_jobs, $run_id;
+
+	print $log "\nFINAL OUTPUT: $final_pon_link\n";
+	print $log "---\n";
+
+	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
+	# collect job metrics (exit status, mem, run time)
+	unless ( ($args{dry_run}) || (scalar(@all_pon_jobs) == 0) ) {
+
+		# collect job stats
+		my $collect_metrics = collect_job_stats(
+			job_ids	=> join(',', @all_pon_jobs),
+			outfile	=> $outfile
 			);
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
-			name	=> 'create_sitesOnly_trimmed_panel_of_normals',
-			cmd	=> $pon_command,
-			modules	=> [$gatk],
+			name	=> 'output_job_metrics_' . $run_count,
+			cmd	=> $collect_metrics,
 			dependencies	=> join(':', @all_pon_jobs),
-			max_time	=> $parameters->{combine}->{time},
-			mem		=> $parameters->{combine}->{mem},
-			hpc_driver	=> $args{hpc_driver}
-			);
-
-		$pon_run_id = submit_job(
-			jobname		=> 'create_sitesOnly_trimmed_panel_of_normals',
-			shell_command	=> $run_script,
-			hpc_driver	=> $args{hpc_driver},
-			dry_run		=> $args{dry_run},
-			log_file	=> $log
-			);
-
-		push @all_jobs, $pon_run_id;
-
-		# create a fully merged output (useful for combining with other studies later)
-		$pon_command = generate_pon(
-			input		=> join(' ', @pon_vcfs),
-			output		=> $pon_tmp,
-			java_mem	=> $parameters->{combine}->{java_mem},
-			tmp_dir		=> $pon_directory,
-			out_type	=> 'full'
-			);
-
-		$pon_command .= "\n" . check_java_output(
-			extra_cmd => "md5sum $pon_tmp > $pon_tmp.md5;\n  bgzip $pon_tmp;\n  tabix -p vcf $pon_tmp.gz;"
-			);
-
-		$run_script = write_script(
-			log_dir	=> $log_directory,
-			name	=> 'create_panel_of_normals',
-			cmd	=> $pon_command,
-			dependencies	=> join(':', @all_pon_jobs, $pon_run_id),
-			modules		=> [$gatk, 'tabix'],
-			max_time	=> $parameters->{combine}->{time},
-			mem		=> $parameters->{combine}->{mem},
+			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver}
 			);
 
 		$run_id = submit_job(
-			jobname		=> 'create_panel_of_normals',
+			jobname		=> 'output_job_metrics',
 			shell_command	=> $run_script,
 			hpc_driver	=> $args{hpc_driver},
 			dry_run		=> $args{dry_run},
 			log_file	=> $log
 			);
 
-		push @all_jobs, $run_id;
+		# wait until it finishes
+		unless ($args{no_wait}) {
+
+			my $complete = 0;
+			my $timeouts = 0;
+
+			while (!$complete && $timeouts < 20 ) {
+				sleep(30);
+				my $status = `sacct --format='State' -j $run_id`;
+
+				# if final job has finished successfully:
+				if ($status =~ m/COMPLETED/s) { $complete = 1; }
+				# if we run into a server connection error (happens rarely with sacct)
+				# increment timeouts (if we continue to repeatedly timeout, we will exit)
+				elsif ($status =~ m/Connection timed out/) {
+					$timeouts++;
+					}
+				# if the job is still pending or running, try again in a bit
+				# but also reset timeouts, because we only care about consecutive timeouts
+				elsif ($status =~ m/PENDING|RUNNING/) {
+					$timeouts = 0;
+					}
+				# if none of the above, we will exit with an error
+				else {
+					die("Final STRELKA accounting job: $run_id finished with errors.");
+					}
+				}
+			}
 		}
+
+	# finish up
+	print $log "\nProgramming terminated successfully.\n\n";
+	close $log;
+
+	}
+
+sub main {
+	my %args = (
+		tool_config		=> undef,
+		data_config		=> undef,
+		output_directory	=> undef,
+		pon			=> undef,
+		hpc_driver		=> undef,
+		del_intermediates	=> undef,
+		dry_run			=> undef,
+		no_wait			=> undef,
+		@_
+		);
+
+	my $tool_config = $args{tool_config};
+	my $data_config = $args{data_config};
+
+	### PREAMBLE ######################################################################################
+
+	# load tool config
+	my $tool_data_orig = LoadFile($tool_config);
+	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'strelka');
+	my $date = strftime "%F", localtime;
+
+	# organize output and log directories
+	my $output_directory = $args{output_directory};
+	$output_directory =~ s/\/$//;
+
+	my $log_directory = join('/', $output_directory, 'logs', 'RUN_SOMATIC_VARIANTCALL');
+	unless(-e $log_directory) { make_path($log_directory); }
+
+	my $log_file = join('/', $log_directory, 'run_STRELKA_somatic_variant_pipeline.log');
+
+	# create a file to hold job metrics
+	my (@files, $run_count, $outfile, $touch_exit_status);
+	unless ($args{dry_run}) {
+		# initiate a file to hold job metrics
+		opendir(LOGFILES, $log_directory) or die "Cannot open $log_directory";
+		@files = grep { /slurm_job_metrics/ } readdir(LOGFILES);
+		$run_count = scalar(@files) + 1;
+		closedir(LOGFILES);
+
+		$outfile = $log_directory . '/slurm_job_metrics_' . $run_count . '.out';
+		$touch_exit_status = system("touch $outfile");
+		if (0 != $touch_exit_status) { Carp::croak("Cannot touch file $outfile"); }
+
+		$log_file = join('/', $log_directory, 'run_STRELKA_somatic_variant_pipeline_' . $run_count . '.log');
+		}
+
+	# start logging
+	open (my $log, '>', $log_file) or die "Could not open $log_file for writing.";
+	$log->autoflush;
+
+	print $log "---\n";
+	print $log "Running Strelka somatic variant calling pipeline.\n";
+	print $log "\n  Tool config used: $tool_config";
+	print $log "\n    Reference used: $tool_data->{reference}";
+
+	$reference = $tool_data->{reference};
+	$seq_type = $tool_data->{seq_type};
+
+	if (defined($tool_data->{intervals_bed})) {
+		$intervals = $tool_data->{intervals_bed};
+		print $log "\n    Target intervals: $intervals";
+		}
+
+	if (defined($args{pon})) {
+		print $log "\n    Panel of Normals: $args{pon}";
+		$pon = $args{pon};
+		}
+
+	print $log "\n    Output directory: $output_directory";
+	print $log "\n  Sample config used: $data_config";
+	print $log "\n---";
+
+	# set tools and versions
+	my $strelka	= 'strelka/' . $tool_data->{strelka_version};
+	my $manta	= 'manta/' . $tool_data->{manta_version};
+	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
+	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
+	my $r_version	= 'R/' . $tool_data->{r_version};
+
+	# get user-specified tool parameters
+	my $parameters = $tool_data->{strelka}->{parameters};
+
+	### RUN ###########################################################################################
+	my ($run_script, $run_id, $link);
+	my (@all_jobs);
+	my $interval_run_id = '';
+
+	# first, intervals file must be bgzipped and tabix indexed
+	if ( ('exome' eq $seq_type) && ($intervals !~ m/gz$/) ) {
+
+		my $old_intervals = $intervals;
+		my @parts = split(/\//, $old_intervals);
+		$intervals = join('/',
+			$output_directory,
+			$parts[-1]
+			);
+
+		if ( (-l $intervals) && ('Y' eq missing_file("$intervals.gz"))) {
+			unlink $intervals or die "Failed to remove previous symlink: $intervals";
+			}
+
+		symlink($old_intervals, $intervals);
+
+		if ('Y' eq missing_file("$intervals.gz")) {
+			my $format_intervals_command = "bgzip -c $intervals > $intervals.gz";
+			$format_intervals_command .= "\ntabix -p bed $intervals.gz";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'run_format_intervals_bed',
+				cmd	=> $format_intervals_command,
+				modules	=> ['tabix'],
+				hpc_driver	=> $args{hpc_driver}
+				);
+
+			$interval_run_id = submit_job(
+				jobname		=> 'run_format_intervals_bed',
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+			}
+
+		$intervals .= '.gz';
+		}
+
+	# get sample data
+	my $smp_data = LoadFile($data_config);
+
+	# create an array to hold final outputs and all patient job ids
+	my (%final_outputs, %patient_jobs, %cleanup);
 
 	# loop over all samples again, this time to run somatic callers
 	print $log "\nRunning manta and somatic variant caller...\n\n";
@@ -635,7 +881,29 @@ sub main {
 
 		# create some directories
 		my $patient_directory = join('/', $output_directory, $patient);
+		unless(-e $patient_directory) { make_path($patient_directory); }
+
 		my $tmp_directory = join('/', $patient_directory, 'TEMP');
+		unless(-e $tmp_directory) { make_path($tmp_directory); }
+
+		my $link_directory = join('/', $patient_directory, 'bam_links');
+		unless(-e $link_directory) { make_path($link_directory); }
+
+		# create some symlinks
+		foreach my $normal (@normal_ids) {
+			my @tmp = split /\//, $smp_data->{$patient}->{normal}->{$normal};
+			$link = join('/', $link_directory, $tmp[-1]);
+			symlink($smp_data->{$patient}->{normal}->{$normal}, $link);
+			}
+		foreach my $tumour (@tumour_ids) {
+			my @tmp = split /\//, $smp_data->{$patient}->{tumour}->{$tumour};
+			$link = join('/', $link_directory, $tmp[-1]);
+			symlink($smp_data->{$patient}->{tumour}->{$tumour}, $link);
+			}
+
+		@patient_jobs{$patient} = [];
+		@final_outputs{$patient} = [];
+		$cleanup{$patient} = "rm -rf $tmp_directory";
 
 		# for T/N pair
 		foreach my $sample (@tumour_ids) {
@@ -777,7 +1045,7 @@ sub main {
 				$filter_command .= "\n\nmd5sum $filtered_output > $filtered_output.md5";
 
 				$required = $filtered_output;
-				$depends  = $run_id;
+				$depends  = '';
 
 				} elsif (scalar(@normal_ids) == 0) {
 
@@ -803,7 +1071,7 @@ sub main {
 				$filter_command .= "\n\nmd5sum $filtered_indels > $filtered_indels.md5";
 
 				$required = $filtered_indels;
-				$depends  = join(':', $run_id, $pon_run_id, $manta_run_id);
+				$depends  = $manta_run_id;
 
 				$cleanup{$patient} .= "\nrm $filtered_snvs";
 				$cleanup{$patient} .= "\nrm $filtered_indels";
@@ -840,7 +1108,7 @@ sub main {
 				$filter_command .= "\n\nmd5sum $filtered_indels > $filtered_indels.md5";
 
 				$required = $filtered_indels;
-				$depends  = join(':', $run_id, $pon_run_id, $manta_run_id);
+				$depends  = $manta_run_id;
 
 				$cleanup{$patient} .= "\nrm $filtered_snvs";
 				$cleanup{$patient} .= "\nrm $filtered_indels";
@@ -872,7 +1140,7 @@ sub main {
 					name	=> 'run_strelka_somatic_variant_caller_' . $sample,
 					cmd	=> $somatic_snv_command,
 					modules	=> [$strelka],
-					dependencies	=> join(':', $run_id, $manta_run_id),
+					dependencies	=> $manta_run_id,
 					max_time	=> $parameters->{strelka}->{time},
 					mem		=> $parameters->{strelka}->{mem},
 					hpc_driver	=> $args{hpc_driver}
@@ -1214,7 +1482,7 @@ sub main {
 # declare variables
 my ($tool_config, $data_config, $output_directory);
 my $hpc_driver = 'slurm';
-my ($remove_junk, $dry_run, $help, $no_wait);
+my ($remove_junk, $dry_run, $help, $no_wait, $create_pon);
 my $panel_of_normals = undef;
 
 # get command line arguments
@@ -1223,6 +1491,7 @@ GetOptions(
 	'd|data=s'	=> \$data_config,
 	't|tool=s'	=> \$tool_config,
 	'o|out_dir=s'	=> \$output_directory,
+	'create-panel-of-normals'	=> \$create_pon,
 	'c|cluster=s'	=> \$hpc_driver,
 	'remove'	=> \$remove_junk,
 	'dry-run'	=> \$dry_run,
@@ -1237,6 +1506,7 @@ if ($help) {
 		"\t--data|-d\t<string> data config (yaml format)",
 		"\t--tool|-t\t<string> tool config (yaml format)",
 		"\t--out_dir|-o\t<string> path to output directory",
+		"\t--create-panel-of-normals\t<boolean> generate a panel of normals? (default: false)",
 		"\t--pon\t<string> path to panel of normals (optional: useful for restarting once this has already been generated)",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
@@ -1253,13 +1523,25 @@ if (!defined($tool_config)) { die("No tool config file defined; please provide -
 if (!defined($data_config)) { die("No data config file defined; please provide -d | --data (ie, sample_config.yaml)"); }
 if (!defined($output_directory)) { die("No output directory defined; please provide -o | --out_dir"); }
 
-main(
-	tool_config		=> $tool_config,
-	data_config		=> $data_config,
-	output_directory	=> $output_directory,
-	pon			=> $panel_of_normals,
-	hpc_driver		=> $hpc_driver,
-	del_intermediates	=> $remove_junk,
-	dry_run			=> $dry_run,
-	no_wait			=> $no_wait
-	);
+if ($create_pon) {
+	pon(
+		tool_config		=> $tool_config,
+		data_config		=> $data_config,
+		output_directory	=> $output_directory,
+		hpc_driver		=> $hpc_driver,
+		del_intermediates	=> $remove_junk,
+		dry_run			=> $dry_run,
+		no_wait			=> $no_wait
+		);
+} else {
+	main(
+		tool_config		=> $tool_config,
+		data_config		=> $data_config,
+		output_directory	=> $output_directory,
+		pon			=> $panel_of_normals,
+		hpc_driver		=> $hpc_driver,
+		del_intermediates	=> $remove_junk,
+		dry_run			=> $dry_run,
+		no_wait			=> $no_wait
+		);
+}
