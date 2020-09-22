@@ -157,7 +157,9 @@ for (file in ploidy.files) {
 ploidy.data <- do.call(rbind, ploidy.list);
 ploidy.data$Sample <- sapply(rownames(ploidy.data), function(i) { unlist(strsplit(as.character(i),'\\.'))[1] } );
 ploidy.data$Order <- sapply(rownames(ploidy.data), function(i) { unlist(strsplit(as.character(i),'\\.'))[2] } );
-ploidy.data[is.na(ploidy.data$Order),]$Order <- 1;
+if (any(is.na(ploidy.data$Order))) {
+	ploidy.data[is.na(ploidy.data$Order),]$Order <- 1;
+	}
 
 # combine for writing
 ploidy.formatted <- ploidy.data[which(ploidy.data$Order == 1),c('Sample','SLPP','cellularity','ploidy')];
@@ -177,6 +179,7 @@ cn.list <- list();
 for (file in cn.files) {
 	# extract sample ID
 	smp <- unlist(strsplit(file, '\\/'));
+	if (length(smp) == 1) { next; }
 	smp <- unlist(strsplit(smp[length(smp)], '_'))[1];
 	# store data in list
 	tmp <- read.delim(file, as.is = TRUE);
@@ -231,10 +234,12 @@ for (smp in names(seg.list)) {
 	tmp[which(tmp$CN >= 3),]$AbsCN <- 1;
 	if (ploidy > 2) {
 		# if ploidy is high AND CN is high, indicate amplification
-		tmp[which(tmp$CN - ploidy > 2),]$AbsCN <- 2;
+		idx <- which(tmp$CN - ploidy > 2);
+		if (length(idx) > 0) { tmp[idx,]$AbsCN <- 2; }
 		} else {
 		# or, if ploidy is low/diploid AND CN is high, indicate amplification
-		tmp[which(tmp$CN >= 4),]$AbsCN <- 2;
+		idx <- which(tmp$CN >= 4);
+		if (length(idx) > 0) { tmp[idx,]$AbsCN <- 2; }
 		}
 
 	tmp <- tmp[which(tmp$AbsCN != 0),];
@@ -265,7 +270,8 @@ rownames(gene.data) <- 1:nrow(gene.data);
 
 # remove untargeted regions
 if (is.null(arguments$targets)) {
-	gene.data <- gene.data[,-which(colnames(gene.data) == 'Target')];
+	gene.data$Target <- 1;
+	#gene.data <- gene.data[,-which(colnames(gene.data) == 'Target')];
 #	} else { gene.data <- droplevels(gene.data[which(gene.data$Target == 1),]);
 	}
 
@@ -291,7 +297,8 @@ for (gene in dup.idx) {
 		new.entry$End <- max(tmp$End);
 		new.entry$GeneID <- paste(tmp$GeneID, collapse = ';');
 		new.entry$Target <- max(tmp$Target);
-		} else if (any(tmp$Target == 1)) {
+	
+	} else if (any(tmp$Target == 1)) {
 		new.entry <- tmp[which(tmp$Target == 1),][1,];
 		} else {
 		new.entry <- tmp[1,];

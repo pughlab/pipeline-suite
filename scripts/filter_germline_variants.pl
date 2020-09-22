@@ -55,15 +55,7 @@ sub main {
 	### RUN ###########################################################################################
 
 	my ($variants);
-
-	my $output_file;
-
-	if (scalar(@normal_samples) > 0) {
-		$output_file = $args{output} . '_filtered_germline_variants.vcf';
-		}
-	else {
-		$output_file = $args{output} . '_filtered_hc_variants.vcf';
-		}
+	my $output_file = $args{output};
 
 	# open the genotyped/recalibrated vcf file
 	my $vcf_fh;

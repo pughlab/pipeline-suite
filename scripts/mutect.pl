@@ -246,7 +246,7 @@ sub pon {
 	my $log_directory = join('/', $output_directory, '..', 'logs', 'CREATE_PanelOfNormals');
 	unless(-e $log_directory) { make_path($log_directory); }
 
-	my $log_file = join('/', $log_directory, 'run_MuTect_GeneratePoN_pipeline.log');
+	my $log_file = join('/', $log_directory, 'run_MuTect_panel_of_normals_pipeline.log');
 
 	# create a file to hold job metrics
 	my (@files, $run_count, $outfile, $touch_exit_status);
@@ -261,7 +261,7 @@ sub pon {
 		$touch_exit_status = system("touch $outfile");
 		if (0 != $touch_exit_status) { Carp::croak("Cannot touch file $outfile"); }
 
-		$log_file = join('/', $log_directory, 'run_MuTect_GeneratePoN_pipeline_' . $run_count . '.log');
+		$log_file = join('/', $log_directory, 'run_MuTect_panel_of_normals_pipeline_' . $run_count . '.log');
 		}
 
 	# start logging

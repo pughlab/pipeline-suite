@@ -485,7 +485,7 @@ sub main {
 			if ('tumour' eq $type) { $tumours{$sample} = $smp_output; }
 
 			# check if this should be run
-			if ('Y' eq missing_file($smp_output)) {
+			if ('Y' eq missing_file("$smp_output.md5")) {
 
 				# record command (in log directory) and then run job
 				print $log "Submitting job to merge lanes and mark dupilcates...\n";

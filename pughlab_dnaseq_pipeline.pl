@@ -306,7 +306,7 @@ sub main {
 					log_file	=> $log
 					);
 
-				print $log ">>> ContEst job id: $coverage_run_id\n\n";
+				print $log ">>> Coverage job id: $coverage_run_id\n\n";
 				push @job_ids, $coverage_run_id;
 				}
 			}

@@ -129,6 +129,39 @@ sub create_apply_vqsr_command {
 	return($recal_command);
 	}
 
+sub create_filter_command {
+	my %args = (
+		input		=> undef,
+		tumour_ids	=> undef,
+		normal_ids	=> undef,
+		output		=> undef,
+		@_
+		);
+
+	my $filter_command = join(' ',
+		"perl $cwd/filter_germline_variants.pl",
+		'--vcf', $args{input},
+		'--output', $args{output},
+		'--reference', $reference
+		);
+
+	if (scalar(@{$args{tumour_ids}}) > 0) {
+		$filter_command .= " --tumour " . join(',', @{$args{tumour_ids}});
+		}
+
+	if (scalar(@{$args{normal_ids}}) > 0) {
+		$filter_command .= " --normal " . join(',', @{$args{normal_ids}});
+		}
+
+	$filter_command .= "\n\n" . join("\n",
+		"md5sum $args{output} > $args{output}.md5",
+		"bgzip $args{output}",
+		"tabix -p vcf $args{output}.gz"
+		);
+
+	return($filter_command);
+	}
+
 ### MAIN ###########################################################################################
 sub main{
 	my %args = (
@@ -462,7 +495,6 @@ sub main{
 		}
 
 	# process each sample in $smp_data
-	my ($filter_cmd, $filter_run_id) = '';
 	foreach my $patient (sort keys %{$smp_data}) {
 
 		print $log "\nInitiating process for PATIENT: $patient\n";
@@ -470,45 +502,19 @@ sub main{
 		my @tumour_ids = keys %{$smp_data->{$patient}->{tumour}};
 		my @normal_ids = keys %{$smp_data->{$patient}->{normal}};
 
-		if (scalar(@normal_ids) > 0) {
-			$filter_cmd = join(' ',
-				"perl $cwd/filter_germline_variants.pl",
-				'--vcf', join('/', $cohort_directory, 'haplotype_caller_genotypes_recalibrated.vcf.gz'),
-				'--tumour', join(',', @tumour_ids),
-				'--normal', join(',', @normal_ids),
-				'--output-stem', join('/', $sample_directory, $patient),
-				'--reference', $reference
-				);
-
-			$filter_cmd .= join(' ',
-				"\n\nmd5sum", join('/', $sample_directory, $patient . '_filtered_germline_variants.vcf'),
-				">", join('/', $sample_directory, $patient . '_filtered_germline_variants.vcf.md5'),
-				"\n\nbgzip", join('/', $sample_directory, $patient . '_filtered_germline_variants.vcf'),
-				"\ntabix -p vcf", join('/', $sample_directory, $patient . '_filtered_germline_variants.vcf.gz')
-				);
-
-			} elsif (scalar(@normal_ids) == 0) {
-
-			$filter_cmd = join(' ',
-				"perl $cwd/filter_germline_variants.pl",
-				'--vcf', join('/', $cohort_directory, 'haplotype_caller_genotypes_recalibrated.vcf.gz'),
-				'--tumour', join(',', @tumour_ids),
-				'--output-stem', join('/', $sample_directory, $patient),
-				'--reference', $reference
-				);
-
-			$filter_cmd .= join(' ',
-				"\n\nmd5sum", join('/', $sample_directory, $patient . '_filtered_hc_variants.vcf'),
-				">", join('/', $sample_directory, $patient . '_filtered_hc_variants.vcf.md5'),
-				"\n\nbgzip", join('/', $sample_directory, $patient . '_filtered_hc_variants.vcf'),
-				"\ntabix -p vcf", join('/', $sample_directory, $patient . '_filtered_hc_variants.vcf.gz')
-				);
+		my $filtered_output = join('/', $sample_directory, $patient . '_filtered_germline_variants.vcf');
+		if (scalar(@normal_ids) == 0) {
+			$filtered_output = join('/', $sample_directory, $patient . '_filtered_hc_variants.vcf');
 			}
 
-		if (
-			('Y' eq missing_file(join('/', $sample_directory, $patient . '_filtered_germline_variants.vcf.md5'))) ||
-			('Y' eq missing_file(join('/', $sample_directory, $patient . '_filtered_hc_variants.vcf.md5')))
-			) {
+		my $filter_cmd = create_filter_command(
+			input		=> join('/', $cohort_directory, 'haplotype_caller_genotypes_recalibrated.vcf.gz'),
+			tumour_ids	=> \@tumour_ids,
+			normal_ids	=> \@normal_ids,
+			output		=> $filtered_output
+			);
+
+		if ('Y' eq missing_file("$filtered_output.md5")) {
 
 			# record command (in log directory) and then run job
 			print $log "Submitting job for FILTER VARIANTS...\n";
@@ -535,12 +541,7 @@ sub main{
 			push @all_jobs, $filter_run_id;
 			}
 
-		if ( scalar(@normal_ids) == 0) {
-			print $log "\nFINAL OUTPUT: " .	join('/', $sample_directory, $patient . '_filtered_hc_variants.vcf.gz') . "\n";
-			} else {
-			print $log "\nFINAL OUTPUT: " . join('/', $sample_directory, $patient . '_filtered_germline_variants.vcf.gz') . "\n";
-			}
-
+		print $log "\nFINAL OUTPUT: $filtered_output.gz \n";
 		print $log "---\n";
 		}
 

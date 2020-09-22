@@ -113,7 +113,7 @@ sub main {
 		$touch_exit_status = system("touch $outfile");
 		if (0 != $touch_exit_status) { Carp::croak("Cannot touch file $outfile"); }
 
-		my $log_file = join('/', $log_directory, 'run_FusionCatcher_pipeline_' . $run_count . '.log');
+		$log_file = join('/', $log_directory, 'run_FusionCatcher_pipeline_' . $run_count . '.log');
 		}
 
 	# start logging

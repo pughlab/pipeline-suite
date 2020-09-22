@@ -1,4 +1,4 @@
-/!/usr/bin/env perl
+#/!/usr/bin/env perl
 ### star_fusion.pl #################################################################################
 use AutoLoader 'AUTOLOAD';
 use strict;
