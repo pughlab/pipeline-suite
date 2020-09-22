@@ -233,10 +233,10 @@ sub pon {
 	my $output_directory = $args{output_directory};
 	$output_directory =~ s/\/$//;
 
-	my $log_directory = join('/', $output_directory, '..', 'logs', 'CREATE_PON');
+	my $log_directory = join('/', $output_directory, '..', 'logs', 'CREATE_PanelOfNormals');
 	unless(-e $log_directory) { make_path($log_directory); }
 
-	my $log_file = join('/', $log_directory, 'run_MuTect2_GeneratePoN_pipeline.log');
+	my $log_file = join('/', $log_directory, 'run_MuTect2_panel_of_normals_pipeline.log');
 
 	# create a file to hold job metrics
 	my (@files, $run_count, $outfile, $touch_exit_status);
@@ -251,7 +251,7 @@ sub pon {
 		$touch_exit_status = system("touch $outfile");
 		if (0 != $touch_exit_status) { Carp::croak("Cannot touch file $outfile"); }
 
-		$log_file = join('/', $log_directory, 'run_MuTect2_GeneratePoN_pipeline_' . $run_count . '.log');
+		$log_file = join('/', $log_directory, 'run_MuTect2_panel_of_normals_pipeline_' . $run_count . '.log');
 		}
 
 	# start logging
@@ -667,7 +667,7 @@ sub main {
 	my $log_directory = join('/', $output_directory, 'logs', 'RUN_SOMATIC_VARIANTCALL');
 	unless(-e $log_directory) { make_path($log_directory); }
 
-	my $log_file = join('/', $log_directory, 'run_MuTect2_pipeline.log');
+	my $log_file = join('/', $log_directory, 'run_MuTect2_somatic_variant_pipeline.log');
 
 	# create a file to hold job metrics
 	my (@files, $run_count, $outfile, $touch_exit_status);
@@ -682,7 +682,7 @@ sub main {
 		$touch_exit_status = system("touch $outfile");
 		if (0 != $touch_exit_status) { Carp::croak("Cannot touch file $outfile"); }
 
-		$log_file = join('/', $log_directory, 'run_MuTect2_pipeline_' . $run_count . '.log');
+		$log_file = join('/', $log_directory, 'run_MuTect2_somatic_variant_pipeline_' . $run_count . '.log');
 		}
 
 	# start logging
@@ -821,70 +821,48 @@ sub main {
 			my %mutect_commands;
 			my $chr;
 			my @chr_parts;
+			my $normal_bam;
 
 			# Tumour only, with a panel of normals
 			if ( (defined($pon)) && (scalar(@normal_ids) == 0) ) {
 
 				print $log "PON defined and no normals detected, so running tumour-only...\n";
 
-				foreach my $chr ( @chroms ) {
-
-					if ( ('genome' eq $chr) || ('exome' eq $chr) ) {
-						$mutect_commands{$chr} = get_mutect_command(
-							tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
-							output		=> "$chr_stem\_$chr.vcf",
-							java_mem	=> $parameters->{mutect}->{java_mem},
-							tmp_dir		=> $tmp_directory,
-							intervals	=> $tool_data->{intervals_bed}
-							);
-						} else {
-						$mutect_commands{$chr} = get_mutect_command(
-							tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
-							output		=> "$chr_stem\_$chr.vcf",
-							java_mem	=> $parameters->{mutect}->{java_mem},
-							tmp_dir		=> $tmp_directory,
-							intervals	=> $chr
-							);
-
-						push @chr_parts, "$chr_stem\_$chr.vcf";
-						}
-					}
-
 				# paired tumour/normal
 				} elsif (scalar(@normal_ids) > 0) {
 
 				print $log "T/N pair detected, running paired mode...\n";
-				my $norm = $normal_ids[0];
-
-				foreach $chr ( @chroms ) {
-
-					if ( ('genome' eq $chr) || ('exome' eq $chr) ) {
-						$mutect_commands{$chr} = get_mutect_command(
-							tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
-							normal		=> $smp_data->{$patient}->{normal}->{$norm},
-							output		=> "$chr_stem\_$chr.vcf",
-							java_mem	=> $parameters->{mutect}->{java_mem},
-							tmp_dir		=> $tmp_directory,
-							intervals	=> $tool_data->{intervals_bed}
-							);
-						} else {
-						$mutect_commands{$chr} = get_mutect_command(
-							tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
-							normal		=> $smp_data->{$patient}->{normal}->{$norm},
-							output		=> "$chr_stem\_$chr.vcf",
-							java_mem	=> $parameters->{mutect}->{java_mem},
-							tmp_dir		=> $tmp_directory,
-							intervals	=> $chr
-							);
-
-						push @chr_parts, "$chr_stem\_$chr.vcf";
-						}
-					}
+				$normal_bam = $smp_data->{$patient}->{normal}->{$normal_ids[0]};
 
 				# else, skip this sample
 				} else {
 					print $log "no PON or normal detected...skipping this sample...\n";
 					next;
+				}
+
+			foreach $chr ( @chroms ) {
+
+				if ( ('genome' eq $chr) || ('exome' eq $chr) ) {
+					$mutect_commands{$chr} = get_mutect_command(
+						tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
+						normal		=> $normal_bam,
+						output		=> "$chr_stem\_$chr.vcf",
+						java_mem	=> $parameters->{mutect}->{java_mem},
+						tmp_dir		=> $tmp_directory,
+						intervals	=> $tool_data->{intervals_bed}
+						);
+					} else {
+					$mutect_commands{$chr} = get_mutect_command(
+						tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
+						normal		=> $normal_bam,
+						output		=> "$chr_stem\_$chr.vcf",
+						java_mem	=> $parameters->{mutect}->{java_mem},
+						tmp_dir		=> $tmp_directory,
+						intervals	=> $chr
+						);
+
+					push @chr_parts, "$chr_stem\_$chr.vcf";
+					}
 				}
 
 			my ($mutect_command, $extra_cmds) = undef;
@@ -981,6 +959,7 @@ sub main {
 				print $log "Skipping Merge chromosomes because this has already been completed!\n";
 				}
 
+			$cleanup_cmd .= "\nrm $chr_stem\_chr*"; 
 			$cleanup_cmd .= "\nrm $merged_output";
 
 			# filter results
