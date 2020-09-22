@@ -1012,10 +1012,12 @@ sub main {
 		# as well as collapsing results from multi-tumour patients
 		unless (defined($args{pon})) {
 
+			# for any germline calls from T/N pairs
 			my $merged_germline = join('/', $pon_intermediates, $patient . '_germline_variants.vcf');
 			my $format_germline_cmd;
 			my @intermediate_files;
 
+			# first merge snp and indel files
 			foreach my $sample (sort @tumour_ids) {
 
 				my @smp_files = grep { /$sample/ } @germline_vcfs;
@@ -1037,6 +1039,64 @@ sub main {
 				$cleanup_cmd .= "\nrm $tmp_vcf.gz";
 				}
 
+			# next, run any normal-only samples
+			if ( (scalar(@tumour_ids) == 0) && (scalar(@normal_ids) > 0) ) {
+
+				print $log "  NORMAL ONLY: $normal_ids[0]\n\n";
+
+				my $output_stem = join('/', $pon_intermediates, $normal_ids[0] . '_VarScan');
+
+				my $varscan_command = get_varscan_snv_command(
+					tumour		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
+					output_stem	=> $output_stem,
+					java_mem	=> $parameters->{varscan}->{java_mem},
+					tmp_dir		=> $tmp_directory,
+					intervals	=> $tool_data->{intervals_bed}
+					);
+
+				$varscan_command .= "\n\n" . join("\n",
+					"md5sum $output_stem.cns.vcf > $output_stem.cns.vcf.md5",
+					"bgzip $output_stem.cns.vcf",
+					"tabix -p vcf $output_stem.cns.vcf.gz"
+					);
+
+				$cleanup_cmd .= "rm $output_stem.cns.vcf.gz";
+				push @intermediate_files, "$output_stem.cns.vcf.gz";
+
+				# check if this should be run
+				if ('Y' eq missing_file("$output_stem.cns.vcf.md5")) {
+
+					# record command (in log directory) and then run job
+					print $log "Submitting job for VarScan...\n";
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> "run_varscan_snv_normalonly_$normal_ids[0]",
+						cmd	=> $varscan_command,
+						modules	=> [$samtools, $varscan, 'tabix'],
+						max_time	=> $parameters->{varscan}->{time},
+						mem		=> $parameters->{varscan}->{mem},
+						hpc_driver	=> $args{hpc_driver}
+						);
+
+					$run_id = submit_job(
+						jobname		=> "run_varscan_snv_normalonly_$normal_ids[0]",
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @germline_jobs, $run_id;
+					push @patient_jobs, $run_id;
+					push @all_jobs, $run_id;
+					}
+				else {
+					print $log "Skipping VarScan because this has already been completed!\n";
+					}
+				}
+
+			# for multiple tumours, collect all variants, then subset the normal
 			if (scalar(@tumour_ids) > 1) {
 
 				$format_germline_cmd .= "\n\n" . join(' ',
@@ -1046,10 +1106,20 @@ sub main {
 					'>', $merged_germline
 					);
 
-				} else {
+				# for a single tumour, simply subset the normal
+				} elsif (scalar(@tumour_ids) == 1) {
 
 				$format_germline_cmd .= "\n\n" . join(' ',
 					'vcf-subset -c NORMAL',
+					$intermediate_files[0],
+					'>', $merged_germline
+					);
+
+				# for normal-only samples
+				} elsif ( (scalar(@tumour_ids) == 0) && (scalar(@normal_ids) > 0) ) {
+
+				$format_germline_cmd .= join(' ',
+					'vcf-subset -c Sample1',
 					$intermediate_files[0],
 					'>', $merged_germline
 					);
