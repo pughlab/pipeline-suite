@@ -737,10 +737,10 @@ sub main {
 	my $string;
 	if (defined($tool_data->{mutect2}->{chromosomes})) {
 		$string = $tool_data->{mutect2}->{chromosomes};
-		} elsif ( ('hg38' eq $tool_data->{ref_type}) || ('hg19' eq $tool_data->{ref_type})) {
-		$string = 'chr' . join(',chr', 1..22) . ',chrX,chrY';
 		} elsif (defined($tool_data->{intervals_bed})) {
 		$string = 'exome';
+		} elsif ( ('hg38' eq $tool_data->{ref_type}) || ('hg19' eq $tool_data->{ref_type})) {
+		$string = 'chr' . join(',chr', 1..22) . ',chrX,chrY';
 		} else {
 		# if no chromosomes can be determined, run as a whole (very very slow!)
 		print $log "  >> Could not determine chromosomes to run\n";
