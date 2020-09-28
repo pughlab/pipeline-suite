@@ -10,7 +10,7 @@ use Getopt::Long;
 use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
-use List::Util 'any';
+use List::Util qw(any);
 
 my $cwd = dirname($0);
 require "$cwd/scripts/utilities.pl";
@@ -420,17 +420,70 @@ sub main {
 			unless(-e $strelka_directory) { make_path($strelka_directory); }
 
 			# first create a panel of normals
-			my $strelka_command = join(' ',
+			my $pon = $tool_data->{strelka}->{pon};
+			my $strelka_command;
+
+			if (!defined($tool_data->{strelka}->{pon})) {
+
+				$pon = join('/', $strelka_directory, 'panel_of_normals.vcf');
+
+				$strelka_command = join(' ',
+					"perl $cwd/scripts/strelka.pl",
+					"-o", $strelka_directory,
+					"-t", $tool_config,
+					"-d", $gatk_output_yaml,
+					"--create-panel-of-normals",
+					"-c", $args{cluster}
+					);
+
+				if ($args{cleanup}) {
+					$strelka_command .= " --remove";
+					}
+
+				# record command (in log directory) and then run job
+				print $log "Submitting job for strelka.pl --create-panel-of-normals\n";
+				print $log "  COMMAND: $strelka_command\n\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'pughlab_dna_pipeline__run_strelka_pon',
+					cmd	=> $strelka_command,
+					modules	=> ['perl'],
+					dependencies	=> $gatk_run_id,
+					mem		=> '256M',
+					max_time	=> '7-00:00:00',
+					hpc_driver	=> $args{cluster}
+					);
+
+				if ($args{dry_run}) {
+
+					$strelka_command .= " --dry-run";
+					`$strelka_command`;
+
+					} else {
+
+					$strelka_run_id = submit_job(
+						jobname		=> $log_directory,
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{cluster},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					print $log ">>> Strelka PoN job id: $strelka_run_id\n\n";
+					push @job_ids, $strelka_run_id;
+					}
+				}
+
+			# next run somatic variant calling
+			$strelka_command = join(' ',
 				"perl $cwd/scripts/strelka.pl",
 				"-o", $strelka_directory,
 				"-t", $tool_config,
 				"-d", $gatk_output_yaml,
-				"-c", $args{cluster}
+				"-c", $args{cluster},
+				"--pon", $pon
 				);
-
-			if (defined($tool_data->{strelka}->{pon})) {
-				$strelka_command .= " --pon $tool_data->{strelka}->{pon}";
-				}
 
 			if ($args{cleanup}) {
 				$strelka_command .= " --remove";
@@ -445,7 +498,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_strelka',
 				cmd	=> $strelka_command,
 				modules	=> ['perl'],
-				dependencies	=> $gatk_run_id,
+				dependencies	=> $strelka_run_id,
 				mem		=> '256M',
 				max_time	=> '7-00:00:00',
 				hpc_driver	=> $args{cluster}
@@ -532,7 +585,7 @@ sub main {
 					}
 				}
 
-			# next run variant calling
+			# next run somatic variant calling
 			$mutect_command = join(' ',
 				"perl $cwd/scripts/mutect.pl",
 				"-o", $mutect_directory,
