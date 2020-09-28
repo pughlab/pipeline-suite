@@ -530,7 +530,7 @@ sub main{
 				hpc_driver	=> $args{hpc_driver}
 				);
 
-			$filter_run_id = submit_job(
+			my $filter_run_id = submit_job(
 				jobname		=> 'run_filter_vcf_' . $patient,
 				shell_command	=> $run_script,
 				hpc_driver	=> $args{hpc_driver},

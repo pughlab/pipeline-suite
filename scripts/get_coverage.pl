@@ -369,7 +369,10 @@ sub main {
 			push @patient_cb_files, $sample . "_mincov_collapsed_sorted.bed";
 
 			# check if this should be run
-			if ('Y' eq missing_file($cb_output . '.md5')) {
+			if (
+				('Y' eq missing_file($cb_output . '.md5')) &&
+				('Y' eq missing_file("$patient_directory/callable_bases.tar.gz"))
+				) {
 
 				# record command (in log directory) and then run job
 				print $log "Submitting job for Callable Bases...\n";

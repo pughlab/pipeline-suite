@@ -470,7 +470,7 @@ if ($help) {
 		"\t--tool|-t\t<string> tool config (yaml format)",
 		"\t--out_dir|-o\t<string> path to output directory",
 		"\t--manta|-m\t<string> path to manta (strelka) output directory",
-		"\t--delly|-D\t<string> path to delly output directory",
+		"\t--delly|-e\t<string> path to delly output directory",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
 		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
