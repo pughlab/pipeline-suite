@@ -213,11 +213,6 @@ write.table(
 	sep = '\t'
 	);
 
-file.symlink(
-	generate.filename(arguments$project, 'mutations_for_cbioportal', 'tsv'),
-	'mutations_combined.maf'
-	);
-
 gc();
 
 # add in empty samples
