@@ -976,14 +976,14 @@ sub main {
 	if ($args{step3}) {
 
 		my $report_command = join(' ',
-			"perl $cwd/scripts/generate_report.pl",
+			"perl $cwd/scripts/report/pughlab_pipeline_auto_report.pl",
 			"-t", $tool_config,
 			"-c", $args{cluster},
-			"-d", $timestamp
+			"-d", $date
 			);
 
 		# record command (in log directory) and then run job
-		print $log "Submitting job for generate_report.pl\n";
+		print $log "Submitting job for pughlab_pipeline_auto_report.pl\n";
 		print $log "  COMMAND: $report_command\n\n";
 
 		$run_script = write_script(
