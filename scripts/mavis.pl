@@ -342,14 +342,6 @@ sub main {
 			$mavis_cmd .= "\n\n" . "mavis schedule -o $patient_directory --resubmit";
 			}
 
-		$mavis_cmd .= "\n\n" . join("\n",
-			"if [ -s $mavis_output ]; then",
-			"  exit 0",
-			"else",
-			"  exit 1",
-			"fi"
-			);
-
 		# check if this should be run
 		if ('Y' eq missing_file($mavis_output)) {
 
