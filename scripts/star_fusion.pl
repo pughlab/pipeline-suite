@@ -363,7 +363,7 @@ sub main {
 				'star-fusion.filter.intermediates_dir'
 				);
 
-			$cleanup_cmd .= "\ntar -czvf $sample_directory/star-fusion.preliminary.tar.gz" .
+			$cleanup_cmd .= "\ntar -czvf $sample_directory/star-fusion.preliminary.tar.gz " .
 				"$sample_directory/star-fusion.preliminary/ --remove-files";
 
 			}
