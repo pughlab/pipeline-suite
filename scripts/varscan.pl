@@ -471,6 +471,7 @@ sub main {
 			# create output stem
 			my $cnv_stem = join('/', $sequenza_directory, $sample . '_VarScan');
 			my $output_stem = join('/', $sample_directory, $sample . '_VarScan');
+			$cleanup_cmd .= "\nrm $cnv_stem";
 			$cleanup_cmd .= "\nrm $output_stem";
 
 			# start with VarScan CNV caller
