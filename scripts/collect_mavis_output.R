@@ -129,5 +129,54 @@ write.table(
 	sep = '\t'
 	);
 
+# format for cbioportal (not complete!)
+tmp <- sv.data[,key.fields];
+tmp$Fusion <- paste0(tmp$gene1_aliases, '--', tmp$gene2_aliases);
+tmp <- tmp[!grepl('None',tmp$Fusion),];
+
+tmp$Tool <- NA;
+for (i in 1:nrow(tmp)) {
+	tools <- unique(unlist(strsplit(as.character(tmp[i,]$tools),';')));
+	tmp[i,]$Tool <- paste(c(tools, 'mavis'), collapse = ',');
+	}
+
+tmp$Status <- NA;
+for (i in 1:nrow(tmp)) {
+	smp <- gsub('-','\\.',tmp[i,]$library);
+	title <- smp.fields[grep(smp,smp.fields)];
+	if (grepl('diseased', title)) { tmp[i,]$Status <- 'somatic'; }
+	else if (grepl('normal', title)) { tmp[i,]$Status <- 'germline'; }
+	}
+
+tmp$Frame <- NA;
+tmp[which(tmp$fusion_splicing_pattern == 'normal'),]$Frame <- 'inframe';
+tmp[which(!tmp$fusion_splicing_pattern %in% c('normal','None')),]$Frame <- 'frameshift';
+
+cbio.data <- data.frame(
+	Hugo_Symbol = c(
+		tmp$gene1_aliases,
+		tmp$gene2_aliases
+		),
+	Entrez_Gene_Id = NA,
+	Center = NA,
+	Tumor_Sample_Barcode = rep(tmp$library, times = 2),
+	Fusion = rep(tmp$Fusion, times = 2),
+	DNA_support = 'yes',
+	RNA_support = 'no',
+	Method = rep(tmp$Tool, times = 2),
+	Frame = rep(tmp$Frame, times = 2),
+	Fusion_Status = rep(tmp$Status, times = 2),
+	SV_Type = rep(tmp$event_type, times = 2),
+	stringsAsFactors = FALSE
+	);
+
+write.table(
+	cbio.data,
+	file = generate.filename(arguments$project, 'svs_for_cbioportal','tsv'),
+	row.names = FALSE,
+	col.names = TRUE,
+	sep = '\t'
+	);
+
 ### SAVE SESSION INFO ##############################################################################
 save.session.profile(generate.filename('CollectMAVIS','SessionProfile','txt'));
