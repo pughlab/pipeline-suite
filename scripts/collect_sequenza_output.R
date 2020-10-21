@@ -164,14 +164,8 @@ if (any(is.na(ploidy.data$Order))) {
 # combine for writing
 ploidy.formatted <- ploidy.data[which(ploidy.data$Order == 1),c('Sample','SLPP','cellularity','ploidy')];
 
-# save combined/formatted data to file
-write.table(
-	ploidy.formatted,
-	file = generate.filename(arguments$project, 'Sequenza_ploidy_purity','tsv'),
-	row.names = FALSE,
-	col.names = TRUE,
-	sep = '\t'
-	);
+# add field for PGA (to be filled in later)
+ploidy.formatted$PGA <- NA;
 
 # read them in
 cn.list <- list();
@@ -246,6 +240,11 @@ for (smp in names(seg.list)) {
 	if (nrow(tmp) == 0) { next; }
 	rownames(tmp) <- paste0('seg', 1:nrow(tmp));
 
+	# calculate PGA
+	pga <- sum(tmp$end - tmp$start)/(3*10**9)*100;
+	ploidy.formatted[which(ploidy.formatted$Sample == smp),]$PGA <- pga;
+
+	# extract gene data
 	gr <- GRanges(tmp);
 
 	# find overlap with genes (any amount of overlap)
@@ -257,6 +256,15 @@ for (smp in names(seg.list)) {
 		gene.data[which(gene.data$GeneID %in% genes),smp] <- tmp[i,]$AbsCN;
 		}
 	}
+
+# save data to file
+write.table(
+	ploidy.formatted,
+	file = generate.filename(arguments$project, 'Sequenza_ploidy_purity','tsv'),
+	row.names = FALSE,
+	col.names = TRUE,
+	sep = '\t'
+	);
 
 write.table(
 	gene.data,
