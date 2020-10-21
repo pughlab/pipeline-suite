@@ -238,8 +238,14 @@ sub main{
 	my $combine_cmd = "Rscript $cwd/scripts/combine_key_metrics.R";
 
 	my $collate_cmd = $extract_cmd . "\n" . $combine_cmd;
-	$collate_cmd .= "\nrm *metrics.txt";
-	$collate_cmd .= "\nrm *md5";
+	$collate_cmd .= "\n\n" . join("\n",
+		"if [ -s fastqc_key_metrics.tsv ]; then",
+		"  rm *metrics.txt",
+		"  rm *md5",
+		"else",
+		"  echo Error in creating final output: fastqc_key_metrics.tsv",
+		"fi"
+		);
 
 	print $log "Submitting job to extract and collate results...\n";
 
