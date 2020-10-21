@@ -410,10 +410,10 @@ sub main {
 	if ($args{report}) {
 
 		my $report_command = join(' ',
-			"perl $cwd/scripts/report/pughlab_pipeline_auto_report.pl",
+			"perl $cwd/scripts/pughlab_pipeline_auto_report.pl",
 			"-t", $tool_config,
 			"-c", $args{cluster},
-			"-r", $date
+			"-d", $date
 			);
 	
 		# record command (in log directory) and then run job
@@ -427,14 +427,13 @@ sub main {
 			modules	=> ['perl'],
 			dependencies	=> join(':', @job_ids),
 			mem		=> '256M',
-			max_time	=> '12:00:00',
+			max_time	=> '24:00:00',
 			hpc_driver	=> $args{cluster}
 			);
 
 		if ($args{dry_run}) {
 
 			$report_command .= " --dry-run";
-			`$report_command`;
 
 			} else {
 

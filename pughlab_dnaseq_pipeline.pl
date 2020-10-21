@@ -976,7 +976,7 @@ sub main {
 	if ($args{step3}) {
 
 		my $report_command = join(' ',
-			"perl $cwd/scripts/report/pughlab_pipeline_auto_report.pl",
+			"perl $cwd/scripts/pughlab_pipeline_auto_report.pl",
 			"-t", $tool_config,
 			"-c", $args{cluster},
 			"-d", $date
@@ -993,7 +993,7 @@ sub main {
 			modules	=> ['perl'],
 			dependencies	=> join(':', @job_ids),
 			mem		=> '256M',
-			max_time	=> '12:00:00',
+			max_time	=> '24:00:00',
 			hpc_driver	=> $args{cluster}
 			);
 
@@ -1008,7 +1008,7 @@ sub main {
 				jobname		=> $log_directory,
 				shell_command	=> $run_script,
 				hpc_driver	=> $args{cluster},
-				dry_run		=> 1, #$args{dry_run},
+				dry_run		=> $args{dry_run},
 				log_file	=> $log
 				);
 

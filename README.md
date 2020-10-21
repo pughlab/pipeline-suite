@@ -152,7 +152,7 @@ perl collect_fastqc_metrics.pl \
 -d /path/to/fastq_config.yaml \
 -t /path/to/fastqc_tool_config.yaml \
 -c slurm \
-{optional: --rna, --dry-run}
+{optional: --rna, --dry-run }
 </code></pre>
 
 ### DNA pipeline:
@@ -165,9 +165,9 @@ perl pughlab_dnaseq_pipeline.pl \
 -d /path/to/dna_fastq_config.yaml \
 --preprocessing \
 --variant_calling \
+--create_report \
 -c slurm \
---remove \
---dry-run
+--remove 
 </code></pre>
 
 This will generate the directory structure in the output directory (provided in /path/to/dna_pipeline_config.yaml), including a "logs/run_DNA_pipeline_TIMESTAMP/" directory containing a file "run_DNASeq_pipeline.log" which lists the individual tool commands; these can be run separately if "--dry-run" is set, or in the event of a failure at any stage and you don't need to re-run the entire thing (***Note:*** doing so would not regenerate files that already exist).
@@ -188,163 +188,173 @@ cat gatk_bam_config\*.yaml | awk 'NR <= 1 || !/^---/' > combined_gatk_bam_config
 -b /path/to/output/bam.yaml \
 -c slurm \
 --remove \
---dry-run
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
 </code></pre>
 
 This will again write individual commands to file: /path/to/output/directory/BWA/logs/run_BWA_pipeline.log
 
 ### run GATK indel realignment and base quality score recalibration
 <pre><code>perl gatk.pl \
---depends { optional: final job ID from bwa.pl } \
 -t /path/to/dna_pipeline_config.yaml \
 -d /path/to/bwa_bam_config.yaml \
 -o /path/to/output/directory \
 -b /path/to/output/bam.yaml \
 -c slurm \
 --remove \
---dry-run
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
 </code></pre>
 
 ### get BAM QC metrics, including coverage, contamination estimates and callable bases
 <pre><code>perl contest.pl \
---depends { optional: final job ID from gatk.pl } \
 -t /path/to/dna_pipeline_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
 -o /path/to/output/directory \
 -c slurm \
 --remove \
---dry-run
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
 
 perl get_coverage.pl \
---depends { optional: final job ID from gatk.pl } \
 -t /path/to/dna_pipeline_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
 -o /path/to/output/directory \
 -c slurm \
 --remove \
---dry-run
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
 </code></pre>
 
 ### Variant calling steps:
 ### run GATK's HaplotypeCaller to produce gvcfs
 <pre><code>perl haplotype_caller.pl \
---depends { optional: final job ID from gatk.pl } \
 -t /path/to/dna_pipeline_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
 -o /path/to/output/directory \
 -c slurm \
 --remove \
---dry-run
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
 
 perl genotype_gvcfs.pl \
---depends { optional: final job ID from haplotype_caller.pl } \
 -t /path/to/dna_pipeline_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
 -o /path/to/output/directory \
 -c slurm \
 --remove \
---dry-run
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
 </code></pre>
 
 ### run GATK's MuTect (v1) to produce somatic SNV calls
 <pre><code>Create a panel of normals:
 perl mutect.pl \
 --create-panel-of-normals \
---depends { optional: final job ID from gatk.pl } \
 -t /path/to/dna_pipeline_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
 -o /path/to/output/directory \
 -c slurm \
 --remove \
---dry-run
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
 
 Generate somatic SNV calls:
 perl mutect.pl \
---depends { optional: final job ID from gatk.pl or mutect.pl (generation of panel of normals) } \
 -t /path/to/dna_pipeline_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
 -o /path/to/output/directory \
 --pon /path/to/panel_of_normals.vcf { optional: can also be specified in mutect_config.yaml if created elsewhere } \
 -c slurm \
 --remove \
---dry-run
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
 </code></pre>
 
 ### run GATK's MuTect2 to produce somatic SNV calls
 <pre><code>Create a panel of normals:
 perl mutect2.pl \
 --create-panel-of-normals \
---depends { optional: final job ID from gatk.pl } \
 -t /path/to/dna_pipeline_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
 -o /path/to/output/directory \
 -c slurm \
 --remove \
---dry-run
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
 
 Generate somatic SNV calls:
 perl mutect2.pl \
---depends { optional: final job ID from gatk.pl or mutect2.pl (generation of panel of normals) } \
 -t /path/to/dna_pipeline_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
 -o /path/to/output/directory \
 --pon /path/to/panel_of_normals.vcf { optional: can also be specified in mutect2_config.yaml if created elsewhere } \
 -c slurm \
 --remove \
---dry-run
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
 </code></pre>
 
 ### run VarScan to produce SNV and CNA calls
 <pre><code>Run T/N pairs and create a panel of normals:
 perl varscan.pl \
 --mode paired \
---depends { optional: final job ID from gatk.pl } \
 -t /path/to/dna_pipeline_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
 -o /path/to/output/directory \
 -c slurm \
 --remove \
---dry-run
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
 
 Run tumour-only samples with a panel of normals (can also be run without, but germline filtering will not be performed):
 perl varscan.pl \
 --mode unpaired \
---depends { optional: final job ID from gatk.pl or above panel of normals creation } \
 -t /path/to/dna_pipeline_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
 -o /path/to/output/directory \
 --pon /path/to/panel_of_normals.vcf { optional: can also be specified in varscan_config.yaml if created elsewhere } \
 -c slurm \
 --remove \
---dry-run
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
 </code></pre>
 
 ### run Strelka to produce SNV and Manta SV calls
 <pre><code>perl strelka.pl \
---depends { optional: final job ID from gatk.pl } \
+-t /path/to/dna_pipeline_config.yaml \
+-d /path/to/gatk_bam_config.yaml \
+-o /path/to/output/directory \
+--create-panel-of-normals \
+-c slurm \
+--remove \
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
+
+perl strelka.pl \
 -t /path/to/dna_pipeline_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
 -o /path/to/output/directory \
 --pon /path/to/panel_of_normals.vcf { optional: useful for restarting once this has already been generated } \
 -c slurm \
 --remove \
---dry-run
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
 </code></pre>
 
 ### run Delly to produce SV calls
 <pre><code>perl delly.pl \
---depends { optional: final job ID from gatk.pl } \
 -t /path/to/dna_pipeline_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
 -o /path/to/output/directory \
 -c slurm \
 --remove \
---dry-run
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
 </code></pre>
 
 ### run Mavis to annotate Delly and Manta SV calls
 <pre><code>perl mavis.pl \
---depends { optional: final job ID from strelka.pl and delly.pl } \
 -t /path/to/dna_pipeline_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
 -o /path/to/output/directory \
@@ -352,7 +362,17 @@ perl varscan.pl \
 --delly /path/to/delly/directory \
 -c slurm \
 --remove \
---dry-run
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
+</code></pre>
+
+### create final report
+<pre><code>perl pughlab_pipeline_auto_report.pl \
+-t /path/to/dna_pipeline_config.yaml \
+-d DATE \
+-c slurm \
+--dry-run { if this is a dry-run; NOTE that this will fail if the above pipeline has not completed } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
 </code></pre>
 
 ### RNA pipeline:
@@ -363,9 +383,9 @@ module load perl
 perl pughlab_rnaseq_pipeline.pl \
 -t /path/to/rna_pipeline_config.yaml \
 -d /path/to/fastq_rna_config.yaml\
+--create-report \
 -c slurm \
 --remove \
---dry-run
 </code></pre>
 
 This will generate the directory structure in the output directory (provided in /path/to/master_rna_config.yaml), including a "logs/run_RNA_pipeline_TIMESTAMP/" directory containing a file "run_RNASeq_pipeline.log" which lists the individual tool commands; these can be run separately if "--dry-run" or in the event of a failure at any stage and you don't need to re-run the entire thing (although doing so would not regenerate files that already exist).
@@ -376,10 +396,10 @@ This will generate the directory structure in the output directory (provided in 
 -d /path/to/fastq_rna_config.yaml \
 -o /path/to/output/directory \
 -b /path/to/output/bam.yaml \
--p PROJECTID \
 -c slurm \
 --remove \
---dry-run
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
 </code></pre>
 
 This will again write individual commands to file: /path/to/output/directory/STAR/logs/run_STAR_pipeline.log
@@ -389,63 +409,68 @@ This will again write individual commands to file: /path/to/output/directory/STA
 -t /path/to/fusioncatcher_config.yaml \
 -d /path/to/fastq_rna_config.yaml \
 -o /path/to/output/directory \
--p PROJECTID \
 -c slurm \
 --remove \
---dry-run
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
 </code></pre>
 
 ### run RSEM on STAR-aligned BAMs
 <pre><code>perl rsem.pl \
---depends { optional: final job ID from star.pl } \
 -t /path/to/rsem_expression_config.yaml \
 -d /path/to/star_bam_config.yaml \
 -o /path/to/output/directory \
--p PROJECTID \
 -c slurm \
 --remove \
---dry-run
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
 </code></pre>
 
 ### run STAR-Fusion on STAR-aligned BAMs
 <pre><code>perl star_fusion.pl \
---depends { optional: final job ID from star.pl } \
 -t /path/to/star_fusion_config.yaml \
 -d /path/to/star_bam_config.yaml \
 -o /path/to/output/directory \
--p PROJECTID \
 -c slurm \
 --remove \
---dry-run
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
 </code></pre>
 
 ### run GATK split CIGAR, indel realignment and base quality score recalibration on MarkDup BAMs
 <pre><code>perl gatk.pl \
 --rna \
---depends { optional: final job ID from star.pl } \
 -t /path/to/gatk_tool_config.yaml \
 -d /path/to/star/bam_config.yaml \
 -o /path/to/output/directory \
 -b /path/to/output/bam.yaml \
 -c slurm \
 --remove \
---dry-run
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
 </code></pre>
 
 ### run GATK HaplotypeCaller, variant filtration and annotataion
 <pre><code>perl haplotype_caller.pl \
 --rna \
---depends { optional: final job ID from gatk.pl } \
 -t /path/to/haplotype_caller_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
 -o /path/to/output/directory \
--p PROJECTID \
 -c slurm \
 --remove \
---dry-run
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
 </code></pre>
 
 These will again write individual commands to file: /path/to/output/directory/TOOL/logs/run_TOOL_pipeline.log
+
+### create final report
+<pre><code>perl pughlab_pipeline_auto_report.pl \
+-t /path/to/rna_pipeline_config.yaml \
+-d DATE \
+-c slurm \
+--dry-run
+</code></pre>
 
 ### Resuming a run:
 If the initial run is unsuccessful or incomplete, check the logs to identify the problem - it is most likely due to insufficient memory or runtime allocation. In this case, update the necessary parameters for the affected stage in the tool_config.yaml. 
