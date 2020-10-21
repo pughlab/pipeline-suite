@@ -169,6 +169,7 @@ sub main {
 	# set tools and versions
 	my $mavis	= 'mavis/' . $tool_data->{mavis_version};
 	my $bwa		= 'bwa/' . $tool_data->{bwa_version};
+	my $r_version	= 'R/' . $tool_data->{r_version};
 
 	my $mavis_export = join("\n",
 		"export MAVIS_ANNOTATIONS=$tool_data->{mavis}->{mavis_annotations}",
@@ -178,7 +179,7 @@ sub main {
 		"export MAVIS_REFERENCE_GENOME=$tool_data->{reference}",
 		"export MAVIS_ALIGNER='$tool_data->{mavis}->{mavis_aligner}'",
 		"export MAVIS_ALIGNER_REFERENCE=$tool_data->{bwa}->{reference}",
-		"export MAVIS_DRAW_FUSIONS_ONLY=False",
+		"export MAVIS_DRAW_FUSIONS_ONLY=True",
 		"export MAVIS_SCHEDULER=" . uc($args{hpc_driver})
 		);
 
@@ -342,6 +343,18 @@ sub main {
 			$mavis_cmd .= "\n\n" . "mavis schedule -o $patient_directory --resubmit";
 			}
 
+		$mavis_cmd .= "\n\n" . join(' ',
+			"grep '^job_ident'",
+			join('/', $patient_directory,  'build.cfg'),
+			"| sed 's/job_ident = //' > ",
+			join('/', $patient_directory, 'job_ids')
+			);
+
+		$mavis_cmd .= "\n\n" . join(' ',
+			"perl $cwd/mavis_check.pl",
+			"-j", join('/', $patient_directory, 'job_ids')
+			);
+
 		# check if this should be run
 		if ('Y' eq missing_file($mavis_output)) {
 
@@ -352,7 +365,7 @@ sub main {
 				log_dir	=> $log_directory,
 				name	=> 'run_mavis_sv_annotator_' . $patient,
 				cmd	=> $mavis_cmd,
-				modules	=> [$mavis, $bwa],
+				modules	=> [$mavis, $bwa, 'perl'],
 				dependencies	=> join(':', @format_jobs),
 				hpc_driver	=> $args{hpc_driver}
 				);
@@ -371,6 +384,34 @@ sub main {
 			print $log "Skipping MAVIS because this has already been completed!\n";
 			}
 		}
+
+	# collate results
+	my $collect_output = join(' ',
+		"Rscript $cwd/collect_mavis_output.R",
+		'-d', $output_directory,
+		'-p', $tool_data->{project_name}
+		);
+
+	$run_script = write_script(
+		log_dir	=> $log_directory,
+		name	=> 'combine_variant_calls',
+		cmd	=> $collect_output,
+		modules	=> [$r_version],
+		dependencies	=> join(':', @all_jobs),
+		mem		=> '6G',
+		max_time	=> '24:00:00',
+		hpc_driver	=> $args{hpc_driver}
+		);
+
+	$run_id = submit_job(
+		jobname		=> 'combine_variant_calls',
+		shell_command	=> $run_script,
+		hpc_driver	=> $args{hpc_driver},
+		dry_run		=> $args{dry_run},
+		log_file	=> $log
+		);
+
+	push @all_jobs, $run_id;
 
 	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
 	# collect job metrics (exit status, mem, run time)
