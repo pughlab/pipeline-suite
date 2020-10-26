@@ -184,8 +184,7 @@ sub get_sequenza_command {
 		'Rscript', $args{tool},
 		'--snp_file', $args{snp},
 		'--cnv_file', $args{cnv},
-		'--out_dir', $args{out_dir},
-		'--cancer_type OV'
+		'--out_dir', $args{out_dir}
 		);
 
 	return($sequenza_command);
