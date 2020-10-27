@@ -130,15 +130,17 @@ sub format_readgroup {
 		lane		=> undef,
 		lib		=> undef,
 		platform	=> 'Illumina',
+		center		=> undef,
 		@_
 		);
 
-	my $readgroup = "ID:patient\tSM:smp\tPL:platform\tPU:unit\tLB:library";
+	my $readgroup = "ID:patient\tSM:smp\tCN:center\tPL:platform\tLB:library\tPU:unit";
 	$readgroup =~ s/patient/$args{subject}/;
 	$readgroup =~ s/smp/$args{sample}/;
 	$readgroup =~ s/unit/$args{lane}/;
 	$readgroup =~ s/library/$args{lib}/;
 	$readgroup =~ s/platform/$args{platform}/;
+	$readgroup =~ s/center/$args{center}/;
 
 	return($readgroup);
 	}

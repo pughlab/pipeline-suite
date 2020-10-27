@@ -43,15 +43,17 @@ sub set_readgroup {
 		lane		=> undef,
 		library		=> undef,
 		platform	=> undef,
+		center		=> undef,
 		@_
 		);
 
-	my $readgroup = '"@RG\tID:id\tSM:smp\tPL:platform\tPU:unit\tLB:library"';
+	my $readgroup = '"@RG\tID:id\tSM:smp\tCN:center\tPL:platform\tLB:library\tPU:unit"';
 	$readgroup =~ s/id/"$args{library}\_$args{lane}"/;
 	$readgroup =~ s/smp/$args{sample}/;
 	$readgroup =~ s/unit/$args{lane}/;
 	$readgroup =~ s/library/$args{library}/;
 	$readgroup =~ s/platform/$args{platform}/;
+	$readgroup =~ s/center/$args{center}/;
 
 	return($readgroup);
 	}
