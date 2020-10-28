@@ -363,7 +363,8 @@ sub main {
 				sample		=> $sample,
 				lane		=> join(':', @lanes),
 				lib		=> $sample,
-				platform	=> $tool_data->{platform}
+				platform	=> $tool_data->{platform},
+				center		=> $tool_data->{seq_center}
 				);
 
 			my $star = "cd $sample_directory\n";

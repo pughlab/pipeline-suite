@@ -315,7 +315,8 @@ sub main {
 						sample		=> $sample,
 						lane		=> $lane,
 						library 	=> $lib,
-						platform 	=> $tool_data->{platform}
+						platform 	=> $tool_data->{platform},
+						center		=> $tool_data->{seq_center}
 						);
 
 					my $bwa = get_bwa_command(
