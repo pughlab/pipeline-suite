@@ -278,6 +278,7 @@ sub main{
 	# First step, find all of the CombineGVCF files
 	opendir(HC_OUTPUT, $output_directory) or die "Could not open $output_directory";
 	my @combined_gvcfs = grep { /g.vcf.gz$/ } readdir(HC_OUTPUT);
+	@combined_gvcfs = sort @combined_gvcfs;
 	closedir(HC_OUTPUT);
 
 	my $genotype_run_id = '';

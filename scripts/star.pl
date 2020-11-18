@@ -323,11 +323,11 @@ sub main {
 			unless(-e $raw_directory) { make_path($raw_directory); }
 
 			my $temp_star = join('/', $sample_directory, 'intermediate_files');
-			$cleanup_cmd .= "\nrm -rf $temp_star";
+			$cleanup_cmd .= "\n  rm -rf $temp_star";
 
 			my $tmp_directory = join('/', $sample_directory, 'TEMP');
 			unless(-e $tmp_directory) { make_path($tmp_directory); }
-			$cleanup_cmd .= "\nrm -rf $tmp_directory";
+			$cleanup_cmd .= "\n  rm -rf $tmp_directory";
 
 			my @lanes = keys %{$smp_data->{$patient}->{$sample}->{runlanes}};
 			my (@r1_fastqs, @r2_fastqs);
@@ -434,7 +434,7 @@ sub main {
 			# check if this should be run
 			if ('Y' eq missing_file($dedup_bam . '.md5')) {
 
-				$markdup_cmd .= "\n" . join("\n",
+				$markdup_cmd .= "\n\n" . join("\n",
 					"samtools quickcheck $dedup_bam",
 					);
 

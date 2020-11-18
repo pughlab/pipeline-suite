@@ -355,7 +355,7 @@ sub pon {
 
 			# run MuTect
 			my $output_stem = join('/', $intermediate_directory, $sample . '_MuTect');
-			$cleanup_cmd .= "\nrm $output_stem.vcf";
+			$cleanup_cmd .= "\n  rm $output_stem.vcf*";
 
 			my $mutect_command = get_mutect_pon_command(
 				normal		=> $smp_data->{$patient}->{normal}->{$sample},

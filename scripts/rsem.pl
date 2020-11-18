@@ -229,7 +229,7 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> 'run_RSEM_' . $sample,
 					cmd	=> $rsem_cmd,
-					modules	=> [$rsem],
+					modules	=> ['perl', $rsem],
 					max_time	=> $parameters->{rsem}->{time},
 					mem		=> $parameters->{rsem}->{mem},
 					hpc_driver	=> $args{hpc_driver}

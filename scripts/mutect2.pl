@@ -381,7 +381,7 @@ sub pon {
 
 			# run MuTect
 			my $mutect_vcf = join('/', $intermediate_directory, $sample . '_MuTect2.vcf');
-			$cleanup_cmd .= "\nrm $mutect_vcf";
+			$cleanup_cmd .= "\n  rm $mutect_vcf*";
 
 			my $mutect_command = get_mutect_pon_command(
 				normal		=> $smp_data->{$patient}->{normal}->{$sample},
@@ -908,10 +908,10 @@ sub main {
 						tmp_dir		=> $tmp_directory,
 						intervals	=> $chr
 						);
-
-					push @chr_parts, "$chr_stem\_$chr.vcf";
-					push @chr_md5s, "$chr_stem\_$chr.vcf.md5";
 					}
+
+				push @chr_parts, "$chr_stem\_$chr.vcf";
+				push @chr_md5s, "$chr_stem\_$chr.vcf.md5";
 				}
 
 			my ($mutect_command, $extra_cmds) = undef;

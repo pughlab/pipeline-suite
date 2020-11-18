@@ -491,7 +491,7 @@ sub main {
 			if ('Y' eq missing_file("$smp_output.md5")) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job to merge lanes and mark dupilcates...\n";
+				print $log "Submitting job to merge lanes and mark duplicates...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -516,7 +516,7 @@ sub main {
 				push @all_jobs, $run_id;
 				}
 			else {
-				print $log "Skipping mark dupicate step because this was performed previously...\n";	
+				print $log "Skipping mark duplicate step because this was performed previously...\n";	
 				}
 
 			push @final_outputs, $smp_output;
@@ -535,7 +535,7 @@ sub main {
 						"if [ -s $smp_output ]; then",
 						$cleanup_cmd,
 						"else",
-						'echo "FINAL OUTPUT: $smp_output is missing; not removing intermediates"',
+						"  echo " . '"FINAL OUTPUT: ' . $smp_output . ' is missing; not removing intermediates"',
 						"fi"
 						);
 

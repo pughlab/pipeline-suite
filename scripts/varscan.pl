@@ -84,7 +84,7 @@ sub get_varscan_snv_command {
 
 		if ($args{output_vcf}) {
 			$varscan_command .= ' --output-vcf 1';
-			};
+			}
 
 		} else {
 
@@ -193,7 +193,8 @@ sub get_sequenza_command {
 # format command to run variant filter
 sub get_filter_command {
 	my %args = (
-		input		=> undef,
+		input_vcf	=> undef,
+		input_snp	=> undef,
 		output_stem	=> undef,
 		tmp_dir		=> undef,
 		pon		=> undef,
@@ -206,27 +207,27 @@ sub get_filter_command {
 	# if tool used was somatic (T/N pair), split snp/indel into germline/somatic 
 	if ($args{somatic}) {
 
-		$filter_command = "if [ ! -s $args{input}.gz.tbi ]; then\n";
-		$filter_command .= "  bgzip $args{input}\n";
-		$filter_command .= "  tabix -p vcf $args{input}.gz\n";
+		$filter_command = "if [ ! -s $args{input_vcf}.gz.tbi ]; then\n";
+		$filter_command .= "  bgzip $args{input_vcf}\n";
+		$filter_command .= "  tabix -p vcf $args{input_vcf}.gz\n";
 		$filter_command .= "fi\n\n";
 
 		$filter_command .= join(' ',
-			"awk 'NR>1 { print \$1" . '"\t"' . "\$2 }'", "$args{output_stem}.Germline.hc",
+			"awk 'NR>1 { print \$1" . '"\t"' . "\$2 }'", "$args{input_snp}.Germline.hc",
 			'|', '/cluster/projects/pughlab/bin/bcftools/bcftools filter',
 			'-T - ',
 			"--include 'INFO/SS=" . '"1"' . "'",
-			"$args{input}.gz",
+			"$args{input_vcf}.gz",
 			'-O v',
 			'-o', $args{output_stem} . "_germline_hc.vcf"
 			);
  
 		$filter_command .= "\n\n" . join(' ',
-			"awk 'NR>1 { print \$1" . '"\t"' . "\$2 }'", "$args{output_stem}.Somatic.hc",
+			"awk 'NR>1 { print \$1" . '"\t"' . "\$2 }'", "$args{input_snp}.Somatic.hc",
 			'|', '/cluster/projects/pughlab/bin/bcftools/bcftools filter',
 			'-T - ',
 			"--include 'INFO/SS=" . '"2"' . "'",
-			"$args{input}.gz",
+			"$args{input_vcf}.gz",
 			'-O v',
 			'-o', $args{output_stem} . "_somatic_hc.vcf"
 			);
@@ -235,7 +236,7 @@ sub get_filter_command {
 	} else {
 		$filter_command = join(' ',
 			'vcftools',
-			'--vcf', $args{input},
+			'--vcf', $args{input_vcf},
 			'--keep-filtered PASS --remove-indels',
 			'--stdout --recode',
 			'--temp', $args{tmp_dir}
@@ -249,7 +250,7 @@ sub get_filter_command {
 
 		$filter_command .= "\n\n" . join(' ',
 			'vcftools',
-			'--vcf', $args{input},
+			'--vcf', $args{input_vcf},
 			'--keep-filtered PASS --keep-only-indels',
 			'--stdout --recode',
 			'--temp', $args{tmp_dir},
@@ -525,9 +526,9 @@ sub main {
 			my %varscan_commands;
 			my (@chr_parts, @chr_jobs, @chr_md5s);
 
-			my $merged_output = $cnv_stem . '__merged';
+			my $merged_snp_output = $cnv_stem . '__merged';
 			if (scalar(@chroms) == 1) {
-                                $merged_output = $cnv_stem . '__' . $chroms[0];
+                                $merged_snp_output = $cnv_stem . '__' . $chroms[0];
                                 }
 
 			foreach my $chr ( @chroms ) {
@@ -587,7 +588,7 @@ sub main {
 				# check if this should be run
 				if (
 					('Y' eq missing_file(@chr_md5s)) &&
-					('Y' eq missing_file("$merged_output.md5"))
+					('Y' eq missing_file("$merged_snp_output.md5"))
 					) {
 
 					# record command (in log directory) and then run job
@@ -629,7 +630,7 @@ sub main {
 
 					# check if this should be run
 					if (
-						('Y' eq missing_file("$merged_output.snp.md5")) &&
+						('Y' eq missing_file("$merged_snp_output.snp.md5")) &&
 						('Y' eq missing_file("$cnv_stem\__$chr.snp.md5"))
 						) {
 
@@ -674,18 +675,18 @@ sub main {
 				my $merge_chr_command = join(' ',
 					'cat', @snp_parts,
 					"| awk 'NR <= 1 || !/^chrom/'",
-					'>', "$merged_output.snp;\n",
+					'>', "$merged_snp_output.snp;\n",
 					'cat', @indel_parts,
 					"| awk 'NR <= 1 || !/^chrom/'",
-					'>', "$merged_output.indel;\n\n",
-					"md5sum $merged_output.snp > $merged_output.snp.md5\n",
-					"md5sum $merged_output.indel > $merged_output.indel.md5\n"
+					'>', "$merged_snp_output.indel;\n\n",
+					"md5sum $merged_snp_output.snp > $merged_snp_output.snp.md5\n",
+					"md5sum $merged_snp_output.indel > $merged_snp_output.indel.md5\n"
 					);
 
 				$cleanup_cmd .= "\nrm $cnv_stem\__chr*";
 
 				# check if this should be run
-				if ('Y' eq missing_file("$merged_output.snp.md5")) {
+				if ('Y' eq missing_file("$merged_snp_output.snp.md5")) {
 
 					# record command (in log directory) and then run job
 					print $log "Submitting job for Merge (for Sequenza) step...\n";
@@ -718,10 +719,10 @@ sub main {
 				}
 
 			# format command for sequenza (T/N only)
-			my $sequenza_output = join('/', $sequenza_directory, $sample . '_VarScan_Total_CN.seg');
+			my $sequenza_output = $merged_snp_output . '_Total_CN.seg';
 			my $sequenza_command = get_sequenza_command(
 				out_dir	=> $sequenza_directory,
-				snp	=> $merged_output . '.snp',
+				snp	=> $merged_snp_output . '.snp',
 				cnv	=> $cnv_stem . '.copynumber',
 				tool	=> $sequenza
 				);
@@ -770,8 +771,8 @@ sub main {
 				unlink "$output_stem.indel" or die "Failed to remove previous symlink: $output_stem.indel";
 				}
 
-			symlink("$merged_output.snp", "$output_stem.snp");
-			symlink("$merged_output.indel", "$output_stem.indel");
+			symlink("$merged_snp_output.snp", "$output_stem.snp");
+			symlink("$merged_snp_output.indel", "$output_stem.indel");
 
 			$varscan_command = get_varscan_process_command(
 				output_stem	=> $output_stem,
@@ -825,9 +826,9 @@ sub main {
 
 			my %varscan_vcf_commands;
 
-			$merged_output = $output_stem . '__merged';
+			my $merged_vcf_output = $output_stem . '__merged';
 			if (scalar(@chroms) == 1) {
-                                $merged_output = $output_stem . '__' . $chroms[0];
+                                $merged_vcf_output = $output_stem . '__' . $chroms[0];
                                 }
 
 			foreach my $chr ( @chroms ) {
@@ -891,7 +892,7 @@ sub main {
 				# check if this should be run
 				if (
 					('Y' eq missing_file(@chr_md5s)) &&
-					('Y' eq missing_file("$merged_output.md5"))
+					('Y' eq missing_file("$merged_vcf_output.md5"))
 					) {
 
 					# record command (in log directory) and then run job
@@ -929,11 +930,11 @@ sub main {
 
 				foreach my $chr ( @chroms ) {
 
-					$varscan_command = $varscan_commands{$chr};
+					$varscan_command = $varscan_vcf_commands{$chr};
 
 					# check if this should be run
 					if (
-						('Y' eq missing_file("$merged_output.snp.vcf.md5")) &&
+						('Y' eq missing_file("$merged_vcf_output.snp.vcf.md5")) &&
 						('Y' eq missing_file("$output_stem\__$chr.snp.vcf.md5"))
 						) {
 
@@ -978,18 +979,18 @@ sub main {
 				my $merge_chr_command = join(' ',
 					'vcf-concat',
 					@snp_parts,
-					'>', "$merged_output.snp.vcf;\n",
+					'>', "$merged_vcf_output.snp.vcf;\n",
 					'vcf-concat',
 					@indel_parts,
-					'>', "$merged_output.indel.vcf;\n\n",
-					"md5sum $merged_output.snp.vcf > $merged_output.snp.vcf.md5\n",
-					"md5sum $merged_output.indel.vcf > $merged_output.indel.vcf.md5\n"
+					'>', "$merged_vcf_output.indel.vcf;\n\n",
+					"md5sum $merged_vcf_output.snp.vcf > $merged_vcf_output.snp.vcf.md5\n",
+					"md5sum $merged_vcf_output.indel.vcf > $merged_vcf_output.indel.vcf.md5\n"
 					);
 
 				$cleanup_cmd .= "\nrm $output_stem\__chr*";
 
 				# check if this should be run
-				if ('Y' eq missing_file("$merged_output.snp.vcf.md5")) {
+				if ('Y' eq missing_file("$merged_vcf_output.snp.vcf.md5")) {
 
 					# record command (in log directory) and then run job
 					print $log "Submitting job for Merge VCF step...\n";
@@ -1029,28 +1030,29 @@ sub main {
 			foreach my $vtype (@var_types) {
 
 				$filter_command = get_filter_command(
-					input		=> join('.', $merged_output, $vtype, 'vcf'),
-					output_stem	=> join('.', $merged_output, $vtype),
+					input_vcf	=> join('.', $merged_vcf_output, $vtype, 'vcf'),
+					input_snp	=> join('.', $output_stem, $vtype),
+					output_stem	=> join('.', $merged_vcf_output, $vtype),
 					somatic		=> 1
 					);
 
 				$filter_command .= "\n\n" . join(' ',
-					'md5sum', join('.',  $merged_output, $vtype . "_germline_hc.vcf"),
-					'>', join('.',  $merged_output, $vtype . "_germline_hc.vcf.md5")
+					'md5sum', join('.',  $merged_vcf_output, $vtype . "_germline_hc.vcf"),
+					'>', join('.',  $merged_vcf_output, $vtype . "_germline_hc.vcf.md5")
 					);
 
-				push @germline_vcfs, join('.', $merged_output, $vtype . "_germline_hc.vcf");
+				push @germline_vcfs, join('.', $merged_vcf_output, $vtype . "_germline_hc.vcf");
 
 				$filter_command .= "\n\n" . join(' ',
-					'md5sum', join('.',  $merged_output, $vtype . "_somatic_hc.vcf"),
-					'>', join('.',  $merged_output, $vtype . "_somatic_hc.vcf.md5")
+					'md5sum', join('.',  $merged_vcf_output, $vtype . "_somatic_hc.vcf"),
+					'>', join('.',  $merged_vcf_output, $vtype . "_somatic_hc.vcf.md5")
 					);
 
 				# add intermediates to cleanup
-				$cleanup_cmd .= "\nrm " . join('.', $merged_output, $vtype, 'vcf.gz');
-				$cleanup_cmd .= "\nrm " . join('.', $merged_output, $vtype, 'vcf.gz.tbi');
+				$cleanup_cmd .= "\nrm " . join('.', $merged_vcf_output, $vtype, 'vcf.gz');
+				$cleanup_cmd .= "\nrm " . join('.', $merged_vcf_output, $vtype, 'vcf.gz.tbi');
 
-				$required = join('.', $merged_output, $vtype . "_somatic_hc.vcf.md5");
+				$required = join('.', $merged_vcf_output, $vtype . "_somatic_hc.vcf.md5");
 
 				# check if this should be run
 				if ('Y' eq missing_file($required)) {
@@ -1091,7 +1093,7 @@ sub main {
 				$final_vcf = join('.', $output_stem, $vtype . '_somatic_annotated.vcf');
 
 				$vcf2maf_cmd = get_vcf2maf_command(
-					input		=> join('.', $merged_output, $vtype . '_somatic_hc.vcf'),
+					input		=> join('.', $merged_vcf_output, $vtype . '_somatic_hc.vcf'),
 					tumour_id	=> $sample,
 					normal_id	=> $normal_ids[0],
 					reference	=> $reference,
@@ -1352,47 +1354,11 @@ sub main {
 	unless (defined($args{pon})) {
 
 		# let's create a command and write script to combine variants for a PoN
-		my $pon_tmp	= join('/', $pon_directory, $date . "_merged_panelOfNormals.vcf");
 		my $pon		= join('/', $pon_directory, $date . "_merged_panelOfNormals_trimmed.vcf");
 		my $final_pon_link = join('/', $output_directory, 'panel_of_normals.vcf');
 
-		# create a fully merged output (useful for combining with other studies later)
-		my $pon_command = generate_pon(
-			input		=> join(' ', @pon_vcfs),
-			output		=> $pon_tmp,
-			java_mem	=> $parameters->{combine}->{java_mem},
-			tmp_dir		=> $output_directory,
-			out_type	=> 'full'
-			);
-
-		$pon_command .= "\n" . check_java_output(
-			extra_cmd => "md5sum $pon_tmp > $pon_tmp.md5;\n  bgzip $pon_tmp;\n  tabix -p vcf $pon_tmp.gz;"
-			);
-
-		$run_script = write_script(
-			log_dir	=> $log_directory,
-			name	=> 'create_panel_of_normals',
-			cmd	=> $pon_command,
-			dependencies	=> join(':', @pon_dependencies),
-			modules		=> [$gatk, 'tabix'],
-			max_time	=> $parameters->{combine}->{time},
-			mem		=> $parameters->{combine}->{mem},
-			hpc_driver	=> $args{hpc_driver}
-			);
-
-		$run_id = submit_job(
-			jobname		=> 'create_panel_of_normals',
-			shell_command	=> $run_script,
-			hpc_driver	=> $args{hpc_driver},
-			dry_run		=> $args{dry_run},
-			log_file	=> $log
-			);
-
-		push @pon_dependencies, $run_id;
-		push @all_jobs, $run_id;
-
 		# create a trimmed (sites only) output (this is the panel of normals)
-		$pon_command = generate_pon(
+		my $pon_command = generate_pon(
 			input		=> join(' ', @pon_vcfs),
 			output		=> $pon,
 			java_mem	=> $parameters->{combine}->{java_mem},
@@ -1878,7 +1844,7 @@ sub unpaired_mode {
 
 			# filter results
 			my $filter_command = get_filter_command(
-				input		=> $merged_output,
+				input_vcf	=> $merged_output,
 				output_stem	=> $output_stem . '_filtered',
 				pon		=> $pon,
 				tmp_dir		=> $tmp_directory
