@@ -40,6 +40,7 @@ save.session.profile <- function(file.name) {
 
 ### PREPARE SESSION ################################################################################
 # import libraries
+library(BoutrosLab.plotting.general);
 library(argparse);
 
 # import command line arguments
@@ -183,6 +184,118 @@ file.symlink(
 	generate.filename(arguments$project, 'ensemble_mutation_data', 'tsv'),
 	'ensemble_mutation_data.tsv'
 	);
+
+### PLOT DATA ######################################################################################
+# if all four tools were used, plot overlap summary
+if (4 == tool.count) {
+
+	# initiate plot data
+	plot.data <- list();
+	plot.data$per_tool <- merge(
+		aggregate(Mutect2 ~ Tumor_Sample_Barcode, combined.data, sum),
+		merge(
+			aggregate(MuTect ~ Tumor_Sample_Barcode, combined.data, sum),
+			merge(
+				aggregate(Strelka ~ Tumor_Sample_Barcode, combined.data, sum),
+				aggregate(VarScan ~ Tumor_Sample_Barcode, combined.data, sum),
+				all = TRUE
+				),
+			all = TRUE
+			),
+		all = TRUE
+		);
+
+	plot.data$overlap <- merge(
+		aggregate(Hugo_Symbol ~ Tumor_Sample_Barcode + Count, combined.data, length),
+		aggregate(Hugo_Symbol ~ Tumor_Sample_Barcode, combined.data, length),
+		by = 'Tumor_Sample_Barcode'
+		);
+	colnames(plot.data$overlap) <- c('ID','Overlap','Count','Total');
+	plot.data$overlap$Overlap <- factor(plot.data$overlap$Overlap, levels = c(1,2,3,4));
+	plot.data$overlap$Percent <- plot.data$overlap$Count / plot.data$overlap$Total * 100;
+
+	save(
+		plot.data,
+		file = generate.filename(arguments$project, 'mutation_overlap', 'RData')
+		);
+
+	# grab some parameters
+	axis.cex <- if (nrow(plot.data$per_tool) <= 30) { 1
+		} else if (nrow(plot.data$per_tool) <= 50) { 0.75
+		} else if (nrow(plot.data$per_tool) <= 80) { 0.5
+		} else { 0 };
+
+	# create some plots to summarize overlap
+	plot.objects <- list();
+
+	# plot per-tool counts
+	for (tool in c('Mutect2','MuTect','Strelka','VarScan')) {
+
+		plot.objects[[tool]] <- create.barplot(
+			get(tool) ~ Tumor_Sample_Barcode,
+			plot.data$per_tool,
+			ylab.label = tool,
+			xlab.label = NULL,
+			ylab.cex = 1,
+			yaxis.cex = 1,
+			xaxis.lab = rep('',nrow(plot.data$per_tool)),
+			yaxis.tck = c(0.5,0),
+			xaxis.tck = 0,
+			yaxis.fontface = 'plain'
+			);
+		}
+
+	overlap.legend <- legend.grob(
+		legends = list(
+			legend = list(
+				colours = rev(c('grey90','grey70','grey30','grey10')),
+				labels = rev(c('1','2','3','4')),
+				title = 'Tool Count'
+				)
+			),
+		title.just = 'left',
+		size = 2
+		);
+
+	# plot overlap
+	plot.objects[['overlap']] <- create.barplot(
+		Percent ~ ID,
+		plot.data$overlap,
+		groups = plot.data$overlap$Overlap,
+		stack = TRUE,
+		col = c('grey90','grey70','grey30','grey10'),
+		ylab.label = '% of Total',
+		xlab.label = NULL,
+		ylimits = c(0,100),
+		yat = seq(0,100,20),
+		ylab.cex = 1,
+		yaxis.cex = 1,
+		xaxis.cex = axis.cex,
+		yaxis.tck = 0.5,
+		xaxis.tck = if (axis.cex == 0) { 0 } else { c(0.5, 0) },
+		xaxis.rot = 90,
+		yaxis.fontface = 'plain',
+		xaxis.fontface = 'plain',
+		legend = list(
+			right = list(fun = overlap.legend)
+			)			
+		);
+
+	# combine them!
+	create.multipanelplot(
+		plot.objects = plot.objects,
+		height = 10,
+		width = 8,
+		resolution = 200,
+		filename = generate.filename(arguments$project, 'mutation_overlap','png'),
+		plot.objects.heights = c(1,1,1,1,3),
+		left.legend.padding = 0,
+		right.legend.padding = 0,
+		top.legend.padding = 0,
+		bottom.legend.padding = 0,
+		y.spacing = -1
+		);
+	}
 
 ### SAVE SESSION INFO ##############################################################################
 save.session.profile(generate.filename('format_ensemble_mutations','SessionProfile','txt'));

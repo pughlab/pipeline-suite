@@ -94,7 +94,7 @@ create.heatmap(
 	same.as.matrix = TRUE,
 	yaxis.lab = NA,
 	xaxis.lab = NA, #rep('', nrow(plot.data)),
-	yaxis.cex = axis.cex,
+	yaxis.cex = 0.8,
 	xaxis.cex = axis.cex,
 	xaxis.tck = 0,
 	yaxis.tck = 0.2,

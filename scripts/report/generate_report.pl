@@ -64,7 +64,7 @@ sub main {
 
 \\pagestyle{fancy}
 \\lfoot{PughLab Pipeline-Suite}
-\\rfoot{Run Date: $args{run_date}}
+\\rfoot{Run Date: \\today}
 \\cfoot{Page \\thepage\\ of \\pageref{LastPage}}
 
 \\title{\\Huge \\bf PughLab Pipeline-Suite Output Report@{[defined $args{title} ? ": $args{title}" : ""]}}

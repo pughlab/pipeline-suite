@@ -319,7 +319,7 @@ if (is.dna) {
 		ylimits = total.cov.limits,
 		yat = total.cov.at,
 		yaxis.cex = 1.3,
-		cex = axis.cex,
+		cex = max(c(axis.cex,0.2)),
 		axes.lwd = 1,
 		y.error.up = if (! all(qc.metrics$granular_median == 1)) {
 			qc.metrics$granular_third_quartile - qc.metrics$granular_median } else { NA },
@@ -381,7 +381,9 @@ if (is.dna) {
 		yat = seq(1,length(smp.names)),
 		xaxis.tck = c(0.5,0),
 		xaxis.cex = 1.3,
-		xlab.label = 'Contamination\nEstimate (%)',
+		xlab.label = if (axis.cex > 0) {
+			'Contamination\nEstimate (%)' } else {
+			'\nContamination\nEstimate (%)' },
 		xlab.cex = 1.5,
 		ylab.label = NULL,
 		xaxis.fontface = 'plain',
@@ -389,7 +391,7 @@ if (is.dna) {
 		xlimits = contest.limits,
 		xat = contest.at,
 		centers = qc.metrics$contamination,
-		symbol.cex = axis.cex,
+		symbol.cex = max(c(axis.cex,0.2)),
 		abline.h = line.breaks,
 		abline.col = 'grey80',
 		top.padding = 0.1,

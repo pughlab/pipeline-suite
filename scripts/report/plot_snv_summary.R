@@ -481,6 +481,23 @@ recurrence.caption <- "Summary of the most frequently mutated genes across the c
 # write for latex
 write("\\section{SNV Summary}", file = 'snv_summary.tex');
 
+# first, check for mutation_overlap plot
+overlap.plot <- rev(sort(list.files(pattern = 'mutation_overlap.png')));
+if (length(overlap.plot) > 0) {
+	write("\\begin{figure}[h!]", file = 'snv_summary.tex', append = TRUE);
+	write("\\begin{center}", file = 'snv_summary.tex', append = TRUE);
+	write(paste0(
+		"\\includegraphics[width=0.9\\textwidth]{",
+		getwd(), '/',
+		overlap.plot[1], '}'
+		), file = 'snv_summary.tex', append = TRUE);
+	write("\\end{center}", file = 'snv_summary.tex', append = TRUE);
+	write(paste0(
+		"\\caption{From top to bottom: number of variants called by each tool (Mutect2, MuTect, Strelka, VarScan) and the overlap with variants called by 3 or more tools carried forward.}"
+		), file = 'snv_summary.tex', append = TRUE);
+	write("\\end{figure}\n", file = 'snv_summary.tex', append = TRUE);
+	}
+
 if (nrow(plot.data) == 0) {
 	write("No genes were recurrently mutated across the cohort.", file = 'snv_summary.tex', append = TRUE);
 	} else {
