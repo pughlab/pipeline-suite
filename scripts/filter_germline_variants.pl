@@ -143,6 +143,7 @@ sub main {
 			if ( (any { $_ < 10 } @norm_dp) || (any { $_ < 10 } @tumour_dp) ) { next; }
 
 			# or if clearly not a germline variant (ie, normal == 0/0) or multiple normals don't match
+			if ( (any { $_ =~ m/0\/0/ } @norm_gts) ) { next; }
 			if ( (any { $_ ne $norm_gts[0] } @norm_gts) ) { next; }
 
 			# or if all genotypes are the reference allelle
