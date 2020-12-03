@@ -874,7 +874,7 @@ sub main {
 					"if [ -s " . join(" ] && [ -s ", @final_outputs) . " ]; then",
 					$cleanup_cmd,
 					"else",
-					'echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
+					'  echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
 					"fi"
 					);
 
@@ -897,7 +897,7 @@ sub main {
 				}
 			}
 
-		print $log "FINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
+		print $log "FINAL OUTPUT:\n  " . join("\n  ", @final_outputs) . "\n";
 		print $log "---\n";
 		}
 

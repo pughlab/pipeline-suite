@@ -471,8 +471,6 @@ sub main {
 			# create output stem
 			my $cnv_stem = join('/', $sequenza_directory, $sample . '_VarScan');
 			my $output_stem = join('/', $sample_directory, $sample . '_VarScan');
-			$cleanup_cmd .= "\nrm $cnv_stem";
-			$cleanup_cmd .= "\nrm $output_stem";
 
 			# start with VarScan CNV caller
 			# only for paired tumour/normal
@@ -726,6 +724,8 @@ sub main {
 				cnv	=> $cnv_stem . '.copynumber',
 				tool	=> $sequenza
 				);
+
+			$cleanup_cmd .= "\nrm $merged_snp_output";
 
 			# check if this should be run
 			if ('Y' eq missing_file($sequenza_output)) {
@@ -1113,7 +1113,7 @@ sub main {
 					$vcf2maf_cmd .= "\n\n" . join("\n",
 						"if [ -s " . join(" ] && [ -s ", $final_maf) . " ]; then",
 						"  md5sum $final_maf > $final_maf.md5",
-						"  mv $tmp_directory/$sample\_VarScan.$vtype\_somatic_hc.vep.vcf $final_vcf",
+						"  mv $tmp_directory/$sample*.$vtype\_somatic_hc.vep.vcf $final_vcf",
 						"  md5sum $final_vcf > $final_vcf.md5",
 						"  bgzip $final_vcf",
 						"  tabix -p vcf $final_vcf.gz",
