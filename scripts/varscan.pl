@@ -17,7 +17,7 @@ my $cwd = dirname($0);
 require "$cwd/utilities.pl";
 
 # define some global variables
-our ($reference, $pon) = undef;
+our ($reference, $pon, $intervals_bed) = undef;
 
 ####################################################################################################
 # version       author		comment
@@ -368,7 +368,9 @@ sub main {
 	my @chroms = split(',', $string);
 
 	if (defined($tool_data->{intervals_bed})) {
-		print $log "\n    Target intervals (exome): $tool_data->{intervals_bed}";
+		$intervals_bed = $tool_data->{intervals_bed};
+		$intervals_bed =~ s/\.bed/_padding100bp.bed/;
+		print $log "\n    Target intervals (exome): $intervals_bed";
 		}
 
 	print $log "\n    Output directory: $output_directory";
@@ -483,7 +485,7 @@ sub main {
 				output_stem	=> $cnv_stem,
 				java_mem	=> $parameters->{varscan}->{java_mem},
 				tmp_dir		=> $tmp_directory,
-				intervals	=> $tool_data->{intervals_bed}
+				intervals	=> $intervals_bed
 				);
 
 			$varscan_command .= "\n\nmd5sum $cnv_stem.copynumber > $cnv_stem.copynumber.md5";
@@ -534,7 +536,7 @@ sub main {
 				my $intervals = $chr;
 
 				if ( ('exome' eq $chr) || ('genome' eq $chr) ) {
-					$intervals = $tool_data->{intervals_bed};
+					$intervals = $intervals_bed;
 					}
 
 				$varscan_commands{$chr} = get_varscan_snv_command(
@@ -836,7 +838,7 @@ sub main {
 				my $intervals = $chr;
 
 				if ( ('exome' eq $chr) || ('genome' eq $chr) ) {
-					$intervals = $tool_data->{intervals_bed};
+					$intervals = $intervals_bed;
 					}
 
 				$varscan_vcf_commands{$chr} = get_varscan_snv_command(
@@ -1197,7 +1199,7 @@ sub main {
 					output_stem	=> $output_stem,
 					java_mem	=> $parameters->{varscan}->{java_mem},
 					tmp_dir		=> $tmp_directory,
-					intervals	=> $tool_data->{intervals_bed}
+					intervals	=> $intervals_bed
 					);
 
 				$varscan_command .= "\n\n" . join("\n",
@@ -1405,7 +1407,7 @@ sub main {
 		);
 
 	if (defined($tool_data->{intervals_bed})) {
-		$collect_output .= " -t $tool_data->{intervals_bed}";
+		$collect_output .= " -t $intervals_bed";
 		}
 
 	$run_script = write_script(
@@ -1566,7 +1568,9 @@ sub unpaired_mode {
 	my @chroms = split(',', $string);
 	
 	if (defined($tool_data->{intervals_bed})) {
-		print $log "\n    Target intervals (exome): $tool_data->{intervals_bed}";
+		$intervals_bed = $tool_data->{intervals_bed};
+		$intervals_bed =~ s/\.bed/_padding100bp.bed/;
+		print $log "\n    Target intervals (exome): $intervals_bed";
 		}
 
 	if (defined($tool_data->{varscan}->{pon})) {
@@ -1672,7 +1676,7 @@ sub unpaired_mode {
 				my $intervals = $chr;
 
 				if ( ('exome' eq $chr) || ('genome' eq $chr) ) {
-					$intervals = $tool_data->{intervals_bed};
+					$intervals = $intervals_bed;
 					}
 
 				$varscan_commands{$chr} = get_varscan_snv_command(

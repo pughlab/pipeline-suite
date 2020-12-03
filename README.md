@@ -119,7 +119,7 @@ There are example config files located in the "configs" folder:
 ## Running a pipeline
 If you are running these pipelines on the cluster, be sure to first load perl!
 
-### Prepare a config file containing paths to FASTQ files:
+### Prepare a yaml file containing paths to FASTQ files:
 <pre><code>cd /path/to/some/directory/pipeline-suite/
 
 module load perl
@@ -154,6 +154,16 @@ perl collect_fastqc_metrics.pl \
 -c slurm \
 {optional: --rna, --dry-run }
 </code></pre>
+
+### Prepare interval files (ie, for WXS):
+For WXS or targeted-sequencing panels, an bed file containing target regions should be provided (listing at minimum: chromosome, start and end positions). Variant calling pipelines MuTect and Mutect2 will add 100bp of padding to each region provided. For consistency, this padding must be manually added prior to variant calling with other tools (ie, Strelka and VarScan).
+
+<pre><code>
+perl format_interval_bed.pl \
+-b /path/to/base/intervals.bed
+</code></pre>
+
+This will produce a padded bed file in the same directory as the original bed file (if the original file is /path/to/intervals.bed then this will produce /path/to/intervals_padding100bp.bed and intervals_padding100bp.bed.gz).
 
 ### DNA pipeline:
 <pre><code>cd /path/to/git/pipeline-suite/

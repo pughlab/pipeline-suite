@@ -297,7 +297,12 @@ sub pon {
 
 	if (defined($tool_data->{intervals_bed})) {
 		$intervals = $tool_data->{intervals_bed};
-		print $log "\n    Target intervals: $intervals";
+		$intervals =~ s/\.bed/_padding100bp.bed.gz/;
+		if ('N' eq missing_file($intervals)) {
+			print $log "\n    Target intervals: $intervals";
+			} else {
+			Carp::croak("$intervals not found. Please run format_intervals_bed.pl to ensure padding is added and then bgzip and tabix index the resulting file.");
+			}
 		}
 
 	if (defined($args{pon})) {
@@ -320,47 +325,6 @@ sub pon {
 	### RUN ###########################################################################################
 	my ($run_script, $run_id, $link);
 	my (@all_pon_jobs, @pon_vcfs);
-	my $interval_run_id = '';
-
-	# first, intervals file must be bgzipped and tabix indexed
-	if ( ('exome' eq $seq_type) && ($intervals !~ m/gz$/) ) {
-
-		my $old_intervals = $intervals;
-		my @parts = split(/\//, $old_intervals);
-		$intervals = join('/',
-			$output_directory,
-			$parts[-1]
-			);
-
-		if ( (-l $intervals) && ('Y' eq missing_file("$intervals.gz"))) {
-			unlink $intervals or die "Failed to remove previous symlink: $intervals";
-			}
-
-		symlink($old_intervals, $intervals);
-
-		if ('Y' eq missing_file("$intervals.gz")) {
-			my $format_intervals_command = "bgzip -c $intervals > $intervals.gz";
-			$format_intervals_command .= "\ntabix -p bed $intervals.gz";
-
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'run_format_intervals_bed',
-				cmd	=> $format_intervals_command,
-				modules	=> ['tabix'],
-				hpc_driver	=> $args{hpc_driver}
-				);
-
-			$interval_run_id = submit_job(
-				jobname		=> 'run_format_intervals_bed',
-				shell_command	=> $run_script,
-				hpc_driver	=> $args{hpc_driver},
-				dry_run		=> $args{dry_run},
-				log_file	=> $log
-				);
-			}
-
-		$intervals .= '.gz';
-		}
 
 	# get sample data
 	my $smp_data = LoadFile($data_config);
@@ -464,7 +428,6 @@ sub pon {
 					name	=> 'run_strelka_germline_variant_caller_' . $norm,
 					cmd	=> $germline_snv_command,
 					modules	=> [$strelka],
-					dependencies	=> $interval_run_id,
 					max_time	=> $parameters->{strelka}->{time},
 					mem		=> $parameters->{strelka}->{mem},
 					hpc_driver	=> $args{hpc_driver}
@@ -795,7 +758,12 @@ sub main {
 
 	if (defined($tool_data->{intervals_bed})) {
 		$intervals = $tool_data->{intervals_bed};
-		print $log "\n    Target intervals: $intervals";
+		$intervals =~ s/\.bed/_padding100bp.bed.gz/;
+		if ('N' eq missing_file($intervals)) {
+			print $log "\n    Target intervals: $intervals";
+			} else {
+			Carp::croak("$intervals not found. Please run format_intervals_bed.pl to ensure padding is added and then bgzip and tabix index the resulting file.");
+			}
 		}
 
 	if (defined($args{pon})) {
@@ -820,47 +788,6 @@ sub main {
 	### RUN ###########################################################################################
 	my ($run_script, $run_id, $link);
 	my (@all_jobs);
-	my $interval_run_id = '';
-
-	# first, intervals file must be bgzipped and tabix indexed
-	if ( ('exome' eq $seq_type) && ($intervals !~ m/gz$/) ) {
-
-		my $old_intervals = $intervals;
-		my @parts = split(/\//, $old_intervals);
-		$intervals = join('/',
-			$output_directory,
-			$parts[-1]
-			);
-
-		if ( (-l $intervals) && ('Y' eq missing_file("$intervals.gz"))) {
-			unlink $intervals or die "Failed to remove previous symlink: $intervals";
-			}
-
-		symlink($old_intervals, $intervals);
-
-		if ('Y' eq missing_file("$intervals.gz")) {
-			my $format_intervals_command = "bgzip -c $intervals > $intervals.gz";
-			$format_intervals_command .= "\ntabix -p bed $intervals.gz";
-
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'run_format_intervals_bed',
-				cmd	=> $format_intervals_command,
-				modules	=> ['tabix'],
-				hpc_driver	=> $args{hpc_driver}
-				);
-
-			$interval_run_id = submit_job(
-				jobname		=> 'run_format_intervals_bed',
-				shell_command	=> $run_script,
-				hpc_driver	=> $args{hpc_driver},
-				dry_run		=> $args{dry_run},
-				log_file	=> $log
-				);
-			}
-
-		$intervals .= '.gz';
-		}
 
 	# get sample data
 	my $smp_data = LoadFile($data_config);
