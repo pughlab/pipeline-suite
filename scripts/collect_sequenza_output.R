@@ -204,9 +204,42 @@ for (file in seg.files) {
 	# store data in list
 	if (smp %in% names(seg.list)) { next; }
 	segs <- read.delim(file);
-	segs <- fillgaps(segs[!is.na(segs$CNt),c('chromosome','start.pos','end.pos','CNt')]);
+	segs <- fillgaps(segs[!is.na(segs$CNt),]);
 	seg.list[[smp]] <- segs;
 	}
+
+# format segments for gistic
+segment.data <- do.call(rbind, seg.list);
+segment.data$Sample <- sapply(rownames(segment.data), function(i) { unlist(strsplit(i,'\\.'))[1] } );
+segment.data$Seg.CN <- (log2(2*segment.data$depth.ratio)-1);
+segment.data <- segment.data[,c('Sample','chromosome','start.pos','end.pos','N.BAF','Seg.CN')];
+
+write.table(
+	segment.data,
+	file = generate.filename(arguments$project, 'segments_for_gistic', 'tsv'),
+	row.names = FALSE,
+	col.names = TRUE,
+	sep = '\t',
+	quote = FALSE
+	);
+
+markers <- unique(data.frame(
+	chr = rep(segment.data$chromosome, times = 2),
+	pos = c(segment.data$start.pos, segment.data$end.pos)
+	));
+
+markers$chr <- factor(markers$chr, levels = paste0('chr',c(1:22,'X','Y')));
+markers <- markers[order(markers$chr, -markers$pos),];
+rownames(markers) <- 1:nrow(markers);
+
+write.table(
+	markers,
+	file = generate.filename(arguments$project, 'markers_for_gistic','txt'),
+	row.names = TRUE,
+	col.names = FALSE,
+	sep = '\t',
+	quote = FALSE
+	);
 
 # define a results table
 gene.data <- refGene;
@@ -217,7 +250,7 @@ for (smp in names(seg.list)) {
 for (smp in names(seg.list)) {
 
 	# convert to GRanges
-	tmp <- seg.list[[smp]];
+	tmp <- seg.list[[smp]][,c('chromosome','start.pos','end.pos','CNt')];
 	colnames(tmp) <- c('chrom','start','end','CN');
 	tmp$AbsCN <- tmp$CN - 2;
 
