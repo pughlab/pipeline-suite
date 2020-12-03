@@ -367,6 +367,8 @@ sub main {
 				cmd	=> $mavis_cmd,
 				modules	=> [$mavis, $bwa, 'perl'],
 				dependencies	=> join(':', @format_jobs),
+				max_time	=> '48:00:00',
+				mem		=> '1G',
 				hpc_driver	=> $args{hpc_driver}
 				);
 
