@@ -43,6 +43,7 @@ is.symlink <- function(file) {
 ### PREPARE SESSION ################################################################################
 # import libraries
 library(argparse);
+library(plyr);
 
 # import command line arguments
 parser <- ArgumentParser();
@@ -130,16 +131,6 @@ maf.files <- maf.files[!sapply(maf.files, is.symlink)];
 samples <- c();
 
 maf.data <- list();
-variant.data <- data.frame();
-maf.fields <- c(
-	'Chromosome',
-	'Start_Position',
-	'End_Position',
-	'Reference_Allele',
-	'Allele',
-	'dbSNP_RS',
-	'Hugo_Symbol'
-	);
 
 for (i in 1:length(maf.files)) {
 
@@ -163,37 +154,7 @@ for (i in 1:length(maf.files)) {
 
 	maf.data[[i]] <- tmp;
 
-	# if RNA-Seq or Exome-Seq, focus on genic regions only
-	if (is.rnaseq || is.exome) {
-		tmp <- tmp[which(tmp$Variant_Classification %in% classes.to.keep),];
-		}
-
-	# if no variants remain after filtering, move on to next sample	
-	if (nrow(tmp) == 0) {
-		next;
-		}
-
-	# store it
-	if (nrow(variant.data) == 0) {
-
-		variant.data <- tmp[,maf.fields];
-		colnames(variant.data) <- c('Chromosome','Start','End','Ref','Alt','dbSNP','Symbol');
-
-		variant.data[,smp] <- variant.codes$Code[match(tmp$Variant_Classification, variant.codes$Classification)];
-
-		} else {
-
-		tmp2 <- tmp[,maf.fields];
-		colnames(tmp2) <- c('Chromosome','Start','End','Ref','Alt','dbSNP','Symbol');
-		tmp2[,smp] <- variant.codes$Code[match(tmp$Variant_Classification, variant.codes$Classification)];
-
-		variant.data <- merge(variant.data, tmp2, all = TRUE);
-
-		rm(tmp2);
-		}
-
 	rm(tmp);
-	gc();
 	}
 
 # save full (combined) maf data to file
@@ -215,11 +176,55 @@ write.table(
 
 gc();
 
+# extract variant info
+maf.fields <- c(
+	'Chromosome',
+	'Start_Position',
+	'End_Position',
+	'Reference_Allele',
+	'Allele',
+	'dbSNP_RS',
+	'Hugo_Symbol',
+	'Variant_Classification',
+	'Tumor_Sample_Barcode'
+	);
+
+trimmed.data <- full.maf.data[,maf.fields];
+colnames(trimmed.data) <- c('Chromosome','Start','End','Ref','Alt','dbSNP','Symbol','Variant_Classification','Sample');
+
+# if RNA-Seq or Exome-Seq, focus on genic regions only
+if (is.rnaseq || is.exome) {
+	trimmed.data <- trimmed.data[which(trimmed.data$Variant_Classification %in% classes.to.keep),];
+	}
+
+trimmed.data$Code <- variant.codes$Code[match(trimmed.data$Variant_Classification, variant.codes$Classification)];
+trimmed.data <- trimmed.data[,-which(colnames(trimmed.data) == 'Variant_Classification')];
+
+smp.data <- list();
+
+# reshape is memory intensive, so do this in batches
+tumour.ids <- unique(trimmed.data$Sample);
+for (smp in tumour.ids) {
+	tmp <- trimmed.data[which(trimmed.data$Sample == smp),];
+	colnames(tmp)[which(colnames(tmp) == 'Code')] <- smp;
+	tmp <- tmp[,-which(colnames(tmp) == 'Sample')];
+	smp.data[[smp]] <- tmp;
+	}
+
+variant.data <- join_all(
+	smp.data,
+	type = 'full',
+	match = 'first'
+	);
+
 # add in empty samples
 for (smp in samples) {
 	if (smp %in% colnames(variant.data)) { next; }
 	variant.data[,smp] <- NA;
 	}
+
+variant.data$Chromosome <- factor(variant.data$Chromosome, levels = paste0('chr',c(1:22,'X','Y','M')));
+variant.data <- variant.data[order(variant.data$Chromosome, variant.data$Start, variant.data$End),];
 
 # save data to file
 write.table(
