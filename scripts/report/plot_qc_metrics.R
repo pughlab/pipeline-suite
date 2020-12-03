@@ -151,6 +151,7 @@ line.breaks <- get.line.breaks(sample.info$Patient);
 # determine some parameters
 add.rectangle <- TRUE;
 if (length(smp.names) > 50) { add.rectangle <- FALSE; }
+if (length(smp.names) < 6) { add.rectangle <- FALSE; }
 
 axis.cex <- if (nrow(cor.data) <= 30) { 1
 	} else if (nrow(cor.data) <= 80) { 0.8

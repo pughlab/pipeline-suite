@@ -499,17 +499,8 @@ if (length(overlap.plot) > 0) {
 	}
 
 if (nrow(plot.data) == 0) {
-	write("No genes were recurrently mutated across the cohort.", file = 'snv_summary.tex', append = TRUE);
+	write("\\pagebreak\nNo genes were recurrently mutated across the cohort.", file = 'snv_summary.tex', append = TRUE);
 	} else {
-	recurrence.summary <- as.data.frame(table(plot.data$Count));
-	colnames(recurrence.summary) <- c('N.samples','N.genes');
-	print(
-		xtable(rev(recurrence.summary), caption = 'Summary of recurrently-mutated genes across the cohort. Table shows number of genes with functionally relevant mutations in N samples.'),
-		file = 'snv_summary.tex',
-		include.rownames = FALSE,
-		append = TRUE
-		);
-
 	write("\\pagebreak\n\\begin{figure}[h!]", file = 'snv_summary.tex', append = TRUE);
 	write("\\begin{center}", file = 'snv_summary.tex', append = TRUE);
 	write(paste0(
@@ -522,8 +513,18 @@ if (nrow(plot.data) == 0) {
 		"\\caption{", summary.caption, "}"
 		), file = 'snv_summary.tex', append = TRUE);
 	write("\\end{figure}\n", file = 'snv_summary.tex', append = TRUE);
+	write("\\pagebreak\n", file = 'snv_summary.tex', append = TRUE);
 
-	write("\\pagebreak\n\\begin{figure}[h!]", file = 'snv_summary.tex', append = TRUE);
+	recurrence.summary <- as.data.frame(table(plot.data$Count));
+	colnames(recurrence.summary) <- c('N.samples','N.genes');
+	print(
+		xtable(rev(recurrence.summary), caption = 'Summary of recurrently-mutated genes across the cohort. Table shows number of genes with functionally relevant mutations in N samples.'),
+		file = 'snv_summary.tex',
+		include.rownames = FALSE,
+		append = TRUE
+		);
+
+	write("\n\\begin{figure}[h!]", file = 'snv_summary.tex', append = TRUE);
 	write("\\begin{center}", file = 'snv_summary.tex', append = TRUE);
 	write(paste0(
 		"\\includegraphics[width=0.9\\textwidth]{",
