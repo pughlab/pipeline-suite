@@ -82,6 +82,8 @@ if (length(qc.files) == 1) {
 	# get correlations (these are Pearson's Correlation)
 	corr.data <- combined.qc[,c('Sample', smp.columns)];
 	corr.data$Sample <- gsub('-', '.', corr.data$Sample);
+	rownames(corr.data) <- corr.data$Sample;
+	corr.data <- corr.data[,-1];
 
 	}
 
