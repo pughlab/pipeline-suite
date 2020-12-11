@@ -35,7 +35,7 @@ sub main {
 	$methods .= "\\subsection{Alignment and Quality Checks:}\n";
 
 	my ($bwa, $gatk, $mutect, $mutect2, $strelka, $manta, $varscan, $delly, $mavis);
-	my ($ref_type, $samtools, $picard, $bedtools, $vcftools, $bcftools);
+	my ($ref_type, $samtools, $picard, $bedtools, $vcftools);
 	my ($k1000g, $mills, $kindels, $dbsnp, $hapmap, $omni, $cosmic);
 	my ($vep, $vcf2maf);
 
@@ -253,6 +253,34 @@ sub main {
 		$methods .= "MuTect2 not run.\\newline\n";
 		}
 
+	if ('Y' eq $tool_data->{somaticsniper}->{run}) {
+
+		$somaticsniper = $tool_data->{somaticsniper_version};
+		my ($tool, $somaticsniper_version) = split('/', $somaticsniper);
+		$somaticsniper = $somaticsniper_version;
+		$samtools = $tool_data->{samtools_version};
+		$vcftools = $tool_data->{vcftools_version};
+
+		my $pon = '';
+		$pon = $tool_data->{somaticsniper}->{pon};
+
+		# annotation
+		my @parts = split('\\/', $tool_data->{annotate}->{vep_path});
+		$vep = $parts[-1];
+		@parts = split('\\/', $tool_data->{annotate}->{vcf2maf_path});
+		$vcf2maf = $parts[-2];
+
+		# fill in methods
+		$methods .= "\\subsubsection{SomaticSniper (v$somaticsniper):}\n";
+		$methods .= "SomaticSniper was run on each T/N pair using options -q 1 -Q 40 -G and -L . For filtering, bcftools (v$samtools) mpileup was run with results filtered for quality using bcftools vcfutils.pl varFilter -Q 20. SomaticSniper's filters were then applied as suggested (snpfilter.pl was first applied to the initial VCF using the normal indel pileup, with the results then filtered using the tumour pileup). The resulting positions were fed into bam-readcount (-b 15 -q 1) for the tumour BAM and SomaticSnipers fpfilter.pl and highconfidence.pl applied to remove probable false positives (min mapping quality = 40 and min somatic score = 40).";
+
+		if ('' ne $pon) {
+			$methods .= "Remaining variants were filtered to remove known germline variants using the provided panel of normals ($pon) with vcftools (v$vcftools).\\newline\n";
+			}
+		} else {
+		$methods .= "SomaticSniper not run.\\newline\n";
+		}
+
 	if ('Y' eq $tool_data->{strelka}->{run}) {
 
 		$strelka	= $tool_data->{strelka_version};
@@ -281,9 +309,6 @@ sub main {
 		$gatk		= $tool_data->{gatk_version};
 		$samtools	= $tool_data->{samtools_version};
 		$vcftools	= $tool_data->{vcftools_version};
-		if (defined($tool_data->{bcftools_version})) {
-			$bcftools = $tool_data->{bcftools_version};
-			} else { $bcftools = '1.2-4-g1fedb8b'; }
 
 		# annotation
 		my @parts = split('\\/', $tool_data->{annotate}->{vep_path});
@@ -293,7 +318,7 @@ sub main {
 
 		# fill in methods
 		$methods .= "\\subsubsection{VarScan (v$varscan):}\n";
-		$methods .= "For variant calling in T/N pairs, samtools (v$samtools) mpileup was run on each T/N pair, using -B -q1 -d 10000. Positions with 0 coverage in both the tumour and normal were excluded and the resulting output provided to VarScan. VarScan somatic and processSomatic were used to generate lists of high-confidence germline and somatic variant positions. VarScan somatic was run again, using --output-vcf, and the resulting VCF was filtered (using bcftools v$bcftools) to produce a high-confidence germline VCF file and a high-confidence somatic VCF file.\\newline\n";
+		$methods .= "For variant calling in T/N pairs, samtools (v$samtools) mpileup was run on each T/N pair, using -B -q1 -d 10000. Positions with 0 coverage in both the tumour and normal were excluded and the resulting output provided to VarScan. VarScan somatic and processSomatic were used to generate lists of high-confidence germline and somatic variant positions. VarScan somatic was run again, using --output-vcf, and the resulting VCF was filtered (using bcftools v$samtools) to produce a high-confidence germline VCF file and a high-confidence somatic VCF file.\\newline\n";
 		$methods .= "To produce a panel of normals, high-confidence germline variants were merged across samples using GATK's CombineVariants (v$gatk), removing any variant that did not pass quality criteria (FILTER field not equal to PASS), and keeping variants present in at least 2 samples.\\newline\n";
 		$methods .= "For variant calling in tumour-only samples, samtools (v$samtools) mpileup was run, again using -B -q1 -d 10000. Positions with 0 coverage were excluded and the resulting output provided to VarScan mpileup2cns using --output-vcf and --variants. Resulting variants were filtered (using vcftools v$vcftools) to remove germline variants (using the panel of normals).\\newline\n";
 		} else {
@@ -302,8 +327,17 @@ sub main {
 
 	if (defined($vep)) {
 		$methods .= "\\subsubsection{Annotation:}\n";
-		$methods .= "Somatic short variants (SNVs and INDELs) were filtered and annotated using VEP (v$vep) and vcf2maf (v$vcf2maf). Filters were applied to remove known common variants (ExAC nonTCGA version r1), and variants with low coverage (see callable bases above).\\newline\n";
-#		$methods .= "Lastly, SNVs and INDELs detected by 2 or more variant calling tools were deemed high-confidence somatic variants and carried forward for recurrence analyses.\\newline\n";
+		$methods .= "Somatic short variants (SNVs and INDELs) were annotated using VEP (v$vep) and vcf2maf (v$vcf2maf) and filtered to remove known common variants (ExAC nonTCGA version r1).\\newline\n";
+		$methods .= "Lastly, an ensemble approach was applied, such that variants meeting the following criteris were carried forward for downstream analyses:\\newline\n";
+		$methods .= join("\n",
+			"{\\scriptsize \\begin{itemize}",
+			"  \\vspace{-0.2cm}\\item SNPs identified by 3 or more tools",
+			"  \\vspace{-0.2cm}\\item INDELs identified by 2 or more tools",
+			"  \\vspace{-0.2cm}\\item variants identified by Mutect2, with VAF \$<\$ 0.1",
+			"  \\vspace{-0.2cm}\\item variants with intra-patient evidence (any of the above 3 criteria)",
+			"\\end{itemize} }"
+			) . "\n";
+		$methods .= "Variants with low coverage (see callable bases above) were flagged.\\newline\n";
 		} else {
 		$methods .= "No somatic variant calling performed.\\newline\n";
 		}
@@ -314,7 +348,7 @@ sub main {
 	if ('Y' eq $tool_data->{delly}->{run}) {
 
 		$delly = $tool_data->{delly_version};
-		$bcftools = $tool_data->{bcftools_version};
+		$samtools = $tool_data->{samtools_version};
 
 		# fill in methods
 		if (defined($manta)) {
@@ -323,7 +357,7 @@ sub main {
 			$methods .= "Somatic structural variants (SVs) including large insertions/deletions, duplications, inversions and translocations were identified using Delly (v$delly).\\newline\n";
 			}
 		$methods .= "\\newline\n";
-		$methods .= "Delly was run on each T/N pair or tumour-only sample, with variants filtered (per patient; -m 0 -a 0.1 -r 0.5 -v 10 -p) and merged (cohort; -m 0 -n 250000000 -b 0 -r 1.0) to identify a joint site list. Sites were genotyped in each sample, merged using bcftools (v$bcftools) and finalized (per tumour, filtered against all available normals; -m 0 -a 0.1 -r 0.5 -v 10 -p), according to published best practices.\\newline\n\\newline\n";
+		$methods .= "Delly was run on each T/N pair or tumour-only sample, with variants filtered (per patient; -m 0 -a 0.1 -r 0.5 -v 10 -p) and merged (cohort; -m 0 -n 250000000 -b 0 -r 1.0) to identify a joint site list. Sites were genotyped in each sample, merged using bcftools (v$samtools) and finalized (per tumour, filtered against all available normals; -m 0 -a 0.1 -r 0.5 -v 10 -p), according to published best practices.\\newline\n\\newline\n";
 		}
 
 	if (defined($manta)) {

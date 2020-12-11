@@ -157,26 +157,21 @@ sub get_delly_filter_command {
 # format command to generate PON
 sub generate_pon {
 	my %args = (
-		bcftools	=> undef,
 		input		=> undef,
 		intermediate	=> undef,
 		output		=> undef,
 		@_
 		);
 
-	if (!defined($args{bcftools})) {
-		$args{bcftools} = 'bcftools';
-		}
-
 	my $pon_command = join(' ',
-		$args{bcftools}, 'merge',
+		'bcftools merge',
 		'-m id -O b',
 		'-o', $args{intermediate},
 		$args{input}
 		);
 
 	$pon_command .= "\n\n" . join(' ',
-		$args{bcftools}, 'index',
+		'bcftools index',
 		'--csi',
 		$args{intermediate}
 		);
@@ -193,25 +188,20 @@ sub generate_pon {
 # format command to merge genotyped bcfs
 sub merge_genotyped_bcfs {
 	my %args = (
-		bcftools	=> undef,
 		input		=> undef,
 		output		=> undef,
 		@_
 		);
 
-	if (!defined($args{bcftools})) {
-		$args{bcftools} = 'bcftools';
-		}
-
 	my $job_command = join(' ',
-		$args{bcftools}, 'merge',
+		'bcftools merge',
 		'-O b --force-samples',
 		'-o', $args{output},
 		$args{input}
 		);
 
 	$job_command .= "\n\n" . join(' ',
-		$args{bcftools}, 'index',
+		'bcftools index',
 		'--csi',
 		$args{output}
 		);
@@ -222,19 +212,14 @@ sub merge_genotyped_bcfs {
 # format command to finalize sv calls
 sub get_finalize_command {
 	my %args = (
-		bcftools	=> undef,
 		id		=> undef,
 		input		=> undef,
 		output		=> undef,
 		@_
 		);
 
-	if (!defined($args{bcftools})) {
-		$args{bcftools} = 'bcftools';
-		}
-
 	my $job_command = join(' ',
-		$args{bcftools}, 'view',
+		'bcftools view',
 		'-s', $args{id},
 		'-O v -o', $args{output},
 		$args{input}
@@ -313,10 +298,7 @@ sub pon {
 
 	# set tools and versions
 	my $delly	= 'delly/' . $tool_data->{delly_version};
-	my $bcftools 	= 'bcftools/' . $tool_data->{bcftools_version};
-	if (defined($tool_data->{bcftools_path})) {
-		$bcftools = '';
-		}
+	my $samtools 	= 'samtools/' . $tool_data->{samtools_version};
 
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{delly}->{parameters};
@@ -518,7 +500,6 @@ sub pon {
 
 	# merge these genotyped results and filter only germline
 	$pon_command = generate_pon(
-		bcftools	=> $tool_data->{bcftools_path},
 		input		=> join(' ', @genotyped_bcfs),
 		intermediate	=> $pon_merged,
 		output		=> $pon_genotyped
@@ -534,7 +515,7 @@ sub pon {
 			name	=> 'create_panel_of_normals',
 			cmd	=> $pon_command,
 			dependencies	=> join(':', @part2_jobs),
-			modules		=> [$delly, $bcftools],
+			modules		=> [$delly, $samtools],
 			max_time	=> $parameters->{filter}->{time},
 			mem		=> $parameters->{filter}->{mem},
 			hpc_driver	=> $args{hpc_driver}
@@ -717,10 +698,7 @@ sub main {
 
 	# set tools and versions
 	my $delly	= 'delly/' . $tool_data->{delly_version};
-	my $bcftools 	= 'bcftools/' . $tool_data->{bcftools_version};
-	if (defined($tool_data->{bcftools_path})) {
-		$bcftools = '';
-		}
+	my $samtools 	= 'samtools/' . $tool_data->{samtools_version};
 
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{delly}->{parameters};
@@ -1045,7 +1023,6 @@ sub main {
 	my $merged_somatic_output = join('/', $output_directory, 'somatic_genotyped_SVs_merged.bcf');
 
 	my $merge_somatic_svs = merge_genotyped_bcfs(
-		bcftools	=> $tool_data->{bcftools_path},
 		input		=> join(' ', @genotyped_bcfs),
 		output		=> $merged_somatic_output
 		);
@@ -1059,7 +1036,7 @@ sub main {
 			name	=> 'merge_genotyped_somatic_svs',
 			cmd	=> $merge_somatic_svs,
 			dependencies	=> join(':', @part2_jobs),
-			modules		=> [$delly, $bcftools],
+			modules		=> [$delly, $samtools],
 			max_time	=> $parameters->{merge}->{time},
 			mem		=> $parameters->{merge}->{mem},
 			hpc_driver	=> $args{hpc_driver}
@@ -1110,7 +1087,6 @@ sub main {
 				);
 
 			$finalize_somatic_svs .= "\n\n" . get_finalize_command(
-				bcftools	=> $tool_data->{bcftools_path},
 				id		=> $sample,
 				output		=> $final_output,
 				input		=> $filter_output
@@ -1127,7 +1103,7 @@ sub main {
 					name	=> 'finalize_somatic_svs_' . $sample,
 					cmd	=> $finalize_somatic_svs,
 					dependencies	=> $merge_run_id,
-					modules		=> [$delly, $bcftools],
+					modules		=> [$delly, $samtools],
 					max_time	=> $parameters->{filter}->{time},
 					mem		=> $parameters->{filter}->{mem},
 					hpc_driver	=> $args{hpc_driver}

@@ -115,6 +115,38 @@ sub main {
 		symlink($qc_data, join('/', $data_directory, 'rnaseqc_output.tsv'));
 		symlink($correlations, join('/', $data_directory, 'genes.rpkm_correlations.tsv'));
 
+		# create some QC plots
+		my $qc_command = "cd $output_directory\n";
+		$qc_command .= "Rscript $cwd/report/plot_qc_metrics.R";
+		$qc_command .= " " . join(' ',
+			'-g', $correlations,
+			'-q', $qc_data,
+			'-o', $plot_directory,
+			'-p', $tool_data->{project_name},
+			'-t', $tool_data->{seq_type}
+			);
+		# run command
+		print $log "Submitting job to create QC plots...\n";
+		$run_script = write_script(
+			log_dir		=> $log_directory,
+			name		=> 'create_qc_plots',
+			cmd		=> $qc_command,
+			modules		=> [$r_version],
+			max_time	=> '01:00:00',
+			mem		=> '2G',
+			hpc_driver	=> $args{cluster}
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'create_qc_plots',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{cluster},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @job_ids, $run_id;
+
 		# rna expression values
 		if ('Y' eq $tool_data->{rsem}->{run}) {
 			my $rsem_dir = join('/', $output_directory, 'RSEM');
@@ -384,6 +416,41 @@ sub main {
 
 		symlink($correlations, join('/', $data_directory, 'germline_correlation.tsv'));
 
+		# create some QC plots
+		my $qc_command = "cd $output_directory\n";
+		$qc_command .= "Rscript $cwd/report/plot_qc_metrics.R";
+		$qc_command .= " " . join(' ',
+			'-g', $correlations,
+			'-q', $qc_data,
+			'-o', $plot_directory,
+			'-p', $tool_data->{project_name},
+			'-t', $tool_data->{seq_type},
+			'-c', $contest_data
+			);
+
+		# run command
+		print $log "Submitting job to create QC plots...\n";
+		$run_script = write_script(
+			log_dir		=> $log_directory,
+			name		=> 'create_qc_plots',
+			cmd		=> $qc_command,
+			modules		=> [$r_version],
+			max_time	=> '01:00:00',
+			mem		=> '2G',
+			hpc_driver	=> $args{cluster}
+			);
+
+		my $qc_run_id = submit_job(
+			jobname		=> 'create_qc_plots',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{cluster},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @job_ids, $qc_run_id;
+
+
 		# somatic variants
 		my ($mutect_data, $mutect2_data, $strelka_data, $varscan_data);
 		my ($sequenza_data, $ploidy_data);
@@ -577,6 +644,7 @@ sub main {
 
 		# find ENSEMBLE mutations
 		$ensemble_command .= " -n " . ($n_tools-1);
+		$ensemble_command .= " -s " . join('/', $plot_directory, 'sample_info.txt');
 
 		# run command
 		print $log "Submitting job to collect somatic variants...\n";
@@ -584,6 +652,7 @@ sub main {
 			log_dir		=> $log_directory,
 			name		=> 'collect_somatic_variant_calls',
 			cmd		=> $ensemble_command,
+			dependencies	=> $qc_run_id,
 			modules		=> [$r_version],
 			max_time	=> '24:00:00',
 			mem		=> '2G',
@@ -633,43 +702,6 @@ sub main {
 
 		push @job_ids, $run_id;
 		}
-
-	# create some QC plots
-	my $qc_command = "cd $output_directory\n";
-	$qc_command .= "Rscript $cwd/report/plot_qc_metrics.R";
-	$qc_command .= " " . join(' ',
-		'-g', $correlations,
-		'-q', $qc_data,
-		'-o', $plot_directory,
-		'-p', $tool_data->{project_name},
-		'-t', $tool_data->{seq_type}
-		);
-
-	unless ('rna' eq $tool_data->{seq_type}) {
-		$qc_command .= " -c $contest_data";
-		}
-
-	# run command
-	print $log "Submitting job to create QC plots...\n";
-	$run_script = write_script(
-		log_dir		=> $log_directory,
-		name		=> 'create_qc_plots',
-		cmd		=> $qc_command,
-		modules		=> [$r_version],
-		max_time	=> '01:00:00',
-		mem		=> '2G',
-		hpc_driver	=> $args{cluster}
-		);
-
-	$run_id = submit_job(
-		jobname		=> 'create_qc_plots',
-		shell_command	=> $run_script,
-		hpc_driver	=> $args{cluster},
-		dry_run		=> $args{dry_run},
-		log_file	=> $log
-		);
-
-	push @job_ids, $run_id;
 
 	# write some methods
 	my $methods_command = "perl $cwd/report/write_wxs_methods.pl";

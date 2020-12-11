@@ -295,20 +295,9 @@ sub pon {
 	$reference = $tool_data->{reference};
 	$seq_type = $tool_data->{seq_type};
 
-	if (defined($tool_data->{intervals_bed})) {
-		$intervals = $tool_data->{intervals_bed};
-		$intervals =~ s/\.bed/_padding100bp.bed.gz/;
-		if ('N' eq missing_file($intervals)) {
-			print $log "\n    Target intervals: $intervals";
-			} else {
-			Carp::croak("$intervals not found. Please run format_intervals_bed.pl to ensure padding is added and then bgzip and tabix index the resulting file.");
-			}
-		}
-
-	if (defined($args{pon})) {
-		print $log "\n    Panel of Normals: $args{pon}";
-		$pon = $args{pon};
-		}
+	$intervals = $tool_data->{intervals_bed};
+	$intervals =~ s/\.bed/_padding100bp.bed.gz/;
+	print $log "\n    Target intervals: $intervals";
 
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
@@ -514,8 +503,7 @@ sub pon {
 				# make sure final output exists before removing intermediate files!
 				my @files_to_check;
 				foreach my $tmp ( @{$final_outputs{$patient}} ) {
-					$tmp .= '.md5';
-					push @files_to_check, $tmp;
+					push @files_to_check, $tmp . '.md5';
 					}
 
 				my $cleanup_cmd = join("\n",
@@ -756,15 +744,9 @@ sub main {
 	$reference = $tool_data->{reference};
 	$seq_type = $tool_data->{seq_type};
 
-	if (defined($tool_data->{intervals_bed})) {
-		$intervals = $tool_data->{intervals_bed};
-		$intervals =~ s/\.bed/_padding100bp.bed.gz/;
-		if ('N' eq missing_file($intervals)) {
-			print $log "\n    Target intervals: $intervals";
-			} else {
-			Carp::croak("$intervals not found. Please run format_intervals_bed.pl to ensure padding is added and then bgzip and tabix index the resulting file.");
-			}
-		}
+	$intervals = $tool_data->{intervals_bed};
+	$intervals =~ s/\.bed/_padding100bp.bed.gz/;
+	print $log "\n    Target intervals: $intervals";
 
 	if (defined($args{pon})) {
 		print $log "\n    Panel of Normals: $args{pon}";

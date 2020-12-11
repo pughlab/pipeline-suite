@@ -35,7 +35,7 @@ sub main {
 	$methods .= "\\subsection{Alignment and Quality Checks:}\n";
 
 	my ($star, $rnaseqc, $gatk, $rsem, $star_fusion, $fusioncatcher);
-	my ($samtools, $picard, $bedtools, $vcftools, $bcftools);
+	my ($samtools, $picard, $bedtools, $vcftools);
 	my ($star_ref, $ref_type, $gtf);
 	my ($k1000g, $mills, $kindels, $dbsnp, $hapmap, $omni, $cosmic);
 	my ($vep, $vcf2maf, $bwa);

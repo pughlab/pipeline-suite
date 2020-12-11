@@ -485,8 +485,7 @@ sub main{
 				# make sure final output exists before removing intermediate files!
 				my @files_to_check;
 				foreach my $tmp ( @final_outputs ) {
-					$tmp .= '.md5';
-					push @files_to_check, $tmp;
+					push @files_to_check, $tmp . '.md5';
 					}
 
 				$cleanup_cmd_rna = join("\n",

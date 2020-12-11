@@ -73,25 +73,44 @@ sub error_checking {
 		}
 	}
 
-	# Strelka, VarScan and Delly
-	if ( ('strelka' eq $pipeline) || ('varscan' eq $pipeline) || ('delly' eq $pipeline) ) {
+	# Strelka, VarScan, SomaticSniper and Delly
+	my @pipeline_list = qw(strelka varscan delly somaticsniper);
+	if ( any { /$pipeline/ } @pipeline_list ) {
 
 		if (!defined($tool_data->{reference})) { die("Must supply path to reference genome!"); }
 
+		my $intervals;
 		if ('dna' eq $data_type) {
 
+			# are intervals provided for exome/targeted seq?
+			# are they properly formatted?
 			if ( ('strelka' eq $pipeline) &&
-				(any { /$tool_data->{seq_type}/ } qw(exome targeted) ) && 
-				(!defined($tool_data->{intervals_bed}))
+				( any { /$tool_data->{seq_type}/ } qw(exome targeted) )
 				) {
-				die("Must supply path to target intervals!");
+
+				$intervals = $tool_data->{intervals_bed};
+				$intervals =~ s/\.bed/_padding100bp.bed.gz/;
+
+				if (!defined($tool_data->{intervals_bed})) {
+					die("Must supply path to target intervals!");
+				} elsif ('Y' eq missing_file($intervals)) {
+					die("Padded, bgzipped file: $intervals is missing. Please run format_intervals_bed.pl to ensure padding is added and file is bgzipped and tabix indexed.");
+				}
 			}
 
-			elsif ( ('varscan' eq $pipeline) &&
-				(!defined($tool_data->{intervals_bed}))
+			if ( ( any { /$pipeline/ } qw(varscan somaticsniper) ) &&
+				( any { /$tool_data->{seq_type}/ } qw(exome targeted) )
 				) {
-				print "WARNING: no target intervals provided.\n";
-				print ">>If this is exome data, target regions are recommend!\n";
+
+				$intervals = $tool_data->{intervals_bed};
+				$intervals =~ s/\.bed/_padding100bp.bed/;
+
+				if (!defined($tool_data->{intervals_bed})) {
+					print "WARNING: no target intervals provided.\n";
+					print ">>If this is exome data, target regions are recommend!\n";
+				} elsif ('Y' eq missing_file($intervals)) {
+					die("Padded file: $intervals is missing. Please run format_intervals_bed.pl to ensure padding is added.");
+				}
 			}
 
 		} elsif (('rna' eq $data_type) && ('strelka' eq $pipeline)) {
@@ -429,7 +448,7 @@ sub get_vcf2maf_command {
 	if (defined($args{normal_id})) {
 		$maf_command .= " --normal-id $args{normal_id}";
 
-		if ($args{input} =~ m/Strelka|VarScan|MuTect2/) {
+		if ($args{input} =~ m/Strelka|VarScan|Mutect2|SomaticSniper/) {
 			$maf_command .= " --vcf-tumor-id TUMOR --vcf-normal-id NORMAL";
 			}
 	} elsif ($args{input} =~ m/VarScan/) {

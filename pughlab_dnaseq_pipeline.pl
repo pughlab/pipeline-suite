@@ -77,7 +77,8 @@ sub main {
 
 	my $run_script;
 	my ($bwa_run_id, $gatk_run_id, $contest_run_id, $coverage_run_id, $hc_run_id);
-	my ($strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id, $delly_run_id);
+	my ($strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id);
+	my ($somaticsniper_run_id, $delly_run_id);
 	my ($mavis_run_id, $report_run_id);
 
 	my @job_ids;
@@ -92,6 +93,7 @@ sub main {
 	my $mutect_directory = join('/', $output_directory, 'MuTect');
 	my $mutect2_directory = join('/', $output_directory, 'MuTect2');
 	my $varscan_directory = join('/', $output_directory, 'VarScan');
+	my $somaticsniper_directory = join('/', $output_directory, 'SomaticSniper');
 	my $delly_directory = join('/', $output_directory, 'Delly');
 	my $mavis_directory = join('/', $output_directory, 'Mavis');
 
@@ -853,6 +855,58 @@ sub main {
 
 				print $log ">>> VarScan tumour-only job id: $varscan_run_id\n\n";
 				push @job_ids, $varscan_run_id;
+				}
+			}
+
+		## SomaticSniper pipeline
+		if ('Y' eq $tool_data->{somaticsniper}->{run}) {
+
+			unless(-e $somaticsniper_directory) { make_path($somaticsniper_directory); }
+
+			my $somaticsniper_command = join(' ',
+				"perl $cwd/scripts/somaticsniper.pl",
+				"-o", $somaticsniper_directory,
+				"-t", $tool_config,
+				"-d", $gatk_output_yaml,
+				"-c", $args{cluster},
+				);
+
+			if ($args{cleanup}) {
+				$somaticsniper_command .= " --remove";
+				}
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for somaticsniper.pl\n";
+			print $log "  COMMAND: $somaticsniper_command\n\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_somaticsniper',
+				cmd	=> $somaticsniper_command,
+				modules	=> ['perl'],
+				dependencies	=> $gatk_run_id,
+				mem		=> '256M',
+				max_time	=> '14-00:00:00',
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
+
+				$somaticsniper_command .= " --dry-run";
+				`$somaticsniper_command`;
+
+				} else {
+
+				$somaticsniper_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> SomaticSniper job id: $somaticsniper_run_id\n\n";
+				push @job_ids, $somaticsniper_run_id;
 				}
 			}
 

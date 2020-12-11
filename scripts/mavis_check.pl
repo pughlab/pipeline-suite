@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use Getopt::Std;
 use Getopt::Long;
+use List::Util qw(any all);
 
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
@@ -38,6 +39,7 @@ while (my $line = <$INPUT>) {
 close $INPUT;
 
 @jobs = sort(@jobs);
+my $job_list = join(',', @jobs);
 my $final_job = $jobs[-1];
 
 # wait until it finishes
@@ -45,27 +47,31 @@ my $complete = 0;
 my $timeouts = 0;
 
 while (!$complete && $timeouts < 20 ) {
-	sleep(30);
-	my $status = `sacct --format='State' -j $final_job`;
-
-	# if final job has finished successfully:
-	if ($status =~ m/COMPLETED/s) { $complete = 1; }
+	#sleep(30);
+	my $status = `sacct --format='State' -j $job_list`;
 
 	# if we run into a server connection error (happens rarely with sacct)
 	# increment timeouts (if we continue to repeatedly timeout, we will exit)
-	elsif ($status =~ m/Connection timed out/) {
+	if ($status =~ m/Connection timed out/) {
 		$timeouts++;
+		next;
+		}
+
+	my @job_statuses = split("\n", $status);
+	@job_statuses = @job_statuses[2..$#job_statuses];
+
+	# if final job has finished successfully:
+	if ( all { $_ =~ m/COMPLETED/ } @job_statuses ) { $complete = 1; }
+
+	# if none of the above, we will exit with an error
+	elsif ( any { $_ =~ m/FAILED|TIMEOUT|CANCELLED/ } @job_statuses ) {
+		die("Final MAVIS job: $final_job finished with errors.");
 		}
 
 	# if the job is still pending or running, try again in a bit
 	# but also reset timeouts, because we only care about consecutive timeouts
-	elsif ($status =~ m/PENDING|RUNNING/) {
-		$timeouts = 0;
-		}
-
-	# if none of the above, we will exit with an error
 	else {
-		die("Final MAVIS job: $final_job finished with errors.");
+		$timeouts = 0;
 		}
 	}
 

@@ -214,7 +214,7 @@ sub get_filter_command {
 
 		$filter_command .= join(' ',
 			"awk 'NR>1 { print \$1" . '"\t"' . "\$2 }'", "$args{input_snp}.Germline.hc",
-			'|', '/cluster/projects/pughlab/bin/bcftools/bcftools filter',
+			'|', 'bcftools filter',
 			'-T - ',
 			"--include 'INFO/SS=" . '"1"' . "'",
 			"$args{input_vcf}.gz",
@@ -224,7 +224,7 @@ sub get_filter_command {
  
 		$filter_command .= "\n\n" . join(' ',
 			"awk 'NR>1 { print \$1" . '"\t"' . "\$2 }'", "$args{input_snp}.Somatic.hc",
-			'|', '/cluster/projects/pughlab/bin/bcftools/bcftools filter',
+			'|', 'bcftools filter',
 			'-T - ',
 			"--include 'INFO/SS=" . '"2"' . "'",
 			"$args{input_vcf}.gz",
@@ -367,11 +367,9 @@ sub main {
 
 	my @chroms = split(',', $string);
 
-	if (defined($tool_data->{intervals_bed})) {
-		$intervals_bed = $tool_data->{intervals_bed};
-		$intervals_bed =~ s/\.bed/_padding100bp.bed/;
-		print $log "\n    Target intervals (exome): $intervals_bed";
-		}
+	$intervals_bed = $tool_data->{intervals_bed};
+	$intervals_bed =~ s/\.bed/_padding100bp.bed/;
+	print $log "\n    Target intervals (exome): $intervals_bed";
 
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
@@ -408,7 +406,7 @@ sub main {
 	my $pon_directory = join('/', $output_directory, 'PanelOfNormals');
 	unless(-e $pon_directory) { make_path($pon_directory); }
 
-	my $pon_intermediates = join('/', $pon_directory, 'intermediates');
+	my $pon_intermediates = join('/', $pon_directory, 'intermediate_files');
 	unless(-e $pon_intermediates) { make_path($pon_intermediates); }
 
 	# process each sample in $smp_data
@@ -790,7 +788,10 @@ sub main {
 			$cleanup_cmd .= "\nrm $output_stem.snp.LOH";
 
 			# check if this should be run
-			if ('Y' eq missing_file("$output_stem.snp.Somatic.hc")) {
+			if (
+				('Y' eq missing_file("$output_stem.snp.Somatic.hc")) ||
+				('Y' eq missing_file("$output_stem.indel.Somatic.hc"))
+				) {
 
 				# record command (in log directory) and then run job
 				print $log "Submitting job for processSomatic...\n";
@@ -801,6 +802,7 @@ sub main {
 					cmd	=> $varscan_command,
 					modules	=> [$samtools, $varscan],
 					dependencies	=> join(':', @snp_jobs),
+					max_time	=> '06:00:00',
 					mem		=> '1G',
 					hpc_driver	=> $args{hpc_driver}
 					);
@@ -1066,7 +1068,7 @@ sub main {
 						log_dir	=> $log_directory,
 						name	=> join('_', 'run_vcf_filter', $vtype, $sample),
 						cmd	=> $filter_command,
-						modules	=> ['tabix'],
+						modules	=> [$samtools, 'tabix'],
 						dependencies	=> join(':', @snp_jobs),
 						max_time	=> $parameters->{filter}->{time},
 						mem		=> $parameters->{filter}->{mem},
@@ -1286,6 +1288,8 @@ sub main {
 					cmd	=> $format_germline_cmd,
 					modules	=> ['perl', $vcftools, 'tabix'],
 					dependencies	=> join(':', @germline_jobs),
+					max_time	=> '06:00:00',
+					mem		=> '1G',
 					hpc_driver	=> $args{hpc_driver}
 					);
 
@@ -1318,8 +1322,7 @@ sub main {
 				# make sure final output exists before removing intermediate files!
 				my @files_to_check;
 				foreach my $tmp ( @final_outputs ) {
-					$tmp .= '.md5';
-					push @files_to_check, $tmp;
+					push @files_to_check, $tmp . '.md5';
 					}
 
 				$cleanup_cmd = join("\n",
@@ -1567,11 +1570,9 @@ sub unpaired_mode {
 
 	my @chroms = split(',', $string);
 	
-	if (defined($tool_data->{intervals_bed})) {
-		$intervals_bed = $tool_data->{intervals_bed};
-		$intervals_bed =~ s/\.bed/_padding100bp.bed/;
-		print $log "\n    Target intervals (exome): $intervals_bed";
-		}
+	$intervals_bed = $tool_data->{intervals_bed};
+	$intervals_bed =~ s/\.bed/_padding100bp.bed/;
+	print $log "\n    Target intervals (exome): $intervals_bed";
 
 	if (defined($tool_data->{varscan}->{pon})) {
 		print $log "\n      Panel of Normals: $tool_data->{varscan}->{pon}";
@@ -1880,7 +1881,7 @@ sub unpaired_mode {
 					log_dir	=> $log_directory,
 					name	=> 'run_vcf_filter_' . $sample,
 					cmd	=> $filter_command,
-					modules	=> [$vcftools],
+					modules	=> [$samtools, $vcftools],
 					dependencies	=> $varscan_run_id,
 					max_time	=> $parameters->{filter}->{time},
 					mem		=> $parameters->{filter}->{mem},
@@ -1988,8 +1989,7 @@ sub unpaired_mode {
 				# make sure final output exists before removing intermediate files!
 				my @files_to_check;
 				foreach my $tmp ( @final_outputs ) {
-					$tmp .= '.md5';
-					push @files_to_check, $tmp;
+					push @files_to_check, $tmp . '.md5';
 					}
 
 				$cleanup_cmd = join("\n",

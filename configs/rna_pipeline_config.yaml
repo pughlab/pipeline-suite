@@ -9,10 +9,10 @@ platform: Illumina
 ref_type: hg38
 star_reference_dir: /cluster/projects/pughlab/references/STAR/STAR_2.7.2b_GRCh38_gencode_v31/
 reference: /cluster/tools/data/genomes/human/hg38/iGenomes/Sequence/WholeGenomeFasta/genome.fa
-reference_gtf: /cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.GRCh38.genes.gtf
+reference_gtf: /cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.annotation.gtf
 star_fusion_reference_dir: /cluster/projects/pughlab/references/STAR-Fusion/GRCh38_gencode_v31_CTAT_lib_Oct012019/ctat_genome_lib_build_dir/
 rsem_reference: /cluster/projects/pughlab/references/RSEM/GRCh38/v31/grch38.v31
-fusioncatcher_reference_dir: /cluster/tools/software/centos7/fusioncatcher/1.20/fusioncatcher/data/current/ 
+fusioncatcher_reference_dir: /cluster/tools/software/centos7/fusioncatcher/1.20/fusioncatcher/data/current/
 # tool versions
 star_version: 2.7.2b
 samtools_version: 1.9

@@ -647,6 +647,14 @@ save(
 	file = generate.filename(arguments$project, 'qc_plot_data','RData')
 	);
 
+write.table(
+	sample.info,
+	file = 'sample_info.txt',
+	row.names = FALSE,
+	col.names = TRUE,
+	sep = '\t'
+	);
+
 # write a caption for this plot
 if (arguments$seq_type == 'rna') {
 	caption <- "Top plot: Breakdown of total reads across the genome (including total mapped to exonic, intronic and intergenic regions, rRNA sequences and total unmapped and/or duplicate reads). Right plot: Mean per-base coverage across the middle 1000 expressed transcripts. Central heatmap: Pearson's correlation of RPKM values for all genes across all samples.";

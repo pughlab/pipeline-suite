@@ -35,11 +35,6 @@ save.session.profile <- function(file.name) {
 
 	}
 
-# function to identify symlinks
-is.symlink <- function(file) {
-	isTRUE(nzchar(Sys.readlink(file), keepNA = TRUE));
-	}
-
 ### PREPARE SESSION ################################################################################
 # import libraries
 library(argparse);
@@ -103,10 +98,6 @@ refGene$GeneID <- factor(refGene$GeneID, levels = as.character(refGene$GeneID));
 # find results files
 genes.files <- list.files(pattern = 'genes.results', recursive = TRUE);
 isoforms.files <- list.files(pattern = 'isoforms.results', recursive = TRUE);
-
-# filter out symlinks
-genes.files <- genes.files[!sapply(genes.files, is.symlink)];
-isoforms.files <- isoforms.files[!sapply(isoforms.files, is.symlink)];
 
 # read them in
 genes.list <- list();

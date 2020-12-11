@@ -11,7 +11,7 @@ intervals_bed:
 dbsnp:
 cosmic: /cluster/projects/pughlab/references/COSMIC/GRCh38/v91/CosmicCodingMuts.vcf.gz
 hapmap: /cluster/projects/ovgroup/projects/OV_Superset/Combined/hg38_population_stratified_af_hapmap_3.3.vcf.gz
-gtf: /cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.GRCh38.genes.gtf
+gtf: /cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.annotation.gtf
 # tool versions
 bwa_version: 0.7.15
 samtools_version: 1.9
@@ -24,8 +24,7 @@ strelka_version: 2.9.10
 manta_version: 1.6.0
 varscan_version: 2.4.2
 delly_version: 0.8.1
-bcftools_version: 1.2
-bcftools_path: /cluster/projects/pughlab/bin/bcftools/bcftools
+somaticsniper_version: bam-somaticsniper/1.0.5.0 # or SomaticSniper/1.0.4 currently available on h4h
 mavis_version: 2.2.5
 r_version: 3.6.1
 # tool specific parameters
@@ -161,7 +160,7 @@ mutect:
 mutect2:
     run: Y
     pon: /cluster/projects/pughlab/references/panel_of_normals/hg38/Mutect2/v3.8/mutect2_v3.8_hg38_panel_of_normals_20201128.vcf
-    chromosomes: chr1,chr2,chr3,chr4,chr5,chr6,chr7,chr8,chr9,chr10,chr11,chr12,chr13,chr14,chr15,chr16,chr17,chr18,chr19,chr20,chr21,chr22,chrX,chrY
+#    chromosomes: chr1,chr2,chr3,chr4,chr5,chr6,chr7,chr8,chr9,chr10,chr11,chr12,chr13,chr14,chr15,chr16,chr17,chr18,chr19,chr20,chr21,chr22,chrX,chrY
     parameters:
         mutect:
             java_mem: 3g
@@ -215,6 +214,22 @@ varscan:
         combine:
             java_mem: 3g
             mem: 4G
+            time: '24:00:00'
+somaticsniper:
+    run: Y
+    pon:
+    parameters:
+        somaticsniper:
+            mem: 4G
+            time: '24:00:00'
+        pileup:
+            mem: 4G
+            time: '24:00:00'
+        readcount:
+            mem: 1G
+            time: '24:00:00'
+        filter:
+            mem: 1G
             time: '24:00:00'
 delly:
     run: Y

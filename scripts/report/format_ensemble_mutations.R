@@ -102,14 +102,21 @@ setwd(arguments$output);
 
 ### FORMAT DATA ####################################################################################
 # create minimal tables for overlap
-keep.fields <- c('Tumor_Sample_Barcode','Hugo_Symbol','Entrez_Gene_Id','Chromosome','Start_Position','End_Position','Reference_Allele','Tumor_Seq_Allele2');
+keep.fields <- c('Tumor_Sample_Barcode','Hugo_Symbol','Entrez_Gene_Id','Chromosome','Start_Position','End_Position','Reference_Allele','Tumor_Seq_Allele2','Variant_Type');
 
 combined.data <- data.frame();
 
 for (tool in names(mutation.data)) {
 
-	tmp <- mutation.data[[tool]][,keep.fields];
-	tmp[,tool] <- 1;
+	if (tool == 'Mutect2') {
+		tmp <- mutation.data[[tool]][,c(keep.fields,'t_depth','t_alt_count')];
+		tmp$VAF <- tmp$t_alt_count / tmp$t_depth;
+		tmp <- tmp[,c(keep.fields,'VAF')];
+		tmp[,tool] <- 1;
+		} else {
+		tmp <- mutation.data[[tool]][,keep.fields];
+		tmp[,tool] <- 1;
+		}
 
 	if (nrow(combined.data) == 0) {
 		combined.data <- tmp;
@@ -124,6 +131,7 @@ for (tool in names(mutation.data)) {
 		}
 	}
 
+# how many times was this variant/sample called?
 combined.data$Count <- apply(
 	combined.data[,names(mutation.data)],
 	1,
@@ -131,9 +139,43 @@ combined.data$Count <- apply(
 	na.rm = TRUE
 	);
 
-# filter to min callset
-filtered.calls <- unique(combined.data[which(combined.data$Count >= arguments$n_tools),]);
+### FILTER VARIANTS ################################################################################
+# apply the following criteria to filter variants:
+#	1) is snv and called by a minimum n_tools
+#	2) is indel and called by 2+ tools (because mutect does not call indels)
+#	3) is called by Mutect2 and VAF is < 0.1
+#	4) keep position if it passes any of the above in any sample AND called by Mutect2
 
+combined.data$FILTER <- NA;
+
+min.count <- max(arguments$n_tools); #, ceiling(length(mutation.data)*0.5));
+
+# 1) is snv and called by a minimum n_tools
+combined.data[which(combined.data$Variant_Type == 'SNP' & combined.data$Count >= min.count),]$FILTER <- 'PASS';
+# 2) is indel and called by 2+ tools (because mutect does not call indels)
+combined.data[which(!combined.data$Variant_Type == 'SNP' & combined.data$Count >= 2),]$FILTER <- 'PASS';
+# 3) is called by Mutect2 and VAF is < 0.1
+if ('Mutect2' %in% colnames(combined.data)) {
+	combined.data[which(combined.data$Mutect2 == 1 & combined.data$VAF < 0.1),]$FILTER <- 'PASS';
+	}
+
+# 4) keep position if it passes any of the above in any sample AND called by Mutect2
+# this should catch most instances of a variant with low VAF/coverage in 1 part of a multi-region tumour
+passed.variants <- unique(combined.data[which(combined.data$FILTER == 'PASS'),c('Chromosome','Start_Position','End_Position','Reference_Allele','Tumor_Seq_Allele2','Variant_Type')]);
+passed.variants$C4 <- 1;
+
+combined.data <- merge(
+	combined.data,
+	passed.variants,
+	all.x = TRUE
+	);
+
+combined.data[which(combined.data$C4 == 1 & combined.data$Mutect2 == 1),]$FILTER <- 'PASS';
+
+# filter data
+filtered.calls <- unique(combined.data[which(combined.data$FILTER == 'PASS'),]);
+
+# order data for easier formatting
 filtered.calls$Chromosome <- factor(filtered.calls$Chromosome, levels = paste0('chr',c(1:22,'X','Y')));
 filtered.calls <- filtered.calls[order(filtered.calls$Chromosome, filtered.calls$Start_Position),];
 
@@ -142,36 +184,6 @@ keep.data <- list();
 
 for (i in 1:nrow(filtered.calls)) {
 
-	smp <- as.character(filtered.calls[i,]$Tumor_Sample_Barcode);
-	chr <- as.character(filtered.calls[i,]$Chromosome);
-	start <- filtered.calls[i,]$Start_Position;
-
-	for (tool in names(mutation.data)) {
-
-		tool.idx <- which(
-			mutation.data[[tool]]$Tumor_Sample_Barcode == smp & 
-			mutation.data[[tool]]$Chromosome == chr & 
-			mutation.data[[tool]]$Start_Position == start
-			);
-
-		if (length(tool.idx) == 1) {
-			keep.data[[i]] <- mutation.data[[tool]][tool.idx,];
-			break;
-			} else { next; }
-		}
-
-	# indicate which methods called each variant
-	tmp <- filtered.calls[i,names(mutation.data)];
-	keep.data[[i]]$Called_By <- paste(colnames(tmp)[which(tmp == 1)], collapse = ',');
-
-	}
-
-keep.calls <- do.call(rbind, keep.data);
-
-# remove unwanted fields
-keep.calls <- keep.calls[,!grepl('variant',colnames(keep.calls))];
-
-# write data
 write.table(
 	keep.calls,
 	file = generate.filename(arguments$project, 'ensemble_mutation_data', 'tsv'),
@@ -299,3 +311,33 @@ if (4 == tool.count) {
 
 ### SAVE SESSION INFO ##############################################################################
 save.session.profile(generate.filename('format_ensemble_mutations','SessionProfile','txt'));
+### format_ensemble_mutations.R ####################################################################
+# Collect and filter mutation calls from multiple tools using an ensemble approach.
+# INPUT (must be in MAF format):
+#	tool-specific mutation calls (output by collect_snv_output.R [usually DATE_PROJECT_mutations_for_cbioportal.tsv]) OR
+#	2-column, tab-delimited file listing Tool and Path [ordered by priority]
+
+### FUNCTIONS ######################################################################################
+# function to generate a standardized filename
+generate.filename <- function(project.stem, file.core, extension, include.date = TRUE) {
+
+        # build up the filename
+        file.name <- paste(project.stem, file.core, sep = '_');
+        file.name <- paste(file.name, extension, sep = '.');
+
+        if (include.date) {
+                file.name <- paste(Sys.Date(), file.name, sep = '_');
+                }
+
+        return(file.name);
+        }
+
+# function to write session profile to file
+save.session.profile <- function(file.name) {
+
+        # open the file
+        sink(file = file.name, split = FALSE);
+
+        # write memory usage to file
+        cat('### MEMORY USAGE ###############################################################');
+        print(proc.time());

@@ -1,4 +1,4 @@
-# PughLab pipeline-suite (version 2.2)
+# PughLab pipeline-suite (version 0.3.0)
 
 ## Introduction
 This is a collection of pipelines to be used for NGS (both DNA and RNA) analyses, from alignment to variant calling.
@@ -83,7 +83,6 @@ There are example config files located in the "configs" folder:
     - path to target intervals (exome capture kit [bed], if defined)
     - path to dbSNP file (if undefined, a default will be used)
     - path to COSMIC file (if desired)
-    - path to GTF file (if desired)
     - path to panel of normals (optional if developed elsewhere)
 
    - mutect2 requires:
@@ -92,13 +91,11 @@ There are example config files located in the "configs" folder:
     - path to target intervals (exome capture kit [bed], if defined)
     - path to dbSNP file (if undefined, a default will be used)
     - path to COSMIC file (if desired)
-    - path to GTF file (if desired)
     - path to panel of normals (optional if developed elsewhere)
 
    - strelka requires:
     - sequence type (one of exome, targeted, rna or wgs)
     - path to reference genome (requires .fa, .dict and .fai files)
-    - path to GTF file (if desired)
     - path to target intervals (exome capture kit [bed], if defined)
     - path to panel of normals (optional if developed elsewhere)
 
@@ -106,8 +103,12 @@ There are example config files located in the "configs" folder:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to sequenza.R script
     - path to target intervals (exome capture kit [bed], if defined)
-    - path to GTF file (if desired)
     - path to panel of normals (optional if developed elsewhere)
+
+   - somaticsniper requires:
+    - path to reference genome (requires .fa, .dict and .fai files)
+    - path to target intervals (exome capture kit [bed], if defined)
+    - path to panel of normals (optional)
 
    - delly requires:
     - path to reference genome (requires .fa, .dict and .fai files)
@@ -305,6 +306,8 @@ perl mutect2.pl \
 --no-wait { if not a dry-run and you don't want to wait around for it to finish }
 </code></pre>
 
+A few notes about Mutect2: Some samples (WGS and some WXS samples) will have exceptionally long run times. One solution is to run Mutect2 *per-chromosome*, however this alters the statistical models applied and thus may produce a different set of variants. Currently, stringent filtering plus the final ensemble approach typically make these differences irrevelant but it is something to be aware of.
+
 ### run VarScan to produce SNV and CNA calls
 <pre><code>Run T/N pairs and create a panel of normals:
 perl varscan.pl \
@@ -352,6 +355,20 @@ perl strelka.pl \
 --no-wait { if not a dry-run and you don't want to wait around for it to finish }
 </code></pre>
 
+### run SomaticSniper to produce SNV calls
+<pre><code>perl somaticsniper.pl \
+-t /path/to/dna_pipeline_config.yaml \
+-d /path/to/gatk_bam_config.yaml \
+-o /path/to/output/directory \
+--pon /path/to/panel_of_normals.vcf { optional } \
+-c slurm \
+--remove \
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
+</code></pre>
+
+SomaticSniper will **ONLY** run on tumour samples with a matched normal, and will **ONLY** produce somatic SNV calls (no panel of normals will be generated for this caller). If you wish to perform additional germline filtering, you may provide a panel of normals developed elsewhere.
+
 ### run Delly to produce SV calls
 <pre><code>perl delly.pl \
 -t /path/to/dna_pipeline_config.yaml \
@@ -384,6 +401,13 @@ perl strelka.pl \
 --dry-run { if this is a dry-run; NOTE that this will fail if the above pipeline has not completed } \
 --no-wait { if not a dry-run and you don't want to wait around for it to finish }
 </code></pre>
+
+### Final notes on the DNA pipeline: ###
+Whenever possible, variant callers will generate a panel of normals to use for variant filtering. Depending on the tool, these panels list probable germline variants and/or sequencing artefacts.
+MuTect: germline variants and sequencing artefacts, called using --artifact_detection_mode; is applied to all samples
+Mutect2: germline variants and sequencing artefacts, called using --artifact_detection_mode; is applied to all samples
+Strelka: germline variants, called using Strelka's germline workflow; applied to all tumour samples
+VarScan: germline variants as determined by VarScan's processSomatic function; only applied to tumour-only samples 
 
 ### RNA pipeline:
 <pre><code>cd /path/to/git/pipeline-suite/
