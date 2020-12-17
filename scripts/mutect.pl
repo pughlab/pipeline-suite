@@ -1069,16 +1069,8 @@ sub main {
 	my $collect_output = join(' ',
 		"Rscript $cwd/collect_snv_output.R",
 		'-d', $output_directory,
-		'-p', $tool_data->{project_name},
-		'-g', $tool_data->{gtf}
+		'-p', $tool_data->{project_name}
 		);
-
-	if (defined($tool_data->{bamqc}->{callable_bases}->{min_depth}->{tumour})) {
-		$collect_output .= " -t $tool_data->{bamqc}->{callable_bases}->{min_depth}->{tumour}";
-		}
-	if (defined($tool_data->{bamqc}->{callable_bases}->{min_depth}->{normal})) {
-		$collect_output .= " -n $tool_data->{bamqc}->{callable_bases}->{min_depth}->{normal}";
-		}
 
 	$run_script = write_script(
 		log_dir	=> $log_directory,
@@ -1086,7 +1078,7 @@ sub main {
 		cmd	=> $collect_output,
 		modules	=> [$r_version],
 		dependencies	=> join(':', @all_jobs),
-		mem		=> '16G',
+		mem		=> '4G',
 		max_time	=> '24:00:00',
 		hpc_driver	=> $args{hpc_driver}
 		);

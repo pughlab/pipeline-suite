@@ -178,8 +178,10 @@ sub get_extra_filter_command {
 		$filter_command .= "\n\n" . join(' ',
 			'bcftools filter',
 			'-R', $args{intervals},
-			'-O v -o', $args{output},
-			$args{input} . '.gz'
+			$args{input} . '.gz',
+			'| vcf-sort -c',
+			'| uniq',
+			'>', $args{output}
 			);
 
 		$filter_command .= "\n\nrm $args{input}.gz*";
@@ -208,6 +210,7 @@ sub get_extra_filter_command {
 			'| vcftools --vcf -',
 			'--exclude-positions', $args{pon},
 			'--stdout --recode',
+			'| vcf-sort -c | uniq',
 			'>', $args{output}
 			);
 
@@ -354,13 +357,15 @@ sub main {
 		my (@final_outputs, @patient_jobs);
 
 		# get normal pileup
-		my $norm_pileup = join('/', $tmp_directory, $normal_ids[0] . '_indel.pileup');
+		my $norm_pileup = join('/', $patient_directory, $normal_ids[0] . '_indel.pileup');
 		my $norm_pileup_cmd = get_pileup_command(
 			bam		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
 			output		=> $norm_pileup
 			);
 
 		$norm_pileup_cmd .= "\n\nmd5sum $norm_pileup > $norm_pileup.md5";
+
+		$cleanup_cmd .= "\nrm $norm_pileup";
 
 		$norm_pile_id = '';
 
@@ -451,13 +456,15 @@ sub main {
 				}
 
 			# collect indel pileup (necessary for filtering)
-			my $tumour_pileup = join('/', $tmp_directory, $sample . '_indel.pileup');
+			my $tumour_pileup = join('/', $sample_directory, $sample . '_indel.pileup');
 			my $tumour_pileup_cmd = get_pileup_command(
 				bam		=> $smp_data->{$patient}->{tumour}->{$sample},
 				output		=> $tumour_pileup
 				);
 
 			$tumour_pileup_cmd .= "\n\nmd5sum $tumour_pileup > $tumour_pileup.md5";
+
+			$cleanup_cmd .= "\nrm $tumour_pileup";
 
 			# check if this should be run
 			if ('Y' eq missing_file("$tumour_pileup.md5")) {
@@ -780,8 +787,7 @@ sub main {
 	my $collect_output = join(' ',
 		"Rscript $cwd/collect_snv_output.R",
 		'-d', $output_directory,
-		'-p', $tool_data->{project_name},
-		'-g', $tool_data->{gtf}
+		'-p', $tool_data->{project_name}
 		);
 
 	$run_script = write_script(

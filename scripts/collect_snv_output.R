@@ -144,6 +144,10 @@ for (i in 1:length(maf.files)) {
 	# remove any poor quality variants
 	tmp <- tmp[which(tmp$FILTER == 'PASS'),];
 
+	if (is.rnaseq) {
+		tmp <- tmp[which(tmp$t_depth > arguments$t_depth),];
+		}
+
 	maf.data[[i]] <- tmp;
 
 	rm(tmp);
@@ -185,7 +189,7 @@ if (is.rnaseq) {
 		);
 
 	# first, apply coverage filter
-	trimmed.data <- full.maf.data[which(full.maf.data$t_depth > arguments$t_depth), maf.fields];
+	trimmed.data <- full.maf.data[,maf.fields];
 	colnames(trimmed.data) <- c('Chromosome','Start','End','Ref','Alt','dbSNP','Symbol','Variant_Classification','Sample');
 
 	# focus on genic regions only

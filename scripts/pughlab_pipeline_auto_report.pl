@@ -452,7 +452,7 @@ sub main {
 
 
 		# somatic variants
-		my ($mutect_data, $mutect2_data, $strelka_data, $varscan_data);
+		my ($mutect_data, $mutect2_data, $strelka_data, $varscan_data, $sniper_data);
 		my ($sequenza_data, $ploidy_data);
 		my $n_tools = 0;
 
@@ -520,6 +520,26 @@ sub main {
 			symlink($strelka_data, join('/', $data_directory, 'strelka_somatic_variants.tsv'));
 
 			$ensemble_command .= " --strelka $strelka_data";
+			$n_tools++;
+			}
+
+		# get mutation calls from SomaticSniper
+		if ('Y' eq $tool_data->{somaticsniper}->{run}) {
+			my $sniper_dir = join('/', $output_directory, 'SomaticSniper');
+			opendir(SNIPER, $sniper_dir) or die "Cannot open '$sniper_dir' !";
+			my @sniper_calls = grep { /mutations_for_cbioportal.tsv/ } readdir(SNIPER);
+			@sniper_calls = sort @sniper_calls;
+			closedir(SNIPER);
+
+			$sniper_data = join('/', $sniper_dir, $sniper_calls[-1]);
+
+			if ( -l join('/', $data_directory, 'sniper_somatic_variants.tsv')) {
+				unlink join('/', $data_directory, 'sniper_somatic_variants.tsv');
+				}
+
+			symlink($sniper_data, join('/', $data_directory, 'sniper_somatic_variants.tsv'));
+
+			$ensemble_command .= " --sniper $sniper_data";
 			$n_tools++;
 			}
 

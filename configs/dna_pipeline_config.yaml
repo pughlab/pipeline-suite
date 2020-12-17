@@ -10,7 +10,7 @@ reference: /cluster/tools/data/genomes/human/hg38/iGenomes/Sequence/WholeGenomeF
 intervals_bed:
 dbsnp:
 cosmic: /cluster/projects/pughlab/references/COSMIC/GRCh38/v91/CosmicCodingMuts.vcf.gz
-hapmap: /cluster/projects/ovgroup/projects/OV_Superset/Combined/hg38_population_stratified_af_hapmap_3.3.vcf.gz
+hapmap: /cluster/projects/pughlab/references/hapmap/hg38_population_stratified_af_hapmap_3.3.vcf.gz
 gtf: /cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.annotation.gtf
 # tool versions
 bwa_version: 0.7.15
@@ -25,6 +25,7 @@ manta_version: 1.6.0
 varscan_version: 2.4.2
 delly_version: 0.8.1
 somaticsniper_version: bam-somaticsniper/1.0.5.0 # or SomaticSniper/1.0.4 currently available on h4h
+vardict_version: 1.7.0
 mavis_version: 2.2.5
 r_version: 3.6.1
 # tool specific parameters
@@ -230,6 +231,20 @@ somaticsniper:
             time: '24:00:00'
         filter:
             mem: 1G
+            time: '24:00:00'
+vardict:
+    run: Y
+    pon: 
+    parameters:
+        vardict:
+            mem: 16G
+            time: '24:00:00'
+        filter:
+            mem: 1G
+            time: '12:00:00'
+        combine:
+            java_mem: 3g
+            mem: 4G
             time: '24:00:00'
 delly:
     run: Y

@@ -212,16 +212,16 @@ sub main {
 
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
-my ($input_vcf, $tumour_ids, $normal_ids, $output_stem, $reference, $help);
+my ($input_vcf, $tumour_ids, $normal_ids, $output, $reference, $help);
 
 # get command line arguments
 GetOptions(
-	'h|help'		=> \$help,
-	'v|vcf=s'		=> \$input_vcf,
-	't|tumour=s'		=> \$tumour_ids,
-	'n|normal=s'		=> \$normal_ids,
-	'o|output-stem=s'	=> \$output_stem,
-	'r|reference=s'		=> \$reference
+	'h|help'	=> \$help,
+	'v|vcf=s'	=> \$input_vcf,
+	't|tumour=s'	=> \$tumour_ids,
+	'n|normal=s'	=> \$normal_ids,
+	'o|output=s'	=> \$output,
+	'r|reference=s'	=> \$reference
 	);
 
 if ($help) {
@@ -231,11 +231,11 @@ if ($help) {
 		"\t--vcf|-v\t<string> input vcf file",
 		"\t--tumour|-t\t<string> comma separated list of tumour IDs",
 		"\t--normal|-n\t<string> comma separated list of normal IDs",
-		"\t--output-stem|-o\t<string> filestem for output files",
+		"\t--output|-o\t<string> path to output file",
 		"\t--reference|-r\t<string> path to reference used for alignments"
 		);
 
-	print $help_msg;
+	print $help_msg . "\n";
 	exit;
 	}
 
@@ -244,6 +244,6 @@ main(
 	vcf		=> $input_vcf,
 	tumours		=> $tumour_ids,
 	normals		=> $normal_ids,
-	output		=> $output_stem,
+	output		=> $output,
 	reference	=> $reference
 	);
