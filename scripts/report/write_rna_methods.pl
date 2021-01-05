@@ -40,6 +40,8 @@ sub main {
 	my ($k1000g, $mills, $kindels, $dbsnp, $hapmap, $omni, $cosmic);
 	my ($vep, $vcf2maf, $bwa);
 
+	$ref_type	= $tool_data->{ref_type};
+
 	# how was STAR run?
 	if ('Y' eq $tool_data->{star}->{run}) {
 
@@ -48,7 +50,6 @@ sub main {
 		$picard		= $tool_data->{picard_version};
 		$bwa		= $tool_data->{bwa_path};
 
-		$ref_type	= $tool_data->{ref_type};
 		my @parts	= split('\\/', $tool_data->{star_reference_dir});
 		@parts		= split($star . '_', $parts[-1]);
 		$star_ref	= $parts[-1];
@@ -122,7 +123,7 @@ sub main {
 		$vcf2maf = $parts[-2];
 
 		$methods .= "Short variants (SNVs and Indels) were identified using GATK's (v$gatk) HaplotypeCaller as per GATK's RNA-Seq variant calling best practices. HaplotypeCaller was run using a minimum confidence threshold of 20 and -dontUseSoftClippedBases. VariantFiltration was used to remove low quality variants (QD \$<2.0\$ and FS \$>30\$) with a cluster size of 3 and cluster window size of 35.\\newline\n";
-		$methods .= "\n\\noindent\nVariants were filtered and annotated using VEP (v$vep) and vcf2maf (v$vcf2maf). Filters were applied to remove known common variants (ExAC nonTCGA version r1) and variants with coverage below 20x.\\newline\n";
+		$methods .= "\n\\noindent\nVariants were filtered and annotated using VEP (v$vep) and vcf2maf ($vcf2maf). Filters were applied to remove known common variants (ExAC nonTCGA version r1) and variants with coverage below 20x.\\newline\n";
 		} else {
 		$methods .= "No variant calling performed.\\newline\n";
 		}
@@ -211,7 +212,7 @@ if ($help) {
 		"\t--directory|-d\t<string> path to output directory"
 		);
 
-	print $help_msg;
+	print $help_msg . "\n";
 	exit;
 	}
 

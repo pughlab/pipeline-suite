@@ -34,7 +34,8 @@ sub main {
 	$methods .= "For all tools, default parameters were used unless otherwise indicated.\\newline\n";
 	$methods .= "\\subsection{Alignment and Quality Checks:}\n";
 
-	my ($bwa, $gatk, $mutect, $mutect2, $strelka, $manta, $varscan, $delly, $mavis, $somaticsniper);
+	my ($bwa, $gatk);
+	my ($mutect, $mutect2, $strelka, $manta, $varscan, $delly, $mavis, $somaticsniper, $vardict);
 	my ($ref_type, $samtools, $picard, $intervals, $bedtools, $vcftools);
 	my ($k1000g, $mills, $kindels, $dbsnp, $hapmap, $omni, $cosmic);
 	my ($vep, $vcf2maf);
@@ -287,6 +288,28 @@ sub main {
 			}
 		} else {
 		$methods .= "SomaticSniper not run.\\newline\n";
+		}
+
+	if ('Y' eq $tool_data->{vardict}->{run}) {
+
+		$vardict	= $tool_data->{vardict_version};
+		$bcftools	= $tool_data->{samtools_version};
+		$vcftools	= $tool_data->{vcftools_version};
+		$gatk		= $tool_data->{gatk_version};
+
+		# annotation
+		my @parts = split('\\/', $tool_data->{annotate}->{vep_path});
+		$vep = $parts[-1];
+		@parts = split('\\/', $tool_data->{annotate}->{vcf2maf_path});
+		$vcf2maf = $parts[-2];
+
+		# fill in methods
+		$methods .= "\\subsubsection{VarDict (v$vardict):}\n";
+		$methods .= "VarDict was run using the recommended protocol for either paired (T/N) or tumour-only, with default parameters and target regions (\$\\pm 50bp padding\$) provided. Variants were filtered by significance (p-value \$<\$ 0.05) using bcftools (v$bcftools).\\newline\n";
+		$methods .= "For T/N, somatic (StrongSomatic and LikelySomatic) and germline variants were extracted. Germline variants were used to generate a panel of normals (merged across samples using GATK's (v$gatk) CombineVariants, and keeping variants present in at least 2 samples).\\newline\n";
+		$methods .= "For tumour-only samples, somatic variants were extracted (StrongSomatic and LikelySomatic), and filtered further using the PoN to remove probable germline variants (vcftools v$vcftools).\\newline\n";
+		} else {
+		$methods .= "VarDict was not run.\\newline\n";
 		}
 
 	if ('Y' eq $tool_data->{strelka}->{run}) {
