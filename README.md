@@ -1,4 +1,4 @@
-# PughLab pipeline-suite (version 0.3.0)
+# PughLab pipeline-suite (version 0.3.1)
 
 ## Introduction
 This is a collection of pipelines to be used for NGS (both DNA and RNA) analyses, from alignment to variant calling.
@@ -106,6 +106,11 @@ There are example config files located in the "configs" folder:
     - path to panel of normals (optional if developed elsewhere)
 
    - somaticsniper requires:
+    - path to reference genome (requires .fa, .dict and .fai files)
+    - path to target intervals (exome capture kit [bed], if defined)
+    - path to panel of normals (optional)
+
+   - vardict requires:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to target intervals (exome capture kit [bed], if defined)
     - path to panel of normals (optional)
@@ -369,6 +374,18 @@ perl strelka.pl \
 
 SomaticSniper will **ONLY** run on tumour samples with a matched normal, and will **ONLY** produce somatic SNV calls (no panel of normals will be generated for this caller). If you wish to perform additional germline filtering, you may provide a panel of normals developed elsewhere.
 
+### run VarDict to produce variant calls
+<pre><code>perl vardict.pl \
+-t /path/to/dna_pipeline_config.yaml \
+-d /path/to/gatk_bam_config.yaml \
+-o /path/to/output/directory \
+--pon /path/to/panel_of_normals.vcf { optional } \
+-c slurm \
+--remove \
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
+</code></pre>
+
 ### run Delly to produce SV calls
 <pre><code>perl delly.pl \
 -t /path/to/dna_pipeline_config.yaml \
@@ -408,6 +425,7 @@ MuTect: germline variants and sequencing artefacts, called using --artifact_dete
 Mutect2: germline variants and sequencing artefacts, called using --artifact_detection_mode; is applied to all samples
 Strelka: germline variants, called using Strelka's germline workflow; applied to all tumour samples
 VarScan: germline variants as determined by VarScan's processSomatic function; only applied to tumour-only samples 
+VarDict: germline variants as determined by VarDict; only applied to tumour-only samples 
 
 ### RNA pipeline:
 <pre><code>cd /path/to/git/pipeline-suite/

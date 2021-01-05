@@ -78,7 +78,7 @@ sub main {
 	my $run_script;
 	my ($bwa_run_id, $gatk_run_id, $contest_run_id, $coverage_run_id, $hc_run_id);
 	my ($strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id);
-	my ($somaticsniper_run_id, $delly_run_id);
+	my ($somaticsniper_run_id, $delly_run_id, $vardict_run_id);
 	my ($mavis_run_id, $report_run_id);
 
 	my @job_ids;
@@ -93,6 +93,7 @@ sub main {
 	my $mutect_directory = join('/', $output_directory, 'MuTect');
 	my $mutect2_directory = join('/', $output_directory, 'MuTect2');
 	my $varscan_directory = join('/', $output_directory, 'VarScan');
+	my $vardict_directory = join('/', $output_directory, 'VarDict');
 	my $somaticsniper_directory = join('/', $output_directory, 'SomaticSniper');
 	my $delly_directory = join('/', $output_directory, 'Delly');
 	my $mavis_directory = join('/', $output_directory, 'Mavis');
@@ -868,7 +869,7 @@ sub main {
 				"-o", $somaticsniper_directory,
 				"-t", $tool_config,
 				"-d", $gatk_output_yaml,
-				"-c", $args{cluster},
+				"-c", $args{cluster}
 				);
 
 			if ($args{cleanup}) {
@@ -907,6 +908,58 @@ sub main {
 
 				print $log ">>> SomaticSniper job id: $somaticsniper_run_id\n\n";
 				push @job_ids, $somaticsniper_run_id;
+				}
+			}
+
+		## VarDict pipeline
+		if ('Y' eq $tool_data->{vardict}->{run}) {
+
+			unless(-e $vardict_directory) { make_path($vardict_directory); }
+
+			my $vardict_command = join(' ',
+				"perl $cwd/scripts/vardict.pl",
+				"-o", $vardict_directory,
+				"-t", $tool_config,
+				"-d", $gatk_output_yaml,
+				"-c", $args{cluster}
+				);
+
+			if ($args{cleanup}) {
+				$vardict_command .= " --remove";
+				}
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for vardict.pl\n";
+			print $log "  COMMAND: $vardict_command\n\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_vardict',
+				cmd	=> $vardict_command,
+				modules	=> ['perl'],
+				dependencies	=> $gatk_run_id,
+				mem		=> '256M',
+				max_time	=> '14-00:00:00',
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
+
+				$vardict_command .= " --dry-run";
+				`$vardict_command`;
+
+				} else {
+
+				$vardict_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> VarDict job id: $vardict_run_id\n\n";
+				push @job_ids, $vardict_run_id;
 				}
 			}
 
