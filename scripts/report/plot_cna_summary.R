@@ -37,6 +37,21 @@ save.session.profile <- function(file.name) {
 
 	}
 
+# function to trim sample IDs
+simplify.ids <- function(x) {
+	match <- TRUE;
+	index <- 1;
+	while (match) {
+		if (length(unique(sapply(x,function(i) { unlist(strsplit(i,''))[index] } ))) == 1) {
+			index <- index + 1;
+			} else {
+			new.ids <- sapply(x,function(i) { substring(i,index,nchar(i)) } );
+			match <- FALSE;
+			}
+		}
+	return(new.ids);
+	}
+
 ### PREPARE SESSION ################################################################################
 # import libraries
 library(xtable);
@@ -128,7 +143,7 @@ create.heatmap(
 	covariates.top.grid.col = list(col = 'black', lwd = 1),
 	covariates.top.col.lines = chr.breaks,
 	inside.legend = list(fun = covariate.legends, x = 1.02, y = 1),
-	yaxis.lab = rev(gsub('\\.','-', colnames(cna.data))),
+	yaxis.lab = gsub('\\.','-', simplify.ids(colnames(cna.data))),
 	xaxis.lab = rep('',nrow(cna.data)),
 	yaxis.cex = axis.cex,
 	xaxis.tck = 0,
@@ -147,7 +162,7 @@ create.heatmap(
 	colourkey.labels = seq(-2,2,1),
 	colourkey.cex = 1,
 	height = 8,
-	width = 10,
+	width = 11,
 	resolution = 200,
 	right.padding = 10,
 	filename = generate.filename(arguments$project, 'cna_landscape','png')
@@ -157,7 +172,7 @@ create.heatmap(
 pga.plot <- create.barplot(
 	Order ~ PGA,
 	ploidy.estimates,
-	yaxis.lab = rev(rownames(ploidy.estimates)),
+	yaxis.lab = simplify.ids(rownames(ploidy.estimates)),
 	ylimits = c(0.5, length(all.samples)+0.5),
 	yat = seq(1,length(all.samples)),
 	xaxis.tck = c(0.5,0),
@@ -231,7 +246,7 @@ create.multipanelplot(
 	filename = generate.filename(arguments$project, 'scna_metrics','png'),
 	layout.width = 3,
 	layout.height = 1,
-	plot.objects.widths = if (axis.cex > 0) { c(1.5,1,1) } else {  c(1.2,1,1) },
+	plot.objects.widths = c(1.2,1,1), #if (axis.cex > 0) { c(1.5,1,1) } else {  c(1.2,1,1) },
 	left.legend.padding = 0,
 	right.legend.padding = 0,
 	top.legend.padding = 0,

@@ -36,7 +36,7 @@ sub main {
 
 	my ($bwa, $gatk);
 	my ($mutect, $mutect2, $strelka, $manta, $varscan, $delly, $mavis, $somaticsniper, $vardict);
-	my ($ref_type, $samtools, $picard, $intervals, $bedtools, $vcftools);
+	my ($ref_type, $samtools, $picard, $intervals, $bedtools, $vcftools, $bcftools);
 	my ($k1000g, $mills, $kindels, $dbsnp, $hapmap, $omni, $cosmic);
 	my ($vep, $vcf2maf);
 
@@ -268,7 +268,7 @@ sub main {
 		$samtools = $tool_data->{samtools_version};
 		$vcftools = $tool_data->{vcftools_version};
 
-		my $pon = '';
+		my $pon;
 		$pon = $tool_data->{somaticsniper}->{pon};
 
 		# annotation
@@ -281,10 +281,10 @@ sub main {
 		$methods .= "\\subsubsection{SomaticSniper (v$somaticsniper):}\n";
 		$methods .= "SomaticSniper was run on each T/N pair using options -q 1 -Q 40 -G and -L . For filtering, bcftools (v$samtools) mpileup was run with results filtered for quality using bcftools vcfutils.pl varFilter -Q 20. SomaticSniper's filters were then applied as suggested (snpfilter.pl was first applied to the initial VCF using the normal indel pileup, with the results then filtered using the tumour pileup). The resulting positions were fed into bam-readcount (-b 15 -q 1) for the tumour BAM and SomaticSnipers fpfilter.pl and highconfidence.pl applied to remove probable false positives (min mapping quality = 40 and min somatic score = 40).";
 
-		if ('' ne $pon) {
-			$methods .= "Remaining variants were filtered to target regions (\$\\pm 50bp padding\$) and germline variants removed using the provided panel of normals ($pon) using bcftools (v$samtools) and vcftools (v$vcftools).\\newline\n";
+		if (defined($pon)) {
+			$methods .= "Remaining variants were filtered to target regions (\$\\pm\$ 50bp padding) and germline variants removed using the provided panel of normals ($pon) using bcftools (v$samtools) and vcftools (v$vcftools).\\newline\n";
 			} else {
-			$methods .= "Remaining variants were filtered to target regions only (\$\\pm 50bp padding\$) using bcftools (v$samtools) .\\newline\n";
+			$methods .= "Remaining variants were filtered to target regions only (\$\\pm\$ 50bp padding) using bcftools (v$samtools) .\\newline\n";
 			}
 		} else {
 		$methods .= "SomaticSniper not run.\\newline\n";
@@ -305,7 +305,7 @@ sub main {
 
 		# fill in methods
 		$methods .= "\\subsubsection{VarDict (v$vardict):}\n";
-		$methods .= "VarDict was run using the recommended protocol for either paired (T/N) or tumour-only, with default parameters and target regions (\$\\pm 50bp padding\$) provided. Variants were filtered by significance (p-value \$<\$ 0.05) using bcftools (v$bcftools).\\newline\n";
+		$methods .= "VarDict was run using the recommended protocol for either paired (T/N) or tumour-only, with default parameters and target regions (\$\\pm\$ 50bp padding) provided. Variants were filtered by significance (p-value \$<\$ 0.05) using bcftools (v$bcftools).\\newline\n";
 		$methods .= "For T/N, somatic (StrongSomatic and LikelySomatic) and germline variants were extracted. Germline variants were used to generate a panel of normals (merged across samples using GATK's (v$gatk) CombineVariants, and keeping variants present in at least 2 samples).\\newline\n";
 		$methods .= "For tumour-only samples, somatic variants were extracted (StrongSomatic and LikelySomatic), and filtered further using the PoN to remove probable germline variants (vcftools v$vcftools).\\newline\n";
 		} else {
@@ -327,7 +327,7 @@ sub main {
 
 		# fill in methods
 		$methods .= "\\subsubsection{Strelka (v$strelka):}\n";
-		$methods .= "Strelka and Manta were run using default parameters in exome mode, with callable regions restricted to target regions (\$\\pm 50bp padding\$).\\newline\n";
+		$methods .= "Strelka and Manta were run using default parameters in exome mode, with callable regions restricted to target regions (\$\\pm\$ 50bp padding).\\newline\n";
 		$methods .= "A panel of normals was produced using all available normal samples, using Strelka's germline workflow. Resulting variants were merged across samples using GATK's CombineVariants (v$gatk), removing any variant that did not pass quality criteria (FILTER field not equal to PASS), and keeping variants present in at least 2 samples.\\newline\n";
 		$methods .= "For somatic variant detection, Strelka  was run on each sample following the developers recommended protocol. First, Manta (v$manta) was run on each T/N pair or tumour-only sample to identify a set of candidate small indels to be provided to Strelka for use in variant calling. Strelka's somatic workflow was run on T/N pairs, while the germline workflow was used for tumour-only samples. In both cases, resulting variant lists were filtered (using vcftools v$vcftools) to remove likely germline variants (found in the panel of normals) and poor quality calls (FILTER field did not equal PASS).\\newline\n";
 		} else {
@@ -349,9 +349,9 @@ sub main {
 
 		# fill in methods
 		$methods .= "\\subsubsection{VarScan (v$varscan):}\n";
-		$methods .= "For variant calling in T/N pairs, samtools (v$samtools) mpileup was run on each T/N pair, using -B -q1 -d 10000 and restricting call regions to target regions (\$\\pm 50bp padding\$). Positions with 0 coverage in both the tumour and normal were excluded and the resulting output provided to VarScan. VarScan somatic and processSomatic were used to generate lists of high-confidence germline and somatic variant positions. VarScan somatic was run again, using --output-vcf, and the resulting VCF was filtered (using bcftools v$samtools) to produce a high-confidence germline VCF file and a high-confidence somatic VCF file.\\newline\n";
+		$methods .= "For variant calling in T/N pairs, samtools (v$samtools) mpileup was run on each T/N pair, using -B -q1 -d 10000 and restricting call regions to target regions (\$\\pm\$ 50bp padding). Positions with 0 coverage in both the tumour and normal were excluded and the resulting output provided to VarScan. VarScan somatic and processSomatic were used to generate lists of high-confidence germline and somatic variant positions. VarScan somatic was run again, using --output-vcf, and the resulting VCF was filtered (using bcftools v$samtools) to produce a high-confidence germline VCF file and a high-confidence somatic VCF file.\\newline\n";
 		$methods .= "To produce a panel of normals, high-confidence germline variants were merged across samples using GATK's CombineVariants (v$gatk), removing any variant that did not pass quality criteria (FILTER field not equal to PASS), and keeping variants present in at least 2 samples.\\newline\n";
-		$methods .= "For variant calling in tumour-only samples, samtools (v$samtools) mpileup was run, again using -B -q1 -d 10000 and restricting call regions to target regions (\$\\pm 50bp padding\$). Positions with 0 coverage were excluded and the resulting output provided to VarScan mpileup2cns using --output-vcf and --variants. Resulting variants were filtered (using vcftools v$vcftools) to remove germline variants (using the panel of normals).\\newline\n";
+		$methods .= "For variant calling in tumour-only samples, samtools (v$samtools) mpileup was run, again using -B -q1 -d 10000 and restricting call regions to target regions (\$\\pm\$ 50bp padding). Positions with 0 coverage were excluded and the resulting output provided to VarScan mpileup2cns using --output-vcf and --variants. Resulting variants were filtered (using vcftools v$vcftools) to remove germline variants (using the panel of normals).\\newline\n";
 		} else {
 		$methods .= "VarScan not run.\\newline\n";
 		}
@@ -362,13 +362,13 @@ sub main {
 		$methods .= "Lastly, an ensemble approach was applied, such that variants meeting the following criteris were carried forward for downstream analyses:\\newline\n";
 		$methods .= join("\n",
 			"{\\scriptsize \\begin{itemize}",
-			"  \\vspace{-0.2cm}\\item SNPs identified by 3 or more tools",
+			"  \\vspace{-0.2cm}\\item SNPs identified by 4 or more tools",
 			"  \\vspace{-0.2cm}\\item INDELs identified by 2 or more tools",
 			"  \\vspace{-0.2cm}\\item variants identified by Mutect2, with VAF \$<\$ 0.1",
 			"  \\vspace{-0.2cm}\\item variants with intra-patient evidence (any of the above 3 criteria)",
 			"\\end{itemize} }"
 			) . "\n";
-		$methods .= "Variants with low coverage (see callable bases above) were flagged.\\newline\n";
+#		$methods .= "Variants with low coverage (see callable bases above) were flagged.\\newline\n";
 		} else {
 		$methods .= "No somatic variant calling performed.\\newline\n";
 		}

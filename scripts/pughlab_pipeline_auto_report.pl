@@ -452,7 +452,7 @@ sub main {
 
 
 		# somatic variants
-		my ($mutect_data, $mutect2_data, $strelka_data, $varscan_data, $sniper_data);
+		my ($mutect_data, $mutect2_data, $strelka_data, $varscan_data, $sniper_data, $vardict_data);
 		my ($sequenza_data, $ploidy_data);
 		my $n_tools = 0;
 
@@ -539,7 +539,27 @@ sub main {
 
 			symlink($sniper_data, join('/', $data_directory, 'sniper_somatic_variants.tsv'));
 
-			$ensemble_command .= " --sniper $sniper_data";
+			$ensemble_command .= " --somaticsniper $sniper_data";
+			$n_tools++;
+			}
+
+		# get mutation calls from VarDict
+		if ('Y' eq $tool_data->{vardict}->{run}) {
+			my $vardict_dir = join('/', $output_directory, 'VarDict');
+			opendir(VARDICT, $vardict_dir) or die "Cannot open '$vardict_dir' !";
+			my @vardict_calls = grep { /mutations_for_cbioportal.tsv/ } readdir(VARDICT);
+			@vardict_calls = sort @vardict_calls;
+			closedir(VARDICT);
+
+			$vardict_data = join('/', $vardict_dir, $vardict_calls[-1]);
+
+			if ( -l join('/', $data_directory, 'vardict_somatic_variants.tsv')) {
+				unlink join('/', $data_directory, 'vardict_somatic_variants.tsv');
+				}
+
+			symlink($vardict_data, join('/', $data_directory, 'vardict_somatic_variants.tsv'));
+
+			$ensemble_command .= " --vardict $vardict_data";
 			$n_tools++;
 			}
 
@@ -663,8 +683,7 @@ sub main {
 			}
 
 		# find ENSEMBLE mutations
-		$ensemble_command .= " -n " . ($n_tools-1);
-		$ensemble_command .= " -s " . join('/', $plot_directory, 'sample_info.txt');
+		$ensemble_command .= " -n 4"; # ($n_tools-1);
 
 		# run command
 		print $log "Submitting job to collect somatic variants...\n";
