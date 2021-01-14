@@ -74,7 +74,7 @@ sub error_checking {
 	}
 
 	# Strelka, VarScan, SomaticSniper and Delly
-	my @pipeline_list = qw(strelka varscan delly somaticsniper);
+	my @pipeline_list = qw(strelka varscan delly somaticsniper vardict);
 	if ( any { /$pipeline/ } @pipeline_list ) {
 
 		if (!defined($tool_data->{reference})) { die("Must supply path to reference genome!"); }
@@ -98,7 +98,7 @@ sub error_checking {
 				}
 			}
 
-			if ( ( any { /$pipeline/ } qw(varscan somaticsniper) ) &&
+			if ( ( any { /$pipeline/ } qw(varscan somaticsniper vardict) ) &&
 				( any { /$tool_data->{seq_type}/ } qw(exome targeted) )
 				) {
 
@@ -296,9 +296,13 @@ sub write_script {
 
 		print $fh_script $sbatch_params . "\n\n";
 		}
+
+	print $fh_script "set -e\n\n";
+
 	if (scalar(@modules_list) > 0) {
 		print $fh_script $modules_to_load . "\n\n";
 		}
+
 	print $fh_script $args{cmd};
 	close($fh_script);
 
@@ -439,7 +443,7 @@ sub get_vcf2maf_command {
 		'--tumor-id', $args{tumour_id},
 		'--vep-path', $args{vep_path},
 		'--vep-data', $args{vep_data},
-		'--vep-forks 1',
+		'--vep-forks 4',
 		'--filter-vcf', $args{filter_vcf},
 		'--buffer-size 100',
 		'--tmp-dir', $args{tmp_dir}
@@ -448,7 +452,7 @@ sub get_vcf2maf_command {
 	if (defined($args{normal_id})) {
 		$maf_command .= " --normal-id $args{normal_id}";
 
-		if ($args{input} =~ m/Strelka|VarScan|Mutect2|SomaticSniper/) {
+		if ($args{input} =~ m/Strelka|VarScan|MuTect2|SomaticSniper/) {
 			$maf_command .= " --vcf-tumor-id TUMOR --vcf-normal-id NORMAL";
 			}
 	} elsif ($args{input} =~ m/VarScan/) {

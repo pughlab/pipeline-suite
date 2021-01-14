@@ -1221,6 +1221,7 @@ sub main {
 						cmd     => $vcf2maf_cmd,
 						modules => ['perl', $samtools, 'tabix'],
 						dependencies    => $run_id,
+						cpus_per_task	=> 4,
 						max_time        => $tool_data->{annotate}->{time},
 						mem             => $tool_data->{annotate}->{mem}->{$vtype},
 						hpc_driver      => $args{hpc_driver}

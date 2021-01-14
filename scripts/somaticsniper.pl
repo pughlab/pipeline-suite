@@ -290,9 +290,11 @@ sub main {
 		print $log "\n      No panel of normals defined! Additional filtering step will not be performed.";
 		}
 
-	$intervals_bed = $tool_data->{intervals_bed};
-	$intervals_bed =~ s/\.bed/_padding100bp.bed/;
-	print $log "\n    Target intervals (exome): $intervals_bed";
+	if (defined($tool_data->{intervals_bed})) {
+		$intervals_bed = $tool_data->{intervals_bed};
+		$intervals_bed =~ s/\.bed/_padding100bp.bed/;
+		print $log "\n    Target intervals (exome): $intervals_bed";
+		}
 
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
@@ -713,6 +715,7 @@ sub main {
 					modules => ['perl', $samtools, 'tabix'],
 					dependencies    => $run_id,
 					max_time        => $tool_data->{annotate}->{time},
+					cpus_per_task	=> 4,
 					mem             => $tool_data->{annotate}->{mem}->{snps},
 					hpc_driver      => $args{hpc_driver}
 					);
