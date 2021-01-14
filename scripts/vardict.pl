@@ -50,10 +50,11 @@ sub get_vardict_command {
 
 	my $vardict_command = 'DIRNAME=$(which VarDict | xargs dirname)';
 
+	# note, we only want to call SNVs and indels (-U/--nosv)
 	$vardict_command .= "\n\n" . join(' ',
 		'VarDict',
 		'-G', $reference,
-		'-f 0.01',
+		'-f 0.01 -U',
 		'-N', $args{tumour_id}
 		);
 
@@ -100,11 +101,11 @@ sub get_filter_command {
 		);
 
 	my $filter_command = "if [ ! -s $args{input_vcf}.gz.tbi ]; then\n";
-	$filter_command .= "  bgzip $args{input_vcf}\n";
+	$filter_command .= "  bgzip -f $args{input_vcf}\n";
 	$filter_command .= "  tabix -p vcf $args{input_vcf}.gz\n";
 	$filter_command .= "fi\n\n";
 
-	# if tool used was somatic (T/N pair), split snp/indel into germline/somatic 
+	# if tool used was somatic (T/N pair), split into germline/somatic
 	if ($args{somatic}) {
 
 		$filter_command .= join(' ',
@@ -115,43 +116,53 @@ sub get_filter_command {
 			'>', $args{output_stem} . "_germline_hc.vcf"
 			);
  
+		# complex variants seem to cause problems with vcf2maf, so we will remove them
 		$filter_command .= "\n\n" . join(' ',
 			'bcftools filter',
 			"--include 'INFO/STATUS=" . '"StrongSomatic,LikelySomatic"' . " & INFO/SSF<0.05'",
 			"$args{input_vcf}.gz",
-			'-O v',
-			'-o', $args{output_stem} . "_somatic_hc.vcf"
+			'| perl -e', "'while(<>) {if (\$_ =~ /^#/) {print \$_;} else {\@a = split /\t/,\$_; if (\$a[7] =~ /TYPE=SNV|TYPE=Insertion|TYPE=Deletion/)", '{print join("\t", @a);}}}' . "'",
+			'>', $args{output_stem} . "_somatic_hc.vcf"
 			);
 
-	# else, for tumour-only, split into snp/indel
+	# else, for normal-only:
+	} elsif (defined($args{normal_id})) {
+
+		$filter_command .= join(' ',
+			'bcftools filter',
+			"--include 'INFO/DP>50 & INFO/AF>0.1'",
+			"$args{input_vcf}.gz",
+			'>', $args{output_stem} . "_germline_hc.vcf"
+			);
+
+	# else, for tumour-only:
 	} else {
 		$filter_command .= "\n\n" . join(' ',
 			'bcftools filter',
-			"--include 'INFO/STATUS=" . '"StrongSomatic,LikelySomatic"' . " & INFO/SSF<0.05'",
+			"--include 'INFO/SBF>0.1 & INFO/VD>10'",
 			"$args{input_vcf}.gz",
-			'-O v',
-			'-o', $args{output_stem} . "_somatic_hc.vcf"
-			);
-		$filter_command = join(' ',
-			'vcftools',
-			'--vcf', $args{input_vcf},
-			'--keep-filtered PASS',
-			'--stdout --recode',
-			'--temp', $args{tmp_dir}
+			'| perl -e', "'while(<>) {if (\$_ =~ /^#/) {print \$_;} else {\@a = split /\t/,\$_; if (\$a[7] =~ /TYPE=SNV|TYPE=Insertion|TYPE=Deletion/)", '{print join("\t", @a);}}}' . "'"
 			);
 
 		if (defined($args{pon})) {
-			$filter_command .= " --exclude-positions $args{pon}";
+			$filter_command .= join(' ',	
+				'| vcftools',
+				'--vcf -',
+				'--keep-filtered PASS',
+				'--stdout --recode --recode-INFO-all',
+				'--exclude-positions', $args{pon},
+				'--temp', $args{tmp_dir}
+				);
 			}
 
-		$filter_command .= ' > ' . $args{output_stem} . "_somatic_hc.vcf";
+		$filter_command .= ' > ' . $args{output_stem} . "_filtered.vcf";
 		}
 
 	return($filter_command);
 	}
 
 # format command to generate PON
-sub  generate_pon {
+sub generate_pon {
 	my %args = (
 		input		=> undef,
 		output		=> undef,
@@ -289,7 +300,7 @@ sub main {
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
 		my @tumour_ids = keys %{$smp_data->{$patient}->{'tumour'}};
 
-		next if (scalar(@normal_ids) == 0);
+		#next if (scalar(@normal_ids) == 0);
 
 		print $log "\nInitiating process for PATIENT: $patient\n";
 
@@ -321,6 +332,124 @@ sub main {
 		# indicate this should be removed at the end
 		$cleanup_cmd = "rm -rf $tmp_directory";
 
+		# check if this patient ONLY has a normal
+		if ( (scalar(@tumour_ids) == 0) & (scalar(@normal_ids) > 0)) {
+
+			print $log "  SAMPLE: $normal_ids[0]\n\n";
+
+			my $sample_directory = join('/', $patient_directory, $normal_ids[0]);
+			unless(-e $sample_directory) { make_path($sample_directory); }
+
+			$run_id = '';
+
+			# create output stem
+			my $output_stem = join('/', $sample_directory, $normal_ids[0] . '_VarDict');
+			$cleanup_cmd .= "\nrm $output_stem.vcf.gz";
+
+			my $vardict_command = get_vardict_command(
+				tumour		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
+				tumour_id	=> $normal_ids[0],
+				output		=> $output_stem . '.vcf',
+				intervals	=> $intervals_bed
+				);
+
+			$vardict_command .= "\n\nmd5sum $output_stem.vcf > $output_stem.vcf.md5";
+
+			# check if this should be run
+			if ('Y' eq missing_file($output_stem . ".vcf.md5")) {
+
+				# record command (in log directory) and then run job
+				print $log "Submitting job for VarDict (java)...\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_vardict_' . $normal_ids[0],
+					cmd	=> $vardict_command,
+					modules	=> ['perl', $vardict, $r_version],
+					max_time	=> $parameters->{vardict}->{time},
+					mem		=> $parameters->{vardict}->{mem},
+					hpc_driver	=> $args{hpc_driver}
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_vardict_' . $normal_ids[0],
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
+				}
+			else {
+				print $log "Skipping VarDict because this has already been completed!\n";
+				}
+
+			# filter results
+			$cleanup_cmd .= "\nrm " . $output_stem . '_filtered.vcf';
+
+			my $filter_command = get_filter_command(
+				input_vcf	=> $output_stem . '.vcf',
+				normal_id	=> $normal_ids[0],
+				output_stem	=> $output_stem,
+				somatic		=> 0,
+				tmp_dir		=> $tmp_directory
+				);
+
+			$filter_command .= "\n\n" . join(' ',
+				'md5sum', $output_stem . '_germline_hc.vcf',
+				'>', $output_stem . '_germline_hc.vcf.md5'
+				);
+
+			$filter_command .= "\n\n" . join("\n",
+				"bgzip -f $output_stem\_germline_hc.vcf",
+				"tabix -p vcf $output_stem\_germline_hc.vcf.gz",
+				"mv $output_stem\_germline* $pon_intermediates"
+				);
+
+			my $new_germline = join('/',
+				$pon_intermediates,
+				$normal_ids[0] . '_VarDict_germline_hc.vcf'
+				);
+
+			push @germline_vcfs, $new_germline . '.gz';
+
+			# check if this should be run
+			if ('Y' eq missing_file($new_germline . '.md5')) {
+
+				# record command (in log directory) and then run job
+				print $log "Submitting job for VCF-Filter...\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_vcf_filter_' . $normal_ids[0],
+					cmd	=> $filter_command,
+					modules	=> [$samtools, 'tabix', $vcftools],
+					dependencies	=> $run_id,
+					max_time	=> $parameters->{filter}->{time},
+					mem		=> $parameters->{filter}->{mem},
+					hpc_driver	=> $args{hpc_driver}
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_vcf_filter_' . $normal_ids[0],
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				push @germline_jobs, $run_id;
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
+
+				} else {
+				print $log "Skipping VCF-Filter because this has already been completed!\n";
+				push @germline_jobs, '';
+				}
+			}
+
 		# for each tumour sample
 		foreach my $sample (@tumour_ids) {
 
@@ -345,11 +474,7 @@ sub main {
 				intervals	=> $intervals_bed
 				);
 
-			$vardict_command .= "\n\n" . join("\n",
-				'if [ $? == 0 ]; then',
-				"  md5sum $output_stem.vcf > $output_stem.vcf.md5",
-				'fi'
-				);
+			$vardict_command .= "\n\n" . "md5sum $output_stem.vcf > $output_stem.vcf.md5";
 
 			# check if this should be run
 			if ('Y' eq missing_file($output_stem . ".vcf.md5")) {
@@ -413,7 +538,7 @@ sub main {
 				);
 
 			$filter_command .= "\n\n" . join(' ',
-				'bgzip', $new_germline . "\n",
+				'bgzip -f', $new_germline . "\n",
 				'tabix -p vcf', $new_germline . '.gz'
 				);
 
@@ -450,6 +575,7 @@ sub main {
 
 				} else {
 				print $log "Skipping VCF-Filter because this has already been completed!\n";
+				push @germline_jobs, '';
 				}
 
 			### Run variant annotation (VEP + vcf2maf)
@@ -481,7 +607,7 @@ sub main {
 					"  md5sum $final_maf > $final_maf.md5",
 					"  mv $tmp_directory/$sample\_VarDict_somatic_hc.vep.vcf $final_vcf",
 					"  md5sum $final_vcf > $final_vcf.md5",
-					"  bgzip $final_vcf",
+					"  bgzip -f $final_vcf",
 					"  tabix -p vcf $final_vcf.gz",
 					"else",
 					'  echo "FINAL OUTPUT MAF is missing; not running md5sum/bgzip/tabix..."',
@@ -497,6 +623,7 @@ sub main {
 					cmd	=> $vcf2maf_cmd,
 					modules	=> ['perl', $samtools, 'tabix'],
 					dependencies	=> $run_id,
+					cpus_per_task	=> 4,
 					max_time	=> $tool_data->{annotate}->{time},
 					mem		=> $tool_data->{annotate}->{mem}->{snps},
 					hpc_driver	=> $args{hpc_driver}
@@ -532,7 +659,7 @@ sub main {
 			my $format_germline_cmd;
 
 			# for multiple tumours, collect all variants, then subset the normal
-			if (scalar(@tumour_ids) == 1) {
+			if (scalar(@tumour_ids) <= 1) {
 
 				push @pon_vcfs, "-V:$patient $germline_vcfs[0]";
 				push @pon_dependencies, $germline_jobs[0];
@@ -547,7 +674,7 @@ sub main {
 
 				$format_germline_cmd .= "\n\n" . join("\n",
 					"md5sum $merged_germline > $merged_germline.md5",
-					"bgzip $merged_germline",
+					"bgzip -f $merged_germline",
 					"tabix -p vcf $merged_germline.gz"
 					);
 
@@ -737,11 +864,7 @@ sub main {
 				intervals	=> $intervals_bed
 				);
 
-			$vardict_command .= "\n\n" . join("\n",
-				'if [ $? == 0 ]; then',
-				"  md5sum $output_stem.vcf > $output_stem.vcf.md5",
-				'fi'
-				);
+			$vardict_command .= "\n\nmd5sum $output_stem.vcf > $output_stem.vcf.md5";
 
 			# check if this should be run
 			if ('Y' eq missing_file($output_stem . ".vcf.md5")) {
@@ -775,7 +898,7 @@ sub main {
 				}
 
 			# filter results
-			$cleanup_cmd .= "\nrm " . $output_stem . '_somatic_hc.vcf';
+			$cleanup_cmd .= "\nrm " . $output_stem . '_filtered.vcf';
 
 			my $filter_command = get_filter_command(
 				input_vcf	=> $output_stem . '.vcf', 
@@ -786,12 +909,12 @@ sub main {
 				);
 
 			$filter_command .= "\n\n" . join(' ',
-				'md5sum', $output_stem . '_somatic_hc.vcf',
-				'>', $output_stem . '_somatic_hc.vcf.md5'
+				'md5sum', $output_stem . '_filtered.vcf',
+				'>', $output_stem . '_filtered.vcf.md5'
 				);
 
 			# check if this should be run
-			if ('Y' eq missing_file($output_stem . '_somatic_hc.vcf.md5')) {
+			if ('Y' eq missing_file($output_stem . '_filtered.vcf.md5')) {
 
 				# record command (in log directory) and then run job
 				print $log "Submitting job for VCF-Filter...\n";
@@ -823,11 +946,11 @@ sub main {
 				}
 
 			### Run variant annotation (VEP + vcf2maf)
-			my $final_maf = $output_stem . '_somatic_annotated.maf';
-			my $final_vcf = $output_stem . '_somatic_annotated.vcf';
+			my $final_maf = $output_stem . '_filtered_annotated.maf';
+			my $final_vcf = $output_stem . '_filtered_annotated.vcf';
 
 			my $vcf2maf_cmd = get_vcf2maf_command(
-				input		=> $output_stem . '_somatic_hc.vcf',
+				input		=> $output_stem . '_filtered.vcf',
 				tumour_id	=> $sample,
 				reference	=> $reference,
 				ref_type	=> $tool_data->{ref_type},
@@ -846,9 +969,9 @@ sub main {
 				$vcf2maf_cmd .= "\n\n" . join("\n",
 					"if [ -s " . join(" ] && [ -s ", $final_maf) . " ]; then",
 					"  md5sum $final_maf > $final_maf.md5",
-					"  mv $tmp_directory/$sample\_VarDict_somatic_hc.vep.vcf $final_vcf",
+					"  mv $tmp_directory/$sample\_VarDict_filtered.vep.vcf $final_vcf",
 					"  md5sum $final_vcf > $final_vcf.md5",
-					"  bgzip $final_vcf",
+					"  bgzip -f $final_vcf",
 					"  tabix -p vcf $final_vcf.gz",
 					"else",
 					'  echo "FINAL OUTPUT MAF is missing; not running md5sum/bgzip/tabix..."',
@@ -864,6 +987,7 @@ sub main {
 					cmd	=> $vcf2maf_cmd,
 					modules	=> ['perl', $samtools, 'tabix'],
 					dependencies	=> $run_id,
+					cpus_per_task	=> 4,
 					max_time	=> $tool_data->{annotate}->{time},
 					mem		=> $tool_data->{annotate}->{mem}->{snps},
 					hpc_driver	=> $args{hpc_driver}
