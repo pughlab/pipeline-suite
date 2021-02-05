@@ -1028,10 +1028,12 @@ sub main {
 				}
 
 			# filter results
-			my ($filter_command, $required);
+			my ($filter_command, $required, $type_job);
 
 			my @var_types = qw(snp indel);
 			foreach my $vtype (@var_types) {
+
+				$type_job = '';
 
 				$filter_command = get_filter_command(
 					input_vcf	=> join('.', $merged_vcf_output, $vtype, 'vcf'),
@@ -1075,7 +1077,7 @@ sub main {
 						hpc_driver	=> $args{hpc_driver}
 						);
 
-					$run_id = submit_job(
+					$type_job = submit_job(
 						jobname		=> join('_', 'run_vcf_filter', $vtype, $sample),
 						shell_command	=> $run_script,
 						hpc_driver	=> $args{hpc_driver},
@@ -1083,9 +1085,9 @@ sub main {
 						log_file	=> $log
 						);
 
-					push @germline_jobs, $run_id;
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
+					push @germline_jobs, $type_job;
+					push @patient_jobs, $type_job;
+					push @all_jobs, $type_job;
 					} else {
 					print $log "Skipping VCF-Filter ($vtype) because this has already been completed!\n";
 					}
@@ -1134,14 +1136,14 @@ sub main {
 						name	=> join('_', 'run_vcf2maf_and_VEP', $vtype, $sample),
 						cmd	=> $vcf2maf_cmd,
 						modules	=> ['perl', $samtools, 'tabix'],
-						dependencies	=> $run_id,
+						dependencies	=> $type_job,
 						cpus_per_task	=> 4,
 						max_time	=> $tool_data->{annotate}->{time},
 						mem		=> $tool_data->{annotate}->{mem}->{$vtype.'s'},
 						hpc_driver	=> $args{hpc_driver}
 						);
 
-					$run_id = submit_job(
+					$type_job = submit_job(
 						jobname		=> join('_', 'run_vcf2maf_and_VEP', $vtype, $sample),
 						shell_command	=> $run_script,
 						hpc_driver	=> $args{hpc_driver},
@@ -1149,8 +1151,8 @@ sub main {
 						log_file	=> $log
 						);
 
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
+					push @patient_jobs, $type_job;
+					push @all_jobs, $type_job;
 					} else {
 					print $log "Skipping vcf2maf ($vtype) because this has already been completed!\n";
 					}
@@ -1340,7 +1342,8 @@ sub main {
 					cmd	=> $cleanup_cmd,
 					dependencies	=> join(':', @patient_jobs),
 					mem		=> '256M',
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					kill_on_error	=> 0
 					);
 
 				$run_id = submit_job(
@@ -1449,7 +1452,8 @@ sub main {
 			cmd	=> $collect_metrics,
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			kill_on_error	=> 0
 			);
 
 		$run_id = submit_job(
@@ -2009,7 +2013,8 @@ sub unpaired_mode {
 					cmd	=> $cleanup_cmd,
 					dependencies	=> join(':', @patient_jobs),
 					mem		=> '256M',
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					kill_on_error	=> 0
 					);
 
 				$run_id = submit_job(
@@ -2068,7 +2073,8 @@ sub unpaired_mode {
 			cmd	=> $collect_metrics,
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			kill_on_error	=> 0
 			);
 
 		$run_id = submit_job(

@@ -205,11 +205,6 @@ sub get_filter_command {
 	if ($args{split}) {
 
 		$filter_command .= ' --keep-filtered PASS --remove-indels';
-
-		if (defined($args{intervals})) {
-			$filter_command .= " --bed $args{intervals}";
-			}
-
 		$filter_command .= " > $args{output_stem}\_snps.vcf";
 
 		$filter_command .= "\n\n" . join(' ',
@@ -218,21 +213,12 @@ sub get_filter_command {
 			'--stdout --recode',
 			'--temp', $args{tmp_dir},
 			'--keep-filtered PASS --keep-only-indels'
-			);;
-
-		if (defined($args{intervals})) {
-			$filter_command .= " --bed $args{intervals}";
-			}
+			);
 
 		$filter_command .= " > $args{output_stem}\_indels.vcf";
 
 	} else {
 		$filter_command .= ' --keep-filtered PASS';
-
-		if (defined($args{intervals})) {
-			$filter_command .= " --bed $args{intervals}";
-			}
-
 		$filter_command .= " > $args{output_stem}.vcf";
 
 		}
@@ -593,7 +579,8 @@ sub pon {
 			cmd	=> $cleanup_cmd,
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			kill_on_error	=> 0
 			);
 
 		$run_id = submit_job(
@@ -624,7 +611,8 @@ sub pon {
 			cmd	=> $collect_metrics,
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '1G',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			kill_on_error	=> 0
 			);
 
 		$run_id = submit_job(
@@ -1089,27 +1077,20 @@ sub main {
 
 			my $filter_command = get_filter_command(
 				input		=> $merged_output,
-				intervals	=> $tool_data->{intervals_bed},
 				output_stem	=> $filtered_stem,
 				tmp_dir		=> $tmp_directory,
-				split		=> 1
+				split		=> 0
 				);
 
 			$filter_command .= "\n\n" . join(' ',
-				'md5sum', "$filtered_stem\_snps.vcf",
-				'>', "$filtered_stem\_snps.vcf.md5"
+				'md5sum', "$filtered_stem.vcf",
+				'>', "$filtered_stem.vcf.md5"
 				);
 
-			$filter_command .= "\n" . join(' ',
-				'md5sum', "$filtered_stem\_indels.vcf",
-				'>', "$filtered_stem\_indels.vcf.md5"
-				);
-
-			$cleanup_cmd .= "\nrm $filtered_stem\_snps.vcf";
-			$cleanup_cmd .= "\nrm $filtered_stem\_indels.vcf";
+			$cleanup_cmd .= "\nrm $filtered_stem.vcf";
 
 			# check if this should be run
-			if ('Y' eq missing_file($filtered_stem . '_snps.vcf.md5')) {
+			if ('Y' eq missing_file($filtered_stem . '.vcf.md5')) {
 
 				# record command (in log directory) and then run job
 				print $log "Submitting job for VCF-filter...\n";
@@ -1143,107 +1124,103 @@ sub main {
 			### Run variant annotation (VEP + vcf2maf)
 			my ($vcf2maf_cmd, $final_vcf, $final_maf, $maf_run_id) = '';
 
-			my @var_types = qw(snps indels);
-			foreach my $vtype (@var_types) {
+			$final_vcf = join('_', $filtered_stem, "annotated.vcf");
+			$final_maf = join('_', $filtered_stem, "annotated.maf");
 
-				$final_vcf = join('_', $filtered_stem, $vtype, "annotated.vcf");
-				$final_maf = join('_', $filtered_stem, $vtype, "annotated.maf");
+			# Tumour only, with a panel of normals
+			if ( (defined($pon)) && (scalar(@normal_ids) == 0) ) {
 
-				# Tumour only, with a panel of normals
-				if ( (defined($pon)) && (scalar(@normal_ids) == 0) ) {
+				$vcf2maf_cmd = get_vcf2maf_command(
+					input           => "$filtered_stem.vcf",
+					tumour_id       => $sample,
+					reference       => $reference,
+					ref_type        => $tool_data->{ref_type},
+					output          => $final_maf,
+					tmp_dir         => $tmp_directory,
+					vcf2maf         => $tool_data->{annotate}->{vcf2maf_path},
+					vep_path        => $tool_data->{annotate}->{vep_path},
+					vep_data        => $tool_data->{annotate}->{vep_data},
+					filter_vcf      => $tool_data->{annotate}->{filter_vcf}
+					);
 
-					$vcf2maf_cmd = get_vcf2maf_command(
-						input           => join('_', $filtered_stem, $vtype . ".vcf"),
-						tumour_id       => $sample,
-						reference       => $reference,
-						ref_type        => $tool_data->{ref_type},
-						output          => $final_maf,
-						tmp_dir         => $tmp_directory,
-						vcf2maf         => $tool_data->{annotate}->{vcf2maf_path},
-						vep_path        => $tool_data->{annotate}->{vep_path},
-						vep_data        => $tool_data->{annotate}->{vep_data},
-						filter_vcf      => $tool_data->{annotate}->{filter_vcf}
-						);
+				# paired tumour/normal
+				} elsif (scalar(@normal_ids) > 0) {
 
-					# paired tumour/normal
-					} elsif (scalar(@normal_ids) > 0) {
+				$vcf2maf_cmd = get_vcf2maf_command(
+					input           => "$filtered_stem.vcf",
+					tumour_id       => $sample,
+					normal_id       => $normal_ids[0],
+					reference       => $reference,
+					ref_type        => $tool_data->{ref_type},
+					output          => $final_maf,
+					tmp_dir         => $tmp_directory,
+					vcf2maf         => $tool_data->{annotate}->{vcf2maf_path},
+					vep_path        => $tool_data->{annotate}->{vep_path},
+					vep_data        => $tool_data->{annotate}->{vep_data},
+					filter_vcf      => $tool_data->{annotate}->{filter_vcf}
+					);
 
-					$vcf2maf_cmd = get_vcf2maf_command(
-						input           => join('_', $filtered_stem, $vtype . ".vcf"),
-						tumour_id       => $sample,
-						normal_id       => $normal_ids[0],
-						reference       => $reference,
-						ref_type        => $tool_data->{ref_type},
-						output          => $final_maf,
-						tmp_dir         => $tmp_directory,
-						vcf2maf         => $tool_data->{annotate}->{vcf2maf_path},
-						vep_path        => $tool_data->{annotate}->{vep_path},
-						vep_data        => $tool_data->{annotate}->{vep_data},
-						filter_vcf      => $tool_data->{annotate}->{filter_vcf}
-						);
-
-					} else {
-					next;
-					}
-
-				# check if this should be run
-				if ('Y' eq missing_file($final_maf . '.md5')) {
-
-					# make sure to remove temp files from previous attempts
-					my $tmp_file = join('/',
-						$tmp_directory,
-						$sample . "_MuTect2_filtered_$vtype.vep.vcf"
-						);
-
-					if ('N' eq missing_file($tmp_file)) {
-						`rm $tmp_file`;
-						}
-
-					# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
-					$vcf2maf_cmd .= "\n\n" . join("\n",
-						"if [ -s " . join(" ] && [ -s ", $final_maf) . " ]; then",
-						"  md5sum $final_maf > $final_maf.md5",
-						"  mv $tmp_file $final_vcf",
-						"  md5sum $final_vcf > $final_vcf.md5",
-						"  bgzip $final_vcf",
-						"  tabix -p vcf $final_vcf.gz",
-						"else",
-						'  echo "FINAL OUTPUT MAF is missing; not running md5sum/bgzip/tabix..."',
-						"fi"
-						);
-
-					# record command (in log directory) and then run job
-					print $log "Submitting job for vcf2maf ($vtype)...\n";
-
-					$run_script = write_script(
-						log_dir => $log_directory,
-						name    => 'run_vcf2maf_and_VEP_' . $sample . '_' . $vtype,
-						cmd     => $vcf2maf_cmd,
-						modules => ['perl', $samtools, 'tabix'],
-						dependencies    => $run_id,
-						cpus_per_task	=> 4,
-						max_time        => $tool_data->{annotate}->{time},
-						mem             => $tool_data->{annotate}->{mem}->{$vtype},
-						hpc_driver      => $args{hpc_driver}
-						);
-
-					$maf_run_id = submit_job(
-						jobname         => 'run_vcf2maf_and_VEP_' . $sample . '_' . $vtype,
-						shell_command   => $run_script,
-						hpc_driver      => $args{hpc_driver},
-						dry_run         => $args{dry_run},
-						log_file	=> $log
-						);
-
-					push @patient_jobs, $maf_run_id;
-					push @all_jobs, $maf_run_id;
-					}
-				else {
-					print $log "Skipping vcf2maf ($vtype) because this has already been completed!\n";
-					}
-
-				push @final_outputs, $final_maf;
+				} else {
+				next;
 				}
+
+			# check if this should be run
+			if ('Y' eq missing_file($final_maf . '.md5')) {
+
+				# make sure to remove temp files from previous attempts
+				my $tmp_file = join('/',
+					$tmp_directory,
+					$sample . "_MuTect2_filtered.vep.vcf"
+					);
+
+				if ('N' eq missing_file($tmp_file)) {
+					`rm $tmp_file`;
+					}
+
+				# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
+				$vcf2maf_cmd .= "\n\n" . join("\n",
+					"if [ -s " . join(" ] && [ -s ", $final_maf) . " ]; then",
+					"  md5sum $final_maf > $final_maf.md5",
+					"  mv $tmp_file $final_vcf",
+					"  md5sum $final_vcf > $final_vcf.md5",
+					"  bgzip $final_vcf",
+					"  tabix -p vcf $final_vcf.gz",
+					"else",
+					'  echo "FINAL OUTPUT MAF is missing; not running md5sum/bgzip/tabix."',
+					"fi"
+					);
+
+				# record command (in log directory) and then run job
+				print $log "Submitting job for vcf2maf...\n";
+
+				$run_script = write_script(
+					log_dir => $log_directory,
+					name    => 'run_vcf2maf_and_VEP_' . $sample,
+					cmd     => $vcf2maf_cmd,
+					modules => ['perl', $samtools, 'tabix'],
+					dependencies    => $run_id,
+					cpus_per_task	=> 4,
+					max_time        => $tool_data->{annotate}->{time},
+					mem             => $tool_data->{annotate}->{mem}->{snps},
+					hpc_driver      => $args{hpc_driver}
+					);
+
+				$maf_run_id = submit_job(
+					jobname         => 'run_vcf2maf_and_VEP_' . $sample,
+					shell_command   => $run_script,
+					hpc_driver      => $args{hpc_driver},
+					dry_run         => $args{dry_run},
+					log_file	=> $log
+					);
+
+				push @patient_jobs, $maf_run_id;
+				push @all_jobs, $maf_run_id;
+				}
+			else {
+				print $log "Skipping vcf2maf because this has already been completed!\n";
+				}
+
+			push @final_outputs, $final_maf;
 			}
 
 		# should intermediate files be removed
@@ -1276,7 +1253,8 @@ sub main {
 					cmd	=> $cleanup_cmd,
 					dependencies	=> join(':', @patient_jobs),
 					mem		=> '256M',
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					kill_on_error	=> 0
 					);
 
 				$run_id = submit_job(
@@ -1335,7 +1313,8 @@ sub main {
 			cmd	=> $collect_metrics,
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			kill_on_error	=> 0
 			);
 
 		$run_id = submit_job(

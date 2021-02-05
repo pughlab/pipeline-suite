@@ -486,7 +486,8 @@ sub main {
 					cmd	=> $cleanup_cmd,
 					dependencies	=> join(':', @patient_jobs),
 					mem		=> '256M',
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					kill_on_error	=> 0
 					);
 
 				$run_id = submit_job(
@@ -548,7 +549,8 @@ sub main {
 			cmd	=> $collect_metrics,
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			kill_on_error	=> 0
 			);
 
 		$run_id = submit_job(

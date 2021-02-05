@@ -182,13 +182,19 @@ sub get_rnaseqc_cmd {
 		@_
 		);
 
+	my $format_gtf_command = "cat $args{gtf}";
+	if ($args{gtf} =~ m/.gz$/) { $format_gtf_command = "zcat $args{gtf}"; }
+
+	$format_gtf_command .= " | grep -e '#' -e 'transcript_id'";
+	$format_gtf_command .= " > $args{tmp_dir}/transcript_ids.gtf";
+
 	my $qc_command = join(' ',
 		'java -Xmx' . $args{java_mem},
 		'-Djava.io.tmpdir=' . $args{tmp_dir},
 		'-jar $rnaseqc_dir/RNA-SeQC.jar',
 		'-bwa', $args{bwa},
 		'-o', $args{output_dir},
-		'-t', $args{gtf},
+		'-t', "$args{tmp_dir}/transcript_ids.gtf",
 		'-r', $args{reference},
 		'-singleEnd no',
 		'-s', $args{input}
@@ -219,11 +225,6 @@ sub main {
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'star');
-
-	# deal with extra arguments
-	$args{hpc_driver} = $args{hpc_driver};
-	$args{del_intermediates} = $args{del_intermediates};
-	$args{dry_run} = $args{dry_run};
 
 	# organize output and log directories
 	my $output_directory = $args{output_directory};
@@ -502,7 +503,8 @@ sub main {
 				cmd	=> $cleanup_cmd,
 				dependencies	=> join(':', @patient_jobs),
 				mem		=> '256M',
-				hpc_driver	=> $args{hpc_driver}
+				hpc_driver	=> $args{hpc_driver},
+				kill_on_error	=> 0
 				);
 
 			$run_id = submit_job(
@@ -535,6 +537,7 @@ sub main {
 	$qc_cmd .= ";\n\ncd $qc_directory;";
 	$qc_cmd .= "\nif [ -s metrics.tsv ]; then";
 	$qc_cmd .= "\n  find . -name '*tmp.txt*' -exec rm {} ". '\;';
+	$qc_cmd .= "\n  rm transcript_ids.gtf;";
 	$qc_cmd .= "\nfi";
 
 	# record command (in log directory) and then run job
@@ -603,7 +606,8 @@ sub main {
 			cmd     => $collect_metrics,
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			kill_on_error	=> 0
 			);
 
 		$run_id = submit_job(

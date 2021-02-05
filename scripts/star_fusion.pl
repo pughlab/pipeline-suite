@@ -192,7 +192,7 @@ sub main {
 
 			my $tmp_directory = join('/', $sample_directory, 'TEMP');
 			unless(-e $tmp_directory) { make_path($tmp_directory); }
-			$cleanup_cmd .= "\nrm -rf $tmp_directory";
+			$cleanup_cmd .= "\n  rm -rf $tmp_directory";
 
 			my $type;
 			if ( (any { $_ =~ m/$sample/ } @normal_ids) ) {
@@ -345,9 +345,9 @@ sub main {
 				push @all_jobs, $run_id;
 
 				# add some stuff to the cleanup
-				$cleanup_cmd .= "\nrm $sample_directory/pipeliner*";
-				$cleanup_cmd .= "\nrm -rf $sample_directory/_starF_checkpoints";
-				$cleanup_cmd .= "\nrm $sample_directory/*.ok";
+				$cleanup_cmd .= "\n  rm $sample_directory/pipeliner*";
+				$cleanup_cmd .= "\n  rm -rf $sample_directory/_starF_checkpoints";
+				$cleanup_cmd .= "\n  rm $sample_directory/*.ok";
 
 				push @patient_jobs, $run_id;
 				}
@@ -357,13 +357,13 @@ sub main {
 
 			# add output from STAR-Fusion to final_outputs
 			push @final_outputs, $fusion_output;
-			$cleanup_cmd .= "\nrm -rf " . join('/', 
+			$cleanup_cmd .= "\n  rm -rf " . join('/', 
 				$sample_directory,
 				'star-fusion.preliminary',
 				'star-fusion.filter.intermediates_dir'
 				);
 
-			$cleanup_cmd .= "\ntar -czvf $sample_directory/star-fusion.preliminary.tar.gz " .
+			$cleanup_cmd .= "\n  tar -czvf $sample_directory/star-fusion.preliminary.tar.gz " .
 				"$sample_directory/star-fusion.preliminary/ --remove-files";
 
 			}
@@ -392,7 +392,8 @@ sub main {
 					cmd     => $cleanup_cmd,
 					dependencies	=> join(':', @patient_jobs),
 					mem		=> '256M',
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					kill_on_error	=> 0
 					);
 
 				$run_id = submit_job(
@@ -451,7 +452,8 @@ sub main {
 			cmd	=> $collect_metrics,
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			kill_on_error	=> 0
 			);
 
 		$run_id = submit_job(

@@ -214,6 +214,10 @@ sub main {
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'vardict');
 	my $date = strftime "%F", localtime;
 
+	if ('wgs' eq $tool_data->{seq_type}) {
+		die('Please use vardict_wgs.pl for WGS data!');
+		}
+
 	# organize output and log directories
 	my $output_directory = $args{output_directory};
 	$output_directory =~ s/\/$//;
@@ -250,7 +254,7 @@ sub main {
 
 	$reference = $tool_data->{reference};
 
-	if (defined($tool_data->{intervals_bed})) {
+	if (('exome' eq $tool_data->{seq_type}) & (defined($tool_data->{intervals_bed}))) {
 		$intervals_bed = $tool_data->{intervals_bed};
 		$intervals_bed =~ s/\.bed/_padding100bp.bed/;
 		print $log "\n    Target intervals (exome): $intervals_bed";
@@ -300,7 +304,7 @@ sub main {
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
 		my @tumour_ids = keys %{$smp_data->{$patient}->{'tumour'}};
 
-		#next if (scalar(@normal_ids) == 0);
+		next if (scalar(@normal_ids) == 0);
 
 		print $log "\nInitiating process for PATIENT: $patient\n";
 
@@ -537,9 +541,9 @@ sub main {
 				$sample . '_VarDict_germline_hc.vcf'
 				);
 
-			$filter_command .= "\n\n" . join(' ',
-				'bgzip -f', $new_germline . "\n",
-				'tabix -p vcf', $new_germline . '.gz'
+			$filter_command .= "\n\n" . join("\n",
+				join(' ', 'bgzip -f', $new_germline),
+				join(' ', 'tabix -p vcf', $new_germline . '.gz')
 				);
 
 			push @germline_vcfs, $new_germline . '.gz';
@@ -741,7 +745,8 @@ sub main {
 					cmd	=> $cleanup_cmd,
 					dependencies	=> join(':', @patient_jobs),
 					mem		=> '256M',
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					kill_on_error	=> 0
 					);
 
 				$run_id = submit_job(
@@ -1040,7 +1045,8 @@ sub main {
 					cmd	=> $cleanup_cmd,
 					dependencies	=> join(':', @patient_jobs),
 					mem		=> '256M',
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					kill_on_error	=> 0
 					);
 
 				$run_id = submit_job(
@@ -1099,7 +1105,8 @@ sub main {
 			cmd	=> $collect_metrics,
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			kill_on_error	=> 0
 			);
 
 		$run_id = submit_job(
