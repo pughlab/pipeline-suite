@@ -5,11 +5,11 @@ seq_type: exome # must be one of exome, targeted, rna or wgs
 seq_center: PMGC
 platform: Illumina
 # reference files
-ref_type: hg38
+ref_type: hg38 # must be hg38 or hg19, not compatible with GRCh37/GRCh38 reference (missing _chr_)
 reference: /cluster/tools/data/genomes/human/hg38/iGenomes/Sequence/WholeGenomeFasta/genome.fa
 intervals_bed:
-dbsnp:
-cosmic: /cluster/projects/pughlab/references/COSMIC/GRCh38/v91/CosmicCodingMuts.vcf.gz
+dbsnp: /cluster/projects/pughlab/references/dbSNP/GRCh38/b151/dbSNP_GRCh38p7_b151_common_chr.vcf.gz
+cosmic: /cluster/projects/pughlab/references/COSMIC/GRCh38/v91/CosmicVariants_full_sorted_chr.vcf.gz
 hapmap: /cluster/projects/pughlab/references/hapmap/hg38_population_stratified_af_hapmap_3.3.vcf.gz
 gtf: /cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.annotation.gtf
 # tool versions
@@ -139,8 +139,8 @@ annotate:
     vep_data: /cluster/projects/pughlab/references/VEP_cache/98
     filter_vcf: /cluster/projects/pughlab/references/VEP_cache/ExAC_nonTCGA.r1.sites.hg19ToHg38.vep.vcf.gz 
     mem:
-        snps: 28G
-        indels: 16G
+        snps: 16G
+        indels: 12G
     time: '72:00:00'
 mutect:
     run: Y
@@ -166,13 +166,12 @@ mutect2:
         mutect:
             java_mem: 3g
             mem: 4G
-            time: '5-00:00:00'
+            time: '21-00:00:00' # some WXS can take >14 days to complete
         merge:
             mem: 2G
             time: '12:00:00'
         filter:
-            java_mem: 3g
-            mem: 4G
+            mem: 1G
             time: '12:00:00'
         combine:
             java_mem: 3g
