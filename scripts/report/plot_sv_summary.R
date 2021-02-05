@@ -287,7 +287,7 @@ if (nrow(sv.data) == 0) {
 			caption = 'Number of events (total and by SV type) discovered by each tool, as well as the overlap, and verified by MAVIS.'
 			),
 		file = 'sv_summary.tex',
-		include.rownames = FALSE,
+		include.rownames = TRUE,
 		append = TRUE
 		);
 

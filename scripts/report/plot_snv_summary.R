@@ -285,7 +285,7 @@ create.heatmap(
 	yaxis.lab = plot.data$Label,
 	xaxis.cex = axis.cex,
 	yaxis.cex = 1,
-	xaxis.tck = 0.2,
+	xaxis.tck = if (axis.cex == 0) { 0 } else { 0.2 },
 	yaxis.tck = 0.2,
 	xaxis.fontface = 'plain',
 	yaxis.fontface = 'plain',
@@ -303,8 +303,8 @@ create.heatmap(
 	at = seq(0,length(variant.colours),1),
 	total.colours = length(variant.colours)+1,
 	colour.scheme = variant.colours,
-	inside.legend = list(fun = functional.legend, x = 1.02, y = 1),
-	right.padding = 21,
+#	inside.legend = list(fun = functional.legend, x = 1.02, y = 1),
+#	right.padding = 21,
 	height = 6,
 	width = 8,
 	resolution = 200,
@@ -493,7 +493,7 @@ if (length(overlap.plot) > 0) {
 		), file = 'snv_summary.tex', append = TRUE);
 	write("\\end{center}", file = 'snv_summary.tex', append = TRUE);
 	write(paste0(
-		"\\caption{From top to bottom: number of variants called by each tool (Mutect2, MuTect, Strelka, VarScan) and the overlap with variants called by 3 or more tools carried forward.}"
+		"\\caption{From top to bottom: number of variants called by each tool (Mutect, MuTect2, SomaticSniper, Strelka, VarDict and VarScan) and the ensemble variants carried forward.}"
 		), file = 'snv_summary.tex', append = TRUE);
 	write("\\end{figure}\n", file = 'snv_summary.tex', append = TRUE);
 	}
