@@ -691,7 +691,6 @@ sub main {
 			log_dir		=> $log_directory,
 			name		=> 'collect_somatic_variant_calls',
 			cmd		=> $ensemble_command,
-			dependencies	=> $qc_run_id,
 			modules		=> [$r_version],
 			max_time	=> '24:00:00',
 			mem		=> '2G',
@@ -835,7 +834,8 @@ sub main {
 			cmd	=> $collect_metrics,
 			dependencies	=> join(':', @job_ids),
 			mem		=> '256M',
-			hpc_driver	=> $args{cluster}
+			hpc_driver	=> $args{cluster},
+			kill_on_error	=> 0
 			);
 
 		$run_id = submit_job(
