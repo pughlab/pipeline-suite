@@ -84,6 +84,7 @@ names(variant.colours) <- c("nonstop","frameshift_indel","other", "missense", "n
 # if this is RNA-Seq, only keep variants in coding regions
 is.rnaseq <- grepl('RNASeq', getwd());
 is.exome <- grepl('Exome', getwd());
+is.germline <- grepl('CPSR', getwd());
 classes.to.keep <- c('RNA','Missense_Mutation','Splice_Region','Splice_Site','In_Frame_Del','In_Frame_Ins',
 	'Frame_Shift_Del','Frame_Shift_Ins','Nonsense_Mutation','Nonstop_Mutation','Translation_Start_Site');
 
@@ -159,6 +160,15 @@ full.maf.data <- do.call(rbind, maf.data);
 if (is.rnaseq) {
 	full.maf.data[,c('Matched_Norm_Sample_Barcode','Match_Norm_Seq_Allele1','Match_Norm_Seq_Allele2')] <- NA;
 	}
+
+if (!is.rnaseq & !is.germline) {
+	full.maf.data[which(full.maf.data$Matched_Norm_Sample_Barcode != 'NORMAL'),]$Mutation_Status <- 'somatic';
+	}
+
+if (!is.rnaseq & is.germline) {
+	full.maf.data[which(full.maf.data$Matched_Norm_Sample_Barcode != 'NORMAL'),]$Mutation_Status <- 'germline';
+	}
+
 colnames(full.maf.data) <- gsub('vcf','variant',colnames(full.maf.data));
 exclude.field <- which(colnames(full.maf.data) == 'variant_pos');
 
