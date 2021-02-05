@@ -113,6 +113,13 @@ sub error_checking {
 				}
 			}
 
+			if ( ( any { /$pipeline/ } qw(vardict) ) && (any { /$tool_data->{seq_type}/ } qw(wgs) ) ) {
+				$intervals = $tool_data->{intervals_bed};
+				if ( (!defined($intervals)) || ('Y' eq missing_file($intervals)) ) {
+					die("For VarDict on WGS, intervals in the form of chr:start-end MUST be provided.");
+				}
+			}
+
 		} elsif (('rna' eq $data_type) && ('strelka' eq $pipeline)) {
 
 			if ('rna' ne $tool_data->{seq_type}) {
@@ -210,6 +217,7 @@ sub write_script {
 		cpus_per_task	=> 1,
 		hpc_driver	=> 'slurm',
 		extra_args	=> undef,
+		kill_on_error	=> 1,
 		@_
 		);
 
@@ -297,7 +305,9 @@ sub write_script {
 		print $fh_script $sbatch_params . "\n\n";
 		}
 
-	print $fh_script "set -e\n\n";
+	if ($args{kill_on_error}) {
+		print $fh_script "set -e\n\n";
+		}
 
 	if (scalar(@modules_list) > 0) {
 		print $fh_script $modules_to_load . "\n\n";
