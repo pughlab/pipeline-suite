@@ -10,7 +10,7 @@ use POSIX qw(strftime);
 use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
-use List::Util qw(any);
+use List::Util qw(any first);
 use IO::Handle;
 
 my $cwd = dirname($0);
@@ -228,6 +228,28 @@ sub get_finalize_command {
 	return($job_command);
 	}
 
+# function to extract SM tag from BAM header
+sub get_sm_tag {
+	my %args = (
+		bam => undef,
+		@_
+		);
+
+	# read in bam header (RG tags only)
+	open (my $bam_fh, "samtools view -H $args{bam} | grep '^\@RG' |");
+	# only look at first line
+	my $line = <$bam_fh>;
+	close($bam_fh);
+	chomp($line);
+
+	my @header_parts = split(/\t/, $line);
+	# pull out and clean SM tag
+	my $sm_tag = first { $_ =~ m/SM:/ } @header_parts;
+	$sm_tag =~ s/^SM://;
+
+	return($sm_tag);
+	}
+
 ### PANEL OF NORMALS ###############################################################################
 sub pon {
 	my %args = (
@@ -299,6 +321,8 @@ sub pon {
 	# set tools and versions
 	my $delly	= 'delly/' . $tool_data->{delly_version};
 	my $samtools 	= 'samtools/' . $tool_data->{samtools_version};
+
+	`module load $samtools`;
 
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{delly}->{parameters};
@@ -553,7 +577,8 @@ sub pon {
 			cmd	=> $cleanup_cmd,
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			kill_on_error	=> 0
 			);
 
 		$run_id = submit_job(
@@ -584,7 +609,8 @@ sub pon {
 			cmd	=> $collect_metrics,
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			kill_on_error	=> 0
 			);
 
 		$run_id = submit_job(
@@ -711,6 +737,8 @@ sub main {
 	my (@part1_jobs, @part2_jobs, @all_jobs);
 	my (@normal_sample_ids, @filtered_bcfs, @genotyped_bcfs);
 
+	my %sample_sheet_tumour;
+	my @sample_sheet_normal;
 	my (%final_outputs, %patient_jobs, %cleanup);
 
 	# process each sample in $smp_data
@@ -733,6 +761,8 @@ sub main {
 		@final_outputs{$patient} = [];
 		$cleanup{$patient} = '';
 
+		@sample_sheet_tumour{$patient} = [];
+
 		# create some directories
 		my $patient_directory = join('/', $output_directory, $patient);
 		unless(-e $patient_directory) { make_path($patient_directory); }
@@ -751,15 +781,23 @@ sub main {
 			my @tmp = split /\//, $smp_data->{$patient}->{normal}->{$normal};
 			$link = join('/', $link_directory, $tmp[-1]);
 			symlink($smp_data->{$patient}->{normal}->{$normal}, $link);
-			print $fh "$normal\tcontrol\n";
+
+			my $sm_tag = get_sm_tag(bam => $smp_data->{$patient}->{normal}->{$normal});
+
+			print $fh "$sm_tag\tcontrol\t$normal\n";
 			push @normal_bams, $smp_data->{$patient}->{normal}->{$normal};
+			push @sample_sheet_normal, "$sm_tag\tcontrol\t$normal\n";
 			}
 		foreach my $tumour (@tumour_ids) {
 			my @tmp = split /\//, $smp_data->{$patient}->{tumour}->{$tumour};
 			$link = join('/', $link_directory, $tmp[-1]);
 			symlink($smp_data->{$patient}->{tumour}->{$tumour}, $link);
-			print $fh "$tumour\ttumor\n";
+
+			my $sm_tag = get_sm_tag(bam => $smp_data->{$patient}->{tumour}->{$tumour});
+
+			print $fh "$sm_tag\ttumor\t$tumour\n";
 			push @tumour_bams, $smp_data->{$patient}->{tumour}->{$tumour};
+			push @{$sample_sheet_tumour{$tumour}}, "$sm_tag\ttumor\t$tumour\n";
 			}
 
 		close $fh;
@@ -958,9 +996,10 @@ sub main {
 				my $sample_sheet = join('/', $sample_directory, 'sample_sheet.tsv');
 				open(my $fh, '>', $sample_sheet) or die "Cannot open '$sample_sheet' !";
 
-				print $fh "$sample\ttumor\n";
-				foreach my $i (@normal_sample_ids) {
-					print $fh "$i\tcontrol\n";
+				print $fh @{$sample_sheet_tumour{$sample}};
+
+				foreach my $i ( @sample_sheet_normal ) {
+					print $fh $i;
 					}
 
 				close $fh;
@@ -1144,7 +1183,8 @@ sub main {
 				cmd	=> $cleanup_cmd,
 				dependencies	=> join(':', @{$patient_jobs{$patient}}),
 				mem		=> '256M',
-				hpc_driver	=> $args{hpc_driver}
+				hpc_driver	=> $args{hpc_driver},
+				kill_on_error	=> 0
 				);
 
 			$run_id = submit_job(
@@ -1176,7 +1216,8 @@ sub main {
 			cmd	=> $collect_metrics,
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			kill_on_error	=> 0
 			);
 
 		$run_id = submit_job(
