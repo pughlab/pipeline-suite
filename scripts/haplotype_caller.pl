@@ -208,6 +208,8 @@ sub main{
 		$dbsnp = '/cluster/tools/data/genomes/human/hg38/hg38bundle/dbsnp_144.hg38.vcf.gz';
 		} elsif ('hg19' eq $tool_data->{ref_type}) {
 		$dbsnp = '/cluster/tools/data/genomes/human/hg19/variantcallingdata/dbsnp_138.hg19.vcf';
+		} else {
+		print $log "\n      No dbSNP provided.";
 		}
 
 	if (defined($tool_data->{intervals_bed})) {
@@ -448,6 +450,7 @@ sub main{
 						cmd	=> $vcf2maf_cmd,
 						modules	=> ['perl', $samtools, 'tabix'],
 						dependencies	=> $run_id,
+						cpus_per_task	=> 4,
 						max_time	=> $parameters->{annotate}->{time},
 						mem		=> $parameters->{annotate}->{mem},
 						hpc_driver	=> $args{hpc_driver}
