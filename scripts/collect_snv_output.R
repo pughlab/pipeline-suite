@@ -83,7 +83,8 @@ names(variant.colours) <- c("nonstop","frameshift_indel","other", "missense", "n
 
 # if this is RNA-Seq, only keep variants in coding regions
 is.rnaseq <- grepl('RNASeq', getwd());
-is.exome <- grepl('Exome', getwd());
+is.exome <- grepl('Exome|WEX|WXS', getwd());
+is.wgs <- grepl('WGS', getwd());
 is.germline <- grepl('CPSR', getwd());
 classes.to.keep <- c('RNA','Missense_Mutation','Splice_Region','Splice_Site','In_Frame_Del','In_Frame_Ins',
 	'Frame_Shift_Del','Frame_Shift_Ins','Nonsense_Mutation','Nonstop_Mutation','Translation_Start_Site');
@@ -143,7 +144,10 @@ for (i in 1:length(maf.files)) {
 
 	## do some filtering
 	# remove any poor quality variants
-	tmp <- tmp[which(tmp$FILTER == 'PASS'),];
+	# for some reason WGS:SomaticSniper output has FILTER = '.'
+	if (!(is.wgs & grepl('SomaticSniper', getwd()))) {
+		tmp <- tmp[which(tmp$FILTER == 'PASS'),];
+		}
 
 	if (is.rnaseq) {
 		tmp <- tmp[which(tmp$t_depth > arguments$t_depth),];
