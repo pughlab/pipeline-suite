@@ -173,10 +173,11 @@ sub get_varscan_cnv_command {
 # format command to run Sequenza
 sub get_sequenza_command {
 	my %args = (
-		tool	=> undef,
-		snp	=> undef,
-		cnv	=> undef,
-		out_dir	=> undef,
+		tool		=> undef,
+		snp		=> undef,
+		cnv		=> undef,
+		out_dir		=> undef,
+		ref_type	=> undef,
 		@_
 		);
 
@@ -184,7 +185,8 @@ sub get_sequenza_command {
 		'Rscript', $args{tool},
 		'--snp_file', $args{snp},
 		'--cnv_file', $args{cnv},
-		'--out_dir', $args{out_dir}
+		'--out_dir', $args{out_dir},
+		'--ref_type', $args{ref_type}
 		);
 
 	return($sequenza_command);
@@ -358,6 +360,8 @@ sub main {
 		$string = 'exome';
 		} elsif ( ('hg38' eq $tool_data->{ref_type}) || ('hg19' eq $tool_data->{ref_type})) {
 		$string = 'chr' . join(',chr', 1..22) . ',chrX,chrY';
+		} elsif ( ('GRCh37' eq $tool_data->{ref_type}) || ('GRCh37' eq $tool_data->{ref_type})) {
+		$string = join(',', 1..22) . ',X,Y';
 		} else {
 		# if no chromosomes can be determined, run as a whole (very very slow!)
 		print $log "  >> Could not determine chromosomes to run\n";
@@ -380,7 +384,8 @@ sub main {
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
 	my $gatk	= 'gatk/' . $tool_data->{gatk_version};
-	my $sequenza	= $tool_data->{varscan}->{parameters}->{sequenza}->{path};
+	my $sequenza	= "$cwd/SequenzaSingleSample_v2.1.R";
+	# $tool_data->{varscan}->{parameters}->{sequenza}->{path};
 	my $r_version	= 'R/' . $tool_data->{r_version};
 	my $r_sequenza	= 'R/' . $tool_data->{varscan}->{parameters}->{sequenza}->{r};
 
@@ -722,7 +727,8 @@ sub main {
 				out_dir	=> $sequenza_directory,
 				snp	=> $merged_snp_output . '.snp',
 				cnv	=> $cnv_stem . '.copynumber',
-				tool	=> $sequenza
+				tool	=> $sequenza,
+				ref_type	=> $tool_data->{ref_type}
 				);
 
 			$cleanup_cmd .= "\nrm $merged_snp_output";
@@ -1566,6 +1572,8 @@ sub unpaired_mode {
 		$string = 'exome';
 		} elsif ( ('hg38' eq $tool_data->{ref_type}) || ('hg19' eq $tool_data->{ref_type})) {
 		$string = 'chr' . join(',chr', 1..22) . ',chrX,chrY';
+		} elsif ( ('GRCh37' eq $tool_data->{ref_type}) || ('GRCh37' eq $tool_data->{ref_type})) {
+		$string = join(',', 1..22) . ',X,Y';
 		} else {
 		# if no chromosomes can be determined, run as a whole (very very slow!)
 		print $log "  >> Could not determine chromosomes to run\n";

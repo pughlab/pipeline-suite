@@ -63,9 +63,12 @@ sub get_mutect_pon_command {
 		'-R', $reference,
 		'--input_file:tumor', $args{normal},
 		'--vcf', $args{output_stem} . '.vcf',
-		'--artifact_detection_mode',
-		'--dbsnp', $dbsnp
+		'--artifact_detection_mode'
 		);
+
+	if (defined($dbsnp)) {
+		$mutect_command .= " --dbsnp $dbsnp";
+		}
 
 	if (defined($cosmic)) {
 		$mutect_command .= " --cosmic $cosmic";
@@ -135,8 +138,11 @@ sub get_mutect_tn_command {
 		'--normal_sample_name', $args{normal_ID},
 		'--vcf', $args{output_stem} . '.vcf',
 		'--out', $args{output_stem} . '.stats',
-		'--dbsnp', $dbsnp
 		);
+
+	if (defined($dbsnp)) {
+		$mutect_command .= " --dbsnp $dbsnp";
+		}
 
 	if (defined($cosmic)) {
 		$mutect_command .= " --cosmic $cosmic";
@@ -177,9 +183,12 @@ sub get_mutect_tonly_command {
 		'--tumor_sample_name', $args{tumour_ID},
 		'--vcf', $args{output_stem} . '.vcf',
 		'--out', $args{output_stem} . '.stats',
-		'--dbsnp', $dbsnp,
 		'--normal_panel', $pon
 		);
+
+	if (defined($dbsnp)) {
+		$mutect_command .= " --dbsnp $dbsnp";
+		}
 
 	if (defined($cosmic)) {
 		$mutect_command .= " --cosmic $cosmic";
@@ -282,6 +291,8 @@ sub pon {
 		$dbsnp = '/cluster/tools/data/genomes/human/hg38/hg38bundle/dbsnp_144.hg38.vcf.gz';
 		} elsif ('hg19' eq $tool_data->{ref_type}) {
 		$dbsnp = '/cluster/tools/data/genomes/human/hg19/variantcallingdata/dbsnp_138.hg19.vcf';
+		} else {
+		print $log "\n      No dbSNP provided.";
 		}
 
 	if (defined($tool_data->{cosmic})) {
@@ -717,6 +728,8 @@ sub main {
 		$dbsnp = '/cluster/tools/data/genomes/human/hg38/hg38bundle/dbsnp_144.hg38.vcf.gz';
 		} elsif ('hg19' eq $tool_data->{ref_type}) {
 		$dbsnp = '/cluster/tools/data/genomes/human/hg19/variantcallingdata/dbsnp_138.hg19.vcf';
+		} else {
+		print $log "\n      No dbSNP provided.";
 		}
 
 	if (defined($tool_data->{cosmic})) {

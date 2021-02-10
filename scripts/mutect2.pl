@@ -59,9 +59,12 @@ sub get_mutect_pon_command {
 		'-R', $reference,
 		'-I:tumor', $args{normal},
 		'--out', $args{output},
-		'--artifact_detection_mode',
-		'--dbsnp', $dbsnp
+		'--artifact_detection_mode'
 		);
+
+	if (defined($dbsnp)) {
+		$mutect_command .= ' --dbsnp ' . $dbsnp;
+		}
 
 	if (defined($args{intervals})) {
 		$mutect_command .= ' ' . join(' ',
@@ -120,9 +123,12 @@ sub get_mutect_command {
 		'-jar $gatk_dir/GenomeAnalysisTK.jar -T MuTect2',
 		'-R', $reference,
 		'-I:tumor', $args{tumour},
-		'--out', $args{output},
-		'--dbsnp', $dbsnp
+		'--out', $args{output}
 		);
+
+	if (defined($dbsnp)) {
+		$mutect_command .= ' --dbsnp ' . $dbsnp;
+		}
 
 	if (defined($args{normal})) {
 		$mutect_command .= " -I:normal $args{normal}";
@@ -164,7 +170,6 @@ sub get_mutect_split_command {
 		'-R', $reference,
 		'-I:tumor', $args{tumour},
 		'--out', $args{output_stem} . '_$CHROM.vcf',
-		'--dbsnp', $dbsnp,
 		'--intervals', '$CHROM',
 		'--interval_padding 100'
 		);
@@ -175,6 +180,10 @@ sub get_mutect_split_command {
 
 	if (defined($cosmic)) {
 		$mutect_command .= " --cosmic $cosmic";
+		}
+
+	if (defined($dbsnp)) {
+		$mutect_command .= ' --dbsnp ' . $dbsnp;
 		}
 
 	if (defined($pon)) {
@@ -296,6 +305,8 @@ sub pon {
 		$dbsnp = '/cluster/tools/data/genomes/human/hg38/hg38bundle/dbsnp_144.hg38.vcf.gz';
 		} elsif ('hg19' eq $tool_data->{ref_type}) {
 		$dbsnp = '/cluster/tools/data/genomes/human/hg19/variantcallingdata/dbsnp_138.hg19.vcf';
+		} else {
+		print $log "\n      No dbSNP provided.";
 		}
 
 	if (defined($tool_data->{cosmic})) {
@@ -730,6 +741,8 @@ sub main {
 		$string = $tool_data->{mutect2}->{chromosomes}; 
 		} elsif ( ('hg38' eq $tool_data->{ref_type}) || ('hg19' eq $tool_data->{ref_type})) {
 		$string = 'chr' . join(',chr', 1..22) . ',chrX,chrY';
+		} elsif ( ('GRCh37' eq $tool_data->{ref_type}) || ('GRCh38' eq $tool_data->{ref_type})) {
+		$string = join(',', 1..22) . ',X,Y';
 		} else {
 		# if no chromosomes can be determined, run as a whole (very very slow!)
 		print $log "  >> Could not determine chromosomes to run\n";
@@ -746,6 +759,8 @@ sub main {
 		$dbsnp = '/cluster/tools/data/genomes/human/hg38/hg38bundle/dbsnp_144.hg38.vcf.gz';
 		} elsif ('hg19' eq $tool_data->{ref_type}) {
 		$dbsnp = '/cluster/tools/data/genomes/human/hg19/variantcallingdata/dbsnp_138.hg19.vcf';
+		} else {
+		print $log "\n      No dbSNP provided.";
 		}
 
 	if (defined($tool_data->{cosmic})) {

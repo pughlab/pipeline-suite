@@ -23,10 +23,21 @@ sub error_checking {
 	my $data_type = $args{data_type};
 
 	# check to see if tool-specific arguments are supplied and/or are correct
+
 	# is ref_type either hg38 or hg19?
-	if ( ('hg38' ne $tool_data->{ref_type}) && ('hg19' ne $tool_data->{ref_type}) ) {
-		die("Unrecognized ref_type; must be one of hg19 or hg38.");
+	# is this RNA?
+	if ('rna' eq $data_type) {
+		if ( ('GRCh38' ne $tool_data->{ref_type}) || ('hg38' ne $tool_data->{ref_type}) ) {
+			die("RNA-Seq pipeline only configured for use with GRCh38/hg38.");
+		}
+	} else {
+	# # or DNA?
+		if ( ('hg38' ne $tool_data->{ref_type}) && ('hg19' ne $tool_data->{ref_type}) && 
+		('GRCh37' ne $tool_data->{ref_type}) && ('GRCh38' ne $tool_data->{ref_type})) {
+			die("Unrecognized ref_type; must be one of hg19, GRCh37, hg38 or GRCh38.");
+		}
 	}
+
 
 	my $is_ref_valid;
 
@@ -441,6 +452,8 @@ sub get_vcf2maf_command {
 		$ref_type = 'GRCh37';
 		} elsif ('hg38' eq $args{ref_type}) {
 		$ref_type = 'GRCh38';
+		} elsif ( ('GRCh38' eq $args{ref_type}) || ('GRCh37' eq $args{ref_type}) ) {
+		$ref_type = $args{ref_type};
 		}
 
 	my $maf_command = join(' ',
