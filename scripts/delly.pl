@@ -218,12 +218,36 @@ sub get_finalize_command {
 		@_
 		);
 
-	my $job_command = join(' ',
-		'bcftools view',
-		'-s', $args{id},
-		'-O v -o', $args{output},
-		$args{input}
-		);
+	my @id_parts = split /\t/, $args{id};
+	my $sm_tag = $id_parts[0];
+	my $tumour_id = $id_parts[2];
+	chomp($tumour_id);
+
+	my $job_command;
+
+	if ($sm_tag eq $tumour_id) {
+
+		$job_command = join(' ',
+			'bcftools view',
+			'-s', $tumour_id,
+			'-O v -o', $args{output},
+			$args{input}
+			);
+
+		} else {
+
+		$job_command = "echo $sm_tag $tumour_id > $args{output}.reheader";
+		$job_command .= "\n\n" . join(' ',
+			'bcftools view',
+			'-s', $sm_tag,
+			$args{input},
+			'| bcftools reheader',
+			'-s', "$args{output}.reheader",
+			'>', $args{output}
+			);
+
+		$job_command .= "\n\nrm $args{output}.reheader";
+		}
 
 	return($job_command);
 	}
@@ -308,9 +332,9 @@ sub pon {
 	print $log "\n    Reference used: $tool_data->{reference}";
 
 	$reference = $tool_data->{reference};
-	if ('hg38' eq $tool_data->{ref_type}) {
+	if ( ('hg38' eq $tool_data->{ref_type}) || ('GRCh38' eq $tool_data->{ref_type}) ) {
 		$exclude_regions = '/cluster/projects/pughlab/references/Delly/excludeTemplates/human.hg38.excl.tsv';
-		} elsif ('hg19' eq $tool_data->{ref_type}) {
+		} elsif ( ('hg19' eq $tool_data->{ref_type}) || ('GRCh37' eq $tool_data->{ref_type}) ) {
 		$exclude_regions = '/cluster/projects/pughlab/references/Delly/excludeTemplates/human.hg19.excl.tsv';
 		}
 
@@ -712,9 +736,9 @@ sub main {
 	print $log "\n    Reference used: $tool_data->{reference}";
 
 	$reference = $tool_data->{reference};
-	if ('hg38' eq $tool_data->{ref_type}) {
+	if ( ('hg38' eq $tool_data->{ref_type}) || ('GRCh38' eq $tool_data->{ref_type}) ) {
 		$exclude_regions = '/cluster/projects/pughlab/references/Delly/excludeTemplates/human.hg38.excl.tsv';
-		} elsif ('hg19' eq $tool_data->{ref_type}) {
+		} elsif ( ('hg19' eq $tool_data->{ref_type}) || ('GRCh37' eq $tool_data->{ref_type}) ) {
 		$exclude_regions = '/cluster/projects/pughlab/references/Delly/excludeTemplates/human.hg19.excl.tsv';
 		}
 
@@ -1126,7 +1150,7 @@ sub main {
 				);
 
 			$finalize_somatic_svs .= "\n\n" . get_finalize_command(
-				id		=> $sample,
+				id		=> @{$sample_sheet_tumour{$sample}},
 				output		=> $final_output,
 				input		=> $filter_output
 				);
