@@ -262,7 +262,7 @@ sub main {
 		$samtools = $tool_data->{samtools_version};
 		$vcftools = $tool_data->{vcftools_version};
 
-		my $pon = '';
+		my $pon;
 		$pon = $tool_data->{somaticsniper}->{pon};
 
 		# annotation
@@ -275,7 +275,7 @@ sub main {
 		$methods .= "\\subsubsection{SomaticSniper (v$somaticsniper):}\n";
 		$methods .= "SomaticSniper was run on each T/N pair using options -q 1 -Q 40 -G and -L . For filtering, bcftools (v$samtools) mpileup was run with results filtered for quality using bcftools vcfutils.pl varFilter -Q 20. SomaticSniper's filters were then applied as suggested (snpfilter.pl was first applied to the initial VCF using the normal indel pileup, with the results then filtered using the tumour pileup). The resulting positions were fed into bam-readcount (-b 15 -q 1) for the tumour BAM and SomaticSnipers fpfilter.pl and highconfidence.pl applied to remove probable false positives (min mapping quality = 40 and min somatic score = 40).";
 
-		if ('' ne $pon) {
+		if (defined($pon)) {
 			$methods .= "Remaining variants were filtered to remove known germline variants using the provided panel of normals ($pon) with vcftools (v$vcftools).\\newline\n";
 			}
 		} else {
@@ -285,7 +285,7 @@ sub main {
 	if ('Y' eq $tool_data->{vardict}->{run}) {
 
 		$vardict	= $tool_data->{vardict_version};
-		$bcftools	= $tool_data->{samtools_version};
+		$samtools	= $tool_data->{samtools_version};
 		$vcftools	= $tool_data->{vcftools_version};
 		$gatk		= $tool_data->{gatk_version};
 
@@ -297,7 +297,7 @@ sub main {
 
 		# fill in methods
 		$methods .= "\\subsubsection{VarDict (v$vardict):}\n";
-		$methods .= "VarDict was run using the recommended protocol for either paired (T/N) or tumour-only, with default parameters. Variants were filtered by significance (p-value \$<\$ 0.05) using bcftools (v$bcftools).\\newline\n";
+		$methods .= "VarDict was run using the recommended protocol for either paired (T/N) or tumour-only, with default parameters. Variants were filtered by significance (p-value \$<\$ 0.05) using bcftools (v$samtools).\\newline\n";
 		$methods .= "For T/N, somatic (StrongSomatic and LikelySomatic) and germline variants were extracted. Germline variants were used to generate a panel of normals (merged across samples using GATK's (v$gatk) CombineVariants, and keeping variants present in at least 2 samples).\\newline\n";
 		$methods .= "For tumour-only samples, somatic variants were extracted (StrongSomatic and LikelySomatic), and filtered further using the PoN to remove probable germline variants (vcftools v$vcftools).\\newline\n";
 		} else {
@@ -352,6 +352,8 @@ sub main {
 		$methods .= "\\subsubsection{Annotation:}\n";
 		$methods .= "Somatic short variants (SNVs and INDELs) were annotated using VEP (v$vep) and vcf2maf (v$vcf2maf) and filtered to remove known common variants (ExAC nonTCGA version r1).\\newline\n";
 		$methods .= "Lastly, an ensemble approach was applied, such that variants meeting the following criteris were carried forward for downstream analyses:\\newline\n";
+		# based on suggested criteria here:
+		# 	https://www.nature.com/articles/s41598-020-69772-8
 		$methods .= join("\n",
 			"{\\scriptsize \\begin{itemize}",
 			"  \\vspace{-0.2cm}\\item SNPs identified by 3 or more tools",

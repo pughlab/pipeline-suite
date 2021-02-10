@@ -360,12 +360,14 @@ sub main {
 		$methods .= "\\subsubsection{Annotation:}\n";
 		$methods .= "Somatic short variants (SNVs and INDELs) were annotated using VEP (v$vep) and vcf2maf (v$vcf2maf) and filtered to remove known common variants (ExAC nonTCGA version r1).\\newline\n";
 		$methods .= "Lastly, an ensemble approach was applied, such that variants meeting the following criteris were carried forward for downstream analyses:\\newline\n";
+		# based on suggested criteria here:
+		# 	https://www.nature.com/articles/s41598-020-69772-8
 		$methods .= join("\n",
 			"{\\scriptsize \\begin{itemize}",
 			"  \\vspace{-0.2cm}\\item SNPs identified by 4 or more tools",
 			"  \\vspace{-0.2cm}\\item INDELs identified by 2 or more tools",
-			"  \\vspace{-0.2cm}\\item variants identified by Mutect2, with VAF \$<\$ 0.1",
-			"  \\vspace{-0.2cm}\\item variants with intra-patient evidence (any of the above 3 criteria)",
+			"  \\vspace{-0.2cm}\\item variants identified by MuTect2, with VAF \$<\$ 0.1",
+			"  \\vspace{-0.2cm}\\item variants identified by MuTect2 AND idenfited by criteria above in any other sample",
 			"\\end{itemize} }"
 			) . "\n";
 #		$methods .= "Variants with low coverage (see callable bases above) were flagged.\\newline\n";
