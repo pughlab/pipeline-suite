@@ -105,7 +105,7 @@ sub get_varscan_snv_command {
 # format command ro tun VarScan processSomatic
 sub get_varscan_process_command {
 	my %args = (
-		output_stem	=> undef,
+		input		=> undef,
 		java_mem	=> undef,
 		tmp_dir		=> undef,
 		@_
@@ -115,14 +115,7 @@ sub get_varscan_process_command {
 		'java -Xmx' . $args{java_mem},
 		'-Djava.io.tmpdir=' . $args{tmp_dir},
 		'-jar $varscan_dir/VarScan.jar processSomatic',
-		$args{output_stem} . '.snp'
-		);
-
-	$process_command .= "\n\n" . join(' ',
-		'java -Xmx' . $args{java_mem},
-		'-Djava.io.tmpdir=' . $args{tmp_dir},
-		'-jar $varscan_dir/VarScan.jar processSomatic',
-		$args{output_stem} . '.indel'
+		$args{input}
 		);
 
 	return($process_command);
@@ -177,15 +170,19 @@ sub get_sequenza_command {
 		snp		=> undef,
 		cnv		=> undef,
 		out_dir		=> undef,
+		cancer_type	=> undef,
 		ref_type	=> undef,
 		@_
 		);
+
+	if (!defined($args{cancer_type})) { $args{cancer_type} = 'all'; }
 
 	my $sequenza_command = join(' ',
 		'Rscript', $args{tool},
 		'--snp_file', $args{snp},
 		'--cnv_file', $args{cnv},
 		'--out_dir', $args{out_dir},
+		'--cancer_type', $args{cancer_type},
 		'--ref_type', $args{ref_type}
 		);
 
@@ -239,7 +236,7 @@ sub get_filter_command {
 		$filter_command = join(' ',
 			'vcftools',
 			'--vcf', $args{input_vcf},
-			'--keep-filtered PASS --remove-indels',
+			'--keep-filtered PASS',
 			'--stdout --recode',
 			'--temp', $args{tmp_dir}
 			);
@@ -248,16 +245,7 @@ sub get_filter_command {
 			$filter_command .= " --exclude-positions $args{pon}";
 			}
 
-		$filter_command .= ' > ' . $args{output_stem} . ".snp.vcf";
-
-		$filter_command .= "\n\n" . join(' ',
-			'vcftools',
-			'--vcf', $args{input_vcf},
-			'--keep-filtered PASS --keep-only-indels',
-			'--stdout --recode',
-			'--temp', $args{tmp_dir},
-			'>', $args{output_stem} . ".indel.vcf"
-			);
+		$filter_command .= ' > ' . $args{output_stem} . ".vcf";
 		}
 
 	return($filter_command);
@@ -320,10 +308,10 @@ sub main {
 	my $output_directory = $args{output_directory};
 	$output_directory =~ s/\/$//;
 
-	my $log_directory = join('/', $output_directory, 'logs', 'RUN_PAIRED_MODE');
+	my $log_directory = join('/', $output_directory, 'logs');
 	unless(-e $log_directory) { make_path($log_directory); }
 
-	my $log_file = join('/', $log_directory, 'run_VarScan_PAIRED_MODE_pipeline.log');
+	my $log_file = join('/', $log_directory, 'run_VarScan_pipeline.log');
 
 	# create a file to hold job metrics
 	my (@files, $run_count, $outfile, $touch_exit_status);
@@ -338,7 +326,7 @@ sub main {
 		$touch_exit_status = system("touch $outfile");
 		if (0 != $touch_exit_status) { Carp::croak("Cannot touch file $outfile"); }
 
-		$log_file = join('/', $log_directory, 'run_VarScan_PAIRED_MODE_pipeline_' . $run_count . '.log');
+		$log_file = join('/', $log_directory, 'run_VarScan_pipeline_' . $run_count . '.log');
 		}
 
 	# start logging
@@ -356,7 +344,7 @@ sub main {
 
 	if (defined($tool_data->{varscan}->{chromosomes})) {
 		$string = $tool_data->{varscan}->{chromosomes};
-		} elsif (defined($tool_data->{intervals_bed})) {
+		} elsif (('exome' eq $tool_data->{seq_type}) && (defined($tool_data->{intervals_bed}))) {
 		$string = 'exome';
 		} elsif ( ('hg38' eq $tool_data->{ref_type}) || ('hg19' eq $tool_data->{ref_type})) {
 		$string = 'chr' . join(',chr', 1..22) . ',chrX,chrY';
@@ -371,9 +359,11 @@ sub main {
 
 	my @chroms = split(',', $string);
 
-	$intervals_bed = $tool_data->{intervals_bed};
-	$intervals_bed =~ s/\.bed/_padding100bp.bed/;
-	print $log "\n    Target intervals (exome): $intervals_bed";
+	if ('exome' eq $tool_data->{seq_type}) {
+		$intervals_bed = $tool_data->{intervals_bed};
+		$intervals_bed =~ s/\.bed/_padding100bp.bed/;
+		print $log "\n    Target intervals (exome): $intervals_bed";
+		}
 
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
@@ -384,8 +374,12 @@ sub main {
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
 	my $gatk	= 'gatk/' . $tool_data->{gatk_version};
-	my $sequenza	= "$cwd/SequenzaSingleSample_v2.1.R";
-	# $tool_data->{varscan}->{parameters}->{sequenza}->{path};
+	my $sequenza;
+	if (defined($tool_data->{varscan}->{parameters}->{sequenza}->{path})) {
+		$sequenza = $tool_data->{varscan}->{parameters}->{sequenza}->{path};
+		} else {
+		$sequenza = "$cwd/SequenzaSingleSample_v2.1.R";
+		}
 	my $r_version	= 'R/' . $tool_data->{r_version};
 	my $r_sequenza	= 'R/' . $tool_data->{varscan}->{parameters}->{sequenza}->{r};
 
@@ -570,11 +564,10 @@ sub main {
 				$varscan_command .= "\n\n" . join("\n",
 					'if [ -s ' . $cnv_stem . '__$CHROM.snp.md5 ]; then',
 					'  Output file for $CHROM already exists',
-					'  exit',
-					'fi'
+					'else'
 					);
 
-				$varscan_command = get_varscan_snv_command(
+				$varscan_command .= "\n\n " . get_varscan_snv_command(
 					tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
 					normal		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
 					output_stem	=> $cnv_stem,
@@ -583,10 +576,12 @@ sub main {
 					split_by_chr	=> 1
 					);
 
-				$varscan_command .= "\n\n" . join("\n",
+				$varscan_command .= "\n\n " . join("\n ",
 					"md5sum $cnv_stem" . '__$CHROM.snp > ' . $cnv_stem . '__$CHROM.snp.md5',
 					"md5sum $cnv_stem" . '__$CHROM.indel > ' . $cnv_stem . '__$CHROM.indel.md5'
 					);
+
+				$varscan_command .= "\nfi";
 
 				# check if this should be run
 				if (
@@ -728,6 +723,7 @@ sub main {
 				snp	=> $merged_snp_output . '.snp',
 				cnv	=> $cnv_stem . '.copynumber',
 				tool	=> $sequenza,
+				cancer_type	=> $parameters->{sequenza}->{cancer_type_prior},
 				ref_type	=> $tool_data->{ref_type}
 				);
 
@@ -768,36 +764,29 @@ sub main {
 
 			# now, because we have it, process the .snp and .indel files to split into
 			# germline/somatic/loh, as well as high and low confidence calls
-			# but first, make symlinks in the SNV directory
-			if (-l "$output_stem.snp") {
-				unlink "$output_stem.snp" or die "Failed to remove previous symlink: $output_stem.snp";
-				}
 
-			if (-l "$output_stem.indel") {
-				unlink "$output_stem.indel" or die "Failed to remove previous symlink: $output_stem.indel";
-				}
+			# merge the .snp and .indel files
+			my $concat_file = $output_stem . '.snp_and_indel';
+			my $concat_cmd = "head -n 1 $merged_snp_output.snp > $concat_file";
+			$concat_cmd .= "\n\n" . join(' ',
+				"cat $merged_snp_output.snp $merged_snp_output.indel",
+				'| sort -V -k1,1 -k2,2',
+				"| grep -v '^chrom'",
+				'>>', $concat_file
+				);
 
-			symlink("$merged_snp_output.snp", "$output_stem.snp");
-			symlink("$merged_snp_output.indel", "$output_stem.indel");
-
-			$varscan_command = get_varscan_process_command(
-				output_stem	=> $output_stem,
+			$varscan_command = $concat_cmd . "\n\n" . get_varscan_process_command(
+				input		=> $concat_file,
 				java_mem	=> '256M',
 				tmp_dir		=> $tmp_directory
 				);
 
-			$cleanup_cmd .= "\nrm $output_stem.indel.Germline";
-			$cleanup_cmd .= "\nrm $output_stem.snp.Germline";
-			$cleanup_cmd .= "\nrm $output_stem.indel.Somatic";
-			$cleanup_cmd .= "\nrm $output_stem.snp.Somatic";
-			$cleanup_cmd .= "\nrm $output_stem.indel.LOH";
-			$cleanup_cmd .= "\nrm $output_stem.snp.LOH";
+			$cleanup_cmd .= "\nrm $concat_file.Germline";
+			$cleanup_cmd .= "\nrm $concat_file.Somatic";
+			$cleanup_cmd .= "\nrm $concat_file.LOH";
 
 			# check if this should be run
-			if (
-				('Y' eq missing_file("$output_stem.snp.Somatic.hc")) ||
-				('Y' eq missing_file("$output_stem.indel.Somatic.hc"))
-				) {
+			if ('Y' eq missing_file("$concat_file.Somatic.hc")) {
 
 				# record command (in log directory) and then run job
 				print $log "Submitting job for processSomatic...\n";
@@ -878,11 +867,10 @@ sub main {
 				$varscan_command .= "\n\n" . join("\n",
 					'if [ -s ' . $output_stem . '__$CHROM.snp.vcf.md5 ]; then',
 					'  Output file for $CHROM already exists',
-					'  exit',
-					'fi'
+					'else'
 					);
 
-				$varscan_command = get_varscan_snv_command(
+				$varscan_command .= "\n\n " . get_varscan_snv_command(
 					tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
 					normal		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
 					output_stem	=> $output_stem,
@@ -892,12 +880,14 @@ sub main {
 					output_vcf	=> 1
 					);
 
-				$varscan_command .= "\n\n" . join(' ',
-					'md5sum', $output_stem . '__$CHROM.snp.vcf',
-					'>', $output_stem . '__$CHROM.snp.vcf.md5' . "\n",
-					'md5sum', $output_stem . '__$CHROM.indel.vcf',
-					'>', $output_stem . '__$CHROM.indel.vcf.md5' . "\n"
+				$varscan_command .= "\n\n " . join("\n ",
+					join(' ', 'md5sum', $output_stem . '__$CHROM.snp.vcf',
+						'>', $output_stem . '__$CHROM.snp.vcf.md5'),
+					join(' ', 'md5sum', $output_stem . '__$CHROM.indel.vcf',
+						'>', $output_stem . '__$CHROM.indel.vcf.md5')
 					);
+
+				$varscan_command .= "\nfi";
 
 				# check if this should be run
 				if (
@@ -981,224 +971,183 @@ sub main {
 				}
 
 			# if necessary, merge per-chrom output into a single file
-			if (scalar(@chroms) > 1) {
+			my $merge_command = join(' ',
+				'vcf-concat', @chr_parts,
+				'| vcf-sort -c',
+				'>', "$merged_vcf_output.snp_and_indel.vcf"
+				);
 
-				my @snp_parts = grep { /snp/ } @chr_parts;
-				my @indel_parts = grep { /indel/ } @chr_parts;
+			$merge_command .= "\n\n" . join("\n",
+				"md5sum $merged_vcf_output.snp_and_indel.vcf > $merged_vcf_output.snp_and_indel.vcf.md5",
+				"bgzip -f $merged_vcf_output.snp_and_indel.vcf",
+				"tabix -p vcf $merged_vcf_output.snp_and_indel.vcf.gz"
+				);
 
-				my $merge_chr_command = join(' ',
-					'vcf-concat',
-					@snp_parts,
-					'>', "$merged_vcf_output.snp.vcf;\n",
-					'vcf-concat',
-					@indel_parts,
-					'>', "$merged_vcf_output.indel.vcf;\n\n",
-					"md5sum $merged_vcf_output.snp.vcf > $merged_vcf_output.snp.vcf.md5\n",
-					"md5sum $merged_vcf_output.indel.vcf > $merged_vcf_output.indel.vcf.md5\n"
+			$cleanup_cmd .= "\nrm $output_stem\__chr*";
+
+			# check if this should be run
+			if ('Y' eq missing_file("$merged_vcf_output.snp_and_indel.vcf.md5")) {
+
+				# record command (in log directory) and then run job
+				print $log "Submitting job for Merge VCF step...\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> "run_merge_varscan_vcfs\_$sample",
+					cmd	=> $merge_command,
+					modules	=> [$vcftools, 'tabix'],
+					dependencies	=> join(':', @chr_jobs),
+					max_time	=> $parameters->{merge}->{time},
+					mem		=> $parameters->{merge}->{mem},
+					hpc_driver	=> $args{hpc_driver}
 					);
 
-				$cleanup_cmd .= "\nrm $output_stem\__chr*";
+				$run_id = submit_job(
+					jobname		=> "run_merge_varscan_vcfs\_$sample",
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
 
-				# check if this should be run
-				if ('Y' eq missing_file("$merged_vcf_output.snp.vcf.md5")) {
-
-					# record command (in log directory) and then run job
-					print $log "Submitting job for Merge VCF step...\n";
-
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> "run_combine_chromosome_output_vcf\_$sample",
-						cmd	=> $merge_chr_command,
-						modules	=> ['vcftools/0.1.15'],
-						dependencies	=> join(':', @chr_jobs),
-						max_time	=> $parameters->{merge}->{time},
-						mem		=> $parameters->{merge}->{mem},
-						hpc_driver	=> $args{hpc_driver}
-						);
-
-					$run_id = submit_job(
-						jobname		=> "run_combine_chromosome_output_vcf\_$sample",
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
-						);
-
-					push @snp_jobs, $run_id;
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
-					}
-				else {
-					print $log "Skipping Merge VCF because this has already been completed!\n";
-					}
+				push @snp_jobs, $run_id;
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
+				}
+			else {
+				print $log "Skipping Merge VCF because this has already been completed!\n";
 				}
 
 			# filter results
-			my ($filter_command, $required, $type_job);
+			my $filter_command = get_filter_command(
+				input_vcf	=> "$merged_vcf_output.snp_and_indel.vcf",
+				input_snp	=> $concat_file,
+				output_stem	=> $merged_vcf_output,
+				somatic		=> 1
+				);
 
-			my @var_types = qw(snp indel);
-			foreach my $vtype (@var_types) {
+			$filter_command .= "\n\n" . join(' ',
+				'md5sum', $merged_vcf_output . "_germline_hc.vcf",
+				'>', $merged_vcf_output . "_germline_hc.vcf.md5"
+				);
 
-				$type_job = '';
+			$filter_command .= "\n\n" . join(' ',
+				'md5sum', $merged_vcf_output . "_somatic_hc.vcf",
+				'>', $merged_vcf_output . "_somatic_hc.vcf.md5"
+				);
 
-				$filter_command = get_filter_command(
-					input_vcf	=> join('.', $merged_vcf_output, $vtype, 'vcf'),
-					input_snp	=> join('.', $output_stem, $vtype),
-					output_stem	=> join('.', $merged_vcf_output, $vtype),
-					somatic		=> 1
+			$filter_command .= "\n\n" . join("\n",
+				"bgzip -f $merged_vcf_output\_germline_hc.vcf",
+				"tabix -p vcf $merged_vcf_output\_germline_hc.vcf.gz"
+				);
+
+			push @germline_vcfs, $merged_vcf_output . "_germline_hc.vcf.gz";
+
+			# check if this should be run
+			if ('Y' eq missing_file($merged_vcf_output . '_somatic_hc.vcf.md5')) {
+
+				# record command (in log directory) and then run job
+				print $log "Submitting job for VCF-Filter...\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_vcf_filter_' . $sample,
+					cmd	=> $filter_command,
+					modules	=> [$samtools, 'tabix'],
+					dependencies	=> join(':', @snp_jobs),
+					max_time	=> $parameters->{filter}->{time},
+					mem		=> $parameters->{filter}->{mem},
+					hpc_driver	=> $args{hpc_driver}
 					);
 
-				$filter_command .= "\n\n" . join(' ',
-					'md5sum', join('.',  $merged_vcf_output, $vtype . "_germline_hc.vcf"),
-					'>', join('.',  $merged_vcf_output, $vtype . "_germline_hc.vcf.md5")
+				$run_id = submit_job(
+					jobname		=> 'run_vcf_filter_' . $sample,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
 					);
 
-				push @germline_vcfs, join('.', $merged_vcf_output, $vtype . "_germline_hc.vcf");
-
-				$filter_command .= "\n\n" . join(' ',
-					'md5sum', join('.',  $merged_vcf_output, $vtype . "_somatic_hc.vcf"),
-					'>', join('.',  $merged_vcf_output, $vtype . "_somatic_hc.vcf.md5")
-					);
-
-				# add intermediates to cleanup
-				$cleanup_cmd .= "\nrm " . join('.', $merged_vcf_output, $vtype, 'vcf.gz');
-				$cleanup_cmd .= "\nrm " . join('.', $merged_vcf_output, $vtype, 'vcf.gz.tbi');
-
-				$required = join('.', $merged_vcf_output, $vtype . "_somatic_hc.vcf.md5");
-
-				# check if this should be run
-				if ('Y' eq missing_file($required)) {
-
-					# record command (in log directory) and then run job
-					print $log "Submitting job for VCF-Filter ($vtype)...\n";
-
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> join('_', 'run_vcf_filter', $vtype, $sample),
-						cmd	=> $filter_command,
-						modules	=> [$samtools, 'tabix'],
-						dependencies	=> join(':', @snp_jobs),
-						max_time	=> $parameters->{filter}->{time},
-						mem		=> $parameters->{filter}->{mem},
-						hpc_driver	=> $args{hpc_driver}
-						);
-
-					$type_job = submit_job(
-						jobname		=> join('_', 'run_vcf_filter', $vtype, $sample),
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
-						);
-
-					push @germline_jobs, $type_job;
-					push @patient_jobs, $type_job;
-					push @all_jobs, $type_job;
-					} else {
-					print $log "Skipping VCF-Filter ($vtype) because this has already been completed!\n";
-					}
-
-				### Run variant annotation (VEP + vcf2maf)
-				my ($vcf2maf_cmd, $final_maf, $final_vcf);
-
-				$final_maf = join('.', $output_stem, $vtype . '_somatic_annotated.maf');
-				$final_vcf = join('.', $output_stem, $vtype . '_somatic_annotated.vcf');
-
-				$vcf2maf_cmd = get_vcf2maf_command(
-					input		=> join('.', $merged_vcf_output, $vtype . '_somatic_hc.vcf'),
-					tumour_id	=> $sample,
-					normal_id	=> $normal_ids[0],
-					reference	=> $reference,
-					ref_type	=> $tool_data->{ref_type},
-					output		=> $final_maf,
-					tmp_dir		=> $tmp_directory,
-					vcf2maf		=> $tool_data->{annotate}->{vcf2maf_path},
-					vep_path	=> $tool_data->{annotate}->{vep_path},
-					vep_data	=> $tool_data->{annotate}->{vep_data},
-					filter_vcf	=> $tool_data->{annotate}->{filter_vcf}
-					);
-
-				# check if this should be run
-				if ('Y' eq missing_file($final_maf . '.md5')) {
-
-					# IF THIS FINAL STEP IS SUCCESSFULLY RUN
-					$vcf2maf_cmd .= "\n\n" . join("\n",
-						"if [ -s " . join(" ] && [ -s ", $final_maf) . " ]; then",
-						"  md5sum $final_maf > $final_maf.md5",
-						"  mv $tmp_directory/$sample*.$vtype\_somatic_hc.vep.vcf $final_vcf",
-						"  md5sum $final_vcf > $final_vcf.md5",
-						"  bgzip $final_vcf",
-						"  tabix -p vcf $final_vcf.gz",
-						"else",
-						'  echo "FINAL OUTPUT MAF is missing; not running md5sum/bgzip/tabix..."',
-						"fi"
-						);
-
-					# record command (in log directory) and then run job
-					print $log "Submitting job for T/N vcf2maf ($vtype)...\n";
-
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> join('_', 'run_vcf2maf_and_VEP', $vtype, $sample),
-						cmd	=> $vcf2maf_cmd,
-						modules	=> ['perl', $samtools, 'tabix'],
-						dependencies	=> $type_job,
-						cpus_per_task	=> 4,
-						max_time	=> $tool_data->{annotate}->{time},
-						mem		=> $tool_data->{annotate}->{mem}->{$vtype.'s'},
-						hpc_driver	=> $args{hpc_driver}
-						);
-
-					$type_job = submit_job(
-						jobname		=> join('_', 'run_vcf2maf_and_VEP', $vtype, $sample),
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
-						);
-
-					push @patient_jobs, $type_job;
-					push @all_jobs, $type_job;
-					} else {
-					print $log "Skipping vcf2maf ($vtype) because this has already been completed!\n";
-					}
-
-				push @final_outputs, $final_maf;
+				push @germline_jobs, $run_id;
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
+				} else {
+				print $log "Skipping VCF-Filter because this has already been completed!\n";
 				}
+
+			### Run variant annotation (VEP + vcf2maf)
+			my $final_maf = $output_stem . '_somatic_annotated.maf';
+			my $final_vcf = $output_stem . '_somatic_annotated.vcf';
+
+			my $vcf2maf_cmd = get_vcf2maf_command(
+				input		=> $merged_vcf_output . '_somatic_hc.vcf',
+				tumour_id	=> $sample,
+				normal_id	=> $normal_ids[0],
+				reference	=> $reference,
+				ref_type	=> $tool_data->{ref_type},
+				output		=> $final_maf,
+				tmp_dir		=> $sample_directory,
+				vcf2maf		=> $tool_data->{annotate}->{vcf2maf_path},
+				vep_path	=> $tool_data->{annotate}->{vep_path},
+				vep_data	=> $tool_data->{annotate}->{vep_data},
+				filter_vcf	=> $tool_data->{annotate}->{filter_vcf}
+				);
+
+			# check if this should be run
+			if ('Y' eq missing_file($final_maf . '.md5')) {
+
+				# IF THIS FINAL STEP IS SUCCESSFULLY RUN
+				$vcf2maf_cmd .= "\n\n" . join("\n",
+					"if [ -s $final_maf ]; then",
+					"  md5sum $final_maf > $final_maf.md5",
+					"  mv $merged_vcf_output\_somatic_hc.vep.vcf $final_vcf",
+					"  md5sum $final_vcf > $final_vcf.md5",
+					"  bgzip $final_vcf",
+					"  tabix -p vcf $final_vcf.gz",
+					"else",
+					'  echo "FINAL OUTPUT MAF is missing; not running md5sum/bgzip/tabix..."',
+					"fi"
+					);
+
+				# record command (in log directory) and then run job
+				print $log "Submitting job for T/N vcf2maf...\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_vcf2maf_and_VEP_' . $sample,
+					cmd	=> $vcf2maf_cmd,
+					modules	=> ['perl', $samtools, 'tabix'],
+					dependencies	=> $run_id,
+					cpus_per_task	=> 4,
+					max_time	=> $tool_data->{annotate}->{time},
+					mem		=> $tool_data->{annotate}->{mem}->{snps},
+					hpc_driver	=> $args{hpc_driver}
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_vcf2maf_and_VEP_' . $sample,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
+				} else {
+				print $log "Skipping vcf2maf because this has already been completed!\n";
+				}
+
+			push @final_outputs, $final_maf;
 			}
 
-		# before making the PoN, we will merge snp/indel results
-		# as well as collapsing results from multi-tumour patients
+		# before making the PoN, we will collapse results from multi-tumour patients
 		unless (defined($args{pon})) {
 
 			# for any germline calls from T/N pairs
 			my $merged_germline = join('/', $pon_intermediates, $patient . '_germline_variants.vcf');
-			my $format_germline_cmd;
-			my @intermediate_files;
 
-			# first merge snp and indel files
-			foreach my $sample (sort @tumour_ids) {
-
-				my @smp_files = grep { /$sample/ } @germline_vcfs;
-				my $snp_vcf = first { /snp/ } @smp_files;
-				my $indel_vcf = first { /indel/ } @smp_files;
-
-				my $tmp_vcf = join('/', $pon_intermediates, $sample . '_merged_variants.vcf');
-
-				$format_germline_cmd .= "\n" . join(' ',
-					'vcf-concat', $snp_vcf, $indel_vcf,
-					'| vcf-sort -c -t', $tmp_directory,
-					'>', $tmp_vcf
-					);
-
-				$format_germline_cmd .= "\n\n" . "bgzip $tmp_vcf";
-				$format_germline_cmd .= "\n" . "tabix -p vcf $tmp_vcf.gz\n";
-
-				push @intermediate_files, "$tmp_vcf.gz";
-				$cleanup_cmd .= "\nrm $tmp_vcf.gz";
-				}
-
-			# next, run any normal-only samples
+			# first, run any normal-only samples
 			if ( (scalar(@tumour_ids) == 0) && (scalar(@normal_ids) > 0) ) {
 
 				print $log "  NORMAL ONLY: $normal_ids[0]\n\n";
@@ -1220,7 +1169,7 @@ sub main {
 					);
 
 				$cleanup_cmd .= "rm $output_stem.cns.vcf.gz";
-				push @intermediate_files, "$output_stem.cns.vcf.gz";
+				push @germline_vcfs, "$output_stem.cns.vcf.gz";
 
 				# check if this should be run
 				if ('Y' eq missing_file("$output_stem.cns.vcf.md5")) {
@@ -1256,11 +1205,12 @@ sub main {
 				}
 
 			# for multiple tumours, collect all variants, then subset the normal
+			my $format_germline_cmd;
 			if (scalar(@tumour_ids) > 1) {
 
-				$format_germline_cmd .= "\n\n" . join(' ',
+				$format_germline_cmd = join(' ',
 					'vcf-isec -n +1',
-					@intermediate_files,
+					@germline_vcfs,
 					'| vcf-subset -c NORMAL',
 					'>', $merged_germline
 					);
@@ -1268,18 +1218,18 @@ sub main {
 				# for a single tumour, simply subset the normal
 				} elsif (scalar(@tumour_ids) == 1) {
 
-				$format_germline_cmd .= "\n\n" . join(' ',
+				$format_germline_cmd = join(' ',
 					'vcf-subset -c NORMAL',
-					$intermediate_files[0],
+					$germline_vcfs[0],
 					'>', $merged_germline
 					);
 
 				# for normal-only samples
 				} elsif ( (scalar(@tumour_ids) == 0) && (scalar(@normal_ids) > 0) ) {
 
-				$format_germline_cmd .= join(' ',
+				$format_germline_cmd = join(' ',
 					'vcf-subset -c Sample1',
-					$intermediate_files[0],
+					$germline_vcfs[0],
 					'>', $merged_germline
 					);
 				}
@@ -1312,6 +1262,7 @@ sub main {
 
 				push @pon_dependencies, $run_id;
 				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
 				}
 
 			push @pon_vcfs, "-V:$patient $merged_germline";
@@ -1366,6 +1317,7 @@ sub main {
 		print $log "---\n";
 		}
 
+	my $pon_job_id;
 	unless (defined($args{pon})) {
 
 		# let's create a command and write script to combine variants for a PoN
@@ -1402,13 +1354,15 @@ sub main {
 			hpc_driver	=> $args{hpc_driver}
 			);
 
-		$run_id = submit_job(
+		$pon_job_id = submit_job(
 			jobname		=> 'create_sitesOnly_trimmed_panel_of_normals',
 			shell_command	=> $run_script,
 			hpc_driver	=> $args{hpc_driver},
 			dry_run		=> $args{dry_run},
 			log_file	=> $log
 			);
+
+		push @all_jobs, $pon_job_id;
 		}
 
 	# collate results
@@ -1419,7 +1373,7 @@ sub main {
 		'-g', $tool_data->{gtf}
 		);
 
-	if (defined($tool_data->{intervals_bed})) {
+	if ( ('exome' eq $tool_data->{seq_type}) && (defined($tool_data->{intervals_bed})) ) {
 		$collect_output .= " -t $intervals_bed";
 		}
 
@@ -1442,189 +1396,12 @@ sub main {
 		log_file	=> $log
 		);
 
-	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
-	# collect job metrics (exit status, mem, run time)
-	unless ( ($args{dry_run}) || (scalar(@all_jobs) == 0) ) {
+	push @all_jobs, $run_id;
 
-		# collect job stats
-		my $collect_metrics = collect_job_stats(
-			job_ids	=> join(',', @all_jobs),
-			outfile	=> $outfile
-			);
-
-		$run_script = write_script(
-			log_dir	=> $log_directory,
-			name	=> 'output_job_metrics_' . $run_count,
-			cmd	=> $collect_metrics,
-			dependencies	=> join(':', @all_jobs),
-			mem		=> '256M',
-			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
-			);
-
-		$run_id = submit_job(
-			jobname		=> 'output_job_metrics',
-			shell_command	=> $run_script,
-			hpc_driver	=> $args{hpc_driver},
-			dry_run		=> $args{dry_run},
-			log_file	=> $log
-			);
-
-		# wait until it finishes
-		unless ($args{no_wait}) {
-
-			my $complete = 0;
-			my $timeouts = 0;
-
-			while (!$complete && $timeouts < 20 ) {
-				sleep(30);
-				my $status = `sacct --format='State' -j $run_id`;
-
-				# if final job has finished successfully:
-				if ($status =~ m/COMPLETED/s) { $complete = 1; }
-				# if we run into a server connection error (happens rarely with sacct)
-				# increment timeouts (if we continue to repeatedly timeout, we will exit)
-				elsif ($status =~ m/Connection timed out/) {
-					$timeouts++;
-					}
-				# if the job is still pending or running, try again in a bit
-				# but also reset timeouts, because we only care about consecutive timeouts
-				elsif ($status =~ m/PENDING|RUNNING/) {
-					$timeouts = 0;
-					}
-				# if none of the above, we will exit with an error
-				else {
-					die("Final VARSCAN accounting job: $run_id finished with errors.");
-					}
-				}
-			}
-		}
-
-	# finish up
-	print $log "\nProgramming terminated successfully.\n\n";
-	close $log;
-	}
-
-### RUN IN UNPAIRED MODE
-sub unpaired_mode {
-	my %args = (
-		tool_config		=> undef,
-		data_config		=> undef,
-		output_directory	=> undef,
-		hpc_driver		=> undef,
-		del_intermediates	=> undef,
-		dry_run			=> undef,
-		pon			=> undef,
-		no_wait			=> undef,
-		@_
-		);
-
-	my $tool_config = $args{tool_config};
-	my $data_config = $args{data_config};
-
-	### PREAMBLE ######################################################################################
-
-	# load tool config
-	my $tool_data_orig = LoadFile($tool_config);
-	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'varscan');
-
-	# organize output and log directories
-	my $output_directory = $args{output_directory};
-	$output_directory =~ s/\/$//;
-
-	my $log_directory = join('/', $output_directory, 'logs', 'RUN_UNPAIRED_MODE');
-	unless(-e $log_directory) { make_path($log_directory); }
-
-	my $log_file = join('/', $log_directory, 'run_VarScan_UNPAIRED_pipeline.log');
-
-	# create a file to hold job metrics
-	my (@files, $run_count, $outfile, $touch_exit_status);
-	unless ($args{dry_run}) {
-		# initiate a file to hold job metrics
-		opendir(LOGFILES, $log_directory) or die "Cannot open $log_directory";
-		@files = grep { /slurm_job_metrics/ } readdir(LOGFILES);
-		$run_count = scalar(@files) + 1;
-		closedir(LOGFILES);
-
-		$outfile = $log_directory . '/slurm_job_metrics_' . $run_count . '.out';
-		$touch_exit_status = system("touch $outfile");
-		if (0 != $touch_exit_status) { Carp::croak("Cannot touch file $outfile"); }
-
-		$log_file = join('/', $log_directory, 'run_VarScan_UNPAIRED_pipeline_' . $run_count . '.log');
-		}
-
-	# start logging
-	open (my $log, '>', $log_file) or die "Could not open $log_file for writing.";
-	$log->autoflush;
-
-	print $log "---\n";
-	print $log "Running VarScan variant calling pipeline in tumour-only mode.\n";
-	print $log "\n  Tool config used: $tool_config";
-	print $log "\n    Reference used: $tool_data->{reference}";
-
-	$reference = $tool_data->{reference};
-
-	my $string;
-
-	if (defined($tool_data->{varscan}->{chromosomes})) {
-		$string = $tool_data->{varscan}->{chromosomes};
-		} elsif (defined($tool_data->{intervals_bed})) {
-		$string = 'exome';
-		} elsif ( ('hg38' eq $tool_data->{ref_type}) || ('hg19' eq $tool_data->{ref_type})) {
-		$string = 'chr' . join(',chr', 1..22) . ',chrX,chrY';
-		} elsif ( ('GRCh37' eq $tool_data->{ref_type}) || ('GRCh37' eq $tool_data->{ref_type})) {
-		$string = join(',', 1..22) . ',X,Y';
-		} else {
-		# if no chromosomes can be determined, run as a whole (very very slow!)
-		print $log "  >> Could not determine chromosomes to run\n";
-		print $log "  >> Will run full genome, however this will be very very slow!\n";
-		$string = 'genome';
-		}
-
-	my @chroms = split(',', $string);
-	
-	$intervals_bed = $tool_data->{intervals_bed};
-	$intervals_bed =~ s/\.bed/_padding100bp.bed/;
-	print $log "\n    Target intervals (exome): $intervals_bed";
-
-	if (defined($tool_data->{varscan}->{pon})) {
-		print $log "\n      Panel of Normals: $tool_data->{varscan}->{pon}";
-		$pon = $tool_data->{varscan}->{pon};
-		} elsif (defined($args{pon})) {
-		print $log "\n      Panel of Normals: $args{pon}";
-		$pon = $args{pon};
-		} else {
-		print $log "\n      No panel of normals defined! Tumour-only samples will be run without germline filter!";
-		}
-
-	print $log "\n    Output directory: $output_directory";
-	print $log "\n  Sample config used: $data_config";
-	print $log "\n---";
-
-	# set tools and versions
-	my $varscan	= 'varscan/' . $tool_data->{varscan_version};
-	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
-	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
-	my $r_version	= 'R/' . $tool_data->{r_version};
-
-	# get user-specified tool parameters
-	my $parameters = $tool_data->{varscan}->{parameters};
-
-	### RUN ###########################################################################################
-	# if multiple chromosomes are to be run (separately):
-	my $chr_file = join('/', $output_directory, 'chromosome_list.txt');
-	if (scalar(@chroms) > 1) {
-		open (my $chr_list, '>', $chr_file) or die "Could not open $chr_file for writing.";
-		foreach my $chrom ( @chroms ) {
-			print $chr_list "$chrom\n";
-			}
-		}
-
-	# get sample data
-	my $smp_data = LoadFile($data_config);
-
-	my ($run_script, $varscan_run_id, $run_id, $link, $cleanup_cmd);
-	my @all_jobs;
+	#########################################
+	### BEGIN PROCESSING UNPAIRED SAMPLES ###
+	#########################################
+	print $log "\n\n>>>Beginning processing of tumour-only samples<<<\n\n";
 
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
@@ -1635,10 +1412,7 @@ sub unpaired_mode {
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
 		my @tumour_ids = keys %{$smp_data->{$patient}->{'tumour'}};
 
-		if (scalar(@normal_ids) > 0) {
-			print $log "\n>> Normal BAM provided, skipping patient.\n";
-			next;
-			}
+		next if (scalar(@normal_ids) > 0);
 
 		# create some directories
 		my $patient_directory = join('/', $output_directory, $patient);
@@ -1671,7 +1445,7 @@ sub unpaired_mode {
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
 
-			$run_id = '';
+			$run_id = $pon_job_id;
 			$varscan_run_id = '';
 			my @snp_jobs;
 
@@ -1719,11 +1493,10 @@ sub unpaired_mode {
 				$varscan_command .= "\n\n" . join("\n",
 					'if [ -s ' . $output_stem . '__$CHROM.cns.vcf.md5 ]; then',
 					'  Output file for $CHROM already exists',
-					'  exit',
-					'fi'
+					'else'
 					);
 
-				$varscan_command = get_varscan_snv_command(
+				$varscan_command .= "\n\n " . get_varscan_snv_command(
 					tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
 					output_stem	=> $output_stem,
 					java_mem	=> $parameters->{varscan}->{java_mem},
@@ -1731,10 +1504,12 @@ sub unpaired_mode {
 					split_by_chr	=> 1
 					);
 
-				$varscan_command .= "\n\n" . join(' ',
+				$varscan_command .= "\n\n " . join(' ',
 					'md5sum', $output_stem . '__$CHROM.cns.vcf',
 					'>', $output_stem . '__$CHROM.cns.vcf.md5'
 					);
+
+				$varscan_command .= "\nfi";
 
 				# check if this should be run
 				if (
@@ -1870,23 +1645,12 @@ sub unpaired_mode {
 				);
 
 			$filter_command .= "\n\n" . join(' ',
-				'md5sum', join('.', "$output_stem\_filtered", 'snp', 'vcf'),
-				'>', join('.', "$output_stem\_filtered", 'snp', 'vcf.md5')
+				"md5sum $output_stem\_filtered.vcf",
+				'>', "$output_stem\_filtered.vcf.md5"
 				);
-
-			$filter_command .= "\n\n" . join(' ',
-				'md5sum', join('.', "$output_stem\_filtered", 'indel','vcf'),
-				'>', join('.', "$output_stem\_filtered", 'indel', 'vcf.md5')
-				);
-
-			my $required = "$output_stem\_filtered.snp.vcf.md5";
-
-			# add intermediates to cleanup
-			$cleanup_cmd .= "\nrm $output_stem\_filtered.snp.vcf";
-			$cleanup_cmd .= "\nrm $output_stem\_filtered.indel.vcf";
 
 			# check if this should be run
-			if ('Y' eq missing_file($required)) {
+			if ('Y' eq missing_file("$output_stem\_filtered.vcf.md5")) {
 
 				# record command (in log directory) and then run job
 				print $log "Submitting job for VCF-Filter...\n";
@@ -1918,77 +1682,72 @@ sub unpaired_mode {
 				print $log "Skipping VCF-Filter because this has already been completed!\n";
 				}
 
-			my @var_types = qw(snp indel);
-			foreach my $vtype (@var_types) {
+			### Run variant annotation (VEP + vcf2maf)
+			my $final_maf = $output_stem . '_annotated.maf';
+			my $final_vcf = $output_stem . '_annotated.vcf';
 
-				### Run variant annotation (VEP + vcf2maf)
-				my $final_maf = join('.', $output_stem, $vtype . '_annotated.maf');
-				my $final_vcf = join('.', $output_stem, $vtype . '_annotated.vcf');
+			my $vcf2maf_cmd = get_vcf2maf_command(
+				input		=> "$output_stem\_filtered.vcf",
+				tumour_id       => $sample,
+				reference       => $reference,
+				ref_type	=> $tool_data->{ref_type},
+				output		=> $final_maf,
+				tmp_dir		=> $sample_directory,
+				vcf2maf		=> $tool_data->{annotate}->{vcf2maf_path},
+				vep_path	=> $tool_data->{annotate}->{vep_path},
+				vep_data	=> $tool_data->{annotate}->{vep_data},
+				filter_vcf      => $tool_data->{annotate}->{filter_vcf}
+				);
 
-				my $vcf2maf_cmd = get_vcf2maf_command(
-					input		=> join('.', "$output_stem\_filtered", $vtype, 'vcf'),
-					tumour_id       => $sample,
-					reference       => $reference,
-					ref_type	=> $tool_data->{ref_type},
-					output		=> $final_maf,
-					tmp_dir		=> $tmp_directory,
-					vcf2maf		=> $tool_data->{annotate}->{vcf2maf_path},
-					vep_path	=> $tool_data->{annotate}->{vep_path},
-					vep_data	=> $tool_data->{annotate}->{vep_data},
-					filter_vcf      => $tool_data->{annotate}->{filter_vcf}
+			my @dependencies = grep { $_ ne '' } @snp_jobs;
+			if (scalar(@dependencies) == 0) { @dependencies[0] = ''; }
+
+			# check if this should be run
+			if ('Y' eq missing_file($final_maf . '.md5')) {
+
+				# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
+				$vcf2maf_cmd .= "\n\n" . join("\n",
+					"if [ -s $final_maf ]; then",
+					"  md5sum $final_maf > $final_maf.md5",
+					"  mv $output_stem\_filtered.vep.vcf $final_vcf",
+					"  md5sum $final_vcf > $final_vcf.md5",
+					"  bgzip $final_vcf",
+					"  tabix -p vcf $final_vcf.gz",
+					"else",
+					'  echo "FINAL OUTPUT MAF is missing; not running md5sum/bgzip/tabix..."',
+					"fi"
 					);
 
-				my @dependencies = grep { $_ ne '' } @snp_jobs;
-				if (scalar(@dependencies) == 0) { @dependencies[0] = ''; }
+				# record command (in log directory) and then run job
+				print $log "Submitting job for tumour-only vcf2maf...\n";
 
-				# check if this should be run
-				if ('Y' eq missing_file($final_maf . '.md5')) {
+				$run_script = write_script(
+					log_dir => $log_directory,
+					name    => 'run_vcf2maf_and_VEP_' . $sample,
+					cmd     => $vcf2maf_cmd,
+					modules => ['perl', $samtools, 'tabix'],
+					dependencies	=> join(':', @dependencies),
+					cpus_per_task	=> 4,
+					max_time	=> $tool_data->{annotate}->{time},
+					mem		=> $tool_data->{annotate}->{mem}->{snps},
+					hpc_driver	=> $args{hpc_driver}
+					);
 
-					# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
-					$vcf2maf_cmd .= "\n\n" . join("\n",
-						"if [ -s " . join(" ] && [ -s ", $final_maf) . " ]; then",
-						"  md5sum $final_maf > $final_maf.md5",
-						"  mv $tmp_directory/$sample\_VarScan\_filtered.$vtype.vep.vcf $final_vcf",
-						"  md5sum $final_vcf > $final_vcf.md5",
-						"  bgzip $final_vcf",
-						"  tabix -p vcf $final_vcf.gz",
-						"else",
-						'  echo "FINAL OUTPUT MAF is missing; not running md5sum/bgzip/tabix..."',
-						"fi"
-						);
+				$run_id = submit_job(
+					jobname		=> 'run_vcf2maf_and_VEP_' . $sample,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
 
-					# record command (in log directory) and then run job
-					print $log "Submitting job for tumour-only vcf2maf ($vtype)...\n";
-
-					$run_script = write_script(
-						log_dir => $log_directory,
-						name    => join('_', 'run_vcf2maf_and_VEP', $vtype, $sample),
-						cmd     => $vcf2maf_cmd,
-						modules => ['perl', $samtools, 'tabix'],
-						dependencies	=> join(':', @dependencies),
-						cpus_per_task	=> 4,
-						max_time	=> $tool_data->{annotate}->{time},
-						mem		=> $tool_data->{annotate}->{mem}->{$vtype.'s'},
-						hpc_driver	=> $args{hpc_driver}
-						);
-
-					$run_id = submit_job(
-						jobname		=> join('_', 'run_vcf2maf_and_VEP', $vtype, $sample),
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
-						);
-
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
-					}
-				else {
-					print $log "Skipping vcf2maf ($vtype) because this has already been completed!\n";
-					}
-
-				push @final_outputs, $final_maf;
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
+				} else {
+				print $log "Skipping vcf2maf because this has already been completed!\n";
 				}
+
+			push @final_outputs, $final_maf;
 			}
 
 		# should intermediate files be removed
@@ -2040,7 +1799,7 @@ sub unpaired_mode {
 		}
 
 	# collate results
-	my $collect_output = join(' ',
+	$collect_output = join(' ',
 		"Rscript $cwd/collect_snv_output.R",
 		'-d', $output_directory,
 		'-p', $tool_data->{project_name}
@@ -2133,7 +1892,6 @@ sub unpaired_mode {
 my ($tool_config, $data_config, $output_directory);
 my $hpc_driver = 'slurm';
 my ($remove_junk, $dry_run, $help, $no_wait);
-my $run_mode = 'paired';
 my $panel_of_normals = undef;
 
 # get command line arguments
@@ -2146,7 +1904,6 @@ GetOptions(
 	'remove'	=> \$remove_junk,
 	'dry-run'	=> \$dry_run,
 	'no-wait'	=> \$no_wait,
-	'mode=s'	=> \$run_mode,
 	'pon=s'		=> \$panel_of_normals
 	);
 
@@ -2158,7 +1915,6 @@ if ($help) {
 		"\t--tool|-t\t<string> tool config (yaml format)",
 		"\t--out_dir|-o\t<string> path to output directory",
 		"\t--pon\t<string> path to panel of normals (optional)",
-		"\t--mode\t<string> one of paired (will generate a panel of normals) or unpaired (default: paired)",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
 		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
@@ -2174,29 +1930,13 @@ if (!defined($tool_config)) { die("No tool config file defined; please provide -
 if (!defined($data_config)) { die("No data config file defined; please provide -d | --data (ie, sample_config.yaml)"); }
 if (!defined($output_directory)) { die("No output directory defined; please provide -o | --out_dir"); }
 
-if ('paired' eq $run_mode) {
-	main(
-		tool_config		=> $tool_config,
-		data_config		=> $data_config,
-		output_directory	=> $output_directory,
-		pon			=> $panel_of_normals,
-		hpc_driver		=> $hpc_driver,
-		del_intermediates	=> $remove_junk,
-		dry_run			=> $dry_run,
-		no_wait			=> $no_wait
-		);
-
-	} elsif ('unpaired' eq $run_mode) {
-
-	unpaired_mode(
-		tool_config		=> $tool_config,
-		data_config		=> $data_config,
-		output_directory	=> $output_directory,
-		pon			=> $panel_of_normals,
-		hpc_driver		=> $hpc_driver,
-		del_intermediates	=> $remove_junk,
-		dry_run			=> $dry_run,
-		no_wait			=> $no_wait
-		);
-
-	} else { die("--mode must be one of paired (for T/N mode and PoN generation) or unpaired"); }
+main(
+	tool_config		=> $tool_config,
+	data_config		=> $data_config,
+	output_directory	=> $output_directory,
+	pon			=> $panel_of_normals,
+	hpc_driver		=> $hpc_driver,
+	del_intermediates	=> $remove_junk,
+	dry_run			=> $dry_run,
+	no_wait			=> $no_wait
+	);
