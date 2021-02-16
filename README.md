@@ -74,6 +74,7 @@ NOTE: The RNA-Seq pipeline is currently only configured for use with GRCh38 refe
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to target intervals (exome capture kit [bed], if defined)
     - path to dbSNP file (if undefined, a default will be used)
+    - path to known pathogenic germline variants (ie, from TCGA)
 
    - annotate requires:
     - path to vcf2maf.pl
@@ -231,7 +232,8 @@ perl get_coverage.pl \
 
 ### Variant calling steps:
 ### run GATK's HaplotypeCaller to produce gvcfs
-<pre><code>perl haplotype_caller.pl \
+<pre><code>Run HaplotypeCaller on each sample separately:
+perl haplotype_caller.pl \
 -t /path/to/dna_pipeline_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
 -o /path/to/output/directory \
@@ -240,9 +242,21 @@ perl get_coverage.pl \
 --dry-run { if this is a dry-run } \
 --no-wait { if not a dry-run and you don't want to wait around for it to finish }
 
+Combine and Genotype GVCFs:
 perl genotype_gvcfs.pl \
 -t /path/to/dna_pipeline_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
+-o /path/to/output/directory \
+-c slurm \
+--remove \
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
+
+Annotate and Filter using CPSR:
+perl annotate_germline.pl \
+-t /path/to/dna_pipeline_config.yaml \
+-d /path/to/gatk_bam_config.yaml \
+-i /path/to/genotype_gvcfs/final/output/directory \
 -o /path/to/output/directory \
 -c slurm \
 --remove \
