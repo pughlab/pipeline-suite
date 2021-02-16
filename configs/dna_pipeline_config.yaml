@@ -27,6 +27,8 @@ delly_version: 0.8.1
 somaticsniper_version: bam-somaticsniper/1.0.5.0 # or SomaticSniper/1.0.4 currently available on h4h
 vardict_version: 1.7.0
 mavis_version: 2.2.5
+cpsr_version: 0.6.1
+pcgr_version: 0.9.1
 r_version: 3.6.1
 # tool specific parameters
 bwa:
@@ -132,6 +134,10 @@ haplotype_caller:
             time: '24:00:00'
         filter_recalibrated:
             mem: 2G
+            time: '24:00:00'
+        cpsr:
+            known_positions: PCA_pathVar_integrated_filtered_adjusted_WITH_FANCI_liftover_hg38.tsv
+            mem: 4G
             time: '24:00:00'
 annotate:
     vcf2maf_path: /cluster/projects/pughlab/bin/vcf2maf-1.6.17/vcf2maf.pl

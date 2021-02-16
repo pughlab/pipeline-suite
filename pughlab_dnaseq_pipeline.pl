@@ -421,6 +421,54 @@ sub main {
 				print $log ">>> GenotypeGVCFs job id: $hc_run_id\n\n";
 				push @job_ids, $hc_run_id;
 				}
+
+			# finally, annotate and filter using CPSR/PCGR
+			$hc_command = join(' ',
+				"perl $cwd/scripts/annotate_germline.pl",
+				"-o", $hc_directory,
+				"-i", join('/', $hc_directory, 'cohort','germline_variants'),
+				"-t", $tool_config,
+				"-d", $gatk_output_yaml,
+				"-c", $args{cluster}
+				);
+
+			if ($args{cleanup}) {
+				$hc_command .= " --remove";
+				}
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for annotate_germline.pl\n";
+			print $log "  COMMAND: $hc_command\n\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_annotate_germline',
+				cmd	=> $hc_command,
+				modules	=> ['perl'],
+				dependencies	=> $hc_run_id,
+				mem		=> '256M',
+				max_time	=> $max_time,
+				hpc_driver	=> $args{cluster}
+				);
+		
+			if ($args{dry_run}) {
+
+				$hc_command .= " --dry-run";
+				`$hc_command`;
+
+				} else {
+
+				$hc_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> AnnotateGermline job id: $hc_run_id\n\n";
+				push @job_ids, $hc_run_id;
+				}
 			}
 
 		## run STRELKA/MANTA pipeline

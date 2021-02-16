@@ -5,7 +5,7 @@ seq_type: exome # must be one of exome, targeted, rna or wgs
 seq_center: PMGC
 platform: Illumina
 # reference files
-ref_type: hg19 # must be hg38 or hg19, not compatible with GRCh37/GRCh38 reference (missing _chr_)
+ref_type: hg19
 reference: /cluster/tools/data/genomes/human/hg19/iGenomes/Sequence/WholeGenomeFasta/genome.fa
 intervals_bed:
 dbsnp: /cluster/projects/pughlab/references/dbSNP/GRCh37/b151/dbSNP_GRCh37p13_b151_common_chr.vcf.gz
@@ -27,6 +27,8 @@ delly_version: 0.8.1
 somaticsniper_version: bam-somaticsniper/1.0.5.0 # or SomaticSniper/1.0.4 currently available on h4h
 vardict_version: 1.7.0
 mavis_version: 2.2.5
+cpsr_version: 0.6.1
+pcgr_version: 0.9.1
 r_version: 3.6.1
 # tool specific parameters
 bwa:
@@ -132,6 +134,10 @@ haplotype_caller:
             time: '24:00:00'
         filter_recalibrated:
             mem: 2G
+            time: '24:00:00'
+        cpsr:
+            known_positions: /cluster/projects/pughlab/external_data/TCGA/PanCan-Germline_Huang_et_al/PCA_pathVar_integrated_filtered_adjusted_WITH_FANCI.tsv 
+            mem: 4G
             time: '24:00:00'
 annotate:
     vcf2maf_path: /cluster/projects/pughlab/bin/vcf2maf-1.6.17/vcf2maf.pl
