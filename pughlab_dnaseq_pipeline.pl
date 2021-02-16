@@ -73,6 +73,12 @@ sub main {
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n---\n\n";
 
+	my $seq_type = $tool_data->{seq_type};
+
+	# indicate maximum time limit for parent jobs to wait
+	my $max_time = '7-00:00:00';
+	if ('wgs' eq $tool_data->{seq_type}) { $max_time = '21-00:00:00'; }
+
 	### MAIN ###########################################################################################
 
 	my $run_script;
@@ -137,7 +143,7 @@ sub main {
 				cmd	=> $bwa_command,
 				modules	=> ['perl'],
 				mem		=> '256M',
-				max_time	=> '7-00:00:00',
+				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -190,7 +196,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $bwa_run_id,
 				mem		=> '256M',
-				max_time	=> '14-00:00:00',
+				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -244,7 +250,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $gatk_run_id,
 				mem		=> '256M',
-				max_time	=> '2-00:00:00',
+				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -290,7 +296,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $gatk_run_id,
 				mem		=> '256M',
-				max_time	=> '4-00:00:00',
+				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -346,7 +352,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $gatk_run_id,
 				mem		=> '256M',
-				max_time	=> '12-00:00:00',
+				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -393,7 +399,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $hc_run_id,
 				mem		=> '256M',
-				max_time	=> '7-00:00:00',
+				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
 				);
 		
@@ -454,7 +460,7 @@ sub main {
 					modules	=> ['perl'],
 					dependencies	=> $gatk_run_id,
 					mem		=> '256M',
-					max_time	=> '7-00:00:00',
+					max_time	=> $max_time,
 					hpc_driver	=> $args{cluster}
 					);
 
@@ -503,7 +509,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $strelka_run_id,
 				mem		=> '256M',
-				max_time	=> '7-00:00:00',
+				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -564,7 +570,7 @@ sub main {
 					modules	=> ['perl'],
 					dependencies	=> $gatk_run_id,
 					mem		=> '256M',
-					max_time	=> '14-00:00:00',
+					max_time	=> $max_time,
 					hpc_driver	=> $args{cluster}
 					);
 
@@ -613,7 +619,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $mutect_run_id,
 				mem		=> '256M',
-				max_time	=> '14-00:00:00',
+				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -674,7 +680,7 @@ sub main {
 					modules	=> ['perl'],
 					dependencies	=> $gatk_run_id,
 					mem		=> '256M',
-					max_time	=> '14-00:00:00',
+					max_time	=> $max_time,
 					hpc_driver	=> $args{cluster}
 					);
 
@@ -723,7 +729,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $mutect2_run_id,
 				mem		=> '256M',
-				max_time	=> '14-00:00:00',
+				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -752,14 +758,12 @@ sub main {
 
 			unless(-e $varscan_directory) { make_path($varscan_directory); }
 
-			# first run T/N pairs -- this will call germline variants for use in filtering T-only callsets
 			my $varscan_command = join(' ',
 				"perl $cwd/scripts/varscan.pl",
 				"-o", $varscan_directory,
 				"-t", $tool_config,
 				"-d", $gatk_output_yaml,
-				"-c", $args{cluster},
-				"--mode paired"
+				"-c", $args{cluster}
 				);
 
 			if (defined($tool_data->{varscan}->{pon})) {
@@ -771,17 +775,17 @@ sub main {
 				}
 
 			# record command (in log directory) and then run job
-			print $log "Submitting job for varscan.pl (T/N mode)\n";
+			print $log "Submitting job for varscan.pl\n";
 			print $log "  COMMAND: $varscan_command\n\n";
 
 			$run_script = write_script(
 				log_dir	=> $log_directory,
-				name	=> 'pughlab_dna_pipeline__run_varscan_paired',
+				name	=> 'pughlab_dna_pipeline__run_varscan',
 				cmd	=> $varscan_command,
 				modules	=> ['perl'],
 				dependencies	=> $gatk_run_id,
 				mem		=> '256M',
-				max_time	=> '7-00:00:00',
+				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -800,61 +804,7 @@ sub main {
 					log_file	=> $log
 					);
 
-				print $log ">>> VarScan T/N job id: $varscan_run_id\n\n";
-				push @job_ids, $varscan_run_id;
-				}
-
-			my $pon = $tool_data->{varscan}->{pon};
-			if (!defined($tool_data->{varscan}->{pon})) {
-				$pon = join('/', $varscan_directory, 'panel_of_normals.vcf');
-				}
-
-			# now run on T-only, using germline variants from T/N pairs to filter
-			$varscan_command = join(' ',
-				"perl $cwd/scripts/varscan.pl",
-				"-o", $varscan_directory,
-				"-t", $tool_config,
-				"-d", $gatk_output_yaml,
-				"-c", $args{cluster},
-				"--mode unpaired",
-				"--pon", $pon
-				);
-
-			if ($args{cleanup}) {
-				$varscan_command .= " --remove";
-				}
-
-			# record command (in log directory) and then run job
-			print $log "Submitting job for varscan.pl\n";
-			print $log "  COMMAND: $varscan_command\n\n";
-
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'pughlab_dna_pipeline__run_varscan_unpaired',
-				cmd	=> $varscan_command,
-				modules	=> ['perl'],
-				dependencies	=> $varscan_run_id,
-				mem		=> '256M',
-				max_time	=> '7-00:00:00',
-				hpc_driver	=> $args{cluster}
-				);
-
-			if ($args{dry_run}) {
-
-				$varscan_command .= " --dry-run";
-				`$varscan_command`;
-
-				} else {
-
-				$varscan_run_id = submit_job(
-					jobname		=> $log_directory,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{cluster},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
-					);
-
-				print $log ">>> VarScan tumour-only job id: $varscan_run_id\n\n";
+				print $log ">>> VarScan job id: $varscan_run_id\n\n";
 				push @job_ids, $varscan_run_id;
 				}
 			}
@@ -887,7 +837,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $gatk_run_id,
 				mem		=> '256M',
-				max_time	=> '14-00:00:00',
+				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -916,8 +866,10 @@ sub main {
 
 			unless(-e $vardict_directory) { make_path($vardict_directory); }
 
-			my $vardict_command = join(' ',
-				"perl $cwd/scripts/vardict.pl",
+			my $vardict_command = "perl $cwd/scripts/vardict.pl";
+			if ('wgs' eq $seq_type) { $vardict_command = "perl $cwd/scripts/vardict_wgs.pl"; }
+
+			$vardict_command .= ' '. join(' ',
 				"-o", $vardict_directory,
 				"-t", $tool_config,
 				"-d", $gatk_output_yaml,
@@ -939,7 +891,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $gatk_run_id,
 				mem		=> '256M',
-				max_time	=> '14-00:00:00',
+				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -991,7 +943,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $gatk_run_id,
 				mem		=> '256M',
-				max_time	=> '14-00:00:00',
+				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -1057,7 +1009,7 @@ sub main {
 				modules	=> ['perl'],
 				dependencies	=> $depends,
 				mem		=> '256M',
-				max_time	=> '2-00:00:00',
+				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -1100,7 +1052,7 @@ sub main {
 			modules	=> ['perl'],
 			dependencies	=> join(':', @job_ids),
 			mem		=> '256M',
-			max_time	=> '24:00:00',
+			max_time	=> '5-00:00:00',
 			hpc_driver	=> $args{cluster}
 			);
 
