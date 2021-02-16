@@ -260,12 +260,12 @@ sub main {
 		print $log "\n    Target intervals (exome): $intervals_bed";
 		}
 
-	if (defined($args{pon})) {
-                print $log "\n    Panel of Normals: $args{pon}";
-                $pon = $args{pon};
-                } elsif (defined($tool_data->{vardict}->{pon})) {
+        if (defined($tool_data->{vardict}->{pon})) {
 		print $log "\n    Panel of Normals: $tool_data->{vardict}->{pon}";
 		$pon = $tool_data->{vardict}->{pon};
+		} elsif (defined($args{pon})) {
+                print $log "\n    Panel of Normals: $args{pon}";
+                $pon = $args{pon};
 		} else {
 		print $log "\n    No panel of normals provided; will attempt to create one.";
 		}

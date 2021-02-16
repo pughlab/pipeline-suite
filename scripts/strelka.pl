@@ -750,9 +750,14 @@ sub main {
 	$intervals =~ s/\.bed/_padding100bp.bed.gz/;
 	print $log "\n    Target intervals: $intervals";
 
-	if (defined($args{pon})) {
-		print $log "\n    Panel of Normals: $args{pon}";
+	if (defined($tool_data->{strelka}->{pon})) {
+		print $log "\n      Panel of Normals: $tool_data->{strelka}->{pon}";
+		$pon = $tool_data->{strelka}->{pon};
+		} elsif (defined($args{pon})) {
+		print $log "\n      Panel of Normals: $args{pon}";
 		$pon = $args{pon};
+		} else {
+		print $log "\n      No panel of normals defined! Tumour-only samples will not be run!!";
 		}
 
 	print $log "\n    Output directory: $output_directory";
@@ -1413,7 +1418,7 @@ if ($help) {
 		"\t--data|-d\t<string> data config (yaml format)",
 		"\t--tool|-t\t<string> tool config (yaml format)",
 		"\t--out_dir|-o\t<string> path to output directory",
-		"\t--create-panel-of-normals\t<boolean> generate a panel of normals? (default: false)",
+		"\t--create-panel-of-normals\t<boolean> create a panel of normals? Use to generate germline variant calls. (default: false)",
 		"\t--pon\t<string> path to panel of normals (optional: useful for restarting once this has already been generated)",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",

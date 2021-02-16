@@ -1405,7 +1405,7 @@ if ($help) {
 		"\t--tool|-t\t<string> tool config (yaml format)",
 		"\t--out_dir|-o\t<string> path to output directory",
 		"\t--pon\t<string> path to panel of normals (optional)",
-		"\t--create-panel-of-normals\t<boolean> generate a panel of normals? (default: false)",
+		"\t--create-panel-of-normals\t<boolean> create a panel of normals? Use to generate germline variant calls. (default: false)",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
 		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
