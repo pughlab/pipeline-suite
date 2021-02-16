@@ -303,7 +303,8 @@ sub main {
 					my @tmp = split /\//, $r1;
 					$raw_link = join('/', $raw_directory, $tmp[-1]);
 					symlink($r1, $raw_link);
-					$raw_link =~ s/R1/R2/;
+					@tmp = split /\//, $r2;
+					$raw_link = join('/', $raw_directory, $tmp[-1]);
 					symlink($r2, $raw_link);
 
 					my $filestem = join('_', $sample, $lane);
