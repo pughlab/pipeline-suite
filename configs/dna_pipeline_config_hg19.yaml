@@ -204,7 +204,7 @@ varscan:
             time: '24:00:00'
         sequenza:
             r: 3.3.0
-            path: /cluster/projects/pughlab/src/sequenza_wrapper/SequenzaSingleSample_v2.1.R
+            cancer_type_prior: all
             mem: 6G
             time: '24:00:00'
         filter:
