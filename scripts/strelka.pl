@@ -149,59 +149,34 @@ sub get_filter_command {
 		output	=> undef,
 		pon	=> undef,
 		tmp_dir	=> undef,
-		split	=> 0,
 		@_
 		);
 
+	my $input = join(' ', @{$args{input}});
 	my $filter_command;
 
 	# if this is tumour-only (and somatic), split indels and snps
-	if ($args{split}) {
-
+	if (scalar(@{$args{input}}) > 1) {
 		$filter_command = join(' ',
-			'vcftools',
-			'--gzvcf', $args{input},
-			'--stdout --recode',
-			'--keep-filtered PASS --remove-indels',
-			'--temp', $args{tmp_dir}
+			'vcf-concat', $input,
+			'| vcf-sort -c -t', $args{tmp_dir},
+			'| vcftools --vcf -'
 			);
-
-		if (defined($args{pon})) {
-			$filter_command .= " --exclude-positions $args{pon}";
-			}
-
-		$filter_command .= " > $args{output}\_snvs_filtered.vcf";
-
-		$filter_command .= "\n\n" . join(' ',
-			'vcftools',
-			'--gzvcf', $args{input},
-			'--stdout --recode',
-			'--keep-filtered PASS --keep-only-indels',
-			'--temp', $args{tmp_dir}
-			);
-
-		if (defined($args{pon})) {
-			$filter_command .= " --exclude-positions $args{pon}";
-			}
-
-		$filter_command .= " > $args{output}\_indels_filtered.vcf";
-
 		} else {
-
-		$filter_command = join(' ',
-			'vcftools',
-			'--gzvcf', $args{input},
-			'--stdout --recode',
-			'--keep-filtered PASS',
-			'--temp', $args{tmp_dir}
-			);
-
-		if (defined($args{pon})) {
-			$filter_command .= " --exclude-positions $args{pon}";
-			}
-
-		$filter_command .= " > $args{output}";
+		$filter_command = "vcftools --gzvf $input";
 		}
+
+	$filter_command .= ' ' . join(' ',
+		'--stdout --recode',
+		'--keep-filtered PASS',
+		'--temp', $args{tmp_dir}
+		);
+
+	if (defined($args{pon})) {
+		$filter_command .= " --exclude-positions $args{pon}";
+		}
+
+	$filter_command .= " > $args{output}";
 
 	return($filter_command);
 	}
@@ -439,7 +414,7 @@ sub pon {
 
 			# filter results to keep only confident (PASS) calls
 			my $filter_command = get_filter_command(
-				input	=> $germline_output,
+				input	=> [$germline_output],
 				output	=> $filtered_germline_output,
 				tmp_dir	=> $tmp_directory
 				);
@@ -584,40 +559,6 @@ sub pon {
 		);
 
 	push @all_pon_jobs, $pon_run_id;
-
-	# create a fully merged output (useful for combining with other studies later)
-	$pon_command = generate_pon(
-		input		=> join(' ', @pon_vcfs),
-		output		=> $pon_tmp,
-		java_mem	=> $parameters->{combine}->{java_mem},
-		tmp_dir		=> $pon_directory,
-		out_type	=> 'full'
-		);
-
-	$pon_command .= "\n" . check_java_output(
-		extra_cmd => "md5sum $pon_tmp > $pon_tmp.md5;\n  bgzip $pon_tmp;\n  tabix -p vcf $pon_tmp.gz;"
-		);
-
-	$run_script = write_script(
-		log_dir	=> $log_directory,
-		name	=> 'create_panel_of_normals',
-		cmd	=> $pon_command,
-		dependencies	=> join(':', @all_pon_jobs),
-		modules		=> [$gatk, 'tabix'],
-		max_time	=> $parameters->{combine}->{time},
-		mem		=> $parameters->{combine}->{mem},
-		hpc_driver	=> $args{hpc_driver}
-		);
-
-	$run_id = submit_job(
-		jobname		=> 'create_panel_of_normals',
-		shell_command	=> $run_script,
-		hpc_driver	=> $args{hpc_driver},
-		dry_run		=> $args{dry_run},
-		log_file	=> $log
-		);
-
-	push @all_pon_jobs, $run_id;
 
 	print $log "\nFINAL OUTPUT: $final_pon_link\n";
 	print $log "---\n";
@@ -821,7 +762,7 @@ sub main {
 		@final_outputs{$patient} = [];
 		$cleanup{$patient} = "rm -rf $tmp_directory";
 
-		# for T/N pair
+		# for each tumour sample
 		foreach my $sample (@tumour_ids) {
 
 			print $log ">>TUMOUR: $sample\n";
@@ -941,94 +882,50 @@ sub main {
 
 
 			# filter variant calls
-			my ($filter_command, $required, $depends);
-			my ($filtered_output, $filtered_indels, $filtered_snvs);
+			my ($filter_command, $depends);
+			my $filtered_output = join('/',
+				$sample_directory,
+				$sample . '_Strelka_somatic_filtered.vcf'
+				);
 
 			if ('rna' eq $seq_type) {
+				$depends  = '';
+				} else {
+				$depends  = $manta_run_id;
+				$cleanup{$patient} .= "\nrm $filtered_output";
+				}
 
-				# filter results to keep confident calls (PASS)
-				$filtered_output = join('/',
-					$sample_directory,
-					$sample . '_Strelka_somatic_filtered.vcf'
-					);
+			# filter results to keep confident calls (PASS)
+			if ('rna' eq $seq_type) {
 
 				$filter_command = get_filter_command(
-					input	=> $somatic_tonly_output,
+					input	=> [$somatic_tonly_output],
 					output	=> $filtered_output,
 					tmp_dir	=> $tmp_directory
 					);
 
-				$filter_command .= "\n\nmd5sum $filtered_output > $filtered_output.md5";
-
-				$required = $filtered_output;
-				$depends  = '';
-
+				# filter results to keep confident calls (PASS) + PoN filter
 				} elsif (scalar(@normal_ids) == 0) {
 
-				# filter results to keep confident calls (PASS)
-				# and split into snv/indel
-				$filtered_output = join('/',
-					$sample_directory,
-					$sample . '_Strelka_somatic'
-					);
-
-				$filtered_snvs = $filtered_output . '_snvs_filtered.vcf';
-				$filtered_indels = $filtered_output . '_indels_filtered.vcf';
-
 				$filter_command = get_filter_command(
-					input	=> $somatic_tonly_output,
+					input	=> [$somatic_tonly_output],
 					output	=> $filtered_output,
 					pon	=> $pon,
-					tmp_dir	=> $tmp_directory,
-					split	=> 1
+					tmp_dir	=> $tmp_directory
 					);
 
-				$filter_command .= "\n\nmd5sum $filtered_snvs > $filtered_snvs.md5";
-				$filter_command .= "\n\nmd5sum $filtered_indels > $filtered_indels.md5";
-
-				$required = $filtered_indels;
-				$depends  = $manta_run_id;
-
-				$cleanup{$patient} .= "\nrm $filtered_snvs";
-				$cleanup{$patient} .= "\nrm $filtered_indels";
-
-				} else {
-
-				# filter results using PoN and keep confident calls (PASS)
-				$filtered_snvs = join('/',
-					$sample_directory,
-					$sample . '_Strelka_somatic_snvs_filtered.vcf'
-					);
+				# filter results to keep confident calls (PASS) + PoN filter
+				} elsif (scalar(@normal_ids) > 0) {
 
 				$filter_command = get_filter_command(
-					input	=> $somatic_snv_output,
-					output	=> $filtered_snvs,
+					input	=> [$somatic_snv_output, $somatic_indel_output],
+					output	=> $filtered_output,
 					pon	=> $pon,
 					tmp_dir	=> $tmp_directory
 					);
-
-				$filter_command .= "\n\nmd5sum $filtered_snvs > $filtered_snvs.md5";
-
-				$filtered_indels = join('/',
-					$sample_directory,
-					$sample . '_Strelka_somatic_indels_filtered.vcf'
-					);
-
-				$filter_command .= "\n\n" . get_filter_command(
-					input	=> $somatic_indel_output,
-					output	=> $filtered_indels,
-					pon	=> $pon,
-					tmp_dir	=> $tmp_directory
-					);
-
-				$filter_command .= "\n\nmd5sum $filtered_indels > $filtered_indels.md5";
-
-				$required = $filtered_indels;
-				$depends  = $manta_run_id;
-
-				$cleanup{$patient} .= "\nrm $filtered_snvs";
-				$cleanup{$patient} .= "\nrm $filtered_indels";
 				}
+
+			$filter_command .= "\n\nmd5sum $filtered_output > $filtered_output.md5";
 
 			my $strelka_run_id = '';
 
@@ -1036,7 +933,7 @@ sub main {
 			if (
 				('Y' eq missing_file($somatic_indel_output)) &&
 				('Y' eq missing_file($somatic_tonly_output)) &&
-				('Y' eq missing_file("$required.md5"))
+				('Y' eq missing_file("$filtered_output.md5"))
 				) {
 
 				# record command (in log directory) and then run job
@@ -1056,7 +953,7 @@ sub main {
 					name	=> 'run_strelka_somatic_variant_caller_' . $sample,
 					cmd	=> $somatic_snv_command,
 					modules	=> [$strelka],
-					dependencies	=> $manta_run_id,
+					dependencies	=> $depends,
 					max_time	=> $parameters->{strelka}->{time},
 					mem		=> $parameters->{strelka}->{mem},
 					hpc_driver	=> $args{hpc_driver}
@@ -1079,7 +976,7 @@ sub main {
 			my $filter_run_id = '';
 
 			# check if this should be run
-			if ('Y' eq missing_file($required . '.md5')) {
+			if ('Y' eq missing_file("$filtered_output.md5")) {
 
 				# record command (in log directory) and then run job
 				print $log "Submitting job for VCF-Filter (somatic)...\n";
@@ -1115,18 +1012,17 @@ sub main {
 			my $normal_id = undef;
 			if (scalar(@normal_ids) > 0) { $normal_id = $normal_ids[0]; }
 
-			# annotate INDELS
-			$final_maf = join('/', $sample_directory, $sample . '_somatic_indels_annotated.maf');
-			$final_vcf = join('/', $sample_directory, $sample . '_somatic_indels_annotated.vcf');
+			$final_maf = join('/', $sample_directory, $sample . '_somatic_annotated.maf');
+			$final_vcf = join('/', $sample_directory, $sample . '_somatic_annotated.vcf');
 
 			$vcf2maf_cmd = get_vcf2maf_command(
-				input		=> $filtered_indels,
+				input		=> $filtered_output,
 				tumour_id	=> $sample,
 				normal_id	=> $normal_id,
 				reference	=> $reference,
 				ref_type	=> $tool_data->{ref_type},
 				output		=> $final_maf,
-				tmp_dir		=> $tmp_directory,
+				tmp_dir		=> $sample_directory,
 				vcf2maf		=> $tool_data->{annotate}->{vcf2maf_path},
 				vep_path	=> $tool_data->{annotate}->{vep_path},
 				vep_data	=> $tool_data->{annotate}->{vep_data},
@@ -1136,15 +1032,21 @@ sub main {
 			# check if this should be run
 			if ('Y' eq missing_file($final_maf . '.md5')) {
 
-				if ('N' eq missing_file("$tmp_directory/$sample\_Strelka_somatic_indels_filtered.vep.vcf")) {
-					`rm $tmp_directory/$sample\_Strelka_somatic_indels_filtered.vep.vcf`;
+				# make sure to remove temp files from previous attempts
+				my $tmp_file = join('/',
+					$sample_directory,
+					$sample . "_Strelka_somatic_filtered.vep.vcf"
+					);
+
+				if ('N' eq missing_file($tmp_file)) {
+					`rm $tmp_file`;
 					}
 
 				# IF THIS FINAL STEP IS SUCCESSFULLY RUN
 				$vcf2maf_cmd .= "\n\n" . join("\n",
-					"if [ -s " . join(" ] && [ -s ", $final_maf) . " ]; then",
+					"if [ -s $final_maf ]; then",
 					"  md5sum $final_maf > $final_maf.md5",
-					"  mv $tmp_directory/$sample\_Strelka_somatic_indels_filtered.vep.vcf $final_vcf",
+					"  mv $tmp_file $final_vcf",
 					"  md5sum $final_vcf > $final_vcf.md5",
 					"  bgzip $final_vcf",
 					"  tabix -p vcf $final_vcf.gz",
@@ -1154,80 +1056,11 @@ sub main {
 					);
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for VEP + vcf2maf (indels)...\n";
+				print $log "Submitting job for VEP + vcf2maf...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
-					name	=> 'run_VEP_and_vcf2maf_indels_' . $sample,
-					cmd	=> $vcf2maf_cmd,
-					modules	=> ['perl', $samtools, 'tabix'],
-					dependencies	=> $filter_run_id,
-					cpus_per_task	=> 4,
-					max_time	=> $tool_data->{annotate}->{time},
-					mem		=> $tool_data->{annotate}->{mem}->{indels},
-					hpc_driver	=> $args{hpc_driver}
-					);
-
-				$annotate_run_id = submit_job(
-					jobname		=> 'run_VEP_and_vcf2maf_indels' . $sample,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{hpc_driver},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
-					);
-
-				push @{$patient_jobs{$patient}}, $annotate_run_id;
-				}
-			else {
-				print $log "Skipping vcf2maf (indels) because this has already been completed!\n";
-				}
-
-			push @{$final_outputs{$patient}}, $final_maf;
-
-			# annotate SNVs
-			$final_maf = join('/', $sample_directory, $sample . '_somatic_snvs_annotated.maf');
-			$final_vcf = join('/', $sample_directory, $sample . '_somatic_snvs_annotated.vcf');
-
-			$vcf2maf_cmd = get_vcf2maf_command(
-				input		=> $filtered_snvs,
-				tumour_id	=> $sample,
-				normal_id	=> $normal_id,
-				reference	=> $reference,
-				ref_type	=> $tool_data->{ref_type},
-				output		=> $final_maf,
-				tmp_dir		=> $tmp_directory,
-				vcf2maf		=> $tool_data->{annotate}->{vcf2maf_path},
-				vep_path	=> $tool_data->{annotate}->{vep_path},
-				vep_data	=> $tool_data->{annotate}->{vep_data},
-				filter_vcf	=> $tool_data->{annotate}->{filter_vcf}
-				);
-
-			# check if this should be run
-			if ('Y' eq missing_file($final_maf . '.md5')) {
-
-				if ('N' eq missing_file("$tmp_directory/$sample\_Strelka_somatic_snvs_filtered.vep.vcf")) {
-					`rm $tmp_directory/$sample\_Strelka_somatic_snvs_filtered.vep.vcf`;
-					}
-
-				# IF THIS FINAL STEP IS SUCCESSFULLY RUN
-				$vcf2maf_cmd .= "\n\n" . join("\n",
-					"if [ -s " . join(" ] && [ -s ", $final_maf) . " ]; then",
-					"  md5sum $final_maf > $final_maf.md5",
-					"  mv $tmp_directory/$sample\_Strelka_somatic_snvs_filtered.vep.vcf $final_vcf",
-					"  md5sum $final_vcf > $final_vcf.md5",
-					"  bgzip $final_vcf",
-					"  tabix -p vcf $final_vcf.gz",
-					"else",
-					'  echo "FINAL OUTPUT MAF is missing; not running md5sum/bgzip/tabix..."',
-					"fi"
-					);
-
-				# record command (in log directory) and then run job
-				print $log "Submitting job for VEP + vcf2maf (SNVs)...\n";
-
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_VEP_and_vcf2maf_snvs_' . $sample,
+					name	=> 'run_VEP_and_vcf2maf_' . $sample,
 					cmd	=> $vcf2maf_cmd,
 					modules	=> ['perl', $samtools, 'tabix'],
 					dependencies	=> $filter_run_id,
@@ -1238,7 +1071,7 @@ sub main {
 					);
 
 				$annotate_run_id = submit_job(
-					jobname		=> 'run_VEP_and_vcf2maf_snvs' . $sample,
+					jobname		=> 'run_VEP_and_vcf2maf_' . $sample,
 					shell_command	=> $run_script,
 					hpc_driver	=> $args{hpc_driver},
 					dry_run		=> $args{dry_run},
@@ -1248,7 +1081,7 @@ sub main {
 				push @{$patient_jobs{$patient}}, $annotate_run_id;
 				}
 			else {
-				print $log "Skipping vcf2maf (snvs) because this has already been completed!\n";
+				print $log "Skipping vcf2maf because this has already been completed!\n";
 				}
 
 			push @{$final_outputs{$patient}}, $final_maf;
@@ -1263,7 +1096,6 @@ sub main {
 
 			if (scalar(@{$patient_jobs{$patient}}) == 0) {
 				`rm -rf $tmp_directory`;
-
 				} else {
 
 				print $log "\nSubmitting job to clean up temporary/intermediate files...\n";
