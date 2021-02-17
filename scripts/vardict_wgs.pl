@@ -872,7 +872,7 @@ sub main {
 					dependencies	=> $run_id,
 					cpus_per_task	=> 4,
 					max_time	=> $tool_data->{annotate}->{time},
-					mem		=> $tool_data->{annotate}->{mem}->{snps},
+					mem		=> $tool_data->{annotate}->{mem},
 					hpc_driver	=> $args{hpc_driver}
 					);
 
@@ -1297,7 +1297,7 @@ sub main {
 					dependencies	=> $run_id,
 					cpus_per_task	=> 4,
 					max_time	=> $tool_data->{annotate}->{time},
-					mem		=> $tool_data->{annotate}->{mem}->{snps},
+					mem		=> $tool_data->{annotate}->{mem},
 					hpc_driver	=> $args{hpc_driver}
 					);
 

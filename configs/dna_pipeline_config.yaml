@@ -144,10 +144,8 @@ annotate:
     vep_path: /cluster/tools/software/centos7/vep/98
     vep_data: /cluster/projects/pughlab/references/VEP_cache/98
     filter_vcf: /cluster/projects/pughlab/references/VEP_cache/ExAC_nonTCGA.r1.sites.hg19ToHg38.vep.vcf.gz 
-    mem:
-        snps: 16G
-        indels: 12G
-    time: '72:00:00'
+    mem: 16G
+    time: '12:00:00'
 mutect:
     run: Y
     pon: /cluster/projects/pughlab/references/panel_of_normals/hg38/MuTect/v1.1.5/mutect_v1.1.5_hg38_panel_of_normals_20201128.vcf
@@ -157,10 +155,9 @@ mutect:
             mem: 12G
             time: '4-00:00:00'
         filter:
-            java_mem: 3g
             mem: 4G
             time: '12:00:00'
-        combine:
+        create_pon:
             java_mem: 3g
             mem: 4G
             time: '24:00:00'
@@ -179,7 +176,7 @@ mutect2:
         filter:
             mem: 1G
             time: '12:00:00'
-        combine:
+        create_pon:
             java_mem: 3g
             mem: 4G
             time: '24:00:00'
@@ -196,7 +193,7 @@ strelka:
         filter:
             mem: 2G
             time: '12:00:00'
-        combine:
+        create_pon:
             java_mem: 3g
             mem: 4G
             time: '96:00:00'
@@ -210,14 +207,14 @@ varscan:
             time: '24:00:00'
         sequenza:
             r: 3.3.0
+            path:
             cancer_type_prior: all
             mem: 6G
             time: '24:00:00'
         filter:
-            java_mem: 1g
-            mem: 2G
+            mem: 1G
             time: '12:00:00'
-        combine:
+        create_pon:
             java_mem: 3g
             mem: 4G
             time: '24:00:00'
@@ -247,7 +244,7 @@ vardict:
         filter:
             mem: 1G
             time: '12:00:00'
-        combine:
+        create_pon:
             java_mem: 3g
             mem: 4G
             time: '24:00:00'

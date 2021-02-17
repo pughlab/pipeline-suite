@@ -155,7 +155,7 @@ sub get_filter_command {
 	my $input = join(' ', @{$args{input}});
 	my $filter_command;
 
-	# if this is tumour-only (and somatic), split indels and snps
+	# if this is a T/N pair, combine indels and snps
 	if (scalar(@{$args{input}}) > 1) {
 		$filter_command = join(' ',
 			'vcf-concat', $input,
@@ -524,7 +524,7 @@ sub pon {
 	my $pon_command = generate_pon(
 		input		=> join(' ', @pon_vcfs),
 		output		=> $pon,
-		java_mem	=> $parameters->{combine}->{java_mem},
+		java_mem	=> $parameters->{create_pon}->{java_mem},
 		tmp_dir		=> $pon_directory,
 		out_type	=> 'trimmed'
 		);
@@ -545,8 +545,8 @@ sub pon {
 		cmd	=> $pon_command,
 		modules	=> [$gatk],
 		dependencies	=> join(':', @all_pon_jobs),
-		max_time	=> $parameters->{combine}->{time},
-		mem		=> $parameters->{combine}->{mem},
+		max_time	=> $parameters->{create_pon}->{time},
+		mem		=> $parameters->{create_pon}->{mem},
 		hpc_driver	=> $args{hpc_driver}
 		);
 
@@ -1066,7 +1066,7 @@ sub main {
 					dependencies	=> $filter_run_id,
 					cpus_per_task	=> 4,
 					max_time	=> $tool_data->{annotate}->{time},
-					mem		=> $tool_data->{annotate}->{mem}->{snps},
+					mem		=> $tool_data->{annotate}->{mem},
 					hpc_driver	=> $args{hpc_driver}
 					);
 

@@ -420,55 +420,63 @@ sub main {
 			my $input_file = join('/', $sample_directory, '/Aligned.sortedByCoord.out.bam');
 			my $dedup_bam = join('/', $patient_directory, $sample . '_sorted_markdup.bam');
 
-			print $fh "$sample\t$dedup_bam\tRNASeq\n";
+			if ('N' eq $parameters->{markdup}->{run}) {
 
-			my $markdup_cmd = get_markdup_command(
-				input		=> $input_file,
-				output		=> $dedup_bam,
-				java_mem	=> $parameters->{markdup}->{java_mem},
-				tmp_dir		=> $tmp_directory
-				);
-	
-			if ('normal' eq $type) { $normals{$sample} = $dedup_bam; }
-			if ('tumour' eq $type) { $tumours{$sample} = $dedup_bam; }
+				if ('normal' eq $type) { $normals{$sample} = $input_file; }
+				if ('tumour' eq $type) { $tumours{$sample} = $input_file; }
 
-			# check if this should be run
-			if ('Y' eq missing_file($dedup_bam . '.md5')) {
+				print $fh "$sample\t$input_file\tRNASeq\n";
 
-				$markdup_cmd .= "\n\n" . join("\n",
-					"samtools quickcheck $dedup_bam",
+				push @final_outputs, $input_file;
+
+				} else {
+
+				print $fh "$sample\t$dedup_bam\tRNASeq\n";
+
+				my $markdup_cmd = get_markdup_command(
+					input		=> $input_file,
+					output		=> $dedup_bam,
+					java_mem	=> $parameters->{markdup}->{java_mem},
+					tmp_dir		=> $tmp_directory
 					);
+		
+				if ('normal' eq $type) { $normals{$sample} = $dedup_bam; }
+				if ('tumour' eq $type) { $tumours{$sample} = $dedup_bam; }
 
-				# record command (in log directory) and then run job
-				print $log "Submitting job to merge lanes and mark dupilcates...\n";
+				# check if this should be run
+				if ('Y' eq missing_file($dedup_bam . '.md5')) {
 
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_MarkDups_' . $sample,
-					cmd	=> $markdup_cmd,
-					modules	=> [$picard, $samtools],
-					dependencies	=> $run_id,
-					max_time	=> $parameters->{markdup}->{time},
-					mem		=> $parameters->{markdup}->{mem},
-					hpc_driver	=> $args{hpc_driver}
-					);
+					# record command (in log directory) and then run job
+					print $log "Submitting job to merge lanes and mark dupilcates...\n";
 
-				$run_id = submit_job(
-					jobname		=> 'run_MarkDups_' . $sample,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{hpc_driver},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
-					);
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_MarkDups_' . $sample,
+						cmd	=> $markdup_cmd,
+						modules	=> [$picard, $samtools],
+						dependencies	=> $run_id,
+						max_time	=> $parameters->{markdup}->{time},
+						mem		=> $parameters->{markdup}->{mem},
+						hpc_driver	=> $args{hpc_driver}
+						);
 
-				push @patient_jobs, $run_id;
-				push @all_jobs, $run_id;
+					$run_id = submit_job(
+						jobname		=> 'run_MarkDups_' . $sample,
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @patient_jobs, $run_id;
+					push @all_jobs, $run_id;
+					}
+				else {
+					print $log "Skipping mark duplicate step because output already exists...\n";
+					}
+
+				push @final_outputs, $dedup_bam;
 				}
-			else {
-				print $log "Skipping mark duplicate step because output already exists...\n";
-				}
-
-			push @final_outputs, $dedup_bam;
 			}
 
 		# and finally, add the final files to the output yaml

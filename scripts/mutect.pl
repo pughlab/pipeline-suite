@@ -464,53 +464,11 @@ sub pon {
 	my $pon_tmp	= join('/', $output_directory, $date . "_merged_panelOfNormals.vcf");
 	my $pon		= join('/', $output_directory, $date . "_merged_panelOfNormals_trimmed.vcf");
 
-	# create a fully merged output (useful for combining with other studies later)
-	my $full_merge_command = generate_pon(
-		input		=> join(' ', @pon_vcfs),
-		output		=> $pon_tmp,
-		java_mem	=> $parameters->{combine}->{java_mem}, 
-		tmp_dir		=> $tmp_directory
-		);
-
-	$full_merge_command .= "\n" . check_java_output(
-		extra_cmd => "md5sum $pon_tmp > $pon_tmp.md5;\ngzip $pon_tmp;"
-		);
-
-	# check if this should be run
-	if ('Y' eq missing_file($pon_tmp . ".md5")) {
-
-		# record command (in log directory) and then run job
-		print $log "Submitting job for CombineVariants...\n";
-		$run_script = write_script(
-			log_dir	=> $log_directory,
-			name	=> 'run_combine_vcfs_full_output',
-			cmd	=> $full_merge_command,
-			modules	=> [$gatk],
-			dependencies	=> join(':', @all_jobs),
-			max_time	=> $parameters->{combine}->{time},
-			mem		=> $parameters->{combine}->{mem},
-			hpc_driver	=> $args{hpc_driver}
-			);
-
-		$run_id = submit_job(
-			jobname		=> 'run_combine_vcfs_full_output',
-			shell_command	=> $run_script,
-			hpc_driver	=> $args{hpc_driver},
-			dry_run		=> $args{dry_run},
-			log_file	=> $log
-			);
-
-		push @all_jobs, $run_id;
-		}
-	else {
-		print $log "Skipping CombineVariants (full) because this has already been completed!\n";
-		}
-
 	# create a trimmed output (minN 2, sites_only) to use as pon
 	my $trimmed_merge_command = generate_pon(
 		input		=> join(' ', @pon_vcfs),
 		output		=> $pon,
-		java_mem	=> $parameters->{combine}->{java_mem}, 
+		java_mem	=> $parameters->{create_pon}->{java_mem}, 
 		tmp_dir		=> $tmp_directory,
 		out_type	=> 'trimmed'
 		);
@@ -543,8 +501,8 @@ sub pon {
 			cmd	=> $trimmed_merge_command,
 			modules	=> [$gatk],
 			dependencies	=> join(':', @all_jobs),
-			max_time	=> $parameters->{combine}->{time},
-			mem		=> $parameters->{combine}->{mem},
+			max_time	=> $parameters->{create_pon}->{time},
+			mem		=> $parameters->{create_pon}->{mem},
 			hpc_driver	=> $args{hpc_driver}
 			);
 
@@ -1011,7 +969,7 @@ sub main {
 					dependencies    => $run_id,
 					cpus_per_task	=> 4,
 					max_time        => $tool_data->{annotate}->{time},
-					mem             => $tool_data->{annotate}->{mem}->{snps},
+					mem             => $tool_data->{annotate}->{mem},
 					hpc_driver      => $args{hpc_driver}
 					);
 
