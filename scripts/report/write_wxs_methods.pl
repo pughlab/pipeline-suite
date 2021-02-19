@@ -144,6 +144,8 @@ sub main {
 		$methods .= "\\subsection{Germline Variant calling:}\n";
 
 		$gatk = $tool_data->{gatk_version};
+		my $cpsr = $tool_data->{cpsr_version};
+		my $pcgr = $tool_data->{pcgr_version};
 		my @parts = split('\\/', $tool_data->{intervals_bed});
 		$intervals = $parts[-1];
 
@@ -175,6 +177,7 @@ sub main {
 			}
 
 		$methods .= "Germline variants were identified using GATK's (v$gatk) HaplotypeCaller and GenotypeGVCFs as per GATK's germline variant calling best practices. HaplotypeCaller was run in GVCF mode, using a minimum confidence threshold of 30, variant index type and parameter of LINEAR and 128000. Known variants (dbSNP) were provided, as were target intervals with interval padding set to 100bp. Variants were combined across samples (using CombineGVCFs) and genotyped using GenotypeGVCFs. Variant score recalibration was performed for INDELs and SNPs separately. For INDELs, known indels were provided, and recalibrater run using tranche sensitivity thresholds of 90, 99, 99.9 and 100 percent and maximum 2 Gaussians for the positive model. For SNPs, known snps and dbSNP were provided, and recalibrater run using maximum 4 Gaussians for the positive model. Recalibration was applied using truth sensitivity filter of 99 using the above generated .tranches and .recal files.\\newline\n";
+		$methods .= "Germline variant significance was assessed using CPSR (v$cpsr) and PCGR (v$pcgr). Variants with a CSPR score above 0 were carried forward, as were any variants previously identified as significant within the TCGA cohort (Huang et al.).\\newline\n"; 
 		$methods .= join("\n",
 			"{\\scriptsize \\begin{itemize}",
 			"  \\vspace{-0.2cm}\\item dbSNP: $dbsnp",
