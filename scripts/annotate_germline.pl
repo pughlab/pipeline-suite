@@ -209,7 +209,6 @@ sub main{
 	my $r_version	= 'R/' . $tool_data->{r_version};
 
 	my $pcgr	= 'pcgr/' . $tool_data->{pcgr_version};
-#	$cpsr_version	= $tool_data->{cpsr_version};
 
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{haplotype_caller}->{parameters};
@@ -485,6 +484,90 @@ sub main{
 			push @final_outputs, $final_maf;
 			}
 
+		# loop over each normal sample (in the absence of any tumour samples)
+		if (scalar(@tumour_ids) == 0) {
+
+			my $sample = $normal_ids[0];
+
+			my $sample_directory = join('/', $patient_directory, $sample);
+
+			my $output_stem = join('/',
+				$sample_directory,
+				join('_', $sample, 'CPSR', 'germline_hc')
+				);
+
+			### Run variant annotation (VEP + vcf2maf)
+			my $final_vcf = $output_stem . ".vep.vcf";
+			my $final_maf = $output_stem . ".maf";
+
+			my $vcf2maf_cmd = get_vcf2maf_command(
+				input		=> $filtered_vcf,
+				tumour_id	=> $sample,
+				reference	=> $reference,
+				ref_type	=> $tool_data->{ref_type},
+				output		=> $final_maf,
+				tmp_dir		=> $sample_directory,
+				vcf2maf		=> $tool_data->{annotate}->{vcf2maf_path},
+				vep_path	=> $tool_data->{annotate}->{vep_path},
+				vep_data	=> $tool_data->{annotate}->{vep_data},
+				filter_vcf	=> $tool_data->{annotate}->{filter_vcf}
+				);
+
+			# check if this should be run
+			if ('Y' eq missing_file($final_maf . '.md5')) {
+
+				my $vep_vcf = join('/',
+					$sample_directory,
+					$patient . '_significant_hits.vep.vcf'
+					);
+
+				if ('N' eq missing_file($vep_vcf)) {
+					`rm $vep_vcf`;
+					}
+
+				# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
+				$vcf2maf_cmd .= "\n\n" . join("\n",
+					"if [ -s $final_maf ]; then",
+					"  md5sum $final_maf > $final_maf.md5",
+					"  mv $vep_vcf $final_vcf",
+					"  md5sum $final_vcf > $final_vcf.md5",
+					"  bgzip $final_vcf",
+					"  tabix -p vcf $final_vcf.gz",
+					"else",
+					'  echo "FINAL OUTPUT MAF is missing; not running md5sum/bgzip/tabix..."',
+					"fi"
+					);
+
+				# record command (in log directory) and then run job
+				print $log "Submitting job for vcf2maf...\n";
+
+				$run_script = write_script(
+					log_dir => $log_directory,
+					name    => 'run_vcf2maf_and_VEP_' . $sample,
+					cmd     => $vcf2maf_cmd,
+					modules => ['perl', $samtools, 'tabix'],
+					dependencies    => $run_id,
+					hpc_driver      => $args{hpc_driver}
+					);
+
+				$run_id = submit_job(
+					jobname         => 'run_vcf2maf_and_VEP_' . $sample,
+					shell_command   => $run_script,
+					hpc_driver      => $args{hpc_driver},
+					dry_run         => $args{dry_run},
+					log_file	=> $log
+					);
+
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
+				}
+			else {
+				print $log "Skipping vcf2maf because this has already been completed!\n";
+				}
+
+			push @final_outputs, $final_maf;
+			}
+
 		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
 		print $log "---\n";
 		}
@@ -508,7 +591,7 @@ sub main{
 		);
 
 	$run_id = submit_job(
-		jobname		=> 'combine_significant_variants',,
+		jobname		=> 'combine_significant_variants',
 		shell_command	=> $run_script,
 		hpc_driver	=> $args{hpc_driver},
 		dry_run		=> $args{dry_run},
