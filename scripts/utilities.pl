@@ -55,14 +55,24 @@ sub error_checking {
 			$tool_data->{bwa}->{parameters}->{merge}->{mark_dup} = 'N';
 		}
 
-		if (!defined($tool_data->{bwa}->{reference}))  {
+		if (!defined($tool_data->{reference}))  {
 			die("Must supply path to reference genome!");
 		}
+
+		if (!defined($tool_data->{bwa}->{reference}))  {
+			die("Must supply path to bwa index for indicated reference genome!");
+		}
+
+		$is_ref_valid = validate_ref(
+			reference	=> $tool_data->{reference},
+			pipeline	=> 'bwa',
+			exts		=> [qw(.fa .fa.fai .dict)]
+		);
 
 		$is_ref_valid = validate_ref(
 			reference	=> $tool_data->{bwa}->{reference},
 			pipeline	=> 'bwa',
-			exts		=> [qw(.fa .fa.amb .fa.ann .fa.bwt .fa.fai .fa.pac .fa.sa)]
+			exts		=> [qw(.fa .fa.amb .fa.ann .fa.bwt .fa.pac .fa.sa)]
 		);
 	}
 

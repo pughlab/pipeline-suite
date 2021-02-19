@@ -397,7 +397,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_genotype_gvcfs',
 				cmd	=> $hc_command,
 				modules	=> ['perl'],
-				dependencies	=> $hc_run_id,
+				dependencies	=> join(':', $gatk_run_id, $hc_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
@@ -445,18 +445,13 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_annotate_germline',
 				cmd	=> $hc_command,
 				modules	=> ['perl'],
-				dependencies	=> $hc_run_id,
+				dependencies	=> join(':', $gatk_run_id, $hc_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
 				);
 		
-			if ($args{dry_run}) {
-
-				$hc_command .= " --dry-run";
-				`$hc_command`;
-
-				} else {
+			unless ($args{dry_run}) {
 
 				$hc_run_id = submit_job(
 					jobname		=> $log_directory,
@@ -480,7 +475,9 @@ sub main {
 			my $pon = $tool_data->{strelka}->{pon};
 			my $strelka_command;
 
-			if (!defined($tool_data->{strelka}->{pon})) {
+			if (defined($tool_data->{strelka}->{pon})) {
+				$strelka_run_id = '';
+				} else {
 
 				$pon = join('/', $strelka_directory, 'panel_of_normals.vcf');
 
@@ -555,7 +552,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_strelka',
 				cmd	=> $strelka_command,
 				modules	=> ['perl'],
-				dependencies	=> $strelka_run_id,
+				dependencies	=> join(':', $gatk_run_id, $strelka_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
@@ -589,8 +586,9 @@ sub main {
 			my $pon = $tool_data->{mutect}->{pon};
 			my $mutect_command;
 
-			if (!defined($tool_data->{mutect}->{pon})) {
-
+			if (defined($tool_data->{mutect}->{pon})) {
+				$mutect_run_id = '';
+				} else {
 				$pon = join('/', $mutect_directory, 'panel_of_normals.vcf');
 
 				# first create a panel of normals
@@ -665,7 +663,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_mutect',
 				cmd	=> $mutect_command,
 				modules	=> ['perl'],
-				dependencies	=> $mutect_run_id,
+				dependencies	=> join(':', $gatk_run_id, $mutect_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
@@ -699,8 +697,9 @@ sub main {
 			my $pon = $tool_data->{mutect2}->{pon};
 			my $mutect2_command;
 
-			if (!defined($tool_data->{mutect2}->{pon})) {
-
+			if (defined($tool_data->{mutect2}->{pon})) {
+				$mutect2_run_id = '';
+				} else {
 				$pon = join('/', $mutect2_directory, 'panel_of_normals.vcf');
 
 				# first create a panel of normals
@@ -775,7 +774,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_mutect2',
 				cmd	=> $mutect2_command,
 				modules	=> ['perl'],
-				dependencies	=> $mutect2_run_id,
+				dependencies	=> join(':', $gatk_run_id, $mutect2_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
@@ -988,7 +987,7 @@ sub main {
 				log_dir	=> $log_directory,
 				name	=> 'pughlab_dna_pipeline__run_delly',
 				cmd	=> $delly_command,
-				modules	=> ['perl'],
+				modules	=> ['perl', 'samtools'],
 				dependencies	=> $gatk_run_id,
 				mem		=> '256M',
 				max_time	=> $max_time,
@@ -1104,12 +1103,7 @@ sub main {
 			hpc_driver	=> $args{cluster}
 			);
 
-		if ($args{dry_run}) {
-
-			$report_command .= " --dry-run";
-			`$report_command`;
-
-			} else {
+		unless ($args{dry_run}) {
 
 			$report_run_id = submit_job(
 				jobname		=> $log_directory,

@@ -217,7 +217,7 @@ sub main {
 	print $log "---\n";
 	print $log "Running BWA-MEM alignment pipeline.\n";
 	print $log "\n  Tool config used: $tool_config";
-	print $log "\n    Reference: $tool_data->{bwa}->{reference}";
+	print $log "\n    Reference: $tool_data->{reference}";
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config\n";
 	print $log "\n---";

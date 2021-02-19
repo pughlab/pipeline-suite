@@ -242,7 +242,6 @@ sub main{
 		} elsif ('GRCh37' eq $tool_data->{ref_type}) {
 		print $log "\n      Using GRCh37-lite variant calling files: /cluster/projects/pughlab/references/GRCh37_variantcalling_ref/";
 		$known_1000g	= '/cluster/projects/pughlab/references/GRCh37_variantcalling_ref/1000G_phase1.snps.high_confidence.grch37.vcf';
-		$known_indels	= '/cluster/projects/pughlab/references/GRCh37_variantcalling_ref/1000G_phase1.indels.grch37.vcf';
 		$known_mills	= '/cluster/projects/pughlab/references/GRCh37_variantcalling_ref/Mills_and_1000G_gold_standard.indels.grch37.vcf';
 		}
 

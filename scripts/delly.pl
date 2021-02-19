@@ -346,8 +346,6 @@ sub pon {
 	my $delly	= 'delly/' . $tool_data->{delly_version};
 	my $samtools 	= 'samtools/' . $tool_data->{samtools_version};
 
-	`module load $samtools`;
-
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{delly}->{parameters};
 
