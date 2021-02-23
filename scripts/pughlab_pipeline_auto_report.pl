@@ -361,6 +361,7 @@ sub main {
 
 		$qc_dir		= join('/', $output_directory, 'BAMQC');
 		$germ_dir	= join('/', $output_directory, 'HaplotypeCaller/cohort/germline_variants');
+		$cpsr_dir	= join('/', $output_directory, 'HaplotypeCaller/CPSR');
 
 		# contamination estimates
 		opendir(CONTEST, $qc_dir . "/ContEst") or die "Cannot open '$qc_dir/ContEst' !";
@@ -449,6 +450,51 @@ sub main {
 			);
 
 		push @job_ids, $qc_run_id;
+
+		# significant germline variants
+		opendir(CPSR, $cpsr_dir) or die "Cannot open '$cpsr_dir' !";
+		my @cpsr_files = grep { /mutations_for_cbioportal.tsv/ } readdir(CPSR);
+		@cpsr_files = sort @cpsr_files;
+		closedir(CPSR);
+
+		$cpsr_calls = join('/', $cpsr_dir, $cpsr_files[-1]);
+
+		if ( -l join('/', $data_directory, 'significant_germline_variants.tsv')) {
+			unlink join('/', $data_directory, 'significant_germline_variants.tsv');
+			}
+
+		symlink($cpsr_calls, join('/', $data_directory, 'significant_germline_variants.tsv'));
+
+		# summarize/plot CPSR output
+		my $plot_command = "cd $output_directory\n";
+		$plot_command .= "Rscript $cwd/report/plot_germline_snv_summary.R";
+		$plot_command .= " " . join(' ',
+			'-m', $cpsr_calls,
+			'-o', $plot_directory,
+			'-p', $tool_data->{project_name}
+			);
+
+		# run command
+		print $log "Submitting job to create germline SNV plots...\n";
+		$run_script = write_script(
+			log_dir		=> $log_directory,
+			name		=> 'plot_germline_snv_summary',
+			cmd		=> $plot_command,
+			modules		=> [$r_version],
+			max_time	=> '01:00:00',
+			mem		=> '2G',
+			hpc_driver	=> $args{cluster}
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'plot_germline_snv_summary',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{cluster},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @job_ids, $run_id;
 
 
 		# somatic variants

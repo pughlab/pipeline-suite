@@ -236,6 +236,7 @@ somaticsniper:
             time: '24:00:00'
 vardict:
     run: Y
+    intervals:
     pon: 
     parameters:
         vardict:

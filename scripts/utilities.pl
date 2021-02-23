@@ -134,8 +134,8 @@ sub error_checking {
 				}
 			}
 
-			if ( ( any { /$pipeline/ } qw(vardict) ) && (any { /$tool_data->{seq_type}/ } qw(wgs) ) ) {
-				$intervals = $tool_data->{intervals_bed};
+			if ( ('vardict' eq $pipeline) && ('wgs' eq $tool_data->{seq_type}) ) {
+				$intervals = $tool_data->{vardict}->{intervals};
 				if ( (!defined($intervals)) || ('Y' eq missing_file($intervals)) ) {
 					die("For VarDict on WGS, intervals in the form of chr:start-end MUST be provided.");
 				}

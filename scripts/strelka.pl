@@ -687,9 +687,11 @@ sub main {
 	$reference = $tool_data->{reference};
 	$seq_type = $tool_data->{seq_type};
 
-	$intervals = $tool_data->{intervals_bed};
-	$intervals =~ s/\.bed/_padding100bp.bed.gz/;
-	print $log "\n    Target intervals: $intervals";
+	if ('exome' eq $seq_type) {
+		$intervals = $tool_data->{intervals_bed};
+		$intervals =~ s/\.bed/_padding100bp.bed.gz/;
+		print $log "\n    Target intervals: $intervals";
+		}
 
 	if (defined($tool_data->{strelka}->{pon})) {
 		print $log "\n      Panel of Normals: $tool_data->{strelka}->{pon}";

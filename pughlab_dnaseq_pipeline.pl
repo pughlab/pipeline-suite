@@ -110,6 +110,7 @@ sub main {
 
 	if ( (!$args{step1}) && ($args{step2}) ) {
 		$gatk_output_yaml = $data_config;
+		$gatk_run_id = '';
 		}
 
 	# Should pre-processing (alignment + GATK indel realignment/recalibration + QC) be performed?
@@ -329,6 +330,7 @@ sub main {
 		## run GATK's HaplotypeCaller pipeline
 		if ('Y' eq $tool_data->{haplotype_caller}->{run}) {
 	 
+			$hc_run_id = '';
 			my $hc_command = join(' ',
 				"perl $cwd/scripts/haplotype_caller.pl",
 				"-o", $hc_directory,

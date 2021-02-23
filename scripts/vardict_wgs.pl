@@ -36,12 +36,44 @@ our ($reference, $pon, $intervals_bed) = undef;
 #	--dry_run indicates that this is a dry run
 
 ### DEFINE SUBROUTINES #############################################################################
+# format command to split bam by chromosome
+sub split_bam_command {
+	my %args = (
+		bam		=> undef,
+		id		=> undef,
+		intervals	=> undef,
+		tmp_dir		=> undef,
+		@_
+		);
+
+	my $output_stem = join('/', $args{tmp_dir}, $args{id});
+
+	my $split_command .= "\n" . 'CHR=$(sed -n "$SLURM_ARRAY_TASK_ID"p ' . $args{intervals} . ')';
+
+	$split_command .= "\n\n" . "if [ -s $output_stem" . '_${CHR}.bam.bai ]; then';
+	$split_command .= "\n  echo $output_stem" . '_${CHR}.bam.bai already exists.';
+	$split_command .= "\nelse";
+
+	$split_command .= "\n\n  " . join(' ',
+		'samtools view -b',
+		$args{bam}, '$CHR',
+		'>', $output_stem . '_${CHR}.bam' . "\n\n ",
+		'samtools index',
+		 $output_stem . '_${CHR}.bam'
+		);
+
+	$split_command .= "\nfi";
+
+	return($split_command);
+	}
+
 # format command to run VarDict SNV calling for WGS
 sub get_vardict_command_wgs {
 	my %args = (
-		tumour		=> undef,
-		normal		=> undef,
+#		tumour		=> undef,
+		normal_id	=> undef,
 		tumour_id	=> undef,
+		tmp_dir		=> undef,
 		output_stem	=> undef,
 		intervals	=> undef,
 		modifier	=> undef,
@@ -52,6 +84,7 @@ sub get_vardict_command_wgs {
 
 	$vardict_command .= "\n" . 'LINE=$(expr $SLURM_ARRAY_TASK_ID + ' . $args{modifier} . ')';
 	$vardict_command .= "\n" . 'REGION=$(sed -n "$LINE"p ' . $args{intervals} . ')';
+	$vardict_command .= "\n" . 'CHR=$(echo $REGION | cut -d: -f1)';
 
 	$vardict_command .= "\n\n" . "if [ -s $args{output_stem}" . '_${REGION}.txt.md5 ]; then';
 	$vardict_command .= "\n  echo $args{output_stem}" . '_${REGION}.txt.md5 already exists.';
@@ -65,10 +98,14 @@ sub get_vardict_command_wgs {
 		'-N', $args{tumour_id}
 		);
 
-	if (defined($args{normal})) {
-		$vardict_command .= ' -b ' . '"' . $args{tumour} . '|' . $args{normal} . '"';
+	my $tumour_bam = join('/', $args{tmp_dir}, $args{tumour_id});
+	if (defined($args{normal_id})) {
+		my $normal_bam = join('/', $args{tmp_dir}, $args{normal_id});
+		$vardict_command .= ' -b ' . '"' .
+			$tumour_bam . '_${CHR}.bam|' .
+			$normal_bam . '_${CHR}.bam"';
 		} else {
-		$vardict_command .= " -b $args{tumour}";
+		$vardict_command .= ' -b ' . $tumour_bam . '_${CHR}.bam';
 		}
 
 	$vardict_command .= ' ' . join(' ',
@@ -324,8 +361,8 @@ sub main {
 		$intervals_bed = $tool_data->{intervals_bed};
 		$intervals_bed =~ s/\.bed/_padding100bp.bed/;
 		print $log "\n    Target intervals (exome): $intervals_bed";
-		} elsif (('wgs' eq $tool_data->{seq_type}) & (defined($tool_data->{intervals_bed}))) {
-		$intervals_bed = $tool_data->{intervals_bed};
+		} elsif ('wgs' eq $tool_data->{seq_type}) {
+		$intervals_bed = $tool_data->{vardict}->{intervals};
 		print $log "\n    Target regions (WGS): $intervals_bed";
 		}
 
@@ -429,23 +466,91 @@ sub main {
 		my $link_directory = join('/', $patient_directory, 'bam_links');
 		unless(-e $link_directory) { make_path($link_directory); }
 
+		# create an array to hold final outputs and all patient job ids
+		my (@patient_jobs, @final_outputs, @germline_vcfs, @germline_jobs, @sample_jobs);
+		my @split_jobs;
+
 		# create some symlinks
 		foreach my $normal (@normal_ids) {
 			my @tmp = split /\//, $smp_data->{$patient}->{normal}->{$normal};
 			$link = join('/', $link_directory, $tmp[-1]);
 			symlink($smp_data->{$patient}->{normal}->{$normal}, $link);
+
+			my $split_bam_command = split_bam_command(
+				bam		=> $smp_data->{$patient}->{normal}->{$normal},
+				id		=> $normal,
+				intervals	=> $chr_file,
+				tmp_dir		=> $tmp_directory
+				);
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for SplitBam...\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'run_split_by_chromosome_' . $normal,
+				cmd	=> $split_bam_command,
+				modules	=> [$samtools],
+				max_time	=> '04:00:00',
+				mem		=> '1G',
+				hpc_driver	=> $args{hpc_driver},
+				extra_args	=> '--array=1-' . scalar(@chroms)
+				);
+
+			$run_id = submit_job(
+				jobname		=> 'run_split_by_chromosome_' . $normal,
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @split_jobs, $run_id;
+			push @patient_jobs, $run_id;
+			push @all_jobs, $run_id;
 			}
+
 		foreach my $tumour (@tumour_ids) {
 			my @tmp = split /\//, $smp_data->{$patient}->{tumour}->{$tumour};
 			$link = join('/', $link_directory, $tmp[-1]);
 			symlink($smp_data->{$patient}->{tumour}->{$tumour}, $link);
+
+			my $split_bam_command = split_bam_command(
+				bam		=> $smp_data->{$patient}->{tumour}->{$tumour},
+				id		=> $tumour,
+				intervals	=> $chr_file,
+				tmp_dir		=> $tmp_directory
+				);
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for SplitBam...\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'run_split_by_chromosome_' . $tumour,
+				cmd	=> $split_bam_command,
+				modules	=> [$samtools],
+				max_time	=> '04:00:00',
+				mem		=> '1G',
+				hpc_driver	=> $args{hpc_driver},
+				extra_args	=> '--array=1-' . scalar(@chroms)
+				);
+
+			$run_id = submit_job(
+				jobname		=> 'run_split_by_chromosome_' . $tumour,
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @split_jobs, $run_id;
+			push @patient_jobs, $run_id;
+			push @all_jobs, $run_id;
 			}
 
-		# create an array to hold final outputs and all patient job ids
-		my (@patient_jobs, @final_outputs, @germline_vcfs, @germline_jobs, @sample_jobs);
-
 		# indicate this should be removed at the end
-		$cleanup_cmd .= "\nrm -rf $tmp_directory";
+		$cleanup_cmd = "\nrm -rf $tmp_directory";
 
 		# check if this patient ONLY has a normal
 		if ( (scalar(@tumour_ids) == 0) & (scalar(@normal_ids) > 0)) {
@@ -454,9 +559,6 @@ sub main {
 
 			my $sample_directory = join('/', $patient_directory, $normal_ids[0]);
 			unless(-e $sample_directory) { make_path($sample_directory); }
-
-			# indicate this should be removed at the end
-			$cleanup_cmd .= "\nrm -rf $tmp_directory";
 
 			@sample_jobs = ();
 			$run_id = '';
@@ -475,8 +577,8 @@ sub main {
 					}
 
 				$vardict_command = get_vardict_command_wgs(
-					tumour		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
 					tumour_id	=> $normal_ids[0],
+					tmp_dir		=> $tmp_directory,
 					output_stem	=> $output_stem,
 					intervals	=> $intervals_bed,
 					modifier	=> $task_array_modifier 
@@ -493,6 +595,7 @@ sub main {
 						name	=> 'run_vardict_' . $normal_ids[0] . '_part' . $task_array_modifier,
 						cmd	=> $vardict_command,
 						modules	=> ['perl', $vardict, $r_version],
+						dependencies	=> join(':', @split_jobs),
 						max_time	=> $parameters->{vardict}->{time},
 						mem		=> $parameters->{vardict}->{mem},
 						hpc_driver	=> $args{hpc_driver},
@@ -639,12 +742,6 @@ sub main {
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
 
-			my $tmp_directory = join('/', $sample_directory, 'TEMP');
-			unless(-e $tmp_directory) { make_path($tmp_directory); }
-
-			# indicate this should be removed at the end
-			$cleanup_cmd .= "\nrm -rf $tmp_directory";
-
 			@sample_jobs = ();
 			$run_id = '';
 
@@ -662,9 +759,11 @@ sub main {
 					}
 
 				$vardict_command = get_vardict_command_wgs(
-					tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
-					normal		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
+			#		tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
+			#		normal		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
 					tumour_id	=> $sample,
+					normal_id	=> $normal_ids[0],
+					tmp_dir		=> $tmp_directory,
 					output_stem	=> $output_stem,
 					intervals	=> $intervals_bed,
 					modifier	=> $task_array_modifier
@@ -681,6 +780,7 @@ sub main {
 						name	=> 'run_vardict_' . $sample . '_part' . $task_array_modifier,
 						cmd	=> $vardict_command,
 						modules	=> ['perl', $vardict, $r_version],
+						dependencies	=> join(':', @split_jobs),
 						max_time	=> $parameters->{vardict}->{time},
 						mem		=> $parameters->{vardict}->{mem},
 						hpc_driver	=> $args{hpc_driver},
@@ -1075,16 +1175,8 @@ sub main {
 		my $link_directory = join('/', $patient_directory, 'bam_links');
 		unless(-e $link_directory) { make_path($link_directory); }
 
-		# create some symlinks
-		foreach my $tumour (@tumour_ids) {
-			my @tmp = split /\//, $smp_data->{$patient}->{tumour}->{$tumour};
-			$link = join('/', $link_directory, $tmp[-1]);
-			symlink($smp_data->{$patient}->{tumour}->{$tumour}, $link);
-			}
-
 		# create an array to hold final outputs and all patient job ids
 		my (@patient_jobs, @final_outputs, @sample_jobs);
-		my $cleanup_cmd;
 
 		# for each tumour sample
 		foreach my $sample (@tumour_ids) {
@@ -1097,11 +1189,47 @@ sub main {
 			my $tmp_directory = join('/', $sample_directory, 'TEMP');
 			unless(-e $tmp_directory) { make_path($tmp_directory); }
 
-			# indicate this should be removed at the end
-			$cleanup_cmd .= "\nrm -rf $tmp_directory";
-
 			@sample_jobs = ();
 			$run_id = '';
+			my $cleanup_cmd = "rm -rf $tmp_directory";
+
+			# create some symlinks
+			my @tmp = split /\//, $smp_data->{$patient}->{tumour}->{$sample};
+			$link = join('/', $link_directory, $tmp[-1]);
+			symlink($smp_data->{$patient}->{tumour}->{$sample}, $link);
+
+			my $split_bam_command = split_bam_command(
+				bam		=> $smp_data->{$patient}->{tumour}->{$sample},
+				id		=> $sample,
+				intervals	=> $chr_file,
+				tmp_dir		=> $tmp_directory
+				);
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for SplitBam...\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'run_split_by_chromosome_' . $sample,
+				cmd	=> $split_bam_command,
+				modules	=> [$samtools],
+				max_time	=> '12:00:00',
+				mem		=> '1G',
+				hpc_driver	=> $args{hpc_driver},
+				extra_args	=> '--array=1-' . scalar(@chroms)
+				);
+
+			$run_id = submit_job(
+				jobname		=> 'run_split_by_chromosome_' . $sample,
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @sample_jobs, $run_id;
+			push @patient_jobs, $run_id;
+			push @all_jobs, $run_id;
 
 			# create output stem
 			my $output_stem = join('/', $tmp_directory, $sample . '_VarDict');
@@ -1117,8 +1245,9 @@ sub main {
 					}
 
 				$vardict_command = get_vardict_command_wgs(
-					tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
+			#		tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
 					tumour_id	=> $sample,
+					tmp_dir		=> $tmp_directory,
 					output_stem	=> $output_stem,
 					intervals	=> $intervals_bed,
 					modifier	=> $task_array_modifier
@@ -1135,6 +1264,7 @@ sub main {
 						name	=> 'run_vardict_' . $sample . '_part' . $task_array_modifier,
 						cmd	=> $vardict_command,
 						modules	=> ['perl', $vardict, $r_version],
+						dependencies	=> $run_id,
 						max_time	=> $parameters->{vardict}->{time},
 						mem		=> $parameters->{vardict}->{mem},
 						hpc_driver	=> $args{hpc_driver},

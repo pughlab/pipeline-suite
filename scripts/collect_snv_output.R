@@ -59,6 +59,11 @@ date <- Sys.Date();
 setwd(arguments$directory);
 
 
+### MAF CODING
+# ensure proper coding of maf columns; this should be consistent, however may change with versions
+maf.classes <- rep('character',132);
+maf.classes[c(2,6,7,40:45,58,60,77:85,100:107,112:122,124:132)] <- 'numeric';
+
 ### VARIANT CODING
 # 1 = missense, 2 = stop gain, 3 = stop loss, 4 = splicing, 5 = frameshift, 6 = in frame indel, 7 = tss
 # 8 = RNA, 9 = other (up/downstream, UTR, intergenic, silent, intron), 10 = ITD
@@ -140,7 +145,11 @@ for (i in 1:length(maf.files)) {
 	samples <- unique(c(samples, smp));
 
 	# read in data
-	tmp <- read.delim(file, comment.char = "#", as.is = TRUE);
+	if (is.germline) {
+		tmp <- read.delim(file, comment.char = "#", colClasses = maf.classes);
+		} else {
+		tmp <- read.delim(file, comment.char = "#", as.is = TRUE);
+		}
 
 	## do some filtering
 	# remove any poor quality variants
@@ -161,9 +170,7 @@ for (i in 1:length(maf.files)) {
 # save full (combined) maf data to file
 full.maf.data <- do.call(rbind, maf.data);
 
-if (is.rnaseq) {
-	full.maf.data[,c('Matched_Norm_Sample_Barcode','Match_Norm_Seq_Allele1','Match_Norm_Seq_Allele2')] <- NA;
-	}
+full.maf.data[which(full.maf.data$Matched_Norm_Sample_Barcode == 'NORMAL'),c('Matched_Norm_Sample_Barcode','Match_Norm_Seq_Allele1','Match_Norm_Seq_Allele2')] <- NA;
 
 if (!is.rnaseq & !is.germline) {
 	full.maf.data[which(full.maf.data$Matched_Norm_Sample_Barcode != 'NORMAL'),]$Mutation_Status <- 'somatic';

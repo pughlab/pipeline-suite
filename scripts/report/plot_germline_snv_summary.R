@@ -74,8 +74,11 @@ names(variant.colours) <- c('missense','nonsense','nonstop','splicing','frameshi
 variant.colours <- variant.colours[c(1:6,9)];
 
 ### READ DATA ######################################################################################
+maf.classes <- rep('character',132);
+maf.classes[c(2,6,7,40:45,58,60,77:85,100:107,112:122,124:132)] <- 'numeric';
+
 # get data
-input.data <- read.delim(arguments$maf);
+input.data <- read.delim(arguments$maf, colClasses = maf.classes);
 
 # collect list of all samples
 all.samples <- sort(as.character(unique(input.data$Tumor_Sample_Barcode)));
@@ -85,31 +88,35 @@ setwd(arguments$output);
 
 ### FORMAT DATA ####################################################################################
 # indicate key fields
-keep.fields <- c('Tumor_Sample_Barcode','Hugo_Symbol','Chromosome','Variant_Classification','Reference_Allele','Tumor_Seq_Allele2', 't_depth','t_ref_count');
+keep.fields <- c('Tumor_Sample_Barcode','Hugo_Symbol','Chromosome','Variant_Classification','Reference_Allele','Tumor_Seq_Allele2', 't_depth','t_ref_count','n_depth','n_ref_count');
+
 mutation.data <- input.data[,keep.fields];
 
 # calculate tumour vaf
 mutation.data$t_vaf <- 1-(mutation.data$t_ref_count/mutation.data$t_depth);
+mutation.data$n_vaf <- 1-(mutation.data$n_ref_count/mutation.data$n_depth);
 
 # apply variant coding
 mutation.data$Code <- variant.codes$Code[match(mutation.data$Variant_Classification, variant.codes$Classification)];
-mutation.data[which(mutation.data$Code > 6),]$Code <- 9;
+if (any(mutation.data$Code > 6)) {
+	mutation.data[which(mutation.data$Code > 6),]$Code <- 9;
+	}
 
-# get per-sample mutation counts
-sample.counts <- data.frame(cbind(
-	table(mutation.data$Tumor_Sample_Barcode),
-	table(mutation.data[which(mutation.data$Code != 9),]$Tumor_Sample_Barcode)
-	));
-colnames(sample.counts) <- c('Total','Non.Silent');
-
-sample.counts <- sample.counts[order(sample.counts$Total, decreasing = TRUE),];
-sample.counts$Order <- 1:nrow(sample.counts);
+# if there are fewer than 5 germline variants here, write a table to output
+show.germline <- mutation.data[,c('Tumor_Sample_Barcode','Hugo_Symbol','Variant_Classification','t_vaf','n_vaf')];
+colnames(show.germline) <- c('Sample','Symbol','Class','TumourVAF','NormalVAF');
 
 # reduce to 1 mutation per gene per sample [taking the higher priority code]
-mutation.data <- aggregate(
-	Code ~ Tumor_Sample_Barcode + Hugo_Symbol + Chromosome + t_vaf,
+mutation.data.trimmed <- aggregate(
+	Code ~ Tumor_Sample_Barcode + Hugo_Symbol + Chromosome,
 	mutation.data,
 	min
+	);
+
+mutation.data.trimmed <- merge(
+	mutation.data.trimmed,
+	mutation.data[,c('Tumor_Sample_Barcode','Hugo_Symbol','Code','t_vaf','n_vaf')],
+	all.x = TRUE
 	);
 
 # reshape data
@@ -177,47 +184,50 @@ heatmap.data <- heatmap.data[do.call(order, transform(heatmap.data)),];
 vaf.data <- vaf.data[rev(colnames(heatmap.data)),rownames(heatmap.data)];
 vaf.data[is.na(vaf.data)] <- 0;
 
-create.heatmap(
-	plot.data[,rownames(heatmap.data)],
-	cluster.dimensions = 'none',
-	same.as.matrix = TRUE,
-	xaxis.lab = rownames(heatmap.data),
-	yaxis.lab = plot.data$Label,
-	xaxis.cex = axis.cex,
-	yaxis.cex = 1,
-	xaxis.tck = if (axis.cex == 0) { 0 } else { 0.2 },
-	yaxis.tck = 0.2,
-	xaxis.fontface = 'plain',
-	yaxis.fontface = 'plain',
-	axes.lwd = 1,
-	grid.row = TRUE,
-	force.grid.row = TRUE,
-	row.colour = 'grey80',
-	col.colour = 'grey80',
-	row.lwd = if (length(all.samples) < 30) { 3 } else { 1 },
-	col.lwd = if (length(all.samples) < 30) { 3 } else { 1 },
-	grid.col = TRUE,
-	force.grid.col = TRUE,
-	print.colour.key = FALSE,
-	fill.colour = 'white',
-	at = seq(0,length(variant.colours),1),
-	total.colours = length(variant.colours)+1,
-	colour.scheme = variant.colours,
-	row.pos = which(vaf.data > 0, arr.ind = TRUE)[,1],
-	col.pos = which(vaf.data > 0, arr.ind = TRUE)[,2],
-	cell.text = rep(expression("\u25CF"), times = sum(vaf.data > 0)),
-	text.col = 'black',
-	text.cex = 0.4,
-	inside.legend = list(fun = functional.legend, x = 1.02, y = 1),
-	right.padding = 15,
-	height = 6,
-	width = 8,
-	resolution = 200,
-	filename = generate.filename(arguments$project, 'germline_snvs','png')
-	);
+if (nrow(plot.data) > 1) {
+
+	create.heatmap(
+		plot.data[,rownames(heatmap.data)],
+		cluster.dimensions = 'none',
+		same.as.matrix = TRUE,
+		xaxis.lab = rownames(heatmap.data),
+		yaxis.lab = plot.data$Label,
+		xaxis.cex = axis.cex,
+		yaxis.cex = 1,
+		xaxis.tck = if (axis.cex == 0) { 0 } else { 0.2 },
+		yaxis.tck = 0.2,
+		xaxis.fontface = 'plain',
+		yaxis.fontface = 'plain',
+		axes.lwd = 1,
+		grid.row = TRUE,
+		force.grid.row = TRUE,
+		row.colour = 'grey80',
+		col.colour = 'grey80',
+		row.lwd = if (length(all.samples) < 30) { 3 } else { 1 },
+		col.lwd = if (length(all.samples) < 30) { 3 } else { 1 },
+		grid.col = TRUE,
+		force.grid.col = TRUE,
+		print.colour.key = FALSE,
+		fill.colour = 'white',
+		at = seq(0,length(variant.colours),1),
+		total.colours = length(variant.colours)+1,
+		colour.scheme = variant.colours,
+		row.pos = which(vaf.data > 0, arr.ind = TRUE)[,1],
+		col.pos = which(vaf.data > 0, arr.ind = TRUE)[,2],
+		cell.text = rep(expression("\u25CF"), times = sum(vaf.data > 0)),
+		text.col = 'black',
+		text.cex = 0.4,
+		inside.legend = list(fun = functional.legend, x = 1.02, y = 1),
+		right.padding = 15,
+		height = 6,
+		width = 8,
+		resolution = 200,
+		filename = generate.filename(arguments$project, 'germline_snvs','png')
+		);
+	}
 
 save(
-	sample.counts,
+	show.germline,
 	mutation.data,
 	plot.data,
 	variant.colours,
@@ -225,16 +235,28 @@ save(
 	);
 
 # write some captions
-recurrence.caption <- "Summary of short germline variants (SNVs and INDELs). Figure shows most frequently mutated genes; background colours indicate predicted functional consequence (white = no mutation detected) while black circles indicate the variant was also detected in the tumour (such that absence suggests the germline mutation may have been lost).";
+recurrence.caption <- "Summary of short germline variants (SNVs and INDELs). Figure shows most frequently mutated genes; background colours indicate predicted functional consequence (white = no mutation detected) while black circles indicate the variant was also detected in the tumour (such that absence suggests the germline mutation may have reverted - only applicable for T/N pairs).";
 
 # write for latex
 write("\\section{Germline SNV Summary}", file = 'germline_snv_summary.tex');
 
 # first, check for mutation_overlap plot
 if (nrow(plot.data) == 0) {
-	write("\\pagebreak\nNo genes were recurrently mutated across the cohort.", file = 'germline_snv_summary.tex', append = TRUE);
+	write("No genes were recurrently mutated across the cohort.", file = 'germline_snv_summary.tex', append = TRUE);
+	} else if (nrow(input.data) < 5) {
+
+	print(
+		xtable(
+			show.germline,
+			caption = 'List of high-confidence germline mutations across the cohort.'
+			),
+		file = 'germline_snv_summary.tex',
+		include.rownames = FALSE,
+		append = TRUE
+		);
+	
 	} else {
-	write("\\pagebreak\n\\begin{figure}[h!]", file = 'germline_snv_summary.tex', append = TRUE);
+	write("\\begin{figure}[h!]", file = 'germline_snv_summary.tex', append = TRUE);
 	write("\\begin{center}", file = 'germline_snv_summary.tex', append = TRUE);
 	write(paste0(
 		"\\includegraphics[width=0.9\\textwidth]{",
