@@ -1,7 +1,7 @@
-### plot_cna_summary.R ############################################################################
-# Plot CNA landscape and calculate PGA.
+### plot_gatk_cna_summary.R ########################################################################
+# Plot CNA landscape
 # INPUT:
-#	- copy number calls and ploidy/purity estimates (output by collect_sequenza_output.R)
+#	- copy number calls and pga estimates (output by collect_gatk_cnv_output.R)
 
 ### FUNCTIONS ######################################################################################
 # function to generate a standardized filename
@@ -71,18 +71,19 @@ arguments <- parser$parse_args();
 ### READ DATA ######################################################################################
 # get data
 input.data <- read.delim(arguments$cnas);
-ploidy.estimates <- read.delim(arguments$metrics, row.names = 1);
+pga <- read.delim(arguments$metrics, row.names = 1);
 
 # move to output directory
 setwd(arguments$output);
 
 ### FORMAT DATA ####################################################################################
-# make sure ploidy data is sorted
-ploidy.estimates <- ploidy.estimates[order(ploidy.estimates$PGA),];
-ploidy.estimates$Order <- 1:nrow(ploidy.estimates);
+# make sure pga data is sorted
+pga$Order <- 1:nrow(pga);
+pga <- pga[order(pga$PGA),];
+pga$Order <- 1:nrow(pga);
 
 # collect list of all (ordered) samples
-all.samples <- rownames(ploidy.estimates);
+all.samples <- rownames(pga);
 
 # makes sure input.data is sorted
 input.data$Chromosome <- factor(input.data$Chromosome, levels = paste0('chr',c(1:22,'X','Y')));
@@ -123,13 +124,17 @@ covariate.legends <- legend.grob(
 		legend = list(
 			colours = force.colour.scheme(c(1:22,'x'), scheme = 'chromosome'),
 			labels = c(1:22,'X')
+			),
+		legend = list(
+			colours = c('red','white','blue'),
+			labels = c('+1','0','-1')
 			)
 		),
 	size = 2
 	);
 
 # create heatmap
-create.heatmap(
+cna.plot <- create.heatmap(
 	cna.data,
 	cluster.dimensions = 'none',
 	covariates.top = list(
@@ -142,7 +147,7 @@ create.heatmap(
 	covariates.top.grid.border = list(col = 'black', lwd = 1),
 	covariates.top.grid.col = list(col = 'black', lwd = 1),
 	covariates.top.col.lines = chr.breaks,
-	inside.legend = list(fun = covariate.legends, x = 1.02, y = 1),
+#	inside.legend = list(fun = covariate.legends, x = 1.08, y = 1),
 	yaxis.lab = gsub('\\.','-', simplify.ids(colnames(cna.data))),
 	xaxis.lab = rep('',nrow(cna.data)),
 	yaxis.cex = axis.cex,
@@ -154,29 +159,24 @@ create.heatmap(
 	grid.col = TRUE,
 	force.grid.col = TRUE,
 	col.lines = chr.breaks,
-	print.colour.key = TRUE,
+	print.colour.key = FALSE,
 	fill.colour = 'grey50',
-	at = seq(-2.5,2.5,1),
+	at = seq(-1.5,1.5,1),
 	colour.scheme = c('blue','white','red'),
-	colourkey.labels.at = seq(-2,2,1),
-	colourkey.labels = seq(-2,2,1),
-	colourkey.cex = 1,
-	height = if (length(all.samples) > 12) { 8 } else { 5 },
-	width = 12,
-	resolution = 400,
-	right.padding = 12,
-	filename = generate.filename(arguments$project, 'cna_landscape','png')
+	colourkey.labels.at = seq(-1,1,1),
+	colourkey.labels = c('loss','neutral','gain'),
+	colourkey.cex = 1
 	);
 
 # create plot for PGA
 pga.plot <- create.barplot(
 	Order ~ PGA,
-	ploidy.estimates,
-	yaxis.lab = simplify.ids(rownames(ploidy.estimates)),
+	pga,
+	yaxis.lab = rep('', nrow(pga)),
 	ylimits = c(0.5, length(all.samples)+0.5),
 	yat = seq(1,length(all.samples)),
 	xaxis.tck = c(0.5,0),
-	yaxis.tck = if (axis.cex == 0) { 0 } else { c(0.2,0) },
+	yaxis.tck = 0,
 	xaxis.fontface = 'plain',
 	yaxis.fontface = 'plain',
 	xlab.label = "PGA\n",
@@ -185,53 +185,6 @@ pga.plot <- create.barplot(
 	xlimits = c(0,100),
 	xat = seq(0,100,50),
 	xaxis.cex = 1,
-	yaxis.cex = if (max(nchar(all.samples))>10) { 0.75*axis.cex } else { axis.cex },
-	axes.lwd = 1,
-	top.padding = 0,
-	plot.horizontal = TRUE
-	);
-
-# create plot for cellulariy (purity) estimates
-purity.plot <- create.barplot(
-	Order ~ cellularity,
-	ploidy.estimates,
-	yaxis.lab = rep('', length(all.samples)),
-	ylimits = c(0.5, length(all.samples)+0.5),
-	yat = seq(1,length(all.samples)),
-	xaxis.tck = c(0.5,0),
-	yaxis.tck = 0,
-	xaxis.fontface = 'plain',
-	yaxis.fontface = 'plain',
-	xlab.label = "Tumour\nCellularity",
-	xlab.cex = 1,
-	ylab.label = NULL,
-	xlimits = c(0,1),
-	xat = seq(0,1,0.5),
-	xaxis.cex = 1,
-	yaxis.cex = axis.cex,
-	axes.lwd = 1,
-	top.padding = 0,
-	plot.horizontal = TRUE
-	);
-
-# create plot for ploidy estimates
-ploidy.plot <- create.barplot(
-	Order ~ ploidy,
-	ploidy.estimates,
-	yaxis.lab = rep('', length(all.samples)),
-	ylimits = c(0.5, length(all.samples)+0.5),
-	yat = seq(1, length(all.samples)),
-	xaxis.tck = c(0.5,0),
-	yaxis.tck = 0,
-	xaxis.fontface = 'plain',
-	yaxis.fontface = 'plain',
-	xlab.label = "Ploidy\nEstimate",
-	xlab.cex = 1,
-	ylab.label = NULL,
-	xlimits = c(0,max(ceiling(ploidy.estimates$ploidy))+0.1),
-	xat = seq(0,max(ceiling(ploidy.estimates$ploidy)), 1),
-	xaxis.cex = 1,
-	yaxis.cex = axis.cex,
 	axes.lwd = 1,
 	top.padding = 0,
 	plot.horizontal = TRUE
@@ -239,62 +192,27 @@ ploidy.plot <- create.barplot(
 
 # combine them!
 create.multipanelplot(
-	plot.objects = list(pga.plot, purity.plot, ploidy.plot),
-	height = if (nrow(ploidy.estimates) <= 30) { 6 } else { 8 },
-	width = 7,
+	plot.objects = list(cna.plot, pga.plot),
+	height = if (nrow(pga) <= 30) { 6 } else { 8 },
+	width = 12,
 	resolution = 200,
-	filename = generate.filename(arguments$project, 'scna_metrics','png'),
-	layout.width = 3,
+	filename = generate.filename(arguments$project, 'gatk_scna_landscape','png'),
+	layout.width = 2,
 	layout.height = 1,
-	plot.objects.widths = c(1.2,1,1), #if (axis.cex > 0) { c(1.5,1,1) } else {  c(1.2,1,1) },
+	legend = list(right = list(fun = covariate.legends)),
+	plot.objects.widths = c(6,0.8),
 	left.legend.padding = 0,
-	right.legend.padding = 0,
+	right.legend.padding = 1,
 	top.legend.padding = 0,
 	bottom.legend.padding = 0,
-	x.spacing = 1,
-	top.padding = -1
+	bottom.padding = -1
 	);
 
 save(
 	cna.data,
-	ploidy.estimates,
-	file = generate.filename(arguments$project, 'cna_data', 'RData')
+	pga,
+	file = generate.filename(arguments$project, 'gatk_cna_data', 'RData')
 	);
 
-# write some captions
-summary.caption <- "Estimated PGA (percent genome altered; left), tumour cellularity (middle) and ploidy (right) estimates for each sample; only available for samples with a matched normal."; 
-cna.caption <- "Ploidy-adjusted CNA profile, ordered by genomic position (chr1 [left] to chrX [right]) and PGA (high [top] to low [bottom]); only available for tumour samples with a matched normal.";
-
-# write for latex
-write("\\section{SCNA Summary}", file = 'cna_summary.tex');
-
-# CNA landscape plot
-write("\\begin{figure}[h!]", file = 'cna_summary.tex', append = TRUE);
-write("\\begin{center}", file = 'cna_summary.tex', append = TRUE);
-write(paste0(
-	"\\includegraphics[width=0.9\\textwidth]{",
-	getwd(), '/',
-	generate.filename(arguments$project, 'cna_landscape','png'), '}'
-	), file = 'cna_summary.tex', append = TRUE);
-write("\\end{center}", file = 'cna_summary.tex', append = TRUE);
-write(paste0(
-	"\\caption{", cna.caption, "}"
-	), file = 'cna_summary.tex', append = TRUE);
-write("\\end{figure}\n", file = 'cna_summary.tex', append = TRUE);
-
-# Purity/Ploidy plot
-write("\\pagebreak\n\\begin{figure}[h!]", file = 'cna_summary.tex', append = TRUE);
-write("\\begin{center}", file = 'cna_summary.tex', append = TRUE);
-write(paste0(
-	"\\includegraphics[width=0.9\\textwidth]{",
-	getwd(), '/',
-	generate.filename(arguments$project, 'scna_metrics','png'), '}'
-	), file = 'cna_summary.tex', append = TRUE);
-write("\\end{center}", file = 'cna_summary.tex', append = TRUE);
-write(paste0(
-	"\\caption{", summary.caption, "}"
-	), file = 'cna_summary.tex', append = TRUE);
-write("\\end{figure}\n", file = 'cna_summary.tex', append = TRUE);
-
 ### SAVE SESSION INFO ##############################################################################
-save.session.profile(generate.filename('CNASummary','SessionProfile','txt'));
+save.session.profile(generate.filename('GATKCNASummary','SessionProfile','txt'));

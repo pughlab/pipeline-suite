@@ -40,7 +40,7 @@ fillgaps <- function(seg) {
   
 	for (i in 1:(nrow(seg)-1)) {
 
-		chr <- as.character(seg[i,]$chromosome);
+		chr <- as.character(seg[i,]$chromos);
 		start <- seg[i,]$start.pos;
 		end <- seg[i,]$end.pos;
 
@@ -67,7 +67,6 @@ parser <- ArgumentParser();
 
 parser$add_argument('-d', '--directory', type = 'character', help = 'path to data directory');
 parser$add_argument('-p', '--project', type = 'character', help = 'project name');
-parser$add_argument('-o', '--optimized', type = 'logical', help = 'was gamma tuning performed?', default = FALSE);
 parser$add_argument('-g', '--gtf', type = 'character', help = 'annotation gtf (refGene)',
 	default = '/cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.annotation.gtf');
 parser$add_argument('-t', '--targets', type = 'character', help = 'target intervals');
@@ -96,24 +95,24 @@ refGene <- droplevels(refGene[which(gene.widths > 20),]);
 refGene.gr <- GRanges(refGene);
 
 refGene$GeneID <- sapply(
-	refGene$INFO,
-	function(i) {
-		parts <- unlist(strsplit(as.character(i), ';'));
-		gene_name <- unlist(strsplit(parts[grepl('gene_id', parts)], ' '));
-		gene_id  <- gene_name[length(gene_name)];
-		return(gene_id);
-		}
-	);
+        refGene$INFO,
+        function(i) {
+                parts <- unlist(strsplit(as.character(i), ';'));
+                gene_name <- unlist(strsplit(parts[grepl('gene_id', parts)], ' '));
+                gene_id  <- gene_name[length(gene_name)];
+                return(gene_id);
+                }
+        );
 
 refGene$Symbol <- sapply(
-	refGene$INFO,
-	function(i) {
-		parts <- unlist(strsplit(as.character(i), ';'));
-		gene_name <- unlist(strsplit(parts[grepl('gene_name', parts)], ' '));
-		gene_symbol <- gene_name[length(gene_name)];
-		return(gene_symbol);
-		}
-	);
+        refGene$INFO,
+        function(i) {
+                parts <- unlist(strsplit(as.character(i), ';'));
+                gene_name <- unlist(strsplit(parts[grepl('gene_name', parts)], ' '));
+                gene_symbol <- gene_name[length(gene_name)];
+                return(gene_symbol);
+                }
+        );
 
 refGene$Chromosome <- factor(refGene$Chromosome, levels = paste0('chr',c(1:22,'X','Y')));
 refGene <- refGene[,-4];
@@ -124,8 +123,8 @@ gene.gr <- GRanges(refGene);
 refGene$Target <- NA;
 if (!is.null(arguments$targets)) {
 
-	target.intervals <- read.delim(arguments$targets, header = F, comment.char = '#');
-	colnames(target.intervals)[1:3] <- c('Chromosome','Start','End');
+	target.intervals <- read.delim(arguments$targets, header = F, comment.char = '@');
+	colnames(target.intervals)[1:4] <- c('Chromosome','Start','End','Strand');
 
 	target.gr <- GRanges(target.intervals);
 
@@ -137,56 +136,17 @@ if (!is.null(arguments$targets)) {
 
 ### MAIN ###########################################################################################
 # find results files
-ploidy.files <- list.files(pattern = 'alternative_solutions.txt$', recursive = TRUE);
-cn.files <- list.files(pattern = 'Total_CN.seg$', recursive = TRUE);
-cn.files <- cn.files[!grepl('^2021',cn.files)];
-seg.files <- list.files(pattern = 'segments.txt$', recursive = TRUE);
-seg.files <- seg.files[!grepl('^2021',seg.files)];
-
-if (arguments$optimized) {
-	ploidy.files <- ploidy.files[grepl('optimized', ploidy.files)];
-	cn.files <- cn.files[grepl('optimized', cn.files)];
-	seg.files <- seg.files[grepl('optimized', seg.files)];
-	} else {
-	ploidy.files <- ploidy.files[!grepl('optimized', ploidy.files)];
-	cn.files <- cn.files[!grepl('optimized', cn.files)];
-	seg.files <- seg.files[!grepl('optimized', seg.files)];
-	}
-
-# read them in
-ploidy.list <- list();
-
-for (file in ploidy.files) {
-	# extract sample ID
-	smp <- unlist(strsplit(file, '\\/'));
-	smp <- unlist(strsplit(smp[length(smp)], '_'))[1];
-	# store data in list
-	if (smp %in% names(ploidy.list)) { next; }
-	ploidy.list[[smp]] <- read.delim(file);
-	}
-
-# format ploidy/cellularity results
-ploidy.data <- do.call(rbind, ploidy.list);
-ploidy.data$Sample <- sapply(rownames(ploidy.data), function(i) { unlist(strsplit(as.character(i),'\\.'))[1] } );
-ploidy.data$Order <- sapply(rownames(ploidy.data), function(i) { unlist(strsplit(as.character(i),'\\.'))[2] } );
-if (any(is.na(ploidy.data$Order))) {
-	ploidy.data[is.na(ploidy.data$Order),]$Order <- 1;
-	}
-
-# combine for writing
-ploidy.formatted <- ploidy.data[which(ploidy.data$Order == 1),c('Sample','SLPP','cellularity','ploidy')];
-
-# add field for PGA (to be filled in later)
-ploidy.formatted$PGA <- NA;
+cr.files <- list.files(pattern = 'called.seg', recursive = TRUE);
+cr.files <- cr.files[!grepl('^2021', cr.files)];
 
 # read them in
 cn.list <- list();
 
-for (file in cn.files) {
+for (file in cr.files) {
 	# extract sample ID
-	smp <- unlist(strsplit(basename(file), '_'))[1];
+	smp <- unlist(strsplit(basename(file), '\\.'))[1];
 	# store data in list
-	tmp <- read.delim(file, as.is = TRUE);
+	tmp <- read.delim(file, as.is = TRUE, comment.char = '@');
 	tmp$ID <- smp;
 	cn.list[[smp]] <- tmp;
 	rm(tmp);
@@ -194,108 +154,45 @@ for (file in cn.files) {
 
 cn.data <- do.call(rbind, cn.list);
 
+# adjust slightly for compatibility with cbioportal
+cn.data <- cn.data[,c('ID','CONTIG','START','END','NUM_POINTS_COPY_RATIO','MEAN_LOG2_COPY_RATIO','CALL')];
+colnames(cn.data) <- c('ID','chrom','loc.start','loc.end','num.mark','seg.mean','call');
+
 cn.data$chrom <- gsub('chr','',cn.data$chrom);
 
 # save combined/formatted data to file
 write.table(
 	cn.data,
-	file = generate.filename(arguments$project, 'Sequenza_Total_CN', 'seg'),
+	file = generate.filename(arguments$project, 'gatk_cnv_calls', 'tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
 	quote = FALSE,
 	sep = '\t'
 	);
 
-# and for segments
-seg.list <- list();
-
-for (file in seg.files) {
-	# extract sample ID
-	smp <- unlist(strsplit(basename(file), '_'))[1];
-
-	# store data in list
-	if (smp %in% names(seg.list)) { next; }
-	segs <- read.delim(file);
-	segs <- fillgaps(segs[!is.na(segs$CNt),]);
-	seg.list[[smp]] <- segs;
-	}
-
-# format segments for gistic
-segment.data <- do.call(rbind, seg.list);
-segment.data$Sample <- sapply(rownames(segment.data), function(i) { unlist(strsplit(i,'\\.'))[1] } );
-segment.data$Seg.CN <- (log2(2*segment.data$depth.ratio)-1);
-segment.data <- segment.data[,c('Sample','chromosome','start.pos','end.pos','N.BAF','Seg.CN')];
-
-write.table(
-	segment.data,
-	file = generate.filename(arguments$project, 'segments_for_gistic', 'tsv'),
-	row.names = FALSE,
-	col.names = TRUE,
-	sep = '\t',
-	quote = FALSE
-	);
-
-markers <- unique(data.frame(
-	chr = rep(segment.data$chromosome, times = 2),
-	pos = c(segment.data$start.pos, segment.data$end.pos)
-	));
-
-markers$chr <- factor(markers$chr, levels = paste0('chr',c(1:22,'X','Y')));
-markers <- markers[order(markers$chr, -markers$pos),];
-rownames(markers) <- 1:nrow(markers);
-
-write.table(
-	markers,
-	file = generate.filename(arguments$project, 'markers_for_gistic','txt'),
-	row.names = TRUE,
-	col.names = FALSE,
-	sep = '\t',
-	quote = FALSE
-	);
-
 # define a results table
 gene.data <- refGene;
-for (smp in names(seg.list)) {
+for (smp in names(cn.list)) {
 	gene.data[,smp] <- 0;
 	}
 
-for (smp in names(seg.list)) {
+pga.values <- list();
+
+for (smp in names(cn.list)) {
 
 	# convert to GRanges
-	tmp <- seg.list[[smp]][,c('chromosome','start.pos','end.pos','CNt')];
+	tmp <- cn.list[[smp]][,c('CONTIG','START','END','CALL')];
 	colnames(tmp) <- c('chrom','start','end','CN');
+	tmp$CN <- factor(tmp$CN, levels = c('-','0','+'), labels = c(-1,0,1));
+	tmp$CN <- as.numeric(as.character(tmp$CN));
 
-	ploidy <- round(ploidy.formatted[which(ploidy.formatted$Sample == smp),]$ploidy);
-
-	tmp$AbsCN <- ifelse(
-		# if ploidy is high AND CN is high, indicate amplification
-		ploidy > 2 & (tmp$CN - round(ploidy)) >= 2, 2,
-		# or, if ploidy is low/diploid AND CN is high, indicate amplification
-		ifelse(
-			ploidy <= 2 & (tmp$CN - 2) >= 2, 2,
-			ifelse(
-				# regardless, if CN == 0, this is homozygous deletion
-				tmp$CN == 0, -2,
-				ifelse(
-					# if ploidy-adjusted CN is > 0, inidate gain
-					(tmp$CN - round(ploidy)) >= 1, 1,
-					ifelse(
-						# if ploidy-adjusted CN is < 0, indicate loss
-						# anything left is neutral
-						(tmp$CN - round(ploidy)) <= -1, -1, 0
-						)
-					)
-				)
-			)
-		);
-
-	tmp <- tmp[which(tmp$AbsCN != 0),];
+	tmp <- tmp[which(tmp$CN != 0),];
 	if (nrow(tmp) == 0) { next; }
 	rownames(tmp) <- paste0('seg', 1:nrow(tmp));
 
 	# calculate PGA
 	pga <- sum(tmp$end - tmp$start)/(3*10**9)*100;
-	ploidy.formatted[which(ploidy.formatted$Sample == smp),]$PGA <- pga;
+	pga.values[[smp]] <- pga;
 
 	# extract gene data
 	gr <- GRanges(tmp);
@@ -306,22 +203,25 @@ for (smp in names(seg.list)) {
 
 	for (i in rownames(regionsWithHits)) {
 		genes <- gene.gr[overlapGenes[which(overlapGenes$queryHits == sub('seg','',i)),]$subjectHits,]$GeneID;
-		gene.data[which(gene.data$GeneID %in% genes),smp] <- tmp[i,]$AbsCN;
+		gene.data[which(gene.data$GeneID %in% genes),smp] <- tmp[i,]$CN;
 		}
 	}
 
+pga.data <- do.call(rbind, pga.values);
+colnames(pga.data)[1] <- 'PGA';
+
 # save data to file
 write.table(
-	ploidy.formatted,
-	file = generate.filename(arguments$project, 'Sequenza_ploidy_purity','tsv'),
-	row.names = FALSE,
+	pga.data,
+	file = generate.filename(arguments$project, 'gatk_pga_estimates','tsv'),
+	row.names = TRUE,
 	col.names = TRUE,
 	sep = '\t'
 	);
 
 write.table(
 	gene.data,
-	file = generate.filename(arguments$project, 'Sequenza_cna_gene_matrix', 'tsv'),
+	file = generate.filename(arguments$project, 'gatk_cna_gene_matrix', 'tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
 	sep = '\t'
@@ -373,8 +273,8 @@ gene.data <- gene.data[order(gene.data$Chromosome, gene.data$Start, gene.data$En
 colnames(gene.data)[which(colnames(gene.data) == 'Symbol')] <- 'Hugo_Symbol';
 
 write.table(
-	gene.data[,c('Hugo_Symbol', names(seg.list))],
-	file = generate.filename(arguments$project, 'thresholded_CN_data_Absolute_Sequenza_for_cbioportal', 'tsv'),
+	gene.data[,c('Hugo_Symbol', names(cn.list))],
+	file = generate.filename(arguments$project, 'somatic_cnv_for_cbioportal', 'tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
 	quote = FALSE,
