@@ -216,11 +216,11 @@ if (nrow(plot.data) > 1) {
 		col.pos = which(vaf.data > 0, arr.ind = TRUE)[,2],
 		cell.text = rep(expression("\u25CF"), times = sum(vaf.data > 0)),
 		text.col = 'black',
-		text.cex = 0.4,
+		text.cex = if (length(all.samples) > 30) { 0.3 } else { 0.4 },
 		inside.legend = list(fun = functional.legend, x = 1.02, y = 1),
 		right.padding = 15,
-		height = 6,
-		width = 8,
+		height = if (nrow(plot.data) > 20) { 8 } else { 6 },
+		width = if (length(all.samples) > 30) { 11 } else { 8 },
 		resolution = 200,
 		filename = generate.filename(arguments$project, 'germline_snvs','png')
 		);

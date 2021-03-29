@@ -63,14 +63,14 @@ summary.list <- list();
 
 for (file in cov.files) {
 	# extract sample ID
-	smp <- unlist(strsplit(unlist(strsplit(file, '\\/'))[2],'_'))[1];
+	smp <- sub('_DepthOfCoverage.sample_statistics','',basename(file));
 	# store data in list
 	cov.list[[smp]] <- read.delim(file);
 	}
 
 for (file in summary.files) {
 	# extract sample ID
-	smp <- unlist(strsplit(unlist(strsplit(file, '\\/'))[2],'_'))[1];
+	smp <- sub('_DepthOfCoverage.sample_summary','',basename(file)); 
 	# store data in list
 	summary.list[[smp]] <- read.delim(file)[1,];
 	}

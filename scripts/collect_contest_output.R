@@ -63,14 +63,14 @@ lane.list <- list();
 
 for (file in meta.files) {
 	# extract sample ID
-	smp <- unlist(strsplit(unlist(strsplit(file, '\\/'))[2],'_'))[1];
+	smp <- sub('_ContEst_META.tsv','',basename(file));
 	# store data in list
 	meta.list[[smp]] <- read.delim(file);
 	}
 
 for (file in lane.files) {
 	# extract sample ID
-	smp <- unlist(strsplit(unlist(strsplit(file, '\\/'))[2],'_'))[1];
+	smp <- sub('_ContEst_READGROUP.tsv','',basename(file));
 	# store data in list
 	lane.list[[smp]] <- read.delim(file);
 	}

@@ -3,6 +3,7 @@
 use AutoLoader 'AUTOLOAD';
 use strict;
 use warnings;
+use version;
 use Carp;
 use Getopt::Std;
 use Getopt::Long;
@@ -238,7 +239,9 @@ sub pon {
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'gatk');
 	my $date = strftime "%F", localtime;
 
-	if ($tool_data->{gatk_version} =~ m/^4/) {
+	my $needed = version->declare('4')->numify;
+	my $given = version->declare($tool_data->{gatk_version})->numify;
+	if ($given >= $needed) {
 		die("Incompatible GATK version requested! MuTect2 pipeline is currently only compatible with GATK 3.x");
 		}
 

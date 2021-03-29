@@ -66,7 +66,8 @@ for (file in cov.files) {
 	# store data in list
 	cov.list[[smp]] <- read.delim(file);
 
-	sample.list <- c(sample.list, colnames(cov.list[[smp]])[7:ncol(cov.list[[smp]])]);
+	these.smps <- setdiff(colnames(cov.list[[smp]])[6:ncol(cov.list[[smp]])],'TargetRegions');
+	sample.list <- c(sample.list, these.smps);
 	}
 
 # determine number of callable bases

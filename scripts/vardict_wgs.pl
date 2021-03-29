@@ -1120,7 +1120,7 @@ sub main {
 		my $pon_command = generate_pon(
 			input		=> join(' ', @pon_vcfs),
 			output		=> $pon,
-			java_mem	=> $parameters->{combine}->{java_mem},
+			java_mem	=> $parameters->{create_pon}->{java_mem},
 			tmp_dir		=> $output_directory,
 			out_type	=> 'trimmed'
 			);
@@ -1141,8 +1141,8 @@ sub main {
 			cmd	=> $pon_command,
 			modules	=> [$gatk],
 			dependencies	=> join(':', @pon_dependencies),
-			max_time	=> $parameters->{combine}->{time},
-			mem		=> $parameters->{combine}->{mem},
+			max_time	=> $parameters->{create_pon}->{time},
+			mem		=> $parameters->{create_pon}->{mem},
 			hpc_driver	=> $args{hpc_driver}
 			);
 

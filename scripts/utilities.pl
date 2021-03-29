@@ -76,7 +76,7 @@ sub error_checking {
 		);
 	}
 
-	# GATK (indel realignment/recalibration + HaplotypeCaller + MuTect + MuTect2)
+	# GATK (indel realignment/recalibration + HaplotypeCaller + MuTect + MuTect2 + GATK-CNV)
 	if ('gatk' eq $pipeline) {
 
 		if (!defined($tool_data->{reference})) { die("Must supply path to reference genome!"); }

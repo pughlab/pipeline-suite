@@ -180,6 +180,11 @@ if (!is.rnaseq & is.germline) {
 	full.maf.data[which(full.maf.data$Matched_Norm_Sample_Barcode != 'NORMAL'),]$Mutation_Status <- 'germline';
 	}
 
+# replace NAs with blanks (required for cBioportal upload)
+for (field in c('t_depth','t_ref_count','t_alt_count','n_depth','n_ref_count','n_alt_count')) {
+	full.maf.data[is.na(full.maf.data[,field]),field] <- '';
+	}
+
 colnames(full.maf.data) <- gsub('vcf','variant',colnames(full.maf.data));
 exclude.field <- which(colnames(full.maf.data) == 'variant_pos');
 

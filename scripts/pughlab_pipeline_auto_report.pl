@@ -84,8 +84,8 @@ sub main {
 	### RUN ####################################################################################
 
 	my @job_ids;
-	my ($qc_dir, $germ_dir);
-	my ($correlations, $qc_data, $contest_data);
+	my ($qc_dir, $germ_dir, $cpsr_dir);
+	my ($correlations, $qc_data, $contest_data, $cpsr_calls);
 	my ($run_script, $run_id);
 
 	### find the required input files

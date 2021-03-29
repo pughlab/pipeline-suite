@@ -378,7 +378,7 @@ sub main {
 	if (defined($tool_data->{varscan}->{parameters}->{sequenza}->{path})) {
 		$sequenza = $tool_data->{varscan}->{parameters}->{sequenza}->{path};
 		} else {
-		$sequenza = "$cwd/SequenzaSingleSample_v2.1.R";
+		$sequenza = "$cwd/run_sequenza.R";
 		}
 	my $r_version	= 'R/' . $tool_data->{r_version};
 	my $r_sequenza	= 'R/' . $tool_data->{varscan}->{parameters}->{sequenza}->{r};
@@ -408,6 +408,8 @@ sub main {
 	my $pon_intermediates = join('/', $pon_directory, 'intermediate_files');
 	unless(-e $pon_intermediates) { make_path($pon_intermediates); }
 
+	my @tumour_only;
+
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
@@ -419,6 +421,7 @@ sub main {
 
 		if (scalar(@normal_ids) == 0) {
 			print $log "\n>> No normal BAM provided, skipping patient.\n";
+			if (scalar(@tumour_ids) > 0) { push @tumour_only, $patient; }
 			next;
 			}
 
@@ -1404,7 +1407,7 @@ sub main {
 	print $log "\n\n>>>Beginning processing of tumour-only samples<<<\n\n";
 
 	# process each sample in $smp_data
-	foreach my $patient (sort keys %{$smp_data}) {
+	foreach my $patient (@tumour_only) {
 
 		print $log "\nInitiating process for PATIENT: $patient\n";
 
