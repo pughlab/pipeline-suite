@@ -12,6 +12,7 @@ use File::Path qw(make_path);
 use YAML qw(LoadFile);
 use List::Util qw(any);
 use File::Find;
+use Data::Dumper;
 
 use IO::Handle;
 
@@ -48,7 +49,7 @@ sub _get_files {
 
 	my @files;
 	my $want = sub {
-		-f && /\Q$exten\E$/ && push @files, $File::Find::name
+		-e && /\Q$exten\E$/ && push @files, $File::Find::name
 		};
 
 	find($want, @{$dirs});
@@ -58,12 +59,16 @@ sub _get_files {
 # format command to run Manta
 sub get_mavis_command {
 	my %args = (
-		tumour_ids	=> undef,
+		tumour_ids	=> [],
 		tumour_bams	=> undef,
+		rna_ids		=> [],
+		rna_bams	=> undef,
 		normal_id	=> undef,
 		normal_bam	=> undef,
 		manta		=> undef,
 		delly		=> undef,
+		starfusion	=> undef,
+		fusioncatcher	=> undef,
 		output		=> undef,
 		@_
 		);
@@ -101,6 +106,30 @@ sub get_mavis_command {
 			);
 		}
 
+	if (scalar(@{$args{rna_ids}}) > 0) {
+
+		$mavis_cmd .= ' ' . join(' ',
+			'--convert starfusion', $args{starfusion}, 'starfusion',
+			'--external_conversion fusioncatcher "Rscript',
+			'/cluster/home/sprokope/git/analysis/convert_fusioncatcher.R',
+			$args{fusioncatcher} . '"'
+			);
+
+		foreach my $smp ( @{$args{rna_ids}} ) {
+
+			my $id = $smp;
+			if ($smp =~ m/^\d/) {
+				$id = 'X' . $smp;
+				}
+			$id .= '-rna';
+
+			$mavis_cmd .= ' ' . join(' ',
+				'--library', $id, 'transcriptome diseased True', $args{rna_bams}->{$smp},
+				'--assign', $id, 'starfusion fusioncatcher'
+				);
+			}
+		}
+
 	return($mavis_cmd);
 	}
 
@@ -108,10 +137,13 @@ sub get_mavis_command {
 sub main {
 	my %args = (
 		tool_config		=> undef,
-		data_config		=> undef,
+		dna_config		=> undef,
+		rna_config		=> undef,
 		output_directory	=> undef,
 		manta_dir		=> undef,
 		delly_dir		=> undef,
+		starfusion_dir		=> undef,
+		fusioncatcher_dir	=> undef,
 		hpc_driver		=> undef,
 		del_intermediates	=> undef,
 		dry_run			=> undef,
@@ -120,7 +152,8 @@ sub main {
 		);
 
 	my $tool_config = $args{tool_config};
-	my $data_config = $args{data_config};
+	my $data_config = $args{dna_config};
+	my $rna_config = $args{rna_config};
 
 	### PREAMBLE ######################################################################################
 
@@ -164,6 +197,13 @@ sub main {
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n    Manta directory: $args{manta_dir}";
 	print $log "\n    Delly directory: $args{delly_dir}";
+
+	if (defined($args{starfusion_dir})) {
+		print $log "\n  RNA sample config used: $rna_config";
+		print $log "\n    STAR-Fusion directory: $args{starfusion_dir}";
+		print $log "\n    FusionCatcher directory: $args{fusioncatcher_dir}";
+		}
+
 	print $log "\n---";
 
 	# set tools and versions
@@ -187,9 +227,23 @@ sub main {
 	# get sample data
 	my $smp_data = LoadFile($data_config);
 
+	# find RNA samples (if provided)
+	if (defined($rna_config)) {
+		my $rna_data = LoadFile($rna_config);
+
+		foreach my $patient (sort keys %{$smp_data}) {
+			next if ( !any { /$patient/ } keys %{$rna_data});
+			my @rna_ids = sort keys %{$rna_data->{$patient}->{'tumour'}};
+			foreach my $id (@rna_ids) {
+				my $bam = $rna_data->{$patient}->{'tumour'}->{$id};
+				$smp_data->{$patient}->{'rna'}->{$id} = $bam;
+				}
+			}
+		}
+
 	# find manta and delly outputs
-	my @sv_directories = ($args{manta_dir}, $args{delly_dir});
-	my @extensions = qw(diploidSV.vcf.gz somaticSV.vcf.gz tumorSV.vcf.gz Delly_SVs_somatic_hc.bcf);
+	my @sv_directories = ($args{manta_dir}, $args{delly_dir}, $args{starfusion_dir}, $args{fusioncatcher_dir});
+	my @extensions = qw(diploidSV.vcf.gz somaticSV.vcf.gz tumorSV.vcf.gz Delly_SVs_somatic_hc.bcf star-fusion.fusion_predictions.abridged.tsv final-list_candidate-fusion-genes.txt);
 
 	my @sv_files;
 	foreach my $extension ( @extensions ) {
@@ -198,6 +252,8 @@ sub main {
 
 	my @manta_files = grep { /Manta/ } @sv_files;
 	my @delly_files = grep { /Delly/ } @sv_files;
+	my @starfusion_files = grep { /star-fusion/ } @sv_files;
+	my @fusioncatcher_files = grep { /candidate-fusion-genes/ } @sv_files;
 
 	# initialize objects
 	my ($run_script, $run_id, $link);
@@ -211,6 +267,7 @@ sub main {
 		# find bams
 		my @normal_ids = sort keys %{$smp_data->{$patient}->{'normal'}};
 		my @tumour_ids = sort keys %{$smp_data->{$patient}->{'tumour'}};
+		my @rna_ids_patient = sort keys %{$smp_data->{$patient}->{'rna'}};
 
 		if (scalar(@tumour_ids) == 0) {
 			print $log "\n>> No tumour BAM provided, skipping patient.\n";
@@ -225,14 +282,16 @@ sub main {
 		unless(-e $link_directory) { make_path($link_directory); }
 
 		# create some symlinks and add samples to sheet
-		foreach my $normal (@normal_ids) {
-			my @tmp = split /\//, $smp_data->{$patient}->{normal}->{$normal};
+		my $normal_id = $normal_ids[0];
+		if (defined($normal_id)) {
+			my @tmp = split /\//, $smp_data->{$patient}->{normal}->{$normal_id};
 			$link = join('/', $link_directory, $tmp[-1]);
-			symlink($smp_data->{$patient}->{normal}->{$normal}, $link);
+			symlink($smp_data->{$patient}->{normal}->{$normal_id}, $link);
 			}
 
 		# and format input files
-		my (@manta_svs_formatted, @format_jobs, @delly_svs_patient);
+		my (@manta_svs_formatted, @format_jobs);
+		my (@delly_svs_patient, @starfus_svs_patient, @fuscatch_svs_patient);
 		my $format_command;
 
 		foreach my $tumour (@tumour_ids) {
@@ -268,6 +327,26 @@ sub main {
 
 				push @manta_svs_formatted, $formatted_vcf;
 				}
+			}
+
+		foreach my $smp (@rna_ids_patient) {
+
+			my @tmp = split /\//, $smp_data->{$patient}->{rna}->{$smp};
+			$link = join('/', $link_directory, 'rna_' . $tmp[-1]);
+			symlink($smp_data->{$patient}->{rna}->{$smp}, $link);
+
+			my @starfus_svs = grep { /$smp/ } @starfusion_files;
+			$link = join('/', $link_directory, $smp . '_star-fusion_predictions.abridged.tsv');
+			symlink($starfus_svs[0], $link);
+
+			push @starfus_svs_patient, $starfus_svs[0];
+
+			my @fuscatch_svs = grep { /$smp/ } @fusioncatcher_files;
+
+			$link = join('/', $link_directory, $smp . '_final-list_candidate-fusion-genes.txt');
+			symlink($fuscatch_svs[0], $link);
+
+			push @fuscatch_svs_patient, $fuscatch_svs[0];
 			}
 
 		# check if this should be run
@@ -308,24 +387,29 @@ sub main {
 			'MAVIS*.COMPLETE'
 			);
 
-		# run on tumour-only
-		if (scalar(@normal_ids) == 0) {
+		if (scalar(@rna_ids_patient) > 0) {
 
 			$mavis_cmd .= "\n\n" . get_mavis_command(
 				tumour_ids	=> \@tumour_ids,
+				normal_id	=> $normal_id,
+				rna_ids		=> \@rna_ids_patient,
 				tumour_bams	=> $smp_data->{$patient}->{tumour},
-				delly		=> join(' ', @delly_svs_patient),
+				normal_bam	=> $smp_data->{$patient}->{normal}->{$normal_id},
+				rna_bams	=> $smp_data->{$patient}->{rna},
 				manta		=> join(' ', @manta_svs_formatted),
+				delly		=> join(' ', @delly_svs_patient),
+				starfusion	=> join(' ', @starfus_svs_patient),
+				fusioncatcher	=> join(' ', @fuscatch_svs_patient),
 				output		=> $mavis_cfg
 				);
 
-			} else { # run on T/N pairs
+			} else {
 
 			$mavis_cmd .= "\n\n" . get_mavis_command(
 				tumour_ids	=> \@tumour_ids,
-				normal_id	=> $normal_ids[0],
+				normal_id	=> $normal_id,
 				tumour_bams	=> $smp_data->{$patient}->{tumour},
-				normal_bam	=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
+				normal_bam	=> $smp_data->{$patient}->{normal}->{$normal_id},
 				manta		=> join(' ', @manta_svs_formatted),
 				delly		=> join(' ', @delly_svs_patient),
 				output		=> $mavis_cfg
@@ -365,10 +449,10 @@ sub main {
 				log_dir	=> $log_directory,
 				name	=> 'run_mavis_sv_annotator_' . $patient,
 				cmd	=> $mavis_cmd,
-				modules	=> [$mavis, $bwa, 'perl'],
+				modules	=> [$mavis, $bwa, 'perl', 'R'],
 				dependencies	=> join(':', @format_jobs),
 				max_time	=> '48:00:00',
-				mem		=> '1G',
+				mem		=> '4G',
 				hpc_driver	=> $args{hpc_driver}
 				);
 
@@ -480,6 +564,7 @@ sub main {
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
 my ($tool_config, $data_config, $output_directory, $manta_directory, $delly_directory);
+my ($rna_config, $starfusion_directory, $fusioncatcher_directory);
 my $hpc_driver = 'slurm';
 my ($remove_junk, $dry_run, $help, $no_wait);
 
@@ -487,10 +572,13 @@ my ($remove_junk, $dry_run, $help, $no_wait);
 GetOptions(
 	'h|help'	=> \$help,
 	'd|data=s'	=> \$data_config,
+	'r|rna=s'	=> \$rna_config,
 	't|tool=s'	=> \$tool_config,
 	'o|out_dir=s'	=> \$output_directory,
 	'm|manta=s'	=> \$manta_directory,
 	'e|delly=s'	=> \$delly_directory,
+	's|starfusion=s'	=> \$starfusion_directory,
+	'f|fusioncatcher=s'	=> \$fusioncatcher_directory,
 	'c|cluster=s'	=> \$hpc_driver,
 	'remove'	=> \$remove_junk,
 	'dry-run'	=> \$dry_run,
@@ -501,11 +589,14 @@ if ($help) {
 	my $help_msg = join("\n",
 		"Options:",
 		"\t--help|-h\tPrint this help message",
-		"\t--data|-d\t<string> data config (yaml format)",
+		"\t--dna|-d\t<string> dna data config (yaml format)",
+		"\t--rna|-r\t<string> rna data config (yaml format) <optional>",
 		"\t--tool|-t\t<string> tool config (yaml format)",
 		"\t--out_dir|-o\t<string> path to output directory",
 		"\t--manta|-m\t<string> path to manta (strelka) output directory",
 		"\t--delly|-e\t<string> path to delly output directory",
+		"\t--starfusion|-s\t<string> path to star-fusion output directory <optional>",
+		"\t--fusioncatcher|-f\t<string> path to fusioncatcher output directory <optional>",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
 		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
@@ -525,10 +616,13 @@ if (!defined($delly_directory)) { die("No delly directory defined; please provid
 
 main(
 	tool_config		=> $tool_config,
-	data_config		=> $data_config,
+	dna_config		=> $data_config,
+	rna_config		=> $rna_config,
 	output_directory	=> $output_directory,
 	manta_dir		=> $manta_directory,
 	delly_dir		=> $delly_directory,
+	starfusion_dir		=> $starfusion_directory,
+	fusioncatcher_dir	=> $fusioncatcher_directory,
 	hpc_driver		=> $hpc_driver,
 	del_intermediates	=> $remove_junk,
 	dry_run			=> $dry_run,

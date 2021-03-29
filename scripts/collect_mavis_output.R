@@ -77,7 +77,8 @@ colnames(sv.data.full)[which(colnames(sv.data.full) == 'X.tracking_id')] <- 'tra
 
 key.fields <- c('event_type','gene1_aliases','gene2_aliases','fusion_splicing_pattern','break1_chromosome','break1_position_start','break1_position_end','break2_chromosome','break2_position_start','break2_position_end','break1_split_reads','break2_split_reads','spanning_reads','flanking_pairs','linking_split_reads','library','tracking_id','tools');
 
-smp.fields <- sort(colnames(sv.data.full)[grep('_genome',colnames(sv.data.full))]);
+smp.fields <- sort(colnames(sv.data.full)[grep('_genome|_transcriptome',colnames(sv.data.full))]);
+smp.fields.names <- sapply(smp.fields, function(i) { unlist(strsplit(i,'_'))[1] } );
 
 sv.data <- sv.data.full[,c(key.fields, smp.fields)];
 
@@ -90,88 +91,131 @@ write.table(
 	sep = '\t'
 	);
 
-# identify recurrent* hits (gene-wise events)
-genes.tmp <- unique(sv.data[,c('gene1_aliases','gene2_aliases','event_type','library')]);
-genes.tmp <- genes.tmp[-which(genes.tmp$gene1_aliases == 'None' & genes.tmp$gene2_aliases == 'None'),];
-
-gene.data <- reshape(
-	genes.tmp,
-	direction = 'wide',
-	timevar = 'library',
-	idvar = c('gene1_aliases','gene2_aliases')
-	);
-colnames(gene.data) <- gsub('event_type.','',colnames(gene.data));
-colnames(gene.data)[1:2] <- c('gene1','gene2');
-
-# because some samples may have multiple events within the same gene-gene pair
-smp.counts <- aggregate(event_type ~ gene1_aliases + gene2_aliases + library, genes.tmp, length);
-smp.counts <- smp.counts[which(smp.counts$event_type == 2),];
-
-for (i in 1:nrow(smp.counts)) {
-
-	gene1 <- smp.counts[i,1];
-	gene2 <- smp.counts[i,2];
-	smp <- smp.counts[i,3];
-
-	idx <- which(genes.tmp$gene1_aliases == gene1 & genes.tmp$gene2_aliases == gene2 & genes.tmp$library == smp);
-	types <- genes.tmp[idx,]$event_type;
-
-	gene.data[which(gene.data$gene1 == gene1 & gene.data$gene2 == gene2),smp] <- paste(types, collapse = ',');
-
-	}
-
-# save combined/formatted data to file
-write.table(
-	gene.data,
-	file = generate.filename(arguments$project, 'gene_by_sample','tsv'),
-	row.names = FALSE,
-	col.names = TRUE,
-	sep = '\t'
-	);
-
 # format for cbioportal (not complete!)
 tmp <- sv.data[,key.fields];
 tmp$Fusion <- paste0(tmp$gene1_aliases, '--', tmp$gene2_aliases);
 tmp <- tmp[!grepl('None',tmp$Fusion),];
 
-tmp$Tool <- NA;
-for (i in 1:nrow(tmp)) {
-	tools <- unique(unlist(strsplit(as.character(tmp[i,]$tools),';')));
-	tmp[i,]$Tool <- paste(c(tools, 'mavis'), collapse = ',');
-	}
-
-tmp$Status <- NA;
+tmp$Status <- 'unknown';
 for (i in 1:nrow(tmp)) {
 	smp <- gsub('-','\\.',tmp[i,]$library);
-	title <- smp.fields[grep(smp,smp.fields)];
+	title <- smp.fields[which(smp.fields.names == smp)];
 	if (grepl('diseased', title)) { tmp[i,]$Status <- 'somatic'; }
 	else if (grepl('normal', title)) { tmp[i,]$Status <- 'germline'; }
 	}
 
-tmp$Frame <- NA;
+tmp$Frame <- 'unknown';
 tmp[which(tmp$fusion_splicing_pattern == 'normal'),]$Frame <- 'inframe';
 tmp[which(!tmp$fusion_splicing_pattern %in% c('normal','None')),]$Frame <- 'frameshift';
 
-cbio.data <- data.frame(
-	Hugo_Symbol = c(
-		tmp$gene1_aliases,
-		tmp$gene2_aliases
+tmp$Support <- NA;
+for (i in 1:nrow(tmp)) {
+	type <- if (grepl('rna', tmp[i,]$library)) { 'rna' } else { 'dna' }
+	tmp[i,]$Support <- type;
+	}
+
+# aggregate to get unique entries
+unique.calls <- aggregate(
+	tmp$tools,
+	by = list(
+		gene1_aliases = tmp$gene1_aliases,
+		gene2_aliases = tmp$gene2_aliases,
+		library = tmp$library,
+		event_type = tmp$event_type,
+		Status = tmp$Status,
+		Fusion = tmp$Fusion,
+		Frame = tmp$Frame,
+		Support = tmp$Support
 		),
-	Entrez_Gene_Id = NA,
-	Center = NA,
-	Tumor_Sample_Barcode = rep(tmp$library, times = 2),
-	Fusion = rep(tmp$Fusion, times = 2),
-	DNA_support = 'yes',
-	RNA_support = 'no',
-	Method = rep(tmp$Tool, times = 2),
-	Frame = rep(tmp$Frame, times = 2),
-	Fusion_Status = rep(tmp$Status, times = 2),
-	SV_Type = rep(tmp$event_type, times = 2),
-	stringsAsFactors = FALSE
+	FUN = function(i) {
+		paste(c(unique(unlist(strsplit(as.character(i),';'))),'mavis'), collapse = ',')
+		}
 	);
 
+colnames(unique.calls)[which(colnames(unique.calls) == 'x')] <- 'Tool';
+
+unique.calls$Sample <- gsub('-wgs|-wxs|-rna','',unique.calls$library);
+
+# format for cbioportal
+cbio.data <- NULL;
+dna.fusions <- NULL;
+if (nrow(unique.calls[which(unique.calls$Support == 'dna'),]) > 0) {
+	dna.fusions <- unique.calls[which(unique.calls$Support == 'dna'),];
+
+	cbio.data <- data.frame(
+		Hugo_Symbol = c(
+			dna.fusions$gene1_aliases,
+			dna.fusions$gene2_aliases
+			),
+		Entrez_Gene_Id = NA,
+		Center = NA,
+		Tumor_Sample_Barcode = rep(dna.fusions$Sample, times = 2),
+		Fusion = rep(dna.fusions$Fusion, times = 2),
+		DNA_support = 'yes',
+		RNA_support = 'no',
+		Method = rep(dna.fusions$Tool, times = 2),
+		Frame = rep(dna.fusions$Frame, times = 2),
+		Fusion_Status = rep(dna.fusions$Status, times = 2),
+#		SV_Type = rep(dna.fusions$event_type, times = 2),
+#		Seq_Type = rep(dna.fusions$Seq_Type, times = 2),
+		stringsAsFactors = FALSE
+		);
+	}
+
+rna.fusions <- NULL;
+if (nrow(unique.calls[which(unique.calls$Support == 'rna'),]) > 0) {
+	rna.fusions <- unique.calls[which(unique.calls$Support == 'rna'),];
+
+	rna.cbio <- data.frame(
+		Hugo_Symbol = c(
+			rna.fusions$gene1_aliases,
+			rna.fusions$gene2_aliases
+			),
+		Entrez_Gene_Id = NA,
+		Center = NA,
+		Tumor_Sample_Barcode = gsub('.rna','',rep(rna.fusions$Sample, times = 2)),
+		Fusion = rep(rna.fusions$Fusion, times = 2),
+		DNA_support = 'no',
+		RNA_support = 'yes',
+		Method = rep(rna.fusions$Tool, times = 2),
+		Frame = rep(rna.fusions$Frame, times = 2),
+		Fusion_Status = rep(rna.fusions$Status, times = 2),
+#		SV_Type = rep(rna.fusions$event_type, times = 2),
+#		Seq_Type = rep(rna.fusions$Seq_Type, times = 2),
+		stringsAsFactors = FALSE
+		);
+
+	if (is.null(cbio.data)) { cbio.data <- rna.cbio; }
+	else {
+		unique.rna <- unique(rna.fusions[,c('Sample','Fusion','Tool','Status','Frame','Support')]);
+		for (i in 1:nrow(unique.rna)) {
+			fusion <- unique.rna[i,]$Fusion;
+			smp <- unique.rna[i,]$Sample
+			dna.idx <- which(cbio.data$Fusion == fusion & cbio.data$Tumor_Sample_Barcode == smp);
+			rna.idx <- which(rna.cbio$Fusion == fusion & rna.cbio$Tumor_Sample_Barcode == smp);
+			if (length(dna.idx) > 0) {
+	#			stop();
+				cbio.data[dna.idx,]$RNA_support <- 'yes';
+				cbio.data[dna.idx,]$Method <- paste0(
+					unique(c(
+						unlist(strsplit(cbio.data[dna.idx,]$Method,',')),
+						unlist(strsplit(rna.cbio[rna.idx,]$Method,','))
+						)),
+					collapse = ','
+					);
+				}
+			else {
+				cbio.data <- rbind(cbio.data, rna.cbio[rna.idx,]);
+				}
+			}
+		}
+	}
+
+to.write <- unique(cbio.data[order(cbio.data$Fusion, cbio.data$Tumor_Sample_Barcode),]);
+to.write[which(to.write$Frame == 'unknown'),]$Frame <- NA;
+
 write.table(
-	cbio.data,
+	to.write,
 	file = generate.filename(arguments$project, 'svs_for_cbioportal','tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
