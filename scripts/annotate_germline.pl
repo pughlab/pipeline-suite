@@ -104,8 +104,8 @@ sub create_extract_command {
 	$extract_command .= "\n\n" . join(' ',
 		'cat', $args{tier_files},
 		"| grep -v 'GENOMIC_CHANGE'",
-		'| awk -F"\t"', "'\$81 >= 0' | cut -f1 | uniq",
-		'| perl -e', "'while(<>) { \$_ =~ m/(^[0-9XY]):g.([0-9]+)/;",
+		'| awk -F"\t"', "'\$81 >= 0' | cut -f1 | sort -u",
+		'| perl -e', "'while(<>) { \$_ =~ m/(^[0-9XY]+):g.([0-9]+)/;",
 		'print join("\t", "chr" . $1, $2) . "\n" }', "'",
 		'> cpsr_significant.txt'
 		);
@@ -401,6 +401,8 @@ sub main{
 			print $log "Skipping filter step because this is already done!\n";
 			}
 
+		my $previous_job_id = $run_id;
+
 		# loop over each tumour sample
 		foreach my $sample ( @tumour_ids ) {
 
@@ -447,7 +449,7 @@ sub main{
 					"  md5sum $final_maf > $final_maf.md5",
 					"  mv $vep_vcf $final_vcf",
 					"  md5sum $final_vcf > $final_vcf.md5",
-					"  bgzip $final_vcf",
+					"  bgzip -f $final_vcf",
 					"  tabix -p vcf $final_vcf.gz",
 					"else",
 					'  echo "FINAL OUTPUT MAF is missing; not running md5sum/bgzip/tabix..."',
@@ -462,7 +464,7 @@ sub main{
 					name    => 'run_vcf2maf_and_VEP_' . $sample,
 					cmd     => $vcf2maf_cmd,
 					modules => ['perl', $samtools, 'tabix'],
-					dependencies    => $run_id,
+					dependencies    => $previous_job_id,
 					hpc_driver      => $args{hpc_driver}
 					);
 
@@ -531,7 +533,7 @@ sub main{
 					"  md5sum $final_maf > $final_maf.md5",
 					"  mv $vep_vcf $final_vcf",
 					"  md5sum $final_vcf > $final_vcf.md5",
-					"  bgzip $final_vcf",
+					"  bgzip -f $final_vcf",
 					"  tabix -p vcf $final_vcf.gz",
 					"else",
 					'  echo "FINAL OUTPUT MAF is missing; not running md5sum/bgzip/tabix..."',
@@ -674,7 +676,7 @@ sub main{
 					}
 				# if none of the above, we will exit with an error
 				else {
-					die("Final GenotypeGVCFs accounting job: $run_id finished with errors.");
+					die("Final CPSR accounting job: $run_id finished with errors.");
 					}
 				}
 			}
