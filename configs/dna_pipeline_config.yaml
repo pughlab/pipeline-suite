@@ -18,6 +18,7 @@ samtools_version: 1.9
 picard_version: 2.6.0
 bedtools_version: 2.27.1
 gatk_version: 3.8
+gatk_cnv_version: 4.1.8.1
 vcftools_version: 0.1.15
 mutect_version: 1.1.5
 strelka_version: 2.9.10
@@ -240,6 +241,7 @@ vardict:
     pon: 
     parameters:
         vardict:
+            # vardict_wgs requires slightly higher mem (~16G) and more time (min 32 hours)
             mem: 12G
             time: '12:00:00'
         test_somatic:
@@ -249,6 +251,30 @@ vardict:
             mem: 1G
             time: '12:00:00'
         create_pon:
+            java_mem: 3g
+            mem: 4G
+            time: '24:00:00'
+gatk_cnv:
+    run: Y
+    gnomad: /cluster/projects/pughlab/references/ExAC/af-only-gnomad.hg38.vcf.gz
+    chromosomes:
+    parameters:
+        readcounts:
+            mem: 1G
+            time: '12:00:00'
+        create_pon:
+            java_mem: 5g
+            mem: 6G
+            time: '24:00:00'
+        denoise:
+            java_mem: 7g
+            mem: 8G
+            time: '24:00:00'
+        allele_counts:
+            java_mem: 7g
+            mem: 8G
+            time: '24:00:00'
+        model:
             java_mem: 3g
             mem: 4G
             time: '24:00:00'
