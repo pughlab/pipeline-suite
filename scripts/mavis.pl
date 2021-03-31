@@ -111,7 +111,7 @@ sub get_mavis_command {
 		$mavis_cmd .= ' ' . join(' ',
 			'--convert starfusion', $args{starfusion}, 'starfusion',
 			'--external_conversion fusioncatcher "Rscript',
-			'/cluster/home/sprokope/git/analysis/convert_fusioncatcher.R',
+			"$cwd/convert_fusioncatcher.R",
 			$args{fusioncatcher} . '"'
 			);
 
