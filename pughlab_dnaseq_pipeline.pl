@@ -84,7 +84,7 @@ sub main {
 	my $run_script;
 	my ($bwa_run_id, $gatk_run_id, $contest_run_id, $coverage_run_id, $hc_run_id);
 	my ($strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id);
-	my ($somaticsniper_run_id, $delly_run_id, $vardict_run_id);
+	my ($somaticsniper_run_id, $delly_run_id, $vardict_run_id, $gatkcnv_run_id);
 	my ($mavis_run_id, $report_run_id);
 
 	my @job_ids;
@@ -92,6 +92,7 @@ sub main {
 	# prepare directory structure
 	my $bwa_directory = join('/', $output_directory, 'BWA');
 	my $gatk_directory = join('/', $output_directory, 'GATK');
+	my $gatk_cnv_directory = join('/', $output_directory, 'GATK_CNV');
 	my $contest_directory = join('/', $output_directory, 'BAMQC', 'ContEst');
 	my $coverage_directory = join('/', $output_directory, 'BAMQC', 'Coverage');
 	my $hc_directory = join('/', $output_directory, 'HaplotypeCaller');
@@ -907,6 +908,58 @@ sub main {
 
 				print $log ">>> SomaticSniper job id: $somaticsniper_run_id\n\n";
 				push @job_ids, $somaticsniper_run_id;
+				}
+			}
+
+		## GATK-CNV pipeline
+		if ('Y' eq $tool_data->{gatk_cnv}->{run}) {
+
+			unless(-e $gatk_cnv_directory) { make_path($gatk_cnv_directory); }
+
+			my $gatk_cnv_command = join(' ',
+				"perl $cwd/scripts/gatk_cnv.pl",
+				"-o", $gatk_cnv_directory,
+				"-t", $tool_config,
+				"-d", $gatk_output_yaml,
+				"-c", $args{cluster}
+				);
+
+			#if ($args{cleanup}) {
+			#	$gatk_cnv_command .= " --remove";
+			#	}
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for gatk_cnv.pl\n";
+			print $log "  COMMAND: $gatk_cnv_command\n\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_gatk_cnv',
+				cmd	=> $gatk_cnv_command,
+				modules	=> ['perl'],
+				dependencies	=> $gatk_run_id,
+				mem		=> '256M',
+				max_time	=> $max_time,
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
+
+				$gatk_cnv_command .= " --dry-run";
+				`$gatk_cnv_command`;
+
+				} else {
+
+				$gatk_cnv_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> GATK-CNV job id: $gatk_cnv_run_id\n\n";
+				push @job_ids, $gatk_cnv_run_id;
 				}
 			}
 

@@ -491,6 +491,17 @@ sub main {
 	my ($run_script, $run_id, $tmp_run_id, $intervals_run_id, $intervals_run_id2, $cleanup_cmd);
 	my @all_jobs;
 
+	# do an initial check for normals; no normals = don't bother running
+	my @has_normals;
+	foreach my $patient (sort keys %{$smp_data}) {
+		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
+		if (scalar(@normal_ids) > 0) { push @has_normals, $patient; }
+		}
+
+	if (scalar(@has_normals) <= 1) {
+		die("Insufficient normals provided for PoN. Either increase available normals and re-run, or set gatk_cnv->{run} = N in tool config.");
+		}	
+
 	# generate processed picard-style intervals list
 	my ($picard_intervals, $gatk_intervals, $gc_intervals, $format_intervals_cmd);
 	my $memory = '1G';
