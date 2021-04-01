@@ -64,7 +64,7 @@ germline.data <- list();
 for (file in vcf.files) {
 
 	# extract sample id
-	smp <- unlist(strsplit(file,'_'))[1];
+	smp <- sub('_filtered_germline_variants.vcf.gz','',file);
 
 	# do some quick filtering
 	sys.command <- paste0("zcat ", file, " | grep -v '##' | cut -f3,6-9 --complement > ", smp, ".vcf");
