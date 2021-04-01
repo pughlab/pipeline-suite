@@ -316,6 +316,17 @@ sub main {
 	my ($run_script, $run_id, $link, $cleanup_cmd, $sniper_id, $norm_pile_id, $tum_pile_id);
 	my @all_jobs;
 
+	# do an initial check for normals; no normals = don't bother running
+	my @has_normals;
+	foreach my $patient (sort keys %{$smp_data}) {
+		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
+		if (scalar(@normal_ids) > 0) { push @has_normals, $patient; }
+		}
+
+	if (scalar(@has_normals) == 0) {
+		die("No normals provided. SomaticSniper requires matched normals, therefore we will exit now.");
+		}
+
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
