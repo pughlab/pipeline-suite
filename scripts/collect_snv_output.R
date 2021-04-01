@@ -170,19 +170,26 @@ for (i in 1:length(maf.files)) {
 # save full (combined) maf data to file
 full.maf.data <- do.call(rbind, maf.data);
 
-full.maf.data[which(full.maf.data$Matched_Norm_Sample_Barcode == 'NORMAL'),c('Matched_Norm_Sample_Barcode','Match_Norm_Seq_Allele1','Match_Norm_Seq_Allele2')] <- NA;
+norm.idx <- which(full.maf.data$Matched_Norm_Sample_Barcode == 'NORMAL');
+if (length(norm.idx) > 0) {
+	full.maf.data[norm.idx,c('Matched_Norm_Sample_Barcode','Match_Norm_Seq_Allele1','Match_Norm_Seq_Allele2')] <- NA;
+	}
 
 if (!is.rnaseq & !is.germline) {
-	full.maf.data[which(full.maf.data$Matched_Norm_Sample_Barcode != 'NORMAL'),]$Mutation_Status <- 'somatic';
+	norm.idx <- which(full.maf.data$Matched_Norm_Sample_Barcode != 'NORMAL');
+	if (length(norm.idx) > 0) { full.maf.data[norm.idx,]$Mutation_Status <- 'somatic'; }
 	}
 
 if (!is.rnaseq & is.germline) {
-	full.maf.data[which(full.maf.data$Matched_Norm_Sample_Barcode != 'NORMAL'),]$Mutation_Status <- 'germline';
+	norm.idx <- which(full.maf.data$Matched_Norm_Sample_Barcode != 'NORMAL');
+	if (length(norm.idx) > 0) { full.maf.data[norm.idx,]$Mutation_Status <- 'germline'; }
 	}
 
 # replace NAs with blanks (required for cBioportal upload)
 for (field in c('t_depth','t_ref_count','t_alt_count','n_depth','n_ref_count','n_alt_count')) {
-	full.maf.data[is.na(full.maf.data[,field]),field] <- '';
+	if (any(is.na(full.maf.data[,field]))) {
+		full.maf.data[is.na(full.maf.data[,field]),field] <- '';
+		}
 	}
 
 colnames(full.maf.data) <- gsub('vcf','variant',colnames(full.maf.data));
