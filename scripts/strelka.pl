@@ -163,7 +163,7 @@ sub get_filter_command {
 			'| vcftools --vcf -'
 			);
 		} else {
-		$filter_command = "vcftools --gzvf $input";
+		$filter_command = "vcftools --gzvcf $input";
 		}
 
 	$filter_command .= ' ' . join(' ',
