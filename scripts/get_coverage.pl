@@ -16,6 +16,8 @@ use IO::Handle;
 my $cwd = dirname($0);
 require "$cwd/utilities.pl";
 
+our ($reference, $gatk_v4);
+
 ####################################################################################################
 # version	author		comment
 # 1.0		sprokopec	script to run DepthOfCoverage on GATK processed bams
@@ -35,33 +37,6 @@ require "$cwd/utilities.pl";
 # 	--dry_run indicates that this is a dry run
 
 ### DEFINE SUBROUTINES #############################################################################
-# format command to extract callability metrics (exome data only)
-sub get_callableLoci_command {
-	my %args = (
-		input		=> undef,
-		output		=> undef,
-		java_mem	=> undef,
-		tmp_dir		=> undef,
-		reference	=> undef,
-		intervals	=> undef,
-		@_
-		);
-
-	my $coverage_command = join(' ',
-		'java -Xmx' . $args{java_mem},
-		'-Djava.io.tmpdir=' . $args{tmp_dir},
-		'-jar $gatk_dir/GenomeAnalysisTK.jar -T DiagnoseTargets',
-		'-R', $args{reference},
-		'-I', $args{input},
-		'-o', $args{output},
-		'--intervals', $args{intervals},
-		'--minimum_coverage 10',
-		'--maximum_coverage 1000000' #default is 1073741823
-		);
-
-	return($coverage_command);
-	}
-
 # format command to extract coverage metrics
 sub get_coverage_command {
 	my %args = (
@@ -69,25 +44,36 @@ sub get_coverage_command {
 		output		=> undef,
 		java_mem	=> undef,
 		tmp_dir		=> undef,
-		reference	=> undef,
 		intervals	=> undef,
 		@_
 		);
 
-	my $coverage_command = join(' ',
-		'java -Xmx' . $args{java_mem},
-		'-Djava.io.tmpdir=' . $args{tmp_dir},
-		'-jar $gatk_dir/GenomeAnalysisTK.jar -T DepthOfCoverage',
-		'-R', $args{reference},
+	my $coverage_command;
+
+	if ($gatk_v4) {
+		$coverage_command = join(' ',
+			'gatk DepthOfCoverage',
+			'-O', $args{output}, '--omit-genes-not-entirely-covered-by-traversal',
+			'--omit-interval-statistics --omit-locus-table --omit-depth-output-at-each-base',
+			'--output-format TABLE --tmp-dir', $args{tmp_dir}
+			);
+		} else {
+		$coverage_command = join(' ',
+			'java -Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-jar $gatk_dir/GenomeAnalysisTK.jar -T DepthOfCoverage',
+			'-o', $args{output},
+			'-omitBaseOutput -omitIntervals -omitLocusTable -nt 2'
+			);
+		}
+
+	$coverage_command .= join(' ',
+		'-R', $reference,
 		'-I', $args{input},
-		'-o', $args{output},
-		'-omitBaseOutput -omitIntervals -omitLocusTable',
-		'-nt 2',
 		'-pt sample -pt readgroup'
 		);
 
 	if (defined($args{intervals})) {
-
 		$coverage_command .= ' ' . join(' ',
 			'--intervals', $args{intervals},
 			'--interval_padding 100'
@@ -231,11 +217,20 @@ sub main {
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n---\n";
 
+	$reference = $tool_data->{reference};
+
 	# set tools and versions
 	my $gatk	= 'gatk/' . $tool_data->{gatk_version};
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $bedtools	= 'bedtools/' . $tool_data->{bedtools_version};
 	my $r_version	= 'R/' . $tool_data->{r_version};
+
+	my $threshold = version->declare('4.0')->numify;
+	my $given = version->declare($tool_data->{gatk_version})->numify;
+
+	if ($given < $threshold) {
+		$gatk_v4 = 0;
+		} else { $gatk_v4 = 1; }
 
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{bamqc}->{parameters};
@@ -305,7 +300,6 @@ sub main {
 			my $cov_command = get_coverage_command(
 				input		=> $smp_data->{$patient}->{$type}->{$sample},
 				output		=> $coverage_out,
-				reference	=> $tool_data->{reference},
 				intervals	=> $tool_data->{intervals_bed},
 				java_mem	=> $parameters->{coverage}->{java_mem},
 				tmp_dir		=> $tmp_directory

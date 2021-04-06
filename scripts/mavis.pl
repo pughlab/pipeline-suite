@@ -387,6 +387,7 @@ sub main {
 			'MAVIS*.COMPLETE'
 			);
 
+		my $memory = '4G';
 		if (scalar(@rna_ids_patient) > 0) {
 
 			$mavis_cmd .= "\n\n" . get_mavis_command(
@@ -402,6 +403,8 @@ sub main {
 				fusioncatcher	=> join(' ', @fuscatch_svs_patient),
 				output		=> $mavis_cfg
 				);
+
+			$memory = '8G';
 
 			} else {
 
@@ -451,8 +454,8 @@ sub main {
 				cmd	=> $mavis_cmd,
 				modules	=> [$mavis, $bwa, 'perl', 'R'],
 				dependencies	=> join(':', @format_jobs),
-				max_time	=> '48:00:00',
-				mem		=> '4G',
+				max_time	=> '12:00:00',
+				mem		=> $memory,
 				hpc_driver	=> $args{hpc_driver}
 				);
 

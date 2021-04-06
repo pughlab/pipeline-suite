@@ -40,9 +40,8 @@ our ($reference, $dictionary, $intervals_bed, $gnomad, $min_length) = undef;
 # format command to run PreprocessIntervals
 sub get_format_intervals_command {
 	my %args = (
-		input_bed	=> undef,
-		input_string	=> undef,
-		picard_out	=> undef,
+		is_wgs		=> 0,
+		intervals	=> undef,
 		gc_out		=> undef,
 		output		=> undef,
 		@_
@@ -50,17 +49,10 @@ sub get_format_intervals_command {
 
 	my $gatk_command;
 
-	if (defined($args{input_bed})) {
-		$gatk_command .= "\n\n" . join(' ',
-			'java -jar $picard_dir/picard.jar BedToIntervalList',
-			'I=' . $args{input_bed},
-			'SD=' . $dictionary,
-			'O=' . $args{picard_out}
-			);
-
+	if (! $args{is_wgs}) {
 		$gatk_command .= "\n\n" . join(' ',
 			'gatk PreprocessIntervals', # by default, this adds 250bp padding to each interval
-			'-L', $args{picard_out},
+			'-L', $args{intervals},
 			'-R', $reference,
 			'--bin-length 0',
 			'--padding 250',
@@ -72,7 +64,7 @@ sub get_format_intervals_command {
 
 		$gatk_command .= "\n\n" . join(' ',
 			'gatk PreprocessIntervals',
-			'-L', $args{input_string},
+			'-L', $args{intervals},
 			'-R', $reference,
 			'--bin-length 1000',
 			'--padding 0',
@@ -113,6 +105,10 @@ sub get_format_gnomad_command {
 		'--restrict-alleles-to BIALLELIC'
 		);
 
+	if ($args{wgs}) {
+		$gatk_command .= " --select 'AF > 0.0001'";
+		}
+
 	$gatk_command .= "\n\n" . join("\n",
 		"bgzip $args{output_stem}.vcf",
 		"tabix -p vcf $args{output_stem}.vcf.gz"
@@ -123,7 +119,7 @@ sub get_format_gnomad_command {
 		$gatk_command .= "\n\n" . join("\n",
 			"for chr in $args{chrom_list}; do",
 			join(' ',
-				"  bcftools filter --include 'INFO/AF>0.0001' -O z -o",
+				'  bcftools filter -r $chr -O z -o',
 				$args{output_stem} . '_minAF_$chr.vcf',
 				"$args{output_stem}.vcf.gz"
 				),
@@ -428,9 +424,15 @@ sub main {
 		print $log "\n    Target intervals (exome): $intervals_bed";
 		}	
 
-	if (defined($tool_data->{gatk_cnv}->{gnomad})) {
-		$gnomad = $tool_data->{gatk_cnv}->{gnomad};
-		print $log "\n    gnomAD SNPs: $tool_data->{gatk_cnv}->{gnomad}";
+	my $is_wgs = 0;
+	if ('wgs' eq $tool_data->{seq_type}) {
+		$is_wgs = 1;
+		$tool_data->{intervals_bed} = undef;
+		}
+
+	if (defined($tool_data->{gnomad})) {
+		$gnomad = $tool_data->{gnomad};
+		print $log "\n    gnomAD SNPs: $tool_data->{gnomad}";
 		} else {
 		die("No gnomAD file provided; please provide path to gnomAD VCF");
 		}
@@ -507,23 +509,19 @@ sub main {
 	my $memory = '1G';
 	if (defined($intervals_bed)) {
 
-		$picard_intervals = join('/', $output_directory, basename($intervals_bed));
-		$picard_intervals =~ s/.bed/.interval_list/;
+		$picard_intervals = $intervals_bed;
+		$picard_intervals =~ s/\.bed/.interval_list/;
 		$gatk_intervals = join('/', $output_directory, basename($intervals_bed));
-		$gatk_intervals =~ s/.bed/.preprocessed.interval_list/;
+		$gatk_intervals =~ s/\.bed/.preprocessed.interval_list/;
 		$gc_intervals	= $gatk_intervals;
-		$gc_intervals	=~ s/.interval_list/.gc.interval_list/;
-
-		$cleanup_cmd = "rm $picard_intervals";
+		$gc_intervals	=~ s/\.interval_list/.gc.interval_list/;
 
 		$format_intervals_cmd = get_format_intervals_command(
-			input_bed	=> $intervals_bed,
 			reference	=> $reference,
-			picard_out	=> $picard_intervals,
+			intervals	=> $picard_intervals,
 			gc_out		=> $gc_intervals,
 			output		=> $gatk_intervals
 			);
-
 		
 		} else {
 
@@ -538,7 +536,7 @@ sub main {
 			);
 	
 		$format_intervals_cmd = get_format_intervals_command(
-			input_string	=> join(' -L ', @chroms),
+			intervals	=> join(' -L ', @chroms),
 			reference	=> $reference,
 			gc_out		=> $gc_intervals,
 			output		=> $gatk_intervals
@@ -580,9 +578,7 @@ sub main {
 	my $gnomad_snps = join('/', $output_directory, 'gnomAD_filtered.vcf.gz');
 	my $gnomad_directory = $output_directory;
 
-	my $is_wgs = 0;
-	if ('wgs' eq $tool_data->{seq_type}) {
-		$is_wgs = 1;
+	if ($is_wgs) {
 		$gnomad_directory = join('/', $output_directory, 'gnomAD');
 		unless(-e $gnomad_directory) { make_path($gnomad_directory); }
 		$gnomad_snps = join('/', $gnomad_directory, 'gnomAD_filtered_minAF_$CHR.interval_list');
@@ -628,7 +624,7 @@ sub main {
 		}
 
 	# return to a reasonable memory
-	if ('wgs' eq $tool_data->{seq_type}) {
+	if ($is_wgs) {
 		$memory = '4G';
 		}
 
