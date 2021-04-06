@@ -1368,38 +1368,41 @@ sub main {
 		push @all_jobs, $pon_job_id;
 		}
 
-	# collate results
-	my $collect_output = join(' ',
-		"Rscript $cwd/collect_sequenza_output.R",
-		'-d', $output_directory,
-		'-p', $tool_data->{project_name},
-		'-g', $tool_data->{gtf}
-		);
+	# if any T/N pairs were provided, collate Sequenza results
+	if (scalar(@sequenza_jobs) > 0) {
 
-	if ( ('exome' eq $tool_data->{seq_type}) && (defined($tool_data->{intervals_bed})) ) {
-		$collect_output .= " -t $intervals_bed";
+		my $collect_output = join(' ',
+			"Rscript $cwd/collect_sequenza_output.R",
+			'-d', $output_directory,
+			'-p', $tool_data->{project_name},
+			'-g', $tool_data->{gtf}
+			);
+
+		if ( ('exome' eq $tool_data->{seq_type}) && (defined($tool_data->{intervals_bed})) ) {
+			$collect_output .= " -t $intervals_bed";
+			}
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'combine_sequenza_segment_calls',
+			cmd	=> $collect_output,
+			modules	=> [$r_version],
+			dependencies	=> join(':', @sequenza_jobs),
+			mem		=> '4G',
+			max_time	=> '12:00:00',
+			hpc_driver	=> $args{hpc_driver}
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'combine_sequenza_segment_calls',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @all_jobs, $run_id;
 		}
-
-	$run_script = write_script(
-		log_dir	=> $log_directory,
-		name	=> 'combine_sequenza_segment_calls',
-		cmd	=> $collect_output,
-		modules	=> [$r_version],
-		dependencies	=> join(':', @sequenza_jobs),
-		mem		=> '4G',
-		max_time	=> '12:00:00',
-		hpc_driver	=> $args{hpc_driver}
-		);
-
-	$run_id = submit_job(
-		jobname		=> 'combine_sequenza_segment_calls',
-		shell_command	=> $run_script,
-		hpc_driver	=> $args{hpc_driver},
-		dry_run		=> $args{dry_run},
-		log_file	=> $log
-		);
-
-	push @all_jobs, $run_id;
 
 	#########################################
 	### BEGIN PROCESSING UNPAIRED SAMPLES ###
