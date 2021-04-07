@@ -3,6 +3,7 @@
 use AutoLoader 'AUTOLOAD';
 use strict;
 use warnings;
+use version;
 use Carp;
 use Getopt::Std;
 use Getopt::Long;
@@ -225,6 +226,7 @@ sub main {
 	my $bedtools	= 'bedtools/' . $tool_data->{bedtools_version};
 	my $r_version	= 'R/' . $tool_data->{r_version};
 
+	# check gatk version
 	my $threshold = version->declare('4.0')->numify;
 	my $given = version->declare($tool_data->{gatk_version})->numify;
 

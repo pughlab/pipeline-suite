@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-### contest.pl #####################################################################################
+### get_sequencing_metrics.pl ######################################################################
 use AutoLoader 'AUTOLOAD';
 use strict;
 use warnings;
@@ -11,19 +11,20 @@ use POSIX qw(strftime);
 use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
+use List::Util qw(any);
 use IO::Handle;
 
 my $cwd = dirname($0);
 require "$cwd/utilities.pl";
 
+our ($reference, $dictionary, $gnomad, $gatk_v4);
+
 ####################################################################################################
 # version	author		comment
-# 1.0		sprokopec	script to run ConTest on T/N pairs
-# 1.1		sprokopec	added help msg and cleaned up code
-# 1.2		sprokopec	minor updates for tool config
+# 1.0		sprokopec	script to collect sequencing metrics on GATK processed BAMs
 
 ### USAGE ##########################################################################################
-# contest.pl -t tool.yaml -d data.yaml -o /path/to/output/dir -c slurm --remove --dry_run
+# get_sequencing_metrics.pl -t tool.yaml -d data.yaml -o /path/to/output/dir -c slurm --remove --dry_run
 #
 # where:
 # 	-t (tool.yaml) contains tool versions and parameters, reference information, etc.
@@ -35,43 +36,110 @@ require "$cwd/utilities.pl";
 # 	--dry_run indicates that this is a dry run
 
 ### DEFINE SUBROUTINES #############################################################################
-# format command to run ContEst on T/N pairs
-sub get_contest_command {
+# format command to convert intervals.bed to picard-style intervals.list
+sub get_format_intervals_command {
 	my %args = (
-		tumour		=> undef,
-		normal		=> undef,
-		output		=> undef,
+		input_bed	=> undef,
+		picard_out	=> undef,
+		@_
+		);
+
+	my $format_command .= "\n\n" . join(' ',
+		'java -jar $picard_dir/picard.jar BedToIntervalList',
+		'I=' . $args{input_bed},
+		'SD=' . $dictionary,
+		'O=' . $args{picard_out}
+		);
+
+	return($format_command);
+	}
+
+# format command to extract metrics on sequencing artefacts
+sub get_artefacts_command {
+	my %args = (
+		input		=> undef,
+		output_stem	=> undef,
 		java_mem	=> undef,
 		tmp_dir		=> undef,
-		level		=> undef,
-		reference	=> undef,
-		hapmap		=> undef,
 		intervals	=> undef,
 		@_
 		);
 
-	my $contest_command = join(' ',
+	my $qc_command = join(' ',
 		'java -Xmx' . $args{java_mem},
 		'-Djava.io.tmpdir=' . $args{tmp_dir},
-		'-jar $gatk_dir/GenomeAnalysisTK.jar -T ContEst',
-		'-R', $args{reference},
-		'-I:eval', $args{tumour},
-		'-I:genotype', $args{normal},
-		'--popfile', $args{hapmap},
-		'-o', $args{output},
-		'--interval_set_rule INTERSECTION',
-		'--lane_level_contamination', $args{level}
+		'-jar $picard_dir/picard.jar CollectSequencingArtifactMetrics',
+		'R=' . $reference,
+		'I=' . $args{input},
+		'O=' . $args{output_stem}
 		);
 
 	if (defined($args{intervals})) {
-
-		$contest_command .= ' ' . join(' ',
-			'--intervals', $args{intervals},
-			'--interval_padding 100'
-			);
+		$qc_command .= " INTERVALS=$args{intervals}";
 		}
 
-	return($contest_command);
+	$qc_command .= "\n\necho 'CollectSequencingArtifactMetrics completed successfully.' > $args{output_stem}.COMPLETE";
+
+	return($qc_command);
+	}
+
+# format command for GetPileupSummaries
+sub get_pileup_command {
+	my %args = (
+		input		=> undef,
+		output		=> undef,
+		tmp_dir		=> undef,
+		intervals	=> undef,
+		@_
+		);
+
+	my $qc_command = join(' ',
+		'gatk GetPileupSummaries',
+		'--input', $args{input},
+		'--output', $args{output},
+		'--tmp-dir', $args{tmp_dir},
+		'--reference', $reference,
+		'--variant', $gnomad
+		);
+
+	if (defined($args{intervals})) {
+		$qc_command .= " --intervals $args{intervals}";
+		}
+
+	$qc_command .= "\n\nmd5sum $args{output} > $args{output}.md5";
+
+	return($qc_command);
+	}
+
+# format command to estimate contamination
+sub get_estimate_contamination_command {
+	my %args = (
+		tumour		=> undef,
+		normal		=> undef,
+		output		=> undef,
+		tmp_dir		=> undef,
+		intervals	=> undef,
+		@_
+		);
+
+	my $qc_command = join(' ',
+		'gatk CalculateContamination',
+		'--input', $args{tumour},
+		'--output', $args{output},
+		'--tmp-dir', $args{tmp_dir}
+		);
+
+	if (defined($args{normal})) {
+		$qc_command .= " --matched-normal $args{normal}";
+		}
+
+	if (defined($args{intervals})) {
+		$qc_command .= " --intervals $args{intervals}";
+		}
+
+#	$qc_command .= "\n\nmd5sum $args{output} > $args{output}.md5";
+
+	return($qc_command);
 	}
 
 ### MAIN ###########################################################################################
@@ -97,10 +165,11 @@ sub main {
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'gatk');
 
 	# confirm version
-	my $needed = version->declare('4')->numify;
-	my $given = version->declare($tool_data->{gatk_version})->numify;
-	if ($given >= $needed) {
-		die("Incompatible GATK version requested! ContEst pipeline is currently only compatible with GATK 3.x");
+	my $needed = version->declare('4.1')->numify;
+	my $given = version->declare($tool_data->{gatk_cnv_version})->numify;
+
+	if ($given < $needed) {
+		die("Incompatible GATK version requested! QC pipeline is currently only compatible with GATK >4.1");
 		}
 
 	# organize output and log directories
@@ -110,7 +179,7 @@ sub main {
 	my $log_directory = join('/', $output_directory, 'logs');
 	unless(-e $log_directory) { make_path($log_directory); }
 
-	my $log_file = join('/', $log_directory, 'run_ContEst_pipeline.log');
+	my $log_file = join('/', $log_directory, 'run_SequenceMetrics_pipeline.log');
 
 	# create a file to hold job metrics
 	my (@files, $run_count, $outfile, $touch_exit_status);
@@ -125,7 +194,7 @@ sub main {
 		$touch_exit_status = system("touch $outfile");
 		if (0 != $touch_exit_status) { Carp::croak("Cannot touch file $outfile"); }
 
-		$log_file = join('/', $log_directory, 'run_ContEst_pipeline_' . $run_count . '.log');
+		$log_file = join('/', $log_directory, 'run_SequenceMetrics_pipeline_' . $run_count . '.log');
 		}
 
 	# start logging
@@ -133,27 +202,59 @@ sub main {
 	$log->autoflush;
 
 	print $log "---\n";
-	print $log "Running ContEst pipeline.\n";
+	print $log "Running SequenceMetrics (QC) pipeline.\n";
 	print $log "\n  Tool config used: $tool_config";
 	print $log "\n    Reference used: $tool_data->{reference}";
-	print $log "\n    Population frequencies: $tool_data->{hapmap}";
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n---\n";
 
+	$reference = $tool_data->{reference};
+	$dictionary = $reference;
+	$dictionary =~ s/.fa/.dict/;
+
+	my $string;
+	if ( ('hg38' eq $tool_data->{ref_type}) || ('hg19' eq $tool_data->{ref_type})) {
+		$string = 'chr' . join(',chr', 1..22) . ',chrX,chrY';
+		} elsif ( ('GRCh37' eq $tool_data->{ref_type}) || ('GRCh37' eq $tool_data->{ref_type})) {
+		$string = join(',', 1..22) . ',X,Y';
+		} else {
+		die("Unrecognized ref_type; must be one of hg19, hg38, GRCh37 or GRCh38");
+		}
+
+	my @chroms = split(',', $string);
+
+	if (defined($tool_data->{gnomad})) {
+		$gnomad = $tool_data->{gnomad};
+		print $log "\n    gnomAD SNPs: $tool_data->{gnomad}";
+		} else {
+		die("No gnomAD file provided; please provide path to gnomAD VCF");
+		}
+
 	# set tools and versions
-	my $gatk	= 'gatk/' . $tool_data->{gatk_version};
+	my $gatk	= 'gatk/' . $tool_data->{gatk_cnv_version};
+	my $picard	= 'picard/' . $tool_data->{picard_version};
+	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
+	my $bedtools	= 'bedtools/' . $tool_data->{bedtools_version};
 	my $r_version	= 'R/' . $tool_data->{r_version};
 
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{bamqc}->{parameters};
 
 	### RUN ###########################################################################################
+	my ($run_script, $run_id, $link, $cleanup_cmd, $picard_intervals);
+	my @all_jobs;
+
+	# use picard-style intervals list
+	if (defined($tool_data->{intervals_bed})) {
+		$picard_intervals = $tool_data->{intervals_bed};
+		$picard_intervals =~ s/\.bed/\.interval_list/;
+		} else {
+		$picard_intervals = undef;
+		}
+
 	# get sample data
 	my $smp_data = LoadFile($data_config);
-
-	my ($run_script, $run_id, $link, $cleanup_cmd);
-	my @all_jobs;
 
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
@@ -163,11 +264,6 @@ sub main {
 		# find bams
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
 		my @tumour_ids = keys %{$smp_data->{$patient}->{'tumour'}};
-
-		if (scalar(@normal_ids) == 0) {
-			print $log "\n>> No normal BAM provided, skipping patient.\n";
-			next;
-			}
 
 		# create some directories
 		my $patient_directory = join('/', $output_directory, $patient);
@@ -195,72 +291,167 @@ sub main {
 			}
 
 		# create an array to hold final outputs and all patient job ids
-		my (@final_outputs, @patient_jobs);
+		my (@final_outputs, @patient_jobs, @pileup_jobs);
 
-		# for T/N only
-		foreach my $sample (@tumour_ids) {
+		my @sample_ids = @tumour_ids;
+		push @sample_ids, @normal_ids;
+		@sample_ids = sort(@sample_ids);
+
+		foreach my $sample (@sample_ids) {
 
 			print $log "  SAMPLE: $sample\n\n";
 
-			# run ContEst on per-bam and per-lane settings
-			my @lane_types = qw(META READGROUP);
-
-			foreach my $lane_type (@lane_types) {
-
-				my $output_file = join('/',
-					$patient_directory,
-					$sample . '_ContEst_' . $lane_type . '.tsv'
-					);
-
-				my $contest_command = get_contest_command(
-					tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
-					normal		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
-					output		=> $output_file,
-					level		=> $lane_type,
-					reference	=> $tool_data->{reference},
-					hapmap		=> $tool_data->{hapmap},
-					intervals	=> $tool_data->{intervals_bed},
-					java_mem	=> $parameters->{contest}->{java_mem},
-					tmp_dir		=> $tmp_directory
-					);
-
-				$contest_command .= "\n" . check_java_output(
-					extra_cmd => "md5sum $output_file > $output_file.md5"
-					);
-
-				# check if this should be run
-				if ('Y' eq missing_file($output_file . '.md5')) {
-
-					# record command (in log directory) and then run job
-					print $log "Submitting job for ContEst ($lane_type)...\n";
-
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> 'run_contest_' . $sample . '_' . $lane_type,
-						cmd	=> $contest_command,
-						modules	=> [$gatk],
-						max_time	=> $parameters->{contest}->{time},
-						mem		=> $parameters->{contest}->{mem},
-						hpc_driver	=> $args{hpc_driver}
-						);
-
-					$run_id = submit_job(
-						jobname		=> 'run_contest_' . $sample . '_' . $lane_type,
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
-						);
-
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
-					}
-				else {
-					print $log "Skipping ContEst: $lane_type as this has already been completed!\n";
-					}
-
-				push @final_outputs, $output_file;
+			my $type;
+			if ( (any { $_ =~ m/$sample/ } @normal_ids) ) {
+				$type = 'normal';
+				} else {
+				$type = 'tumour';
 				}
+
+			## Collect artefact metrics on all input BAMs
+			my $output_stem = join('/', $patient_directory, $sample . '_artifact_metrics');
+
+			my $qc_command = get_artefacts_command(
+				input		=> $smp_data->{$patient}->{$type}->{$sample},
+				output_stem	=> $output_stem,
+				intervals	=> $picard_intervals,
+				java_mem	=> $parameters->{qc}->{java_mem},
+				tmp_dir		=> $tmp_directory
+				);
+
+			# check if this should be run
+			if ('Y' eq missing_file($output_stem . '.COMPLETE')) {
+
+				# record command (in log directory) and then run job
+				print $log "Submitting job for CollectSequenceArtefacts...\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_collect_sequencing_artefacts_' . $sample,
+					cmd	=> $qc_command,
+					modules	=> [$picard],
+					max_time	=> $parameters->{qc}->{time},
+					mem		=> $parameters->{qc}->{mem},
+					hpc_driver	=> $args{hpc_driver}
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_collect_sequencing_artefacts_' . $sample,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
+				} else {
+				print $log "Skipping CollectSequenceArtefacts because this has already been completed!\n";
+				}
+
+			push @final_outputs, $output_stem . '.bait_bias_summary_metrics';
+			push @final_outputs, $output_stem . '.pre_adapter_summary_metrics';
+
+			## Collect contamination estimates
+			my $pileup_out = join('/', $patient_directory, $sample . '_pileup.table');
+
+			my $pileup_command = get_pileup_command(
+				input		=> $smp_data->{$patient}->{$type}->{$sample},
+				output		=> $pileup_out,
+				intervals	=> $picard_intervals,
+#				java_mem	=> $parameters->{qc}->{java_mem},
+				tmp_dir		=> $tmp_directory
+				);
+
+			$cleanup_cmd .= "\nrm $pileup_out";
+
+			# check if this should be run
+			if ('Y' eq missing_file($pileup_out . '.md5')) {
+
+				# record command (in log directory) and then run job
+				print $log "Submitting job for GetPileupSummaries...\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_get_pileup_summaries_' . $sample,
+					cmd	=> $pileup_command,
+					modules	=> [$gatk],
+					max_time	=> '04:00:00',
+				#	mem		=> $parameters->{qc}->{mem},
+					hpc_driver	=> $args{hpc_driver}
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_get_pileup_summaries_' . $sample,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				push @pileup_jobs, $run_id;
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
+				} else {
+				print $log "Skipping GetPileupSummaries because this has already been completed!\n";
+				}
+			}
+
+		# for each tumour
+		foreach my $tumour (@tumour_ids) {
+
+			my $tumour_pileup = join('/', $patient_directory, $tumour . '_pileup.table');
+			my $normal_pileup = undef;
+			if (scalar(@normal_ids) > 0) {
+				$normal_pileup = join('/',
+					$patient_directory,
+					$normal_ids[0] . '_pileup.table'
+					);
+				}
+
+			my $contest_output = join('/', $patient_directory, $tumour . '_contamination.table');
+			my $contest_command = get_estimate_contamination_command(
+				tumour		=> $tumour_pileup,
+				normal		=> $normal_pileup,
+				output		=> $contest_output,
+#				intervals	=> $picard_intervals,
+#				java_mem	=> $parameters->{qc}->{java_mem},
+				tmp_dir		=> $tmp_directory
+				);
+
+			# check if this should be run
+			if ('Y' eq missing_file($contest_output . '.md5')) {
+
+				# record command (in log directory) and then run job
+				print $log "Submitting job for CalculateContamination...\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_calculate_contamination_' . $tumour,
+					cmd	=> $contest_command,
+					modules	=> [$gatk],
+					dependencies	=> join(':', @pileup_jobs),
+#					max_time	=> $parameters->{qc}->{time},
+#					mem		=> $parameters->{qc}->{mem},
+					hpc_driver	=> $args{hpc_driver}
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_calculate_contamination_' . $tumour,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
+				} else {
+				print $log "Skipping CalculateContamination because this has already been completed!\n";
+				}
+
+			push @final_outputs, $contest_output;
+
 			}
 
 		# should intermediate files be removed
@@ -274,13 +465,8 @@ sub main {
 				print $log "Submitting job to clean up temporary/intermediate files...\n";
 
 				# make sure final output exists before removing intermediate files!
-				my @files_to_check;
-				foreach my $tmp ( @final_outputs ) {
-					push @files_to_check, $tmp . '.md5';
-					}
-
 				$cleanup_cmd = join("\n",
-					"if [ -s " . join(" ] && [ -s ", @files_to_check) . " ]; then",
+					"if [ -s " . join(" ] && [ -s ", @final_outputs) . " ]; then",
 					"  $cleanup_cmd",
 					"else",
 					'  echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
@@ -313,14 +499,14 @@ sub main {
 
 	# collate results
 	my $collect_output = join(' ',
-		"Rscript $cwd/collect_contest_output.R",
+		"Rscript $cwd/collect_sequencing_metrics.R",
 		'-d', $output_directory,
-		'-p', $tool_data->{project_name}
+		'-p', $tool_data->{project_name},
 		);
 
 	$run_script = write_script(
 		log_dir	=> $log_directory,
-		name	=> 'combine_contest_output',
+		name	=> 'combine_qc_output',
 		cmd	=> $collect_output,
 		modules	=> [$r_version],
 		dependencies	=> join(':', @all_jobs),
@@ -330,7 +516,7 @@ sub main {
 		);
 
 	$run_id = submit_job(
-		jobname		=> 'combine_contest_output',
+		jobname		=> 'combine_qc_output',
 		shell_command	=> $run_script,
 		hpc_driver	=> $args{hpc_driver},
 		dry_run		=> $args{dry_run},
@@ -389,7 +575,7 @@ sub main {
 					}
 				# if none of the above, we will exit with an error
 				else {
-					die("Final ContEst accounting job: $run_id finished with errors.");
+					die("Final SequenceMetrics accounting job: $run_id finished with errors.");
 					}
 				}
 			}
@@ -404,7 +590,7 @@ sub main {
 # declare variables
 my ($tool_config, $data_config, $output_directory);
 my $hpc_driver = 'slurm';
-my ($remove_junk, $dry_run, $no_wait, $help);
+my ($remove_junk, $dry_run, $help, $no_wait);
 
 # get command line arguments
 GetOptions(
