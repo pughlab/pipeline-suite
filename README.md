@@ -145,10 +145,11 @@ For WXS or targeted-sequencing panels, a bed file containing target regions shou
 
 <pre><code>
 perl format_interval_bed.pl \
--b /path/to/base/intervals.bed
+-b /path/to/base/intervals.bed \
+-r /path/to/reference.fa
 </code></pre>
 
-This will produce a padded bed file in the same directory as the original bed file (if the original file is /path/to/intervals.bed then this will produce /path/to/intervals_padding100bp.bed and intervals_padding100bp.bed.gz).
+This will produce a padded bed file in the same directory as the original bed file (if the original file is /path/to/intervals.bed then this will produce /path/to/intervals_padding100bp.bed and intervals_padding100bp.bed.gz) and a picard-style intervals.list file.
 
 ### DNA pipeline:
 <pre><code>cd /path/to/git/pipeline-suite/
@@ -212,6 +213,15 @@ This will again write individual commands to file: /path/to/output/directory/BWA
 
 ### get BAM QC metrics, including coverage, contamination estimates and callable bases
 <pre><code>perl contest.pl \
+-t /path/to/dna_pipeline_config.yaml \
+-d /path/to/gatk_bam_config.yaml \
+-o /path/to/output/directory \
+-c slurm \
+--remove \
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
+
+perl get_sequencing_metrics.pl \
 -t /path/to/dna_pipeline_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
 -o /path/to/output/directory \
@@ -374,6 +384,18 @@ perl vardict.pl \
 -d /path/to/gatk_bam_config.yaml \
 -o /path/to/output/directory \
 --pon /path/to/panel_of_normals.vcf { optional if not using the one created here; can also be specified in dna_pipeline_config.yaml if created elsewhere } \
+-c slurm \
+--remove \
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
+</code></pre>
+
+### run GATK:CNV to produce somatic CNA calls
+<pre><code>Generate somatic CNA calls:
+perl gatk_cnv.pl \
+-t /path/to/dna_pipeline_config.yaml \
+-d /path/to/gatk_bam_config.yaml \
+-o /path/to/output/directory \
 -c slurm \
 --remove \
 --dry-run { if this is a dry-run } \
