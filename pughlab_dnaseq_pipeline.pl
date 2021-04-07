@@ -10,7 +10,7 @@ use Getopt::Long;
 use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
-use List::Util qw(any);
+use List::Util qw(any none);
 
 my $cwd = dirname($0);
 require "$cwd/scripts/utilities.pl";
@@ -82,9 +82,9 @@ sub main {
 	### MAIN ###########################################################################################
 
 	my $run_script;
-	my ($bwa_run_id, $gatk_run_id, $contest_run_id, $coverage_run_id, $hc_run_id);
+	my ($bwa_run_id, $gatk_run_id, $contest_run_id, $qc_run_id, $coverage_run_id, $hc_run_id);
 	my ($strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id);
-	my ($somaticsniper_run_id, $delly_run_id, $vardict_run_id, $gatkcnv_run_id);
+	my ($somaticsniper_run_id, $delly_run_id, $vardict_run_id, $gatk_cnv_run_id);
 	my ($mavis_run_id, $report_run_id);
 
 	my @job_ids;
@@ -93,6 +93,7 @@ sub main {
 	my $bwa_directory = join('/', $output_directory, 'BWA');
 	my $gatk_directory = join('/', $output_directory, 'GATK');
 	my $gatk_cnv_directory = join('/', $output_directory, 'GATK_CNV');
+	my $qc_directory = join('/', $output_directory, 'BAMQC', 'SequenceMetrics');
 	my $contest_directory = join('/', $output_directory, 'BAMQC', 'ContEst');
 	my $coverage_directory = join('/', $output_directory, 'BAMQC', 'Coverage');
 	my $hc_directory = join('/', $output_directory, 'HaplotypeCaller');
@@ -224,11 +225,13 @@ sub main {
 
 		## run GATK's ContEst for contamination estimation (T/N only)
 		## and GATK's DepthOfCoverage and find Callable Bases
+		unless(-e $qc_directory) { make_path($qc_directory); }
 		unless(-e $contest_directory) { make_path($contest_directory); }
 		unless(-e $coverage_directory) { make_path($coverage_directory); }
 
 		if ('Y' eq $tool_data->{bamqc}->{run}) {
 
+			# ContEst (GATK v3.x) pipeline
 			my $contest_command = join(' ',
 				"perl $cwd/scripts/contest.pl",
 				"-o", $contest_directory,
@@ -275,6 +278,54 @@ sub main {
 				push @job_ids, $contest_run_id;
 				}
 
+			# QC (GATK v4.x) pipeline
+			my $qc_command = join(' ',
+				"perl $cwd/scripts/get_sequencing_metrics.pl",
+				"-o", $qc_directory,
+				"-t", $tool_config,
+				"-d", $gatk_output_yaml,
+				"-c", $args{cluster}
+				);
+
+			if ($args{cleanup}) {
+				$qc_command .= " --remove";
+				}
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for get_sequencing_metrics.pl\n";
+			print $log "  COMMAND: $qc_command\n\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_qc',
+				cmd	=> $qc_command,
+				modules	=> ['perl'],
+				dependencies	=> $gatk_run_id,
+				mem		=> '256M',
+				max_time	=> $max_time,
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
+
+				$qc_command .= " --dry-run";
+				`$qc_command`;
+
+				} else {
+
+				$qc_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> QC job id: $qc_run_id\n\n";
+				push @job_ids, $qc_run_id;
+				}
+
+			# Coverage (GATK, any version) + callable bases pipeline
 			my $coverage_command = join(' ',
 				"perl $cwd/scripts/get_coverage.pl",
 				"-o", $coverage_directory,
@@ -1225,7 +1276,7 @@ if (!defined($data_config)) { die("No data config file defined; please provide -
 
 # check for compatible HPC driver; if not found, change dry_run to Y
 my @compatible_drivers = qw(slurm);
-if ( (!any { /$hpc_driver/ } @compatible_drivers ) && (!$dry_run) ) {
+if ( (none { $_ =~ m/$hpc_driver/ } @compatible_drivers ) && (!$dry_run) ) {
 	print "Unrecognized HPC driver requested: setting dry_run to true -- jobs will not be submitted but commands will be written to file.\n";
 	$dry_run = 1;
 	}
