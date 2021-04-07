@@ -3,6 +3,7 @@
 use AutoLoader 'AUTOLOAD';
 use strict;
 use warnings;
+use version;
 use Carp;
 use Getopt::Std;
 use Getopt::Long;
@@ -94,6 +95,13 @@ sub main {
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'gatk');
+
+	# confirm version
+	my $needed = version->declare('4')->numify;
+	my $given = version->declare($tool_data->{gatk_version})->numify;
+	if ($given >= $needed) {
+		die("Incompatible GATK version requested! ContEst pipeline is currently only compatible with GATK 3.x");
+		}
 
 	# organize output and log directories
 	my $output_directory = $args{output_directory};
