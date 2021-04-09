@@ -205,13 +205,21 @@ sub main {
 	print $log "Running SequenceMetrics (QC) pipeline.\n";
 	print $log "\n  Tool config used: $tool_config";
 	print $log "\n    Reference used: $tool_data->{reference}";
-	print $log "\n    Output directory: $output_directory";
-	print $log "\n  Sample config used: $data_config";
-	print $log "\n---\n";
 
 	$reference = $tool_data->{reference};
 	$dictionary = $reference;
 	$dictionary =~ s/.fa/.dict/;
+
+	if (defined($tool_data->{gnomad})) {
+		$gnomad = $tool_data->{gnomad};
+		print $log "\n    gnomAD SNPs: $tool_data->{gnomad}";
+		} else {
+		die("No gnomAD file provided; please provide path to gnomAD VCF");
+		}
+
+	print $log "\n    Output directory: $output_directory";
+	print $log "\n  Sample config used: $data_config";
+	print $log "\n---\n";
 
 	my $string;
 	if ( ('hg38' eq $tool_data->{ref_type}) || ('hg19' eq $tool_data->{ref_type})) {
@@ -223,13 +231,6 @@ sub main {
 		}
 
 	my @chroms = split(',', $string);
-
-	if (defined($tool_data->{gnomad})) {
-		$gnomad = $tool_data->{gnomad};
-		print $log "\n    gnomAD SNPs: $tool_data->{gnomad}";
-		} else {
-		die("No gnomAD file provided; please provide path to gnomAD VCF");
-		}
 
 	# set tools and versions
 	my $gatk	= 'gatk/' . $tool_data->{gatk_cnv_version};
@@ -359,7 +360,6 @@ sub main {
 				input		=> $smp_data->{$patient}->{$type}->{$sample},
 				output		=> $pileup_out,
 				intervals	=> $picard_intervals,
-#				java_mem	=> $parameters->{qc}->{java_mem},
 				tmp_dir		=> $tmp_directory
 				);
 
@@ -376,8 +376,8 @@ sub main {
 					name	=> 'run_get_pileup_summaries_' . $sample,
 					cmd	=> $pileup_command,
 					modules	=> [$gatk],
-					max_time	=> '04:00:00',
-				#	mem		=> $parameters->{qc}->{mem},
+					max_time	=> $parameters->{qc}->{time},
+					mem		=> $parameters->{qc}->{mem},
 					hpc_driver	=> $args{hpc_driver}
 					);
 
