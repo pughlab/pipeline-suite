@@ -250,7 +250,7 @@ sub main {
 		$picard_intervals = $tool_data->{intervals_bed};
 		$picard_intervals =~ s/\.bed/\.interval_list/;
 		} else {
-		$picard_intervals = undef;
+		$picard_intervals = join(' -L ', @chroms);
 		}
 
 	# get sample data
