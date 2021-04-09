@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use Getopt::Std;
 use Getopt::Long;
+use Data::Dumper;
 use List::Util qw(any all);
 
 ### GETOPTS AND DEFAULT VALUES #####################################################################
@@ -46,8 +47,10 @@ my $final_job = $jobs[-1];
 my $complete = 0;
 my $timeouts = 0;
 
+sleep(60);
+
 while (!$complete && $timeouts < 20 ) {
-	#sleep(30);
+
 	my $status = `sacct --format='State' -j $job_list`;
 
 	# if we run into a server connection error (happens rarely with sacct)
@@ -60,8 +63,13 @@ while (!$complete && $timeouts < 20 ) {
 	my @job_statuses = split("\n", $status);
 	@job_statuses = @job_statuses[2..$#job_statuses];
 
+	print Dumper \@job_statuses;
+
 	# if final job has finished successfully:
-	if ( all { $_ =~ m/COMPLETED/ } @job_statuses ) { $complete = 1; }
+	if ( all { $_ =~ m/COMPLETED/ } @job_statuses ) {
+		$complete = 1;
+		print "All jobs completed successfully.";
+		}
 
 	# if none of the above, we will exit with an error
 	elsif ( any { $_ =~ m/FAILED|TIMEOUT|CANCELLED/ } @job_statuses ) {
@@ -73,6 +81,8 @@ while (!$complete && $timeouts < 20 ) {
 	else {
 		$timeouts = 0;
 		}
+
+	sleep(60);
 	}
 
 exit;
