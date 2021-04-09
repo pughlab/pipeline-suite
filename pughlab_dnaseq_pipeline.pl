@@ -908,6 +908,44 @@ sub main {
 				print $log ">>> VarScan job id: $varscan_run_id\n\n";
 				push @job_ids, $varscan_run_id;
 				}
+
+			# run sequenza pipeline
+			my $sequenza_command = join(' ',
+				"perl $cwd/scripts/run_sequenza_with_optimal_gamma.pl",
+				"-o", $varscan_directory,
+				"-t", $tool_config,
+				"-d", $gatk_output_yaml,
+				"-c", $args{cluster}
+				);
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for run_sequenza_with_optimal_gamma.pl\n";
+			print $log "  COMMAND: $sequenza_command\n\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_sequenza',
+				cmd	=> $sequenza_command,
+				modules	=> ['perl'],
+				dependencies	=> $varscan_run_id,
+				mem		=> '256M',
+				max_time	=> $max_time,
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
+			
+				$varscan_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> VarScan job id: $varscan_run_id\n\n";
+				push @job_ids, $varscan_run_id;
+				}
 			}
 
 		## SomaticSniper pipeline
@@ -1268,8 +1306,8 @@ if ($help) {
 	exit;
 	}
 
-if ( (!$preprocessing) && (!$variant_calling) ) {
-	die("Please choose a step to run (either --preprocessing and/or --variant_caling)");
+if ( (!$preprocessing) && (!$variant_calling) && (!$create_report) ) {
+	die("Please choose a step to run (either --preprocessing and/or --variant_caling and/or --create_report )");
 	}
 if (!defined($tool_config)) { die("No tool config file defined; please provide -t | --tool (ie, tool_config.yaml)"); }
 if (!defined($data_config)) { die("No data config file defined; please provide -d | --data (ie, sample_config.yaml)"); }
