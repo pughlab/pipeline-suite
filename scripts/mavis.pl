@@ -52,7 +52,7 @@ sub _get_files {
 		-e && /\Q$exten\E$/ && push @files, $File::Find::name
 		};
 
-	find($want, @{$dirs});
+	find($want, $dirs);
 	return(@files);
 	}
 
@@ -241,19 +241,22 @@ sub main {
 			}
 		}
 
-	# find manta and delly outputs
-	my @sv_directories = ($args{manta_dir}, $args{delly_dir}, $args{starfusion_dir}, $args{fusioncatcher_dir});
-	my @extensions = qw(diploidSV.vcf.gz somaticSV.vcf.gz tumorSV.vcf.gz Delly_SVs_somatic_hc.bcf star-fusion.fusion_predictions.abridged.tsv final-list_candidate-fusion-genes.txt);
-
-	my @sv_files;
-	foreach my $extension ( @extensions ) {
-		push @sv_files, _get_files(\@sv_directories, $extension);
+	# find SV files in each directory
+	my (@manta_files, @delly_files, @starfusion_files, @fusioncatcher_files);
+	if (defined($args{manta_dir})) {
+		@manta_files = _get_files($args{manta_dir}, 'diploidSV.vcf.gz');
+		push @manta_files, _get_files($args{manta_dir}, 'somaticSV.vcf.gz');
+		push @manta_files, _get_files($args{manta_dir}, 'tumorSV.vcf.gz');
 		}
-
-	my @manta_files = grep { /Manta/ } @sv_files;
-	my @delly_files = grep { /Delly/ } @sv_files;
-	my @starfusion_files = grep { /star-fusion/ } @sv_files;
-	my @fusioncatcher_files = grep { /candidate-fusion-genes/ } @sv_files;
+	if (defined($args{delly_dir})) {
+		@delly_files = _get_files($args{delly_dir}, 'Delly_SVs_somatic_hc.bcf');
+		}
+	if (defined($args{starfusion_dir})) {
+		@starfusion_files = _get_files($args{starfusion_dir}, 'star-fusion.fusion_predictions.abridged.tsv');
+		}
+	if (defined($args{fusioncatcher_dir})) {
+		@fusioncatcher_files = _get_files($args{fusioncatcher_dir}, 'final-list_candidate-fusion-genes.txt');
+		}
 
 	# initialize objects
 	my ($run_script, $run_id, $link);
@@ -390,7 +393,7 @@ sub main {
 		my $memory = '4G';
 		if (scalar(@rna_ids_patient) > 0) {
 
-			$mavis_cmd .= "\n\n" . get_mavis_command(
+			$mavis_cmd .= "\n\necho 'Running mavis config.';\n\n" . get_mavis_command(
 				tumour_ids	=> \@tumour_ids,
 				normal_id	=> $normal_id,
 				rna_ids		=> \@rna_ids_patient,
@@ -408,7 +411,7 @@ sub main {
 
 			} else {
 
-			$mavis_cmd .= "\n\n" . get_mavis_command(
+			$mavis_cmd .= "\n\necho 'Running mavis config.';\n\n" . get_mavis_command(
 				tumour_ids	=> \@tumour_ids,
 				normal_id	=> $normal_id,
 				tumour_bams	=> $smp_data->{$patient}->{tumour},
@@ -419,25 +422,25 @@ sub main {
 				);
 			}
 
-		$mavis_cmd .= "\n\n" . "mavis setup $mavis_cfg -o $patient_directory";
+		$mavis_cmd .= "\n\necho 'Running mavis setup.';\n\nmavis setup $mavis_cfg -o $patient_directory";
 
 		# if build.cfg already exists, then try resubmitting
 		if ('Y' eq missing_file("$patient_directory/build.cfg")) {
-			$mavis_cmd .= "\n\n" . "mavis schedule -o $patient_directory --submit";
+			$mavis_cmd .= "\n\necho 'Running mavis schedule.';\n\nmavis schedule -o $patient_directory --submit";
 			} else {
 			$mavis_cmd =~ s/mavis config/#mavis config/;
 			$mavis_cmd =~ s/mavis setup/#mavis setup/;
-			$mavis_cmd .= "\n\n" . "mavis schedule -o $patient_directory --resubmit";
+			$mavis_cmd .= "\n\necho 'Running mavis schedule with resubmit.';\n\nmavis schedule -o $patient_directory --resubmit";
 			}
 
-		$mavis_cmd .= "\n\n" . join(' ',
+		$mavis_cmd .= "\n\necho 'MAVIS schedule complete, extracting job ids.';\n\n" . join(' ',
 			"grep '^job_ident'",
 			join('/', $patient_directory,  'build.cfg'),
 			"| sed 's/job_ident = //' > ",
 			join('/', $patient_directory, 'job_ids')
 			);
 
-		$mavis_cmd .= "\n\n" . join(' ',
+		$mavis_cmd .= "\n\necho 'Beginning check of mavis jobs.';\n\n" . join(' ',
 			"perl $cwd/mavis_check.pl",
 			"-j", join('/', $patient_directory, 'job_ids')
 			);
@@ -456,7 +459,8 @@ sub main {
 				dependencies	=> join(':', @format_jobs),
 				max_time	=> '12:00:00',
 				mem		=> $memory,
-				hpc_driver	=> $args{hpc_driver}
+				hpc_driver	=> $args{hpc_driver},
+				kill_on_error	=> 0
 				);
 
 			$run_id = submit_job(

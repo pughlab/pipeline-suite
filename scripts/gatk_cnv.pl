@@ -489,6 +489,9 @@ sub main {
 	######################
 
 	### RUN ###########################################################################################
+	# begin by loading sample data
+	my $smp_data = LoadFile($data_config);
+
 	# begin by formatting intervals for gatk
 	my ($run_script, $run_id, $tmp_run_id, $intervals_run_id, $intervals_run_id2, $cleanup_cmd);
 	my @all_jobs;
@@ -500,7 +503,7 @@ sub main {
 		if (scalar(@normal_ids) > 0) { push @has_normals, $patient; }
 		}
 
-	if (scalar(@has_normals) <= 1) {
+	if (scalar(@has_normals) < 1) {
 		die("Insufficient normals provided for PoN. Either increase available normals and re-run, or set gatk_cnv->{run} = N in tool config.");
 		}	
 
@@ -628,9 +631,7 @@ sub main {
 		$memory = '4G';
 		}
 
-	# next, load and process sample data
-	my $smp_data = LoadFile($data_config);
-
+	# initiate objects to hold key info
 	my (%final_outputs, %patient_jobs, %cleanup);
 
 	# prep directories for pon
@@ -1229,7 +1230,7 @@ sub main {
 					}
 				# if none of the above, we will exit with an error
 				else {
-					die("Final ContEst accounting job: $run_id finished with errors.");
+					die("Final GATK:CNV accounting job: $run_id finished with errors.");
 					}
 				}
 			}

@@ -527,7 +527,10 @@ sub main {
 			$cleanup_cmd .= "\nrm " . join('/', $sample_directory, '*SNPfilter');
 
 			# check if this should be run
-			if ('Y' eq missing_file($snp_filter)) {
+			if (
+				('Y' eq missing_file($snp_filter)) &&
+				('Y' eq missing_file($snp_filter . '.fp_pass'))
+				) {
 
 				# record command (in log directory) and then run job
 				print $log "Submitting job for snpFilter...\n";

@@ -1,10 +1,8 @@
-### run_sequenza.R #################################################################################
-# Script to run Sequenza on snps and cnv files from Varscan
+### SequenzaSingleSample_optimized.R ###############################################################
+# Script to run Sequenza (v2.1) on snps and cnv files from Varscan using optimized gamma parameter
 #
 # Modified from /cluster/projects/pughlab/src/sequenza_wrapper/SequenzaSingleSample_v2.1.R
 # to incorporate reference type
-
-# Deprecated as of 2021-04-09; replaced by run_sequenza_with_optimal_gamma.pl
 
 ### PREAMBLE #######################################################################################
 library(sequenza);
@@ -12,41 +10,6 @@ library(optparse);
 library(GenomicRanges);
 
 ### FUNCTIONS ######################################################################################
-# function to find overlap among bed files
-BedBedOverlap <- function(bed.frame1, bed.frame2, pad = 0) {
-
-	colnames(bed.frame1)[1:3] <- c("Chromsome","Start_Position","End_Position");
-	bed.frame1$Start_Position <- as.numeric(as.character(bed.frame1$Start_Position));
-	bed.frame1$End_Position <- as.numeric(as.character(bed.frame1$End_Position));
-	bed.frame1$Chromsome <- gsub("chr","",bed.frame1$Chromsome);
-
-	colnames(bed.frame2)[1:3] <- c("Chromsome","Start_Position","End_Position");
-	bed.frame2$Start_Position <- as.numeric(as.character(bed.frame2$Start_Position));
-	bed.frame2$End_Position <- as.numeric(as.character(bed.frame2$End_Position));
-	bed.frame2$Chromsome <- gsub("chr","",bed.frame2$Chromsome);
-
-	## add padding to bed if desired
-	bed.frame1$Start_Position <- bed.frame1$Start_Position - pad;
-	bed.frame1$End_Position <- bed.frame1$End_Position + pad;
-
-	bed.frame2$Start_Position <- bed.frame2$Start_Position - pad;
-	bed.frame2$End_Position <- bed.frame2$End_Position + pad;
-
-	bed_ranges1 <- with(
-		bed.frame1,
-		GRanges(Chromsome, IRanges(start=Start_Position, end=End_Position))
-		);
-
-	bed_ranges2 <- with(
-		bed.frame2,
-		GRanges(Chromsome, IRanges(start=Start_Position, end=End_Position))
-		);
-
-	hits <- overlapsAny(bed_ranges1,bed_ranges2);
-	
-	return(hits);
-	}
-
 # function to extract alternative solutions
 alternative.cp.solutions <- function(cp.table) {
 	ci <- get.ci(cp.table);
@@ -66,7 +29,7 @@ alternative.cp.solutions <- function(cp.table) {
 	} else {
 		data.frame(
 			cellularity = ci$max.cellularity, 
-			ploidy = ci$max.ploidy,
+			 ploidy = ci$max.ploidy,
 			SLPP = cp.table$lpp[which(cp.table$ploidy == ci$max.ploidy),
 			which(cp.table$cellularity == ci$max.cellularity)]
 			);
@@ -76,34 +39,30 @@ alternative.cp.solutions <- function(cp.table) {
 ### PARSE OPTIONS ##################################################################################
 # For now, test if commands are in original, trailing format, or new opt-parse format
 option_list <- list(
-	make_option(c("-z", "--seqz_file"), type="character", default=NULL, 
-		help="seqz file name", metavar="character"),
-	make_option(c("-s", "--snp_file"), type="character", default=NULL, 
-		help="varscan snp file name", metavar="character"),
-	make_option(c("-c", "--cnv_file"), type="character", default=NULL,
-		help="varscan copy number file name [default= %default]", metavar="character"),
+	make_option(c("-q", "--seqz_file"), type="character", default=NULL,
+		help="seqz.data file produced from Varscan input",
+		metavar="character"),
 	make_option(c("-o", "--out_dir"), type="character", default=NULL,
 		help="output directory [default= %default]", metavar="character"),
-	make_option(c("-p", "--purity"), type="double", default=1,
-		help="alternate purity [default= %default]", metavar="double"),
-	make_option(c("-x", "--ploidy"), type="double", default=2,
-		help="alternate purity [default= %default]", metavar="double"),
 	make_option(c("-m", "--min.reads.normal"), type="double", default=10,
 		help="min reads to make genotype call [default= %default]", metavar="double"),
+	make_option(c("-g", "--gamma"), type="character", default=40,
+		help="penalty for each discontinuity in the curve [default= %default]", metavar="character"),
+	make_option(c("-k", "--kmin"), type="double", default=5,
+		help="minimum number of probes in each segment [default= %default]", metavar="double"),
 	make_option(c("-n", "--remove_centromeres"), type="logical", default=TRUE,
 		help="remove all snp and copy-number data from centromeric regions", metavar="logical"),
-	make_option(c("-g", "--gamma"), type="double", default=40,
-		help="penalty for each discontinuity in the curve [default= %default]", metavar="double"),
+	make_option(c("-p", "--ploidy_priors"), type="character",
+		default="/cluster/projects/pughlab/src/sequenza_wrapper/PANCAN_ASCAT_ploidy_prob.Rdata",
+		help="Ploidy priors table [default= %default]", metavar="character"),
 	make_option(c("-t", "--cancer_type"), type="character", default="all",
 		help="Cancer type to define priors [default= %default]", metavar="character"),
-	make_option(c("-b", "--breaks_method"), type="character", default="het",
-		help="breaks method for segmentation [default= %default]", metavar="character"),
 	make_option(c("-w", "--window"), type="integer", default=1000000,
 		help="window size for plotting [default= %default]", metavar="integer"),
 	make_option(c("-r", "--ratio_priority"), type="logical", default=FALSE,
 		help="Use only depth ratio for segmentation? [default= %default]", metavar="logical"),
-	make_option(c("-a", "--assembly"), type="character", default='hg38',
-		help="Reference type (ie, hg19, hg38) [default= %default]", metavar="character"),
+	make_option(c("-a", "--assembly"), type="character", default='hg38', metavar="character",
+		help="Reference type (one of hg19, GRCh37, hg38, GRCh38) [default= %default]"),
 	make_option(c("-f", "--min_reads_baf"), type="integer", default=1,
 		help="Threshold on the depth of the positions included to calculate the average BAF for segment. Set to extreme value (ex. 1x10^6) to exclude BAF from calculations [default= %default]", metavar="integer")
 	); 
@@ -113,13 +72,11 @@ opt <- parse_args(opt_parser);
 
 # extract options
 seqz.file <- opt$seqz_file;
-snp.file <- opt$snp_file;
-cnv.file <- opt$cnv_file;
 outdir <- opt$out_dir;
 
-purity <- opt$purity;
 usr_cancer_type <- opt$cancer_type;
-ud_ploidy <- opt$ploidy;
+purity <- 1;
+ud_ploidy <- 2;
 
 min.reads.normal <- opt$min.reads.normal;
 min.reads.baf <- opt$min_reads_baf;
@@ -130,86 +87,102 @@ print("Running Sequenza with the following options:");
 print(opt);
 
 ### MAIN ###########################################################################################
-# create SEQZ file if not provided
-if (is.null(seqz.file)) {
+# make a new directory so we don't overwrite old output
+new.outdir <- paste0(outdir, "/optimized");
 
-	# read in the snp file
-	snp <- read.delim(snp.file);
+# add another output directory for user defined purity 
+output_udp <- paste0(new.outdir,"/output_udp_",purity,"/");
+dir.create(output_udp, showWarnings = FALSE, recursive = TRUE);
 
-	# read in the cnv file
-	cnv <- read.delim(cnv.file);
+# find optimal gamma
+print("Finding optimal gamma");
 
-	# remove any non-canonical chromosomes
-	chr_list <- c(paste0("chr",1:22),"chrX");
+tuning_dir <- paste0(outdir,"/output_tuning/");
+tuning.files <- list.files(path = tuning_dir, pattern = 'RDS', full.names = TRUE);
 
-	if (!grepl('chr', snp$chrom[1])) {
-		snp$chrom <- factor(snp$chrom, levels = c(1:22,'X'), labels = chr_list);
-		cnv$chrom <- factor(cnv$chrom, levels = c(1:22,'X'), labels = chr_list);
+for (file in tuning.files) {
+
+	load(file);
+
+	if (file == tuning.files[1]) {
+		gamma.frame <- out.data;
+		} else {
+		gamma.frame <- rbind(gamma.frame, out.data);
 		}
-
-	snp <- subset(snp,chrom %in% chr_list);
-	cnv <- subset(cnv,chrom %in% chr_list);
-
-	# remove centromeric regions
-	if (opt$remove_centromeres) {
-
-		if (assembly %in% c('hg19','GRCh37')) {
-			centromere.file <- '/cluster/projects/pughlab/references/ucsc/hg19/centromeres.txt';
-			idx <- 1:3;
-			} else if (assembly %in% c('hg38','GRCh38')) {
-			centromere.file <- '/cluster/projects/pughlab/references/ucsc/hg38/centromeres.txt';
-			idx <- 2:4;
-			}
-
-		cent <- read.delim(centromere.file, header = FALSE);
-
-		del_snp <- BedBedOverlap(snp[,c(1,2,2)], cent[,idx]);
-		snp <- snp[!del_snp,];
-
-		del_cnv <- BedBedOverlap(cnv[,c(1:3)], cent[,idx]);
-		cnv <- cnv[!del_cnv,];
-		 
-		}
-
-	# prepare sequenza data file
-	seqz.data <- VarScan2seqz(
-		varscan.somatic = snp, 
-		varscan.copynumber = cnv
-		);
-
-	filestem <- gsub(".snp", "", basename(snp.file));
-	seqz.file <- paste0(outdir, '/', filestem, '.seqz');
-
-	write.table(
-		seqz.data,
-		file = paste0(outdir, '/', filestem, '.seqz'),
-		col.names = TRUE,
-		row.names = FALSE,
-		sep = "\t"
-		);
-
-	gc();
-
 	}
 
-### SEQUENZA #######################################################################################
-# add another output directory for user defined purity 
-output_udp <- paste0(outdir,"/output_udp_",purity,"/");
-dir.create(output_udp, showWarnings = FALSE, recursive=TRUE);
+# Determine the optimal gamma value using previously run tuning step
+gamma.frame <- gamma.frame[order(gamma.frame$gamma),];
 
-# full vs. het methods, applicable in different scenarios
+n_seg <- gamma.frame$n_seg;
+gamma_vect <- gamma.frame$gamma;
+
+# calculate slope for each pair of points
+diff_x <- diff(gamma_vect);
+diff_y <- diff(n_seg);
+
+f_slopes <- diff_x/diff_y;
+
+# slope closest to -1
+opt_slope <- which.min(abs(-1-f_slopes));
+
+opt_gamma <- mean(gamma_vect[opt_slope+1],gamma_vect[opt_slope]);
+opt_seg <- n_seg[gamma_vect==opt_gamma];
+
+log_n_seg <- log10(n_seg);
+log_opt_seg <- log10(opt_seg);
+
+print(paste0(">>Optimal GAMMA: ", opt_gamma));
+
+## plot gamma values vs. segment values
+pdf(
+        file = paste0(new.outdir, "/optimal_gamma_selection.pdf"),
+        height = 5,
+        width = 8
+        );
+
+plot(gamma_vect, n_seg/100, pch = 16, xlab = "Gamma Value", ylab = "Number of Segments (hundred)", log = "y", las = 1);
+
+lines(gamma_vect,n_seg/100,col="red",lty=1,lwd=2);
+
+arrows(
+        x0 = opt_gamma,
+        y0 = (opt_seg+(max(n_seg)*0.01))/100,
+        x1 = opt_gamma,
+        y1 = opt_seg/100,
+        col = "grey",
+        lwd = 2,
+        length = 0.1
+        );
+
+text(
+        x = opt_gamma,
+        y = (opt_seg+(max(n_seg)*0.01))/100,
+        labels = paste0("Optimal Gamma = ", opt_gamma, "\n", "Segments N = ", opt_seg), pos = 3
+        );
+
+dev.off();
+
+### SEQUENZA #######################################################################################
+filestem <- gsub('.seqz','',basename(seqz.file));
+
+print("Running sequenza.extract with optimal gamma");
+
 data <- sequenza.extract(
 	seqz.file,
-	breaks.method = opt$breaks_method, 
+	breaks.method = 'het', 
 	window = opt$window,
-	gamma = opt$gamma,
+	gamma = opt_gamma,
 	min.reads.normal = min.reads.normal,
 	min.reads.baf = min.reads.baf,
+	kmin = opt$kmin,
 	assembly = assembly
 	);
 
 # feed in prior probabilities based on cancer type
-load(file="/cluster/projects/pughlab/src/sequenza_wrapper/PANCAN_ASCAT_ploidy_prob.Rdata")
+print("Feeding in prior probabilities for ploidy");
+
+load(opt$ploidy_priors);
 
 priors <- subset(ploidy_table, cancer_type==toupper(usr_cancer_type))[c("CN","value")];
 
@@ -223,14 +196,12 @@ CP <- sequenza.fit(
 sequenza.results(
 	sequenza.extract = data,
 	cp.table = CP,
-	sample.id = gsub('.seqz','',basename(seqz.file)),
-	out.dir = outdir
+	sample.id = filestem,
+	out.dir = new.outdir
 	);
 
-# output results for all original alternative solutions
-
 ### Extract all alternative solutions###
-print ("Getting alternative purity solutions");
+print("Getting alternative purity solutions");
 
 alt <- alternative.cp.solutions(CP);
 
@@ -239,17 +210,16 @@ ploidies <- alt$ploidy;
 
 ## output series of results files (images and text files) for the alternative purity solutions
 ## index starts at 2 because the first solution is already output as the top hit.
-
 if (length(purities) > 1) { ## bug fix to not run alt solutions if there are no alt solutions.
 	for (i in 2:length(purities)) {
 		print(paste("Creating new directories and printing solution:", i));
-		output_alt <- paste0(outdir,"/sol",i,"_",purities[i],"/");
-		dir.create(output_alt, showWarnings = FALSE, recursive = TRUE);
+		output_alt <- paste0(new.outdir,"/sol",i,"_",purities[i],"/");
+		dir.create(output_udp, showWarnings = FALSE, recursive = TRUE);
 		sequenza.results(
 			sequenza.extract = data, 
 			cp.table = CP,
-			sample.id = gsub('.seqz','',basename(seqz.file)),
-			out.dir = output_alt, 
+			sample.id = filestem,
+			out.dir = output_alt,
 			cellularity = purities[i],
 			ploidy = ploidies[i]
 			);
@@ -261,11 +231,10 @@ if (length(purities) > 1) { ## bug fix to not run alt solutions if there are no 
 ## fit, unless you re-fit with the user-defined purity as one of the (using the command below)
 ## options.	I have opted to instead [force the user to instead provide both the purity and ploidy
 ## values.
-
 sequenza.results(
 	sequenza.extract = data,
 	cp.table = CP, 
-	sample.id = gsub('.seqz','',basename(seqz.file)),
+	sample.id = filestem,
 	out.dir = output_udp,
 	cellularity = purity,
 	ploidy = ud_ploidy
@@ -279,14 +248,14 @@ for (i in 2:length(data$segments)) {
 
 colnames(data.seg) <- c("chrom","loc.start","loc.end","Bf","N.BAF","sd.BAF","seg.mean","num.mark","sd.ratio");
 data.seg$seg.mean <- log2(data.seg$seg.mean);
-data.seg$ID <- rep(sub('.seqz','',basename(seqz.file)),nrow(data.seg));
+data.seg$ID <- rep(basename(seqz.file),nrow(data.seg));
 data.seg <- data.seg[,c("ID","chrom","loc.start","loc.end","num.mark","seg.mean")];
 
-setwd(outdir);
+print(paste0("Saving final calls: ", paste0(new.outdir, '/', filestem, "_Total_CN.seg")));
 
 write.table(
 	data.seg,
-	file = paste0(sub('.seqz','',basename(seqz.file)),"_Total_CN.seg"),
+	file = paste0(new.outdir, '/', filestem, "_Total_CN.seg"),
 	row.names = FALSE,
 	quote = FALSE,
 	sep = "\t"

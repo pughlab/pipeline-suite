@@ -67,7 +67,6 @@ parser <- ArgumentParser();
 
 parser$add_argument('-d', '--directory', type = 'character', help = 'path to data directory');
 parser$add_argument('-p', '--project', type = 'character', help = 'project name');
-parser$add_argument('-o', '--optimized', type = 'logical', help = 'was gamma tuning performed?', default = FALSE);
 parser$add_argument('-g', '--gtf', type = 'character', help = 'annotation gtf (refGene)',
 	default = '/cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.annotation.gtf');
 parser$add_argument('-t', '--targets', type = 'character', help = 'target intervals');
@@ -139,27 +138,14 @@ if (!is.null(arguments$targets)) {
 # find results files
 ploidy.files <- list.files(pattern = 'alternative_solutions.txt$', recursive = TRUE);
 cn.files <- list.files(pattern = 'Total_CN.seg$', recursive = TRUE);
-cn.files <- cn.files[!grepl('^2021',cn.files)];
 seg.files <- list.files(pattern = 'segments.txt$', recursive = TRUE);
-seg.files <- seg.files[!grepl('^2021',seg.files)];
-
-if (arguments$optimized) {
-	ploidy.files <- ploidy.files[grepl('optimized', ploidy.files)];
-	cn.files <- cn.files[grepl('optimized', cn.files)];
-	seg.files <- seg.files[grepl('optimized', seg.files)];
-	} else {
-	ploidy.files <- ploidy.files[!grepl('optimized', ploidy.files)];
-	cn.files <- cn.files[!grepl('optimized', cn.files)];
-	seg.files <- seg.files[!grepl('optimized', seg.files)];
-	}
 
 # read them in
 ploidy.list <- list();
 
 for (file in ploidy.files) {
 	# extract sample ID
-	smp <- unlist(strsplit(file, '\\/'));
-	smp <- unlist(strsplit(smp[length(smp)], '_'))[1];
+	smp <- unlist(strsplit(basename(file), '_VarScan'))[1];
 	# store data in list
 	if (smp %in% names(ploidy.list)) { next; }
 	ploidy.list[[smp]] <- read.delim(file);

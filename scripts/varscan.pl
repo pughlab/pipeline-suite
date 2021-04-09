@@ -62,9 +62,9 @@ sub get_varscan_snv_command {
 		'-f', $reference
 		);
 
-	if ( (defined($args{intervals})) && ($args{intervals} !~ m/chr|CHR/) ) {
+	if ( (defined($args{intervals})) && ($args{intervals} =~ m/.bed/) ) {
 		$varscan_command .= " -l $args{intervals} ";
-		} elsif ( (defined($args{intervals})) && ($args{intervals} =~ m/chr|CHR/) ) {
+		} elsif ( (defined($args{intervals})) && ($args{intervals} !~ m/bed/) ) {
 		$varscan_command .= " -r $args{intervals} ";
 		} else { $varscan_command .= ' '; }
 
@@ -161,32 +161,6 @@ sub get_varscan_cnv_command {
 		);
 
 	return($varscan_command);
-	}
-
-# format command to run Sequenza
-sub get_sequenza_command {
-	my %args = (
-		tool		=> undef,
-		snp		=> undef,
-		cnv		=> undef,
-		out_dir		=> undef,
-		cancer_type	=> undef,
-		ref_type	=> undef,
-		@_
-		);
-
-	if (!defined($args{cancer_type})) { $args{cancer_type} = 'all'; }
-
-	my $sequenza_command = join(' ',
-		'Rscript', $args{tool},
-		'--snp_file', $args{snp},
-		'--cnv_file', $args{cnv},
-		'--out_dir', $args{out_dir},
-		'--cancer_type', $args{cancer_type},
-		'--ref_type', $args{ref_type}
-		);
-
-	return($sequenza_command);
 	}
 
 # format command to run variant filter
@@ -308,7 +282,7 @@ sub main {
 	my $output_directory = $args{output_directory};
 	$output_directory =~ s/\/$//;
 
-	my $log_directory = join('/', $output_directory, 'logs');
+	my $log_directory = join('/', $output_directory, 'logs', 'VARSCAN');
 	unless(-e $log_directory) { make_path($log_directory); }
 
 	my $log_file = join('/', $log_directory, 'run_VarScan_pipeline.log');
@@ -374,14 +348,7 @@ sub main {
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
 	my $gatk	= 'gatk/' . $tool_data->{gatk_version};
-	my $sequenza;
-	if (defined($tool_data->{varscan}->{parameters}->{sequenza}->{path})) {
-		$sequenza = $tool_data->{varscan}->{parameters}->{sequenza}->{path};
-		} else {
-		$sequenza = "$cwd/run_sequenza.R";
-		}
 	my $r_version	= 'R/' . $tool_data->{r_version};
-	my $r_sequenza	= 'R/' . $tool_data->{varscan}->{parameters}->{sequenza}->{r};
 
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{varscan}->{parameters};
@@ -399,8 +366,8 @@ sub main {
 	# get sample data
 	my $smp_data = LoadFile($data_config);
 
-	my ($run_script, $cnv_run_id, $varscan_run_id, $sequenza_run_id, $run_id, $link, $cleanup_cmd);
-	my (@all_jobs, @pon_vcfs, @pon_dependencies, @sequenza_jobs);
+	my ($run_script, $cnv_run_id, $varscan_run_id, $run_id, $link, $cleanup_cmd);
+	my (@all_jobs, @pon_vcfs, @pon_dependencies);
 
 	my $pon_directory = join('/', $output_directory, 'PanelOfNormals');
 	unless(-e $pon_directory) { make_path($pon_directory); }
@@ -467,7 +434,6 @@ sub main {
 			$run_id = '';
 			$cnv_run_id = '';
 			$varscan_run_id = '';
-			$sequenza_run_id = '';
 			my @snp_jobs;
 
 			# create output stem
@@ -717,52 +683,6 @@ sub main {
 				else {
 					print $log "Skipping Merge (for Sequenza) because this has already been completed!\n";
 					}
-				}
-
-			# format command for sequenza (T/N only)
-			my $sequenza_output = $merged_snp_output . '_Total_CN.seg';
-			my $sequenza_command = get_sequenza_command(
-				out_dir	=> $sequenza_directory,
-				snp	=> $merged_snp_output . '.snp',
-				cnv	=> $cnv_stem . '.copynumber',
-				tool	=> $sequenza,
-				cancer_type	=> $parameters->{sequenza}->{cancer_type_prior},
-				ref_type	=> $tool_data->{ref_type}
-				);
-
-			$cleanup_cmd .= "\nrm $merged_snp_output";
-
-			# check if this should be run
-			if ('Y' eq missing_file($sequenza_output)) {
-
-				# record command (in log directory) and then run job
-				print $log "Submitting job for Sequenza...\n";
-
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_sequenza_' . $sample,
-					cmd	=> $sequenza_command,
-					modules	=> [$r_sequenza],
-					dependencies	=> join(':', @snp_jobs, $cnv_run_id),
-					max_time	=> $parameters->{sequenza}->{time},
-					mem		=> $parameters->{sequenza}->{mem},
-					hpc_driver	=> $args{hpc_driver}
-					);
-
-				$sequenza_run_id = submit_job(
-					jobname		=> 'run_sequenza_' . $sample,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{hpc_driver},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
-					);
-
-				push @sequenza_jobs, $sequenza_run_id;
-				push @patient_jobs, $sequenza_run_id;
-				push @all_jobs, $sequenza_run_id;
-				}
-			else {
-				print $log "Skipping Sequenza because this has already been completed!\n";
 				}
 
 			# now, because we have it, process the .snp and .indel files to split into
@@ -1368,42 +1288,6 @@ sub main {
 		push @all_jobs, $pon_job_id;
 		}
 
-	# if any T/N pairs were provided, collate Sequenza results
-	if (scalar(@sequenza_jobs) > 0) {
-
-		my $collect_output = join(' ',
-			"Rscript $cwd/collect_sequenza_output.R",
-			'-d', $output_directory,
-			'-p', $tool_data->{project_name},
-			'-g', $tool_data->{gtf}
-			);
-
-		if ( ('exome' eq $tool_data->{seq_type}) && (defined($tool_data->{intervals_bed})) ) {
-			$collect_output .= " -t $intervals_bed";
-			}
-
-		$run_script = write_script(
-			log_dir	=> $log_directory,
-			name	=> 'combine_sequenza_segment_calls',
-			cmd	=> $collect_output,
-			modules	=> [$r_version],
-			dependencies	=> join(':', @sequenza_jobs),
-			mem		=> '4G',
-			max_time	=> '12:00:00',
-			hpc_driver	=> $args{hpc_driver}
-			);
-
-		$run_id = submit_job(
-			jobname		=> 'combine_sequenza_segment_calls',
-			shell_command	=> $run_script,
-			hpc_driver	=> $args{hpc_driver},
-			dry_run		=> $args{dry_run},
-			log_file	=> $log
-			);
-
-		push @all_jobs, $run_id;
-		}
-
 	#########################################
 	### BEGIN PROCESSING UNPAIRED SAMPLES ###
 	#########################################
@@ -1805,7 +1689,7 @@ sub main {
 		}
 
 	# collate results
-	$collect_output = join(' ',
+	my $collect_output = join(' ',
 		"Rscript $cwd/collect_snv_output.R",
 		'-d', $output_directory,
 		'-p', $tool_data->{project_name}

@@ -1,4 +1,4 @@
-# PughLab pipeline-suite (version 0.3.1)
+# PughLab pipeline-suite (version 0.4.0)
 
 ## Introduction
 This is a collection of pipelines to be used for NGS (both DNA and RNA) analyses, from alignment to variant calling.
@@ -67,7 +67,8 @@ NOTE: The RNA-Seq pipeline is currently only configured for use with GRCh38 refe
 
    - bamqc requires:
     - path to reference genome (requires .fa, .dict and .fai files)
-    - path to hapmap/SNP file with population frequencies
+    - path to hapmap/SNP file with population frequencies (for ContEst)
+    - path to gnomAD/SNP vcf file with allele frequencies (must have accompanying .idx file)
     - path to target intervals (such as bed file for exome capture kit) if seq_type is exome or targeted
 
    - haplotype_caller requires:
@@ -117,6 +118,10 @@ NOTE: The RNA-Seq pipeline is currently only configured for use with GRCh38 refe
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to target intervals (exome capture kit [bed], if defined)
     - path to panel of normals (optional)
+
+   - gatk_cnv requires:
+    - path to reference genome (requires .fa, .dict and .fai files)
+    - path to gnomAD/SNP vcf file with allele frequencies (must have accompanying .idx file)
 
    - delly requires:
     - path to reference genome (requires .fa, .dict and .fai files)
@@ -336,6 +341,15 @@ perl varscan.pl \
 --dry-run { if this is a dry-run } \
 --no-wait { if not a dry-run and you don't want to wait around for it to finish }
 
+Use VarScan output to run Sequenza with gamma tuning for optimized SCNA calls:
+perl run_sequenza_with_optimal_gamma.pl \
+-t /path/to/dna_pipeline_config.yaml \
+-d /path/to/gatk_bam_config.yaml \
+-o /path/to/output/directory \
+-c slurm \
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
+
 </code></pre>
 
 ### run Strelka to produce SNV and Manta SV calls
@@ -402,6 +416,8 @@ perl gatk_cnv.pl \
 --no-wait { if not a dry-run and you don't want to wait around for it to finish }
 </code></pre>
 
+GATK:CNV will **ONLY** run if at least one normal sample is provided, but will then run all provided samples (T/N and tumour-only).
+
 ### run Delly to produce SV calls
 <pre><code>Generate somatic SV calls:
 perl delly.pl \
@@ -422,6 +438,9 @@ perl mavis.pl \
 -o /path/to/output/directory \
 --manta /path/to/strelka/directory \
 --delly /path/to/delly/directory \
+--rna /path/to/gatk_rnaseq_bam_config.yaml { optional if pughlab_rnaseq_pipeline.pl was run previously } \
+--starfusion /path/to/starfusion/directory { optional if pughlab_rnaseq_pipeline.pl was run previously } \
+--fusioncatcher /path/to/fusioncatcher/directory { optional if pughlab_rnaseq_pipeline.pl was run } \
 -c slurm \
 --remove \
 --dry-run { if this is a dry-run } \
@@ -439,12 +458,21 @@ perl pughlab_pipeline_auto_report.pl \
 </code></pre>
 
 ### Final notes on the DNA pipeline: ###
-Whenever possible, variant callers will generate a panel of normals to use for variant filtering. Depending on the tool, these panels list probable germline variants and/or sequencing artefacts.
-MuTect: germline variants and sequencing artefacts, called using --artifact_detection_mode; is applied to all samples
-Mutect2: germline variants and sequencing artefacts, called using --artifact_detection_mode; is applied to all samples
-Strelka: germline variants, called using Strelka's germline workflow; applied to all tumour samples
-VarScan: germline variants as determined by VarScan's processSomatic function; only applied to tumour-only samples 
-VarDict: germline variants as determined by VarDict; only applied to tumour-only samples 
+SomaticSniper will not run if no matched normals are provided; set run: N in dna_pipeline_config.yaml
+GATK_CNV requires at least 1 matched normal, but would ideally have many (for the panel of normals); set run: N in dna_pipeline_config.yaml if normals are unavailable.
+
+Panel of Normals for SNV callers: Whenever possible, variant callers will generate a panel of normals to use for variant filtering. Depending on the tool, these panels list probable germline variants and/or sequencing artefacts.
+- MuTect: germline variants and sequencing artefacts, called using --artifact_detection_mode; is applied to all samples
+- Mutect2: germline variants and sequencing artefacts, called using --artifact_detection_mode; is applied to all samples
+- Strelka: germline variants, called using Strelka's germline workflow; applied to all tumour samples
+- VarScan: germline variants as determined by VarScan's processSomatic function; only applied to tumour-only samples
+- VarDict: germline variants as determined by VarDict; only applied to tumour-only samples 
+
+VCF2MAF produces very large log files. Once complete, please remove/trim these to free up space! For example
+<pre><code>for i in logs/run_vcf2maf_and_VEP_INS-\*/slurm/s\*out; do
+  grep -v 'WARNING' $i > $i.trim; rm $i;
+done
+</code></pre>
 
 ### RNA pipeline:
 <pre><code>cd /path/to/git/pipeline-suite/

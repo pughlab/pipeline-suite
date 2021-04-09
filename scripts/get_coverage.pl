@@ -68,7 +68,7 @@ sub get_coverage_command {
 			);
 		}
 
-	$coverage_command .= join(' ',
+	$coverage_command .= ' ' . join(' ',
 		'-R', $reference,
 		'-I', $args{input},
 		'-pt sample -pt readgroup'

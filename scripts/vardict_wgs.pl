@@ -70,7 +70,6 @@ sub split_bam_command {
 # format command to run VarDict SNV calling for WGS
 sub get_vardict_command_wgs {
 	my %args = (
-#		tumour		=> undef,
 		normal_id	=> undef,
 		tumour_id	=> undef,
 		tmp_dir		=> undef,
@@ -599,7 +598,7 @@ sub main {
 						max_time	=> $parameters->{vardict}->{time},
 						mem		=> $parameters->{vardict}->{mem},
 						hpc_driver	=> $args{hpc_driver},
-						extra_args	=> '--array=1-' . $limit . '%100'
+						extra_args	=> '--array=1-' . $limit . '%50'
 						);
 
 					$run_id = submit_job(
