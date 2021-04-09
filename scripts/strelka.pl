@@ -1062,7 +1062,7 @@ sub main {
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
-					name	=> 'run_VEP_and_vcf2maf_' . $sample,
+					name	=> 'run_vcf2maf_and_VEP_' . $sample,
 					cmd	=> $vcf2maf_cmd,
 					modules	=> ['perl', $samtools, 'tabix'],
 					dependencies	=> $filter_run_id,
@@ -1073,7 +1073,7 @@ sub main {
 					);
 
 				$annotate_run_id = submit_job(
-					jobname		=> 'run_VEP_and_vcf2maf_' . $sample,
+					jobname		=> 'run_vcf2maf_and_VEP_' . $sample,
 					shell_command	=> $run_script,
 					hpc_driver	=> $args{hpc_driver},
 					dry_run		=> $args{dry_run},
