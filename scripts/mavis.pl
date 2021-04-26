@@ -86,6 +86,7 @@ sub get_mavis_command {
 		if ($smp =~ m/^\d/) {
 			$id = 'X' . $smp;
 			}
+		$id =~ s/_/-/g;
 
 		$mavis_cmd .= ' ' . join(' ',
 			'--library', $id, 'genome diseased False', $args{tumour_bams}->{$smp},
@@ -99,6 +100,7 @@ sub get_mavis_command {
 		if ($args{normal_id} =~ m/^\d/) {
 			$id = 'X' . $args{normal_id};
 			}
+		$id =~ s/_/-/g;
 
 		$mavis_cmd .= ' ' . join(' ',
 			'--library', $id, 'genome normal False', $args{normal_bam},
@@ -121,6 +123,7 @@ sub get_mavis_command {
 			if ($smp =~ m/^\d/) {
 				$id = 'X' . $smp;
 				}
+			$id =~ s/_/-/g;
 			$id .= '-rna';
 
 			$mavis_cmd .= ' ' . join(' ',
@@ -259,7 +262,7 @@ sub main {
 		}
 
 	# initialize objects
-	my ($run_script, $run_id, $link);
+	my ($run_script, $run_id, $link, $cleanup_cmd);
 	my @all_jobs;
 
 	# process each sample in $smp_data
@@ -476,6 +479,42 @@ sub main {
 		else {
 			print $log "Skipping MAVIS because this has already been completed!\n";
 			}
+
+		# should intermediate files be removed
+		# run per patient
+		if ($args{del_intermediates}) {
+
+			print $log "Submitting job to clean up temporary/intermediate files...\n";
+
+			# make sure final output exists before removing intermediate files!
+			$cleanup_cmd = join("\n",
+				"if [ -s $mavis_output ]; then",
+				"  cd $patient_directory\n\n",
+				"  find . -name '*.sam' -type f -exec rm {} " . '\;' . "\n",
+				"  find . -name '*.bam' -type f -exec rm {} " . '\;' . "\n",
+				"else",
+				'  echo "FINAL OUTPUT FILE is missing; not removing intermediates"',
+				"fi"
+				);
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'run_cleanup_' . $patient,
+				cmd	=> $cleanup_cmd,
+				dependencies	=> $run_id,
+				mem		=> '256M',
+				hpc_driver	=> $args{hpc_driver},
+				kill_on_error	=> 0
+				);
+
+			$run_id = submit_job(
+				jobname		=> 'run_cleanup_' . $patient,
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+			}	
 		}
 
 	# collate results
