@@ -46,6 +46,13 @@ sub main {
 	my @tex_files = grep { /tex$/ } @input_files;
 	@tex_files = sort @tex_files;
 
+	# if both sequenza and gatk_cnv were run
+	my @cnv_tex = grep { /^cna/ } @tex_files;
+	if (scalar(@cnv_tex) == 2) {
+		my $gatk_cnv_tex = grep { /gatk/ } @cnv_tex;
+		`sed -i 's/section{SCNA Summary}/pagebreak/' $gatk_cnv_tex`;
+		}
+
 	# find QC input
 	my @qc_plots = grep { /qc_metrics.png$/ } @plot_files;
 	my $most_recent_qc_plot = $qc_plots[-1];

@@ -69,13 +69,20 @@ variant.codes <- data.frame(
 	Code = c(9, 9, 9, 8, 9, 9, 9, 9, 1, 4, 4, 6, 6, 5, 5, 2, 3, 7, 10)
 	);
 
-#variant.colours <- c('#673AB7','#2196F3','#F44336','#00BCD4','#E91E63','#8BC34A','#FFC107','#03A9F4','grey50');
 variant.colours <- c('darkseagreen4','darkorchid4','#9AA3F2','yellow','darkorange3','#F9B38E','turquoise1','plum','grey50')
 names(variant.colours) <- c('missense','nonsense','nonstop','splicing','frameshift_indel','in_frame_indel','tss','RNA','other');
 
 # for these plots, we will ignore some variant types
 variant.colours <- variant.colours[c(1:6,9)];
 basechange.colours <- default.colours(8,'pastel')[-5];
+
+# read in list of known driver genes (Cancer Gene Census from COSMIC)
+driver.genes <- read.delim(
+	'/cluster/projects/pughlab/references/COSMIC/cancer_gene_census_20210414.tsv',
+	comment.char = '#'
+	);
+
+driver.genes <- driver.genes[which(driver.genes$Hallmark == 'Yes'),];
 
 ### READ DATA ######################################################################################
 # get data
@@ -148,7 +155,7 @@ functional.summary$Tumor_Sample_Barcode <- factor(
 	functional.summary$Tumor_Sample_Barcode,
 	levels = rownames(sample.counts)
 	);
-functional.summary$Code <- factor(functional.summary$Code, levels = c(1:6,9));
+functional.summary$Code <- factor(functional.summary$Code, levels = rev(c(1:6,9)));
 rm(tmp);
 
 alt.functional <- data.frame(table(mutation.data[which(mutation.data$Code < 9),c('Tumor_Sample_Barcode','Code')]));
@@ -159,7 +166,7 @@ alt.functional$Tumor_Sample_Barcode <- factor(
 	alt.functional$Tumor_Sample_Barcode,
 	levels = rownames(sample.counts)
 	);
-alt.functional$Code <- factor(alt.functional$Code, levels = c(1:6,9));
+alt.functional$Code <- factor(alt.functional$Code, levels = rev(c(1:6,9)));
 rm(tmp);
 
 mutation.data$Basechange <- paste0(mutation.data$Reference_Allele, '>', mutation.data$Tumor_Seq_Allele2);
@@ -172,7 +179,7 @@ mutation.data[which(mutation.data$Basechange == 'C>G'),]$Basechange <- 'G>C';
 mutation.data[which(mutation.data$Basechange == 'C>A'),]$Basechange <- 'G>T';
 mutation.data$Basechange <- factor(
 	mutation.data$Basechange,
-	levels = c('A>C','A>G','A>T','G>A','G>C','G>T','indel')
+	levels = rev(c('A>C','A>G','A>T','G>A','G>C','G>T','indel'))
 	);
 basechange.summary <- data.frame(table(mutation.data[,c('Tumor_Sample_Barcode','Basechange')]));
 tmp <- aggregate(Freq ~ Tumor_Sample_Barcode, basechange.summary, sum);
@@ -185,7 +192,8 @@ basechange.summary$Tumor_Sample_Barcode <- factor(
 rm(tmp);
 
 # remove silent mutations
-mutation.data.trimmed <- mutation.data[which(!mutation.data$Code == 9),];
+remove.idx <- which(mutation.data$Variant_Classification %in% c('Silent','Intron','IGR'));
+mutation.data <- mutation.data[-remove.idx,];
 
 # reduce to 1 mutation per gene per sample [taking the higher priority code]
 mutation.data.trimmed <- aggregate(
@@ -216,11 +224,27 @@ plot.data <- plot.data[order(-plot.data$Count, plot.data$Priority),];
 # remove non-recurrently mutated genes
 plot.data <- plot.data[which(plot.data$Count > 1),];
 
+recurrence.summary <- as.data.frame(table(plot.data$Count));
+colnames(recurrence.summary) <- c('N.samples','N.genes');
+
+# remove known problem (passenger) genes
+genes.to.exclude <- c('TTN','MUC17','OBSCN','MUC16','SYNE2','NEB','SYNE1');
+
+plot.data <- plot.data[which(!plot.data$Hugo_Symbol %in% genes.to.exclude),];
+
 # trim down to top recurrently mutated genes (or top 20, whichever is smallest)
+tophit.flag <- FALSE;
 top.count <- which(plot.data$Count > length(all.samples)*0.2);
 if (length(top.count) <= 20 & length(top.count) > 2) {
 	plot.data <- plot.data[which(plot.data$Count > length(all.samples)*0.2),];
-	} else {
+	} else if (nrow(plot.data[which(plot.data$Count == length(all.samples)),]) > 20) {
+	# likely only true for datasets with no matched normal
+	# plot known tumour suppressors
+	tophit.flag <- TRUE;
+	plot.data <- plot.data[which(plot.data$Hugo_Symbol %in% driver.genes$Hugo_Symbol),];
+	}
+
+if (nrow(plot.data) > 20) {
 	plot.data <- plot.data[1:20,];
 	}
 
@@ -303,8 +327,10 @@ create.heatmap(
 	at = seq(0,length(variant.colours),1),
 	total.colours = length(variant.colours)+1,
 	colour.scheme = variant.colours,
-#	inside.legend = list(fun = functional.legend, x = 1.02, y = 1),
-#	right.padding = 21,
+	inside.legend = if (length(all.samples) < 12) { 
+		list(fun = functional.legend, x = 1.02, y = 1)
+		} else { NULL },
+	right.padding = if (length(all.samples) < 12) { 21 } else { 0 },
 	height = 6,
 	width = 8,
 	resolution = 200,
@@ -348,7 +374,7 @@ mutation.type.plot <- create.barplot(
 	functional.summary,
 	groups = functional.summary$Code,
 	stack = TRUE,
-	col = variant.colours,
+	col = rev(variant.colours),
 	xaxis.lab = rep('',length(all.samples)),
 	xlimits = c(0.5, length(all.samples)+0.5),
 	xat = seq(1,length(all.samples)),
@@ -371,7 +397,7 @@ functional.plot <- create.barplot(
 	alt.functional,
 	groups = alt.functional$Code,
 	stack = TRUE,
-	col = variant.colours,
+	col = rev(variant.colours),
 	xaxis.lab = rep('',length(all.samples)),
 	xlimits = c(0.5, length(all.samples)+0.5),
 	xat = seq(1,length(all.samples)),
@@ -395,7 +421,7 @@ basechange.plot <- create.barplot(
 	basechange.summary,
 	groups = basechange.summary$Basechange,
 	stack = TRUE,
-	col = basechange.colours,
+	col = rev(basechange.colours),
 	xaxis.lab = levels(basechange.summary$Tumor_Sample_Barcode),
 	xaxis.rot = 90,
 	xlimits = c(0.5, length(all.samples)+0.5),
@@ -476,7 +502,12 @@ if (arguments$seq_type == 'wgs') {
 	} else {
 	summary.caption <- "Summary of short somatic variants (SNVs, indels) for each sample. From top to bottom: mutation rate (SNVs and INDELs per Mbp); proportion of total mutations with indicated functional consequence; proportion of all non-silent mutations with indicated functional consequence; proportion of total mutations with the indicated mutation type.";
 	}
-recurrence.caption <- "Summary of the most frequently mutated genes across the cohort. Figure shows genes with mutations detected in $>$20\\% of samples (or top 20 genes). Colours indicate predicted functional consequence (white = no mutation detected).";
+
+if (tophit.flag) {
+	recurrence.caption <- "Summary of the top 20 most frequently mutated known driver genes across the cohort. Colours indicate predicted functional consequence (white = no mutation detected).";
+	} else {
+	recurrence.caption <- "Summary of the most frequently mutated genes across the cohort. Figure shows genes with mutations detected in $>$20\\% of samples (or top 20 genes). Colours indicate predicted functional consequence (white = no mutation detected).";
+	}
 
 # write for latex
 write("\\section{SNV Summary}", file = 'snv_summary.tex');
@@ -487,7 +518,7 @@ if (length(overlap.plot) > 0) {
 	write("\\begin{figure}[h!]", file = 'snv_summary.tex', append = TRUE);
 	write("\\begin{center}", file = 'snv_summary.tex', append = TRUE);
 	write(paste0(
-		"\\includegraphics[width=0.9\\textwidth]{",
+		"\\includegraphics[width=0.8\\textwidth]{",
 		getwd(), '/',
 		overlap.plot[1], '}'
 		), file = 'snv_summary.tex', append = TRUE);
@@ -495,16 +526,16 @@ if (length(overlap.plot) > 0) {
 	write(paste0(
 		"\\caption{From top to bottom: number of variants called by each tool (Mutect, MuTect2, SomaticSniper, Strelka, VarDict and VarScan) and the ensemble variants carried forward.}"
 		), file = 'snv_summary.tex', append = TRUE);
-	write("\\end{figure}\n", file = 'snv_summary.tex', append = TRUE);
+	write("\\end{figure}\n\\pagebreak\n", file = 'snv_summary.tex', append = TRUE);
 	}
 
 if (nrow(plot.data) == 0) {
-	write("\\pagebreak\nNo genes were recurrently mutated across the cohort.", file = 'snv_summary.tex', append = TRUE);
+	write("No genes were recurrently mutated across the cohort.", file = 'snv_summary.tex', append = TRUE);
 	} else {
-	write("\\pagebreak\n\\begin{figure}[h!]", file = 'snv_summary.tex', append = TRUE);
+	write("\\begin{figure}[h!]", file = 'snv_summary.tex', append = TRUE);
 	write("\\begin{center}", file = 'snv_summary.tex', append = TRUE);
 	write(paste0(
-		"\\includegraphics[width=0.9\\textwidth]{",
+		"\\includegraphics[width=0.8\\textwidth]{",
 		getwd(), '/',
 		generate.filename(arguments$project, 'mutation_summary','png'), '}'
 		), file = 'snv_summary.tex', append = TRUE);
@@ -513,12 +544,14 @@ if (nrow(plot.data) == 0) {
 		"\\caption{", summary.caption, "}"
 		), file = 'snv_summary.tex', append = TRUE);
 	write("\\end{figure}\n", file = 'snv_summary.tex', append = TRUE);
+
 	write("\\pagebreak\n", file = 'snv_summary.tex', append = TRUE);
 
-	recurrence.summary <- as.data.frame(table(plot.data$Count));
-	colnames(recurrence.summary) <- c('N.samples','N.genes');
 	print(
-		xtable(rev(recurrence.summary), caption = 'Summary of recurrently-mutated genes across the cohort. Table shows number of genes with functionally relevant mutations in N samples.'),
+		xtable(
+			rev(recurrence.summary)[1:(min(nrow(recurrence.summary),10)),],
+			caption = 'Summary of recurrently-mutated genes across the cohort. Table shows number of genes with functionally relevant mutations in N samples.'
+			),
 		file = 'snv_summary.tex',
 		include.rownames = FALSE,
 		append = TRUE
@@ -527,7 +560,7 @@ if (nrow(plot.data) == 0) {
 	write("\n\\begin{figure}[h!]", file = 'snv_summary.tex', append = TRUE);
 	write("\\begin{center}", file = 'snv_summary.tex', append = TRUE);
 	write(paste0(
-		"\\includegraphics[width=0.9\\textwidth]{",
+		"\\includegraphics[width=0.8\\textwidth]{",
 		getwd(), '/',
 		generate.filename(arguments$project, 'snv_recurrent_genes','png'), '}'
 		), file = 'snv_summary.tex', append = TRUE);

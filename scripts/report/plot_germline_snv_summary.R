@@ -74,11 +74,18 @@ names(variant.colours) <- c('missense','nonsense','nonstop','splicing','frameshi
 variant.colours <- variant.colours[c(1:6,9)];
 
 ### READ DATA ######################################################################################
-maf.classes <- rep('character',132);
-maf.classes[c(2,6,7,40:45,58,60,77:85,100:107,112:122,124:132)] <- 'numeric';
+# if there happens to only be 'T' within any allele field (ie, Reference_Allele, Tumor_Seq_Allele),
+# R will interpret this as 'TRUE' - set the field classes to character to avoid this
+
+# edit: unfortunately, this sometimes causes errors when trying to read in the table...
+# since we don't actually use allele information here, just ignore the problem for now
+
+#maf.classes <- rep('character',132);
+#maf.classes[c(2,6,7,40:45,58,60,77:85,100:107,112:122,124:132)] <- 'numeric';
 
 # get data
-input.data <- read.delim(arguments$maf, colClasses = maf.classes);
+input.data <- read.delim(arguments$maf, stringsAsFactors = FALSE);
+#read.delim(arguments$maf, colClasses = maf.classes);
 
 # collect list of all samples
 all.samples <- sort(as.character(unique(input.data$Tumor_Sample_Barcode)));
@@ -87,6 +94,17 @@ all.samples <- sort(as.character(unique(input.data$Tumor_Sample_Barcode)));
 setwd(arguments$output);
 
 ### FORMAT DATA ####################################################################################
+
+### manually update annotation ###
+# vcf2maf mis-annotates a common downstream/regulartory_region TERC mutation (rs2293607) 
+# as a downstream variant in ACTRT3; therefore we will manually update this for plotting
+idx <- which(input.data$dbSNP_RS == 'rs2293607' & input.data$SYMBOL == 'ACTRT3');
+if (length(idx) > 0) {
+	input.data[idx,]$Hugo_Symbol <- 'TERC';
+	input.data[idx,]$Entrez_Gene_Id <- '7012';
+	}
+##################################
+
 # indicate key fields
 keep.fields <- c('Tumor_Sample_Barcode','Hugo_Symbol','Chromosome','Variant_Classification','Reference_Allele','Tumor_Seq_Allele2', 't_depth','t_ref_count','n_depth','n_ref_count');
 
@@ -94,7 +112,9 @@ mutation.data <- input.data[,keep.fields];
 
 # calculate tumour vaf
 mutation.data$t_vaf <- 1-(mutation.data$t_ref_count/mutation.data$t_depth);
-mutation.data$n_vaf <- 1-(mutation.data$n_ref_count/mutation.data$n_depth);
+mutation.data$n_vaf <- if (all(is.na(mutation.data$n_depth))) { NA; } else {
+	1-(mutation.data$n_ref_count/mutation.data$n_depth);
+	}
 
 # apply variant coding
 mutation.data$Code <- variant.codes$Code[match(mutation.data$Variant_Classification, variant.codes$Classification)];
@@ -121,7 +141,7 @@ mutation.data.trimmed <- merge(
 
 # reshape data
 plot.data <- reshape(
-	mutation.data[,c('Tumor_Sample_Barcode','Chromosome','Hugo_Symbol','Code')],
+	mutation.data.trimmed[,c('Tumor_Sample_Barcode','Chromosome','Hugo_Symbol','Code')],
 	direction = 'wide',
 	timevar = 'Tumor_Sample_Barcode',
 	idvar = c('Chromosome','Hugo_Symbol')
@@ -129,7 +149,7 @@ plot.data <- reshape(
 colnames(plot.data) <- gsub('Code.','',colnames(plot.data));
 
 vaf.data <- reshape(
-	mutation.data[,c('Tumor_Sample_Barcode','Chromosome','Hugo_Symbol','t_vaf')],
+	mutation.data.trimmed[,c('Tumor_Sample_Barcode','Chromosome','Hugo_Symbol','t_vaf')],
 	direction = 'wide',
 	timevar = 'Tumor_Sample_Barcode',
 	idvar = c('Chromosome','Hugo_Symbol')
@@ -181,44 +201,63 @@ heatmap.data <- t(plot.data[,all.samples]);
 heatmap.data[!is.na(heatmap.data)] <- 1;
 heatmap.data <- heatmap.data[do.call(order, transform(heatmap.data)),];
 
-vaf.data <- vaf.data[rev(colnames(heatmap.data)),rownames(heatmap.data)];
+vaf.data <- vaf.data[colnames(heatmap.data),rownames(heatmap.data)];
 vaf.data[is.na(vaf.data)] <- 0;
+
+# create function to determine spot size
+modifier <- if (length(all.samples) < 12) { 1.5 } else { 1 }
+spot.size.vaf <- function(x) { abs(x)* modifier; }
+spot.colour.vaf <- function(x) {
+	sapply(x, function(i) { if (i >= 0.5) { 'black' } else { 'grey70' } } )
+	}
+
+dot.key <- list(
+	points = list(
+		col = c('black','black','black','grey70','grey70','grey70'),
+		cex = spot.size.vaf(c(1,0.8,0.5,0.2,0.1,0)),
+		pch = 19
+		),
+	text = list(
+		lab = c('1.0','0.8','0.5','0.2','0.1','0'),
+		cex = 0.7
+		),
+	padding.text = 1.05,
+	title = 'Tumour VAF',
+	cex.title = 0.8
+	);
 
 if (nrow(plot.data) > 1) {
 
-	create.heatmap(
-		plot.data[,rownames(heatmap.data)],
-		cluster.dimensions = 'none',
-		same.as.matrix = TRUE,
+	create.dotmap(
+		x = vaf.data,
+		bg.data = plot.data[rownames(vaf.data),colnames(vaf.data)],
+		spot.size.function = spot.size.vaf,
+		spot.colour.function = spot.colour.vaf,
+		pch = 19,
+		colour.scheme = variant.colours,
+		at = seq(0,length(variant.colours),1),
+		total.colours = length(variant.colours)+1,
+		colourkey = FALSE,
+		legend = list(
+			right = list(fun = draw.key, args = list(key = dot.key)),
+			inside = list(fun = functional.legend, x = 1.02, y = 1)
+			),
+		right.padding = 5,
 		xaxis.lab = rownames(heatmap.data),
 		yaxis.lab = plot.data$Label,
 		xaxis.cex = axis.cex,
 		yaxis.cex = 1,
-		xaxis.tck = if (axis.cex == 0) { 0 } else { 0.2 },
-		yaxis.tck = 0.2,
+		xaxis.tck = 0,
+		yaxis.tck = 0,
 		xaxis.fontface = 'plain',
 		yaxis.fontface = 'plain',
-		axes.lwd = 1,
-		grid.row = TRUE,
-		force.grid.row = TRUE,
-		row.colour = 'grey80',
+		xaxis.rot = 90,
+		bg.alpha = 1,
+		lwd = 1,
+		col.lwd = 2,
+		row.lwd = 2,
 		col.colour = 'grey80',
-		row.lwd = if (length(all.samples) < 30) { 3 } else { 1 },
-		col.lwd = if (length(all.samples) < 30) { 3 } else { 1 },
-		grid.col = TRUE,
-		force.grid.col = TRUE,
-		print.colour.key = FALSE,
-		fill.colour = 'white',
-		at = seq(0,length(variant.colours),1),
-		total.colours = length(variant.colours)+1,
-		colour.scheme = variant.colours,
-		row.pos = which(vaf.data > 0, arr.ind = TRUE)[,1],
-		col.pos = which(vaf.data > 0, arr.ind = TRUE)[,2],
-		cell.text = rep(expression("\u25CF"), times = sum(vaf.data > 0)),
-		text.col = 'black',
-		text.cex = if (length(all.samples) > 30) { 0.3 } else { 0.4 },
-		inside.legend = list(fun = functional.legend, x = 1.02, y = 1),
-		right.padding = 15,
+		row.colour = 'grey80',
 		height = if (nrow(plot.data) > 20) { 8 } else { 6 },
 		width = if (length(all.samples) > 30) { 11 } else { 8 },
 		resolution = 200,
@@ -235,7 +274,7 @@ save(
 	);
 
 # write some captions
-recurrence.caption <- "Summary of short germline variants (SNVs and INDELs). Figure shows most frequently mutated genes; background colours indicate predicted functional consequence (white = no mutation detected) while black circles indicate the variant was also detected in the tumour (such that absence suggests the germline mutation may have reverted - only applicable for T/N pairs).";
+recurrence.caption <- "Summary of pathogenic germline variants (SNVs and INDELs). Figure shows most frequently mutated genes; background colours indicate predicted functional consequence (white = no mutation detected) while circles indicate the variant was detected in the tumour (such that absence suggests the germline mutation may have reverted); black indicates VAF $>=$ 0.5. For T/N pairs, germline variants are detected in the normal sample. For tumour-only samples, variants are those detected in any tumour for a given patient (ie, for patients with multiple tumours, the variant may be in any them).";
 
 # write for latex
 write("\\section{Germline SNV Summary}", file = 'germline_snv_summary.tex');

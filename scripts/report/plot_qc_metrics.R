@@ -50,7 +50,8 @@ parser <- ArgumentParser();
 
 parser$add_argument('-t', '--seq_type', type = 'character', help = 'either wgs, exome or rna', default = 'exome');
 parser$add_argument('-g', '--correlations', type = 'character', help = 'path to germline correlation file');
-parser$add_argument('-c', '--contamination', type = 'character', help = 'path to contest file');
+parser$add_argument('-c', '--contest', type = 'character', help = 'path to contest file');
+parser$add_argument('-m', '--contamination', type = 'character', help = 'path to contamination file');
 parser$add_argument('-q', '--coverage', type = 'character', help = 'path to coverage metrics');
 parser$add_argument('-o', '--output_dir', type = 'character', help = 'path to output directory');
 parser$add_argument('-p', '--project', type = 'character', help = 'project name');
@@ -63,7 +64,8 @@ date <- Sys.Date();
 # clarify input files
 is.dna <- (arguments$seq_type == 'exome' || arguments$seq_type == 'wgs');
 summary.file <- arguments$coverage;
-contest.file <- arguments$contamination;
+contest.file <- arguments$contest;
+other.contamination <- arguments$contamination;
 cor.file <- arguments$correlations;
 output.dir <- arguments$output_dir;
 
@@ -73,10 +75,35 @@ metric.data  <- read.delim(summary.file, row.names = 1);
 cor.data <- read.delim(cor.file, row.names = 1);
 
 if (is.dna) {
-	contam.data  <- read.delim(contest.file);
-	contam.data <- contam.data[which(contam.data$name == 'META'),];
-	rownames(contam.data) <- contam.data$Sample;
-	contam.data <- contam.data[,-1];
+	if (!is.null(contest.file)) {
+		contest.data <- read.delim(contest.file);
+		contest.data <- contest.data[which(contest.data$name == 'META'),];
+		rownames(contest.data) <- contest.data$Sample;
+		contest.data <- contest.data[,c('contamination','confidence_interval_95_low','confidence_interval_95_high')];
+		contest.data$Method <- 'ContEst';
+		}
+
+	if (!is.null(other.contamination)) {
+		pileup.contam <- read.delim(other.contamination);
+		pileup.contam$contamination <- pileup.contam$contamination * 100;
+		pileup.contam$confidence_interval_95_low <- pileup.contam$contamination - (pileup.contam$error*100);
+		pileup.contam$confidence_interval_95_high <- pileup.contam$contamination + (pileup.contam$error*100);
+		rownames(pileup.contam) <- pileup.contam$sample;
+		pileup.contam <- pileup.contam[,c('contamination','confidence_interval_95_low','confidence_interval_95_high')];
+		pileup.contam$Method <- 'pileup';
+		}
+
+	if (!is.null(other.contamination)) {
+		contam.data <- pileup.contam; } else if (!is.null(contest.file)) {
+		contam.data <- contest.data; } else {
+		contam.data <- NULL;
+		}
+
+	contam.method <- if (!is.null(other.contamination)) {
+		"GATK's GetPileupSummaries and CalculateContamination were used to estimate contamination."; } else if (!is.null(contest.file)) {
+		"GATK's ContEst was used to estimate contamination for T/N pairs only."; } else {
+		NULL;
+		}
 	}
 
 # determine sample order (to ensure all plots are ordered the same)
@@ -407,7 +434,7 @@ if (is.dna) {
 		);
 
 	# identify cases with high contamination estimates
-	high.contamination <- qc.metrics[which(qc.metrics$contamination > 3),c(1,11)];
+	high.contamination <- qc.metrics[which(qc.metrics$contamination > 3),c(1,8)];
 	colnames(high.contamination) <- c('Sample','Contamination_Estimate');
 
 	# combine them!
@@ -659,9 +686,9 @@ write.table(
 if (arguments$seq_type == 'rna') {
 	caption <- "Top plot: Breakdown of total reads across the genome (including total mapped to exonic, intronic and intergenic regions, rRNA sequences and total unmapped and/or duplicate reads). Right plot: Mean per-base coverage across the middle 1000 expressed transcripts. Central heatmap: Pearson's correlation of RPKM values for all genes across all samples.";
 	} else if (arguments$seq_type == 'exome') {
-	caption <- "Top plot: Summary of coverage across target bases. Points indicate median read depth (range from first to third quartiles) while red bars show percent of target bases with $>$15x coverage. Right plot: Contamination estimate (as a percent $\\pm$ 95\\% CI) as provided by ContEst (available for T/N pairs only). Central heatmap: Spearman's correlation ($\\rho$) of germline variant genotypes across all samples.";
+	caption <- "Top plot: Summary of coverage across target bases. Points indicate median read depth (range from first to third quartiles) while red bars show percent of target bases with $>$15x coverage. Right plot: Contamination estimate (as a percent $\\pm$ 95\\% CI if ContEst [available for T/N pairs only] or $\\pm$ error if GATK:Pileup was used). Central heatmap: Spearman's correlation ($\\rho$) of germline variant genotypes across all samples.";
 	} else if (arguments$seq_type == 'wgs') {
-	caption = "Top plot: Summary of coverage across the genome. Points indicate mean read depth while red bars show percent of bases with $>$15x coverage. Right plot: Contamination estimate (as a percent $\\pm$ 95\\% CI) as provided by ContEst (available for T/N pairs only). Central heatmap: Spearman's correlation ($\\rho$) of germline variant genotypes across all samples.";
+	caption <- "Top plot: Summary of coverage across the genome. Points indicate mean read depth while red bars show percent of bases with $>$15x coverage. Right plot: Contamination estimate (as a percent $\\pm$ 95\\% CI if ContEst [available for T/N pairs only] or $\\pm$ error if GATK:Pileup was used). Central heatmap: Spearman's correlation ($\\rho$) of germline variant genotypes across all samples.";
 	}
 
 write(
@@ -701,6 +728,9 @@ if (is.dna) {
 
 	# record contamination
 	write("\\subsection{Contamination}", file = 'qc_concerns.tex', append = TRUE);
+	if (!is.null(contam.method)) {
+		write(contam.method, file = 'qc_concerns.tex', append = TRUE);
+		}
 	if (nrow(high.contamination) > 0) {
 		high.contamination <- xtable(
 			high.contamination,
