@@ -239,24 +239,3 @@ sequenza.results(
 	cellularity = purity,
 	ploidy = ud_ploidy
 	);
-
-## Ouput a total Copy-number seg file for viewing in IGV etc.
-data.seg <- data$segments[[1]];
-for (i in 2:length(data$segments)) {
-	data.seg <- rbind(data.seg,data$segments[[i]]);
-	}
-
-colnames(data.seg) <- c("chrom","loc.start","loc.end","Bf","N.BAF","sd.BAF","seg.mean","num.mark","sd.ratio");
-data.seg$seg.mean <- log2(data.seg$seg.mean);
-data.seg$ID <- rep(basename(seqz.file),nrow(data.seg));
-data.seg <- data.seg[,c("ID","chrom","loc.start","loc.end","num.mark","seg.mean")];
-
-print(paste0("Saving final calls: ", paste0(new.outdir, '/', filestem, "_Total_CN.seg")));
-
-write.table(
-	data.seg,
-	file = paste0(new.outdir, '/', filestem, "_Total_CN.seg"),
-	row.names = FALSE,
-	quote = FALSE,
-	sep = "\t"
-	);

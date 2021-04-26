@@ -46,6 +46,7 @@ sub create_seqz_command {
 		cnv		=> undef,
 		out_dir		=> undef,
 		ref_type	=> undef,
+		is_wgs		=> 0,
 		@_
 		);
 
@@ -56,6 +57,10 @@ sub create_seqz_command {
 		'--out_dir', $args{out_dir},
 		'--assembly', $args{ref_type}
 		);
+
+	if ($args{is_wgs}) {
+		$sequenza_command .= " -w TRUE";
+		}
 
 	return($sequenza_command);
 	}
@@ -169,6 +174,10 @@ sub main {
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{varscan}->{parameters};
 
+	# is this exome or whole-genome seq?
+	my $is_wgs = 0;
+	if ('wgs' eq $tool_data->{seq_type}) { $is_wgs = 1; }
+
 	### RUN ###########################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
@@ -214,7 +223,8 @@ sub main {
 				snp		=> $snp_files[0],
 				cnv		=> $cnv_files[0],
 				out_dir		=> $sequenza_directory,
-				ref_type	=> $tool_data->{ref_type}
+				ref_type	=> $tool_data->{ref_type},
+				is_wgs		=> $is_wgs
 				);
 
 			my $seqz_file = $snp_files[0];
@@ -263,12 +273,12 @@ sub main {
 
 			# set time/memory requirements
 			my ($time_req, $mem_req);
-			if ('exome' eq $tool_data->{seq_type}) {
-				$time_req = '24:00:00';
-				$mem_req = '4G';
-				} elsif ('wgs' eq $tool_data->{seq_type}) {
+			if ($is_wgs) {
 				$time_req = '72:00:00';
 				$mem_req = '8G';
+				} else {
+				$time_req = '24:00:00';
+				$mem_req = '4G';
 				}
 
 			# check if this should be run
