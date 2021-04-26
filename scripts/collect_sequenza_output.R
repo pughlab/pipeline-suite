@@ -57,6 +57,31 @@ fillgaps <- function(seg) {
 	return(seg);
 	}
 
+# function to get ploidy-adjusted absolute CN value (as per JB)
+get.ploidyadjusted.cn <- function(cn, ploidy) {
+	 ifelse(
+		# if ploidy is high AND CN is high, indicate amplification
+		ploidy > 2 & (cn - round(ploidy)) >= 2, 2,
+		# or, if ploidy is low/diploid AND CN is high, indicate amplification
+		ifelse(
+			ploidy <= 2 & (cn - 2) >= 2, 2,
+			ifelse(
+				# regardless, if CN == 0, this is homozygous deletion
+				cn == 0, -2,
+				ifelse(
+					# if ploidy-adjusted CN is > 0, inidate gain
+					(cn - round(ploidy)) >= 1, 1,
+					ifelse(
+						# if ploidy-adjusted CN is < 0, indicate loss
+						# anything left is neutral
+						(cn - round(ploidy)) <= -1, -1, 0
+						)
+					)
+				)
+			)
+		);
+	}
+
 ### PREPARE SESSION ################################################################################
 # import libraries
 library(GenomicRanges);
@@ -137,8 +162,10 @@ if (!is.null(arguments$targets)) {
 ### MAIN ###########################################################################################
 # find results files
 ploidy.files <- list.files(pattern = 'alternative_solutions.txt$', recursive = TRUE);
-cn.files <- list.files(pattern = 'Total_CN.seg$', recursive = TRUE);
 seg.files <- list.files(pattern = 'segments.txt$', recursive = TRUE);
+
+ploidy.files <- ploidy.files[grepl('optimized', ploidy.files)];
+seg.files <- seg.files[grepl('optimized', seg.files)];
 
 # read them in
 ploidy.list <- list();
@@ -165,39 +192,12 @@ ploidy.formatted <- ploidy.data[which(ploidy.data$Order == 1),c('Sample','SLPP',
 # add field for PGA (to be filled in later)
 ploidy.formatted$PGA <- NA;
 
-# read them in
-cn.list <- list();
-
-for (file in cn.files) {
-	# extract sample ID
-	smp <- unlist(strsplit(basename(file), '_'))[1];
-	# store data in list
-	tmp <- read.delim(file, as.is = TRUE);
-	tmp$ID <- smp;
-	cn.list[[smp]] <- tmp;
-	rm(tmp);
-	}
-
-cn.data <- do.call(rbind, cn.list);
-
-cn.data$chrom <- gsub('chr','',cn.data$chrom);
-
-# save combined/formatted data to file
-write.table(
-	cn.data,
-	file = generate.filename(arguments$project, 'Sequenza_Total_CN', 'seg'),
-	row.names = FALSE,
-	col.names = TRUE,
-	quote = FALSE,
-	sep = '\t'
-	);
-
 # and for segments
 seg.list <- list();
 
 for (file in seg.files) {
 	# extract sample ID
-	smp <- unlist(strsplit(basename(file), '_'))[1];
+	smp <- unlist(strsplit(basename(file), '_VarScan'))[1];
 
 	# store data in list
 	if (smp %in% names(seg.list)) { next; }
@@ -207,14 +207,14 @@ for (file in seg.files) {
 	}
 
 # format segments for gistic
+# https://crazyhottommy.blogspot.com/2017/11/run-gistic2-with-sequenza-segmentation.html
 segment.data <- do.call(rbind, seg.list);
 segment.data$Sample <- sapply(rownames(segment.data), function(i) { unlist(strsplit(i,'\\.'))[1] } );
-segment.data$Seg.CN <- (log2(2*segment.data$depth.ratio)-1);
-segment.data <- segment.data[,c('Sample','chromosome','start.pos','end.pos','N.BAF','Seg.CN')];
+segment.data$Seg.CN <- (log2(2*segment.data$depth.ratio)-1); # same as log2(depth.ratio)
 
 write.table(
-	segment.data,
-	file = generate.filename(arguments$project, 'segments_for_gistic', 'tsv'),
+	segment.data[,c('Sample','chromosome','start.pos','end.pos','N.BAF','Seg.CN')],
+	file = generate.filename(arguments$project, 'segments_for_gistic', 'seg'),
 	row.names = FALSE,
 	col.names = TRUE,
 	sep = '\t',
@@ -239,48 +239,45 @@ write.table(
 	quote = FALSE
 	);
 
-# define a results table
-gene.data <- refGene;
+# format for cBioportal
+segment.data$chromosome <- gsub('chr','',segment.data$chromosome);
+segment.data <- segment.data[,c('Sample','chromosome','start.pos','end.pos','N.ratio','Seg.CN')];
+colnames(segment.data) <- c('ID','chrom','loc.start','loc.end','num.mark','seg.mean');
+write.table(
+	segment.data,
+	file = generate.filename(arguments$project, 'segments_for_cbioportal', 'seg'),
+	row.names = FALSE,
+	col.names = TRUE,
+	sep = '\t',
+	quote = FALSE
+	);
+
+# format gene tables; ploidy-adjusted AbsCN and ratio files
+gene.data.cn <- refGene;
 for (smp in names(seg.list)) {
-	gene.data[,smp] <- 0;
+	gene.data.cn[,smp] <- 0;
 	}
+gene.data.ratio <- gene.data.cn;
 
 for (smp in names(seg.list)) {
 
 	# convert to GRanges
-	tmp <- seg.list[[smp]][,c('chromosome','start.pos','end.pos','CNt')];
-	colnames(tmp) <- c('chrom','start','end','CN');
+	tmp <- seg.list[[smp]][,c('chromosome','start.pos','end.pos','CNt','depth.ratio')];
+	colnames(tmp) <- c('chrom','start','end','CN','depth.ratio');
 
 	ploidy <- round(ploidy.formatted[which(ploidy.formatted$Sample == smp),]$ploidy);
 
-	tmp$AbsCN <- ifelse(
-		# if ploidy is high AND CN is high, indicate amplification
-		ploidy > 2 & (tmp$CN - round(ploidy)) >= 2, 2,
-		# or, if ploidy is low/diploid AND CN is high, indicate amplification
-		ifelse(
-			ploidy <= 2 & (tmp$CN - 2) >= 2, 2,
-			ifelse(
-				# regardless, if CN == 0, this is homozygous deletion
-				tmp$CN == 0, -2,
-				ifelse(
-					# if ploidy-adjusted CN is > 0, inidate gain
-					(tmp$CN - round(ploidy)) >= 1, 1,
-					ifelse(
-						# if ploidy-adjusted CN is < 0, indicate loss
-						# anything left is neutral
-						(tmp$CN - round(ploidy)) <= -1, -1, 0
-						)
-					)
-				)
-			)
-		);
+	tmp$RATIO <- log2(tmp$depth.ratio);
+	tmp$AbsCN <- get.ploidyadjusted.cn(tmp$CN, ploidy);
+#	tmp$AbsCN <- log2(tmp$CN / ploidy);
+#	if (any(tmp$CN == 0)) {	tmp[which(tmp$CN == 0),]$AbsCN <- -2; }
 
-	tmp <- tmp[which(tmp$AbsCN != 0),];
 	if (nrow(tmp) == 0) { next; }
 	rownames(tmp) <- paste0('seg', 1:nrow(tmp));
 
 	# calculate PGA
-	pga <- sum(tmp$end - tmp$start)/(3*10**9)*100;
+	for.pga <- tmp[which(tmp$AbsCN > 0),];
+	pga <- sum(for.pga$end - for.pga$start)/(3*10**9)*100;
 	ploidy.formatted[which(ploidy.formatted$Sample == smp),]$PGA <- pga;
 
 	# extract gene data
@@ -292,7 +289,8 @@ for (smp in names(seg.list)) {
 
 	for (i in rownames(regionsWithHits)) {
 		genes <- gene.gr[overlapGenes[which(overlapGenes$queryHits == sub('seg','',i)),]$subjectHits,]$GeneID;
-		gene.data[which(gene.data$GeneID %in% genes),smp] <- tmp[i,]$AbsCN;
+		gene.data.cn[which(gene.data.cn$GeneID %in% genes),smp] <- tmp[i,]$AbsCN;
+		gene.data.ratio[which(gene.data.ratio$GeneID %in% genes),smp] <- tmp[i,]$RATIO;
 		}
 	}
 
@@ -306,64 +304,18 @@ write.table(
 	);
 
 write.table(
-	gene.data,
+	gene.data.cn,
 	file = generate.filename(arguments$project, 'Sequenza_cna_gene_matrix', 'tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
 	sep = '\t'
 	);
 
-rownames(gene.data) <- 1:nrow(gene.data);
-
-# remove untargeted regions
-if (is.null(arguments$targets)) {
-	gene.data$Target <- 1;
-	#gene.data <- gene.data[,-which(colnames(gene.data) == 'Target')];
-#	} else { gene.data <- droplevels(gene.data[which(gene.data$Target == 1),]);
-	}
-
-# clean up any duplicates (2 or more gene entries with the same symbol that occur adjacent to each other)
-dup.idx <- gene.data$Symbol[which(duplicated(gene.data$Symbol))];
-
-for (gene in dup.idx) {
-
-	tmp <- gene.data[which(gene.data$Symbol == gene),];
-	if (nrow(tmp) < 2) { next; }
-
-	keep.all <- FALSE;
-	for (i in 2:nrow(tmp)) {
-		# if all entries have identical CN calls
-		if (tmp[i,]$Chromosome == tmp[i-1,]$Chromosome && all(tmp[i,7:ncol(tmp)] == tmp[i-1,7:ncol(tmp)])) {
-			keep.all <- TRUE;
-			}
-		}
-
-	# if they are all the same
-	if (keep.all) {
-		new.entry <- tmp[1,];
-		new.entry$End <- max(tmp$End);
-		new.entry$GeneID <- paste(tmp$GeneID, collapse = ';');
-		new.entry$Target <- max(tmp$Target);
-	
-	} else if (any(tmp$Target == 1)) {
-		new.entry <- tmp[which(tmp$Target == 1),][1,];
-		} else {
-		new.entry <- tmp[1,];
-		}
-
-	gene.data <- gene.data[-which(gene.data$Symbol == gene),];
-	gene.data <- rbind(gene.data, new.entry);
-	}
-
-gene.data <- gene.data[order(gene.data$Chromosome, gene.data$Start, gene.data$End),];
-colnames(gene.data)[which(colnames(gene.data) == 'Symbol')] <- 'Hugo_Symbol';
-
 write.table(
-	gene.data[,c('Hugo_Symbol', names(seg.list))],
-	file = generate.filename(arguments$project, 'thresholded_CN_data_Absolute_Sequenza_for_cbioportal', 'tsv'),
+	gene.data.ratio,
+	file = generate.filename(arguments$project, 'Sequenza_ratio_gene_matrix', 'tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
-	quote = FALSE,
 	sep = '\t'
 	);
 

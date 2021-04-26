@@ -543,6 +543,8 @@ sub main {
 				log_file	=> $log
 				);
 
+			unless($args{dry_run}) { sleep(10); }
+
 			push @split_jobs, $run_id;
 			push @patient_jobs, $run_id;
 			push @all_jobs, $run_id;
@@ -609,6 +611,8 @@ sub main {
 						log_file	=> $log
 						);
 
+					unless($args{dry_run}) { sleep(10); }
+
 					push @sample_jobs, $run_id;
 					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
@@ -653,6 +657,8 @@ sub main {
 					dry_run		=> $args{dry_run},
 					log_file	=> $log
 					);
+
+				unless($args{dry_run}) { sleep(10); }
 
 				push @sample_jobs, $run_id;
 				push @patient_jobs, $run_id;
