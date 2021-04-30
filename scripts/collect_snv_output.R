@@ -48,8 +48,6 @@ parser$add_argument('-d', '--directory', type = 'character', help = 'path to dat
 parser$add_argument('-p', '--project', type = 'character', help = 'project name');
 parser$add_argument('-t', '--t_depth', type = 'integer', 
 	help = 'minimum tumour depth required (rna-seq only)', default = 20);
-parser$add_argument('-g', '--gtf', type = 'character', help = 'annotation gtf (refGene; rna-seq only)',
-	default = '/cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.GRCh38.genes.gtf');
 
 arguments <- parser$parse_args();
 
@@ -95,37 +93,6 @@ is.germline <- grepl('CPSR', getwd());
 # if this is RNA-Seq, only keep variants in coding regions
 classes.to.keep <- c('RNA','Missense_Mutation','Splice_Region','Splice_Site','In_Frame_Del','In_Frame_Ins',
 	'Frame_Shift_Del','Frame_Shift_Ins','Nonsense_Mutation','Nonstop_Mutation','Translation_Start_Site');
-
-### FORMAT ANNOTATION
-# using refGene, indicate genes to keep (coding genes) for gene x patient matrix
-if (is.rnaseq) {
-	refGene <- read.delim(arguments$gtf, header = F, comment.char = '#');
-
-	refGene <- droplevels(refGene[which(refGene$V3 == 'gene'),c(1,4,5,9)]);
-	colnames(refGene) <- c('Chromosome','Start','End','INFO');
-
-	refGene$GeneID <- sapply(
-		refGene$INFO,
-		function(i) {
-			parts <- unlist(strsplit(as.character(i), ';'));
-			gene_name <- unlist(strsplit(parts[grepl('gene_id', parts)], ' '));
-			gene_id  <- gene_name[length(gene_name)];
-			return(gene_id);
-			}
-		);
-
-	refGene$Symbol <- sapply(
-		refGene$INFO,
-		function(i) {
-			parts <- unlist(strsplit(as.character(i), ';'));
-			gene_name <- unlist(strsplit(parts[grepl('gene_name', parts)], ' '));
-			gene_symbol <- gene_name[length(gene_name)];
-			return(gene_symbol);
-			}
-		);
-
-	refGene$Chromosome <- factor(refGene$Chromosome, levels = paste0('chr',c(1:22,'X','Y','M')));
-	}
 
 ### MAIN ###########################################################################################
 # find results files
@@ -215,6 +182,54 @@ if (any(full.maf.data$Entrez_Gene_Id == 0 & full.maf.data$SYMBOL_SOURCE == 'Entr
 # remove unnecessary columns
 colnames(full.maf.data) <- gsub('vcf','variant',colnames(full.maf.data));
 exclude.field <- grepl('variant', colnames(full.maf.data));
+
+
+### fix some weird cases
+# some cases where vcf2maf doesn't fill in Entrez_Gene_Id
+if (any(full.maf.data$Hugo_Symbol == 'ATXN7' & full.maf.data$Chromosome == 'chr3')) {
+        full.maf.data[which(full.maf.data$Hugo_Symbol == 'ATXN7' & full.maf.data$Chromosome == 'chr3'),]$Entrez_Gene_Id <- 6314;
+        }
+
+if (any(full.maf.data$Hugo_Symbol == 'EZHIP' & full.maf.data$Chromosome == 'chrX')) {
+        full.maf.data[which(full.maf.data$Hugo_Symbol == 'EZHIP' & full.maf.data$Chromosome == 'chrX'),]$Entrez_Gene_Id <- 340602;
+        }
+
+if (any(full.maf.data$Hugo_Symbol == 'MAP3K14' & full.maf.data$Chromosome == 'chr17')) {
+        full.maf.data[which(full.maf.data$Hugo_Symbol == 'MAP3K14' & full.maf.data$Chromosome == 'chr17'),]$Entrez_Gene_Id <- 9020;
+        }
+
+# some cases where vcf2maf fills in the wrong GeneID
+# ie, EIF4A2 is given GeneID for SNORA81 (which is within EIF4A2) but not necessarily on the variant position
+if (any(full.maf.data$Hugo_Symbol == 'EIF4A2' & full.maf.data$Chromosome == 'chr3')) {
+        full.maf.data[which(full.maf.data$Hugo_Symbol == 'EIF4A2' & full.maf.data$Chromosome == 'chr3'),]$Entrez_Gene_Id <- 1974;
+        }
+
+if (any(full.maf.data$Hugo_Symbol == 'MEF2B' & full.maf.data$Chromosome == 'chr19')) {
+        full.maf.data[which(full.maf.data$Hugo_Symbol == 'MEF2B' & full.maf.data$Chromosome == 'chr19'),]$Entrez_Gene_Id <- 100271849;
+        }
+
+if (any(full.maf.data$Hugo_Symbol == 'PRSS1' & full.maf.data$Chromosome == 'chr7')) {
+        full.maf.data[which(full.maf.data$Hugo_Symbol == 'PRSS1' & full.maf.data$Chromosome == 'chr7'),]$Entrez_Gene_Id <- 5644;
+        }
+
+if (any(full.maf.data$Hugo_Symbol == 'SMG1' & full.maf.data$Chromosome == 'chr16')) {
+        full.maf.data[which(full.maf.data$Hugo_Symbol == 'SMG1' & full.maf.data$Chromosome == 'chr16'),]$Entrez_Gene_Id <- 23049;
+        }
+
+if (any(full.maf.data$Hugo_Symbol == 'SRSF2' & full.maf.data$Chromosome == 'chr17')) {
+        full.maf.data[which(full.maf.data$Hugo_Symbol == 'SRSF2' & full.maf.data$Chromosome == 'chr17'),]$Entrez_Gene_Id <- 6427;
+        }
+
+# vcf2maf mis-annotates a common downstream/regulartory_region TERC mutation (rs2293607) 
+# as a downstream variant in ACTRT3; therefore we will manually update this for plotting
+if (any(full.maf.data$dbSNP_RS == 'rs2293607' & full.maf.data$SYMBOL == 'ACTRT3')) {
+        full.maf.data[which(full.maf.data$dbSNP_RS == 'rs2293607' & full.maf.data$SYMBOL == 'ACTRT3'),]$Hugo_Symbol <- 'TERC';
+        full.maf.data[which(full.maf.data$dbSNP_RS == 'rs2293607' & full.maf.data$SYMBOL == 'ACTRT3'),]$Entrez_Gene_Id <- 7012;
+        }
+
+# there are most likely more wierd cases and I will add them as I find them
+###
+
 
 # save to file
 write.table(
