@@ -35,28 +35,6 @@ save.session.profile <- function(file.name) {
 
 	}
 
-# function to fill gaps (provided by jbruce)
-fillgaps <- function(seg) {
-  
-	for (i in 1:(nrow(seg)-1)) {
-
-		chr <- as.character(seg[i,]$chromos);
-		start <- seg[i,]$start.pos;
-		end <- seg[i,]$end.pos;
-
-		if (seg[i+1,"chromosome"] == chr & seg[i+1,"start.pos"] != (end + 1)) {
-
-      			if (abs(seg[i,"CNt"]) > abs(seg[i+1,"CNt"])) {
-				seg[i,"end.pos"] <- seg[i+1,"start.pos"]-1;
-				} else {
-				seg[i+1,"start.pos"] <- seg[i,"end.pos"]+1;
-				}
-			}
-		}
-
-	return(seg);
-	}
-
 ### PREPARE SESSION ################################################################################
 # import libraries
 library(GenomicRanges);
@@ -137,7 +115,7 @@ if (!is.null(arguments$targets)) {
 ### MAIN ###########################################################################################
 # find results files
 cr.files <- list.files(pattern = 'called.seg', recursive = TRUE);
-cr.files <- cr.files[!grepl('^2021', cr.files)];
+#cr.files <- cr.files[!grepl('^2021', cr.files)];
 
 # read them in
 cn.list <- list();
@@ -158,12 +136,20 @@ cn.data <- do.call(rbind, cn.list);
 cn.data <- cn.data[,c('ID','CONTIG','START','END','NUM_POINTS_COPY_RATIO','MEAN_LOG2_COPY_RATIO','CALL')];
 colnames(cn.data) <- c('ID','chrom','loc.start','loc.end','num.mark','seg.mean','call');
 
-cn.data$chrom <- gsub('chr','',cn.data$chrom);
-
 # save combined/formatted data to file
 write.table(
+	cn.data[,1:6],
+	file = generate.filename(arguments$project, 'gatk_cnv_for_gistic', 'tsv'),
+	row.names = FALSE,
+	col.names = TRUE,
+	quote = FALSE,
+	sep = '\t'
+	);
+
+cn.data$chrom <- gsub('chr','',cn.data$chrom);
+write.table(
 	cn.data,
-	file = generate.filename(arguments$project, 'gatk_cnv_calls', 'tsv'),
+	file = generate.filename(arguments$project, 'gatk_cnv_for_cbioportal', 'seg'),
 	row.names = FALSE,
 	col.names = TRUE,
 	quote = FALSE,
@@ -171,27 +157,28 @@ write.table(
 	);
 
 # define a results table
-gene.data <- refGene;
+gene.data.cn <- refGene;
 for (smp in names(cn.list)) {
-	gene.data[,smp] <- 0;
+	gene.data.cn[,smp] <- 0;
 	}
+gene.data.ratio <- gene.data.cn;
 
 pga.values <- list();
 
 for (smp in names(cn.list)) {
 
 	# convert to GRanges
-	tmp <- cn.list[[smp]][,c('CONTIG','START','END','CALL')];
-	colnames(tmp) <- c('chrom','start','end','CN');
+	tmp <- cn.list[[smp]][,c('CONTIG','START','END','MEAN_LOG2_COPY_RATIO','CALL')];
+	colnames(tmp) <- c('chrom','start','end','RATIO','CN');
 	tmp$CN <- factor(tmp$CN, levels = c('-','0','+'), labels = c(-1,0,1));
 	tmp$CN <- as.numeric(as.character(tmp$CN));
 
-	tmp <- tmp[which(tmp$CN != 0),];
 	if (nrow(tmp) == 0) { next; }
 	rownames(tmp) <- paste0('seg', 1:nrow(tmp));
 
 	# calculate PGA
-	pga <- sum(tmp$end - tmp$start)/(3*10**9)*100;
+	for.pga <- tmp[which(tmp$CN != 0),];
+	pga <- sum(for.pga$end - for.pga$start)/(3*10**9)*100;
 	pga.values[[smp]] <- pga;
 
 	# extract gene data
@@ -203,7 +190,8 @@ for (smp in names(cn.list)) {
 
 	for (i in rownames(regionsWithHits)) {
 		genes <- gene.gr[overlapGenes[which(overlapGenes$queryHits == sub('seg','',i)),]$subjectHits,]$GeneID;
-		gene.data[which(gene.data$GeneID %in% genes),smp] <- tmp[i,]$CN;
+		gene.data.cn[which(gene.data.cn$GeneID %in% genes),smp] <- tmp[i,]$CN;
+		gene.data.ratio[which(gene.data.ratio$GeneID %in% genes),smp] <- tmp[i,]$RATIO;
 		}
 	}
 
@@ -219,65 +207,20 @@ write.table(
 	sep = '\t'
 	);
 
+colnames(gene.data.cn)[which(colnames(gene.data.cn) == 'Symbol')] <- 'Hugo_Symbol';
 write.table(
-	gene.data,
-	file = generate.filename(arguments$project, 'gatk_cna_gene_matrix', 'tsv'),
+	gene.data.cn[,c('Hugo_Symbol',names(cn.list))],
+	file = generate.filename(arguments$project, 'gatk_cna_matrix_for_cbioportal', 'tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
 	sep = '\t'
 	);
 
-rownames(gene.data) <- 1:nrow(gene.data);
-
-# remove untargeted regions
-if (is.null(arguments$targets)) {
-	gene.data$Target <- 1;
-	#gene.data <- gene.data[,-which(colnames(gene.data) == 'Target')];
-#	} else { gene.data <- droplevels(gene.data[which(gene.data$Target == 1),]);
-	}
-
-# clean up any duplicates (2 or more gene entries with the same symbol that occur adjacent to each other)
-dup.idx <- gene.data$Symbol[which(duplicated(gene.data$Symbol))];
-
-for (gene in dup.idx) {
-
-	tmp <- gene.data[which(gene.data$Symbol == gene),];
-	if (nrow(tmp) < 2) { next; }
-
-	keep.all <- FALSE;
-	for (i in 2:nrow(tmp)) {
-		# if all entries have identical CN calls
-		if (tmp[i,]$Chromosome == tmp[i-1,]$Chromosome && all(tmp[i,7:ncol(tmp)] == tmp[i-1,7:ncol(tmp)])) {
-			keep.all <- TRUE;
-			}
-		}
-
-	# if they are all the same
-	if (keep.all) {
-		new.entry <- tmp[1,];
-		new.entry$End <- max(tmp$End);
-		new.entry$GeneID <- paste(tmp$GeneID, collapse = ';');
-		new.entry$Target <- max(tmp$Target);
-	
-	} else if (any(tmp$Target == 1)) {
-		new.entry <- tmp[which(tmp$Target == 1),][1,];
-		} else {
-		new.entry <- tmp[1,];
-		}
-
-	gene.data <- gene.data[-which(gene.data$Symbol == gene),];
-	gene.data <- rbind(gene.data, new.entry);
-	}
-
-gene.data <- gene.data[order(gene.data$Chromosome, gene.data$Start, gene.data$End),];
-colnames(gene.data)[which(colnames(gene.data) == 'Symbol')] <- 'Hugo_Symbol';
-
 write.table(
-	gene.data[,c('Hugo_Symbol', names(cn.list))],
-	file = generate.filename(arguments$project, 'somatic_cnv_for_cbioportal', 'tsv'),
+	gene.data.ratio,
+	file = generate.filename(arguments$project, 'gatk_ratio_gene_matrix', 'tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
-	quote = FALSE,
 	sep = '\t'
 	);
 

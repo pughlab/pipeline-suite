@@ -60,7 +60,8 @@ sub get_mutect_pon_command {
 		'-R', $reference,
 		'-I:tumor', $args{normal},
 		'--out', $args{output},
-		'--artifact_detection_mode'
+		'--artifact_detection_mode',
+		'--enable_strand_artifact_filter'
 		);
 
 	if (defined($dbsnp)) {
@@ -124,7 +125,8 @@ sub get_mutect_command {
 		'-jar $gatk_dir/GenomeAnalysisTK.jar -T MuTect2',
 		'-R', $reference,
 		'-I:tumor', $args{tumour},
-		'--out', $args{output}
+		'--out', $args{output},
+		'--enable_strand_artifact_filter'
 		);
 
 	if (defined($dbsnp)) {

@@ -46,6 +46,19 @@ sub main {
 	my @tex_files = grep { /tex$/ } @input_files;
 	@tex_files = sort @tex_files;
 
+	# if both sequenza and gatk_cnv were run
+	my @cnv_tex = grep { /^cna/ } @tex_files;
+	if (scalar(@cnv_tex) == 2) {
+		my $gatk_cnv_tex = join('/', $args{input_dir}, grep { /gatk/ } @cnv_tex);
+		`sed -i 's/section{SCNA Summary}/pagebreak/' $gatk_cnv_tex`;
+		}
+
+	# if both plot_snv_summary.R and filter_ensemble_mutations.R (OncoKB) were run:
+	my @snv_tex = grep { /^somatic_snv_summary/ } @tex_files;
+	if (scalar(@snv_tex) == 2) {
+		@tex_files = grep { $_ != 'somatic_snv_summary.tex' } @tex_files;
+		}
+
 	# find QC input
 	my @qc_plots = grep { /qc_metrics.png$/ } @plot_files;
 	my $most_recent_qc_plot = $qc_plots[-1];

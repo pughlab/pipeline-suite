@@ -85,7 +85,7 @@ sub main {
 
 	my @job_ids;
 	my ($qc_dir, $germ_dir, $cpsr_dir);
-	my ($correlations, $qc_data, $contest_data, $cpsr_calls);
+	my ($correlations, $qc_data, $cb_data, $seqqc_data, $contest_data, $cpsr_calls) = undef;
 	my ($run_script, $run_id);
 
 	### find the required input files
@@ -363,59 +363,81 @@ sub main {
 		$germ_dir	= join('/', $output_directory, 'HaplotypeCaller/cohort/germline_variants');
 		$cpsr_dir	= join('/', $output_directory, 'HaplotypeCaller/CPSR');
 
-		# contamination estimates
-		opendir(CONTEST, $qc_dir . "/ContEst") or die "Cannot open '$qc_dir/ContEst' !";
-		my @contest_files = grep { /ContEst_output.tsv/ } readdir(CONTEST);
-		@contest_files = sort @contest_files;
-		closedir(CONTEST);
+		# contamination estimates (T/N, meta + readgroup)
+		if (-e "$qc_dir/ContEst") {
+			opendir(CONTEST, $qc_dir . "/ContEst") or die "Cannot open '$qc_dir/ContEst' !";
+			my @contest_files = grep { /ContEst_output.tsv/ } readdir(CONTEST);
+			@contest_files = sort @contest_files;
+			closedir(CONTEST);
 
-		$contest_data = join('/', $qc_dir, 'ContEst', $contest_files[-1]);
+			$contest_data = join('/', $qc_dir, 'ContEst', $contest_files[-1]);
 
-		if ( -l join('/', $data_directory, 'ContEst_output.tsv')) {
-			unlink join('/', $data_directory, 'ContEst_output.tsv');
+			if ( -l join('/', $data_directory, 'ContEst_output.tsv')) {
+				unlink join('/', $data_directory, 'ContEst_output.tsv');
+				}
+
+			symlink($contest_data, join('/', $data_directory, 'ContEst_output.tsv'));
 			}
 
-		symlink($contest_data, join('/', $data_directory, 'ContEst_output.tsv'));
+		# contamination estimates (all samples)
+		if (-e "$qc_dir/SequenceMetrics") {
+			opendir(QC, $qc_dir . "/SequenceMetrics");
+			my @seqqc_files = grep { /ContaminationEstimates.tsv/ } readdir(QC);
+			@seqqc_files = sort @seqqc_files;
+			closedir(QC);
+
+			$seqqc_data = join('/', $qc_dir, 'SequenceMetrics', $seqqc_files[-1]);
+
+			if ( -l join('/', $data_directory, 'ContaminationEstimates.tsv')) {
+				unlink join('/', $data_directory, 'ContaminationEstimates.tsv');
+				}
+
+			symlink($seqqc_data, join('/', $data_directory, 'ContaminationEstimates.tsv'));
+			}
 
 		# coverage summary metrics
-		opendir(COVERAGE, $qc_dir . "/Coverage") or die "Cannot open '$qc_dir/Coverage' !";
-		my @all_coverage_files = grep { /tsv/ } readdir(COVERAGE);
+		if (-e "$qc_dir/Coverage") {
+			opendir(COVERAGE, $qc_dir . "/Coverage") or die "Cannot open '$qc_dir/Coverage' !";
+			my @all_coverage_files = grep { /tsv/ } readdir(COVERAGE);
 
-		my @coverage_files = grep { /Coverage_summary.tsv/ } @all_coverage_files;
-		@coverage_files = sort @coverage_files;
+			my @coverage_files = grep { /Coverage_summary.tsv/ } @all_coverage_files;
+			@coverage_files = sort @coverage_files;
 
-		my @cb_files = grep { /total_bases_covered.tsv/ } @all_coverage_files;
-		@cb_files = sort @cb_files;
+			my @cb_files = grep { /total_bases_covered.tsv/ } @all_coverage_files;
+			@cb_files = sort @cb_files;
 
-		closedir(COVERAGE);
+			closedir(COVERAGE);
 
-		$qc_data = join('/', $qc_dir, 'Coverage', $coverage_files[-1]);
-		my $cb_data = join('/', $qc_dir, 'Coverage', $cb_files[-1]);
+			$qc_data = join('/', $qc_dir, 'Coverage', $coverage_files[-1]);
+			$cb_data = join('/', $qc_dir, 'Coverage', $cb_files[-1]);
 
-		if ( -l join('/', $data_directory, 'Coverage_summary.tsv')) {
-			unlink join('/', $data_directory, 'Coverage_summary.tsv');
+			if ( -l join('/', $data_directory, 'Coverage_summary.tsv')) {
+				unlink join('/', $data_directory, 'Coverage_summary.tsv');
+				}
+
+			if ( -l join('/', $data_directory, 'total_bases_covered.tsv')) {
+				unlink join('/', $data_directory, 'total_bases_covered.tsv');
+				}		
+
+			symlink($qc_data, join('/', $data_directory, 'Coverage_summary.tsv'));
+			symlink($cb_data, join('/', $data_directory, 'total_bases_covered.tsv'));
 			}
-
-		if ( -l join('/', $data_directory, 'total_bases_covered.tsv')) {
-			unlink join('/', $data_directory, 'total_bases_covered.tsv');
-			}		
-
-		symlink($qc_data, join('/', $data_directory, 'Coverage_summary.tsv'));
-		symlink($cb_data, join('/', $data_directory, 'total_bases_covered.tsv'));
 
 		# germline variant correlations
-		opendir(GERMLINE, $germ_dir) or die "Cannot open '$germ_dir' !";
-		my @correlation_files = grep { /germline_correlation.tsv/ } readdir(GERMLINE);
-		@correlation_files = sort @correlation_files;
-		closedir(GERMLINE);
+		if (-e $germ_dir) {
+			opendir(GERMLINE, $germ_dir) or die "Cannot open '$germ_dir' !";
+			my @correlation_files = grep { /germline_correlation.tsv/ } readdir(GERMLINE);
+			@correlation_files = sort @correlation_files;
+			closedir(GERMLINE);
 
-		$correlations = join('/', $germ_dir, $correlation_files[-1]);
+			$correlations = join('/', $germ_dir, $correlation_files[-1]);
 
-		if ( -l join('/', $data_directory, 'germline_correlation.tsv')) {
-			unlink join('/', $data_directory, 'germline_correlation.tsv');
+			if ( -l join('/', $data_directory, 'germline_correlation.tsv')) {
+				unlink join('/', $data_directory, 'germline_correlation.tsv');
+				}
+
+			symlink($correlations, join('/', $data_directory, 'germline_correlation.tsv'));
 			}
-
-		symlink($correlations, join('/', $data_directory, 'germline_correlation.tsv'));
 
 		# create some QC plots
 		my $qc_command = "cd $output_directory\n";
@@ -426,7 +448,8 @@ sub main {
 			'-o', $plot_directory,
 			'-p', $tool_data->{project_name},
 			'-t', $tool_data->{seq_type},
-			'-c', $contest_data
+			'-c', $contest_data,
+			'-m', $seqqc_data
 			);
 
 		# run command
@@ -452,54 +475,55 @@ sub main {
 		push @job_ids, $qc_run_id;
 
 		# significant germline variants
-		opendir(CPSR, $cpsr_dir) or die "Cannot open '$cpsr_dir' !";
-		my @cpsr_files = grep { /mutations_for_cbioportal.tsv/ } readdir(CPSR);
-		@cpsr_files = sort @cpsr_files;
-		closedir(CPSR);
+		if (-e $cpsr_dir) {
+			opendir(CPSR, $cpsr_dir) or die "Cannot open '$cpsr_dir' !";
+			my @cpsr_files = grep { /mutations_for_cbioportal.tsv/ } readdir(CPSR);
+			@cpsr_files = sort @cpsr_files;
+			closedir(CPSR);
 
-		$cpsr_calls = join('/', $cpsr_dir, $cpsr_files[-1]);
+			$cpsr_calls = join('/', $cpsr_dir, $cpsr_files[-1]);
 
-		if ( -l join('/', $data_directory, 'significant_germline_variants.tsv')) {
-			unlink join('/', $data_directory, 'significant_germline_variants.tsv');
+			if ( -l join('/', $data_directory, 'cpsr_germline_variants.tsv')) {
+				unlink join('/', $data_directory, 'cpsr_germline_variants.tsv');
+				}
+
+			symlink($cpsr_calls, join('/', $data_directory, 'cpsr_germline_variants.tsv'));
+
+			# summarize/plot CPSR output
+			my $plot_command = "cd $output_directory\n";
+			$plot_command .= "Rscript $cwd/report/plot_germline_snv_summary.R";
+			$plot_command .= " " . join(' ',
+				'-m', $cpsr_calls,
+				'-o', $plot_directory,
+				'-p', $tool_data->{project_name}
+				);
+
+			# run command
+			print $log "Submitting job to create germline SNV plots...\n";
+			$run_script = write_script(
+				log_dir		=> $log_directory,
+				name		=> 'plot_germline_snv_summary',
+				cmd		=> $plot_command,
+				modules		=> [$r_version],
+				max_time	=> '01:00:00',
+				mem		=> '2G',
+				hpc_driver	=> $args{cluster}
+				);
+
+			$run_id = submit_job(
+				jobname		=> 'plot_germline_snv_summary',
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @job_ids, $run_id;
 			}
-
-		symlink($cpsr_calls, join('/', $data_directory, 'significant_germline_variants.tsv'));
-
-		# summarize/plot CPSR output
-		my $plot_command = "cd $output_directory\n";
-		$plot_command .= "Rscript $cwd/report/plot_germline_snv_summary.R";
-		$plot_command .= " " . join(' ',
-			'-m', $cpsr_calls,
-			'-o', $plot_directory,
-			'-p', $tool_data->{project_name}
-			);
-
-		# run command
-		print $log "Submitting job to create germline SNV plots...\n";
-		$run_script = write_script(
-			log_dir		=> $log_directory,
-			name		=> 'plot_germline_snv_summary',
-			cmd		=> $plot_command,
-			modules		=> [$r_version],
-			max_time	=> '01:00:00',
-			mem		=> '2G',
-			hpc_driver	=> $args{cluster}
-			);
-
-		$run_id = submit_job(
-			jobname		=> 'plot_germline_snv_summary',
-			shell_command	=> $run_script,
-			hpc_driver	=> $args{cluster},
-			dry_run		=> $args{dry_run},
-			log_file	=> $log
-			);
-
-		push @job_ids, $run_id;
-
 
 		# somatic variants
 		my ($mutect_data, $mutect2_data, $strelka_data, $varscan_data, $sniper_data, $vardict_data);
-		my ($sequenza_data, $ploidy_data);
+		my ($sequenza_data, $ploidy_data, $gatk_cnv, $gatk_pga);
 		my $n_tools = 0;
 
 		# find ENSEMBLE mutations
@@ -579,11 +603,11 @@ sub main {
 
 			$sniper_data = join('/', $sniper_dir, $sniper_calls[-1]);
 
-			if ( -l join('/', $data_directory, 'sniper_somatic_variants.tsv')) {
-				unlink join('/', $data_directory, 'sniper_somatic_variants.tsv');
+			if ( -l join('/', $data_directory, 'somaticsniper_somatic_variants.tsv')) {
+				unlink join('/', $data_directory, 'somaticsniper_somatic_variants.tsv');
 				}
 
-			symlink($sniper_data, join('/', $data_directory, 'sniper_somatic_variants.tsv'));
+			symlink($sniper_data, join('/', $data_directory, 'somaticsniper_somatic_variants.tsv'));
 
 			$ensemble_command .= " --somaticsniper $sniper_data";
 			$n_tools++;
@@ -610,6 +634,7 @@ sub main {
 			}
 
 		# get mutation calls from VarScan
+		my (@cna_calls, @ploidy);
 		if ('Y' eq $tool_data->{varscan}->{run}) {
 			my $varscan_dir = join('/', $output_directory, 'VarScan');
 
@@ -619,50 +644,117 @@ sub main {
 			my @varscan_calls = grep { /mutations_for_cbioportal.tsv/ } @varscan_files;
 			@varscan_calls = sort @varscan_calls;
 
-			my @cna_calls = grep { /Sequenza_cna_gene_matrix.tsv/ } @varscan_files;
+			@cna_calls = grep { /Sequenza_ratio_gene_matrix.tsv/ } @varscan_files;
 			@cna_calls = sort @cna_calls;
 
-			my @ploidy = grep { /Sequenza_ploidy_purity.tsv/ } @varscan_files;
+			@ploidy = grep { /Sequenza_ploidy_purity.tsv/ } @varscan_files;
 			@ploidy = sort @ploidy;
 
 			closedir(VARSCAN);
 
 			$varscan_data = join('/', $varscan_dir, $varscan_calls[-1]);
-			$sequenza_data = join('/', $varscan_dir, $cna_calls[-1]);
-			$ploidy_data = join('/', $varscan_dir, $ploidy[-1]);
 
 			if ( -l join('/', $data_directory, 'varscan_somatic_variants.tsv')) {
 				unlink join('/', $data_directory, 'varscan_somatic_variants.tsv');
 				}
-			if ( -l join('/', $data_directory, 'sequenza_cna_matrix.tsv')) {
-				unlink join('/', $data_directory, 'sequenza_cna_matrix.tsv');
-				}
-			if ( -l join('/', $data_directory, 'sequenza_cna_metrics.tsv')) {
-				unlink join('/', $data_directory, 'sequenza_cna_metrics.tsv');
-				}
 
 			symlink($varscan_data, join('/', $data_directory, 'varscan_somatic_variants.tsv'));
-			symlink($sequenza_data, join('/', $data_directory, 'sequenza_cna_matrix.tsv'));
-			symlink($ploidy_data, join('/', $data_directory, 'sequenza_cna_metrics.tsv'));
 
 			$ensemble_command .= " --varscan $varscan_data";
 			$n_tools++;
 
-			# plot CNA summary
-			my $cna_plot_command = join(' ',
-				"Rscript $cwd/report/plot_cna_summary.R",
+			# get cna calls from sequenza
+			unless (scalar(@cna_calls) == 0) {
+
+				$sequenza_data = join('/', $varscan_dir, $cna_calls[-1]);
+				$ploidy_data = join('/', $varscan_dir, $ploidy[-1]);
+
+				if ( -l join('/', $data_directory, 'sequenza_ratio_matrix.tsv')) {
+					unlink join('/', $data_directory, 'sequenza_ratio_matrix.tsv');
+					}
+				if ( -l join('/', $data_directory, 'sequenza_cna_metrics.tsv')) {
+					unlink join('/', $data_directory, 'sequenza_cna_metrics.tsv');
+					}
+
+				symlink($sequenza_data, join('/', $data_directory, 'sequenza_ratio_matrix.tsv'));
+				symlink($ploidy_data, join('/', $data_directory, 'sequenza_cna_metrics.tsv'));
+
+				# plot CNA summary
+				my $cna_plot_command = join(' ',
+					"Rscript $cwd/report/plot_cna_summary.R",
+					'-p', $tool_data->{project_name},
+					'-o', $plot_directory,
+					'-c', $sequenza_data,
+					'-m', $ploidy_data,
+					'-s', 'ratio'
+					);
+
+				# run command
+				print $log "Submitting job to plot somatic copy-number variants...\n";
+				$run_script = write_script(
+					log_dir		=> $log_directory,
+					name		=> 'plot_cna_summary',
+					cmd		=> $cna_plot_command,
+					modules		=> [$r_version],
+					max_time	=> '04:00:00',
+					mem		=> '2G',
+					hpc_driver	=> $args{cluster}
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'plot_cna_summary',
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				push @job_ids, $run_id;
+				}
+			}
+
+		# get CNAs calls from GATK:CNV
+		if ('Y' eq $tool_data->{gatk_cnv}->{run}) {
+			my $gatk_cnv_dir = join('/', $output_directory, 'GATK_CNV');
+
+			opendir(GATKCNV, $gatk_cnv_dir) or die "Cannot open '$gatk_cnv_dir' !";
+			my @gatk_cnv_files = readdir(GATKCNV);
+			my @cnv_files = grep { /ratio_gene_matrix.tsv/ } @gatk_cnv_files;
+			@cnv_files = sort @cnv_files;
+			my @pga_files = grep { /pga_estimates.tsv/ } @gatk_cnv_files;
+			@pga_files = sort @pga_files;
+			closedir(GATKCNV);
+
+			my $cnv_data = join('/', $gatk_cnv_dir, $cnv_files[-1]);
+			my $pga_data = join('/', $gatk_cnv_dir, $pga_files[-1]);
+
+			if ( -l join('/', $data_directory, 'gatk_cnv_ratio_matrix.tsv')) {
+				unlink join('/', $data_directory, 'gatk_cnv_ratio_matrix.tsv');
+				}
+
+			if ( -l join('/', $data_directory, 'gatk_cnv_pga_estimates.tsv')) {
+				unlink join('/', $data_directory, 'gatk_cnv_pga_estimates.tsv');
+				}
+
+			symlink($cnv_data, join('/', $data_directory, 'gatk_cnv_ratio_matrix.tsv'));
+			symlink($pga_data, join('/', $data_directory, 'gatk_cnv_pga_estimates.tsv'));
+
+			# plot SV summary
+			my $cnv_plot_command = join(' ',
+				"Rscript $cwd/report/plot_gatk_cna_summary.R",
 				'-p', $tool_data->{project_name},
 				'-o', $plot_directory,
-				'-c', $sequenza_data,
-				'-m', $ploidy_data
+				'-c', $cnv_data,
+				'-m', $pga_data,
+				'-s', 'ratio'
 				);
 
 			# run command
-			print $log "Submitting job to plot somatic copy-number variants...\n";
+			print $log "Submitting job to plot GATK CNVs...\n";
 			$run_script = write_script(
 				log_dir		=> $log_directory,
-				name		=> 'plot_cna_summary',
-				cmd		=> $cna_plot_command,
+				name		=> 'plot_gatk_cnv_summary',
+				cmd		=> $cnv_plot_command,
 				modules		=> [$r_version],
 				max_time	=> '04:00:00',
 				mem		=> '2G',
@@ -670,7 +762,7 @@ sub main {
 				);
 
 			$run_id = submit_job(
-				jobname		=> 'plot_cna_summary',
+				jobname		=> 'plot_sv_summary',
 				shell_command	=> $run_script,
 				hpc_driver	=> $args{cluster},
 				dry_run		=> $args{dry_run},
@@ -729,17 +821,16 @@ sub main {
 			}
 
 		# find ENSEMBLE mutations
-		$ensemble_command .= " -n 4"; # ($n_tools-1);
-
 		# run command
 		print $log "Submitting job to collect somatic variants...\n";
 		$run_script = write_script(
 			log_dir		=> $log_directory,
 			name		=> 'collect_somatic_variant_calls',
 			cmd		=> $ensemble_command,
+			dependencies	=> $qc_run_id,
 			modules		=> [$r_version],
-			max_time	=> '24:00:00',
-			mem		=> '2G',
+			max_time	=> '48:00:00',
+			mem		=> '4G',
 			hpc_driver	=> $args{cluster}
 			);
 

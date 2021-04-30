@@ -46,10 +46,8 @@ parser <- ArgumentParser();
 parser$add_argument('-d', '--directory', type = 'character', help = 'path to data directory',
 	default = getwd());
 parser$add_argument('-p', '--project', type = 'character', help = 'project name');
-parser$add_argument('-t', '--t_depth', type = 'integer', help = 'minimum tumour depth required (rna-seq only)',
-	default = 20);
-parser$add_argument('-g', '--gtf', type = 'character', help = 'annotation gtf (refGene; rna-seq only)',
-	default = '/cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.GRCh38.genes.gtf');
+parser$add_argument('-t', '--t_depth', type = 'integer', 
+	help = 'minimum tumour depth required (rna-seq only)', default = 20);
 
 arguments <- parser$parse_args();
 
@@ -86,50 +84,19 @@ names(variant.colours) <- c("nonstop","frameshift_indel","other", "missense", "n
 	"splicing", "in_frame_indel", "itd", "tss"
 	);
 
-# if this is RNA-Seq, only keep variants in coding regions
+# determine type of experiment that was run
 is.rnaseq <- grepl('RNASeq', getwd());
 is.exome <- grepl('Exome|WEX|WXS', getwd());
 is.wgs <- grepl('WGS', getwd());
 is.germline <- grepl('CPSR', getwd());
+
+# if this is RNA-Seq, only keep variants in coding regions
 classes.to.keep <- c('RNA','Missense_Mutation','Splice_Region','Splice_Site','In_Frame_Del','In_Frame_Ins',
 	'Frame_Shift_Del','Frame_Shift_Ins','Nonsense_Mutation','Nonstop_Mutation','Translation_Start_Site');
 
-###
-
-### FORMAT ANNOTATION
-# using refGene, indicate genes to keep (coding genes) for gene x patient matrix
-if (is.rnaseq) {
-	refGene <- read.delim(arguments$gtf, header = F, comment.char = '#');
-
-	refGene <- droplevels(refGene[which(refGene$V3 == 'gene'),c(1,4,5,9)]);
-	colnames(refGene) <- c('Chromosome','Start','End','INFO');
-
-	refGene$GeneID <- sapply(
-		refGene$INFO,
-		function(i) {
-			parts <- unlist(strsplit(as.character(i), ';'));
-			gene_name <- unlist(strsplit(parts[grepl('gene_id', parts)], ' '));
-			gene_id  <- gene_name[length(gene_name)];
-			return(gene_id);
-			}
-		);
-
-	refGene$Symbol <- sapply(
-		refGene$INFO,
-		function(i) {
-			parts <- unlist(strsplit(as.character(i), ';'));
-			gene_name <- unlist(strsplit(parts[grepl('gene_name', parts)], ' '));
-			gene_symbol <- gene_name[length(gene_name)];
-			return(gene_symbol);
-			}
-		);
-
-	refGene$Chromosome <- factor(refGene$Chromosome, levels = paste0('chr',c(1:22,'X','Y','M')));
-	}
-
 ### MAIN ###########################################################################################
 # find results files
-maf.files <- list.files(pattern = '*.maf$', recursive = TRUE);
+maf.files <- list.files(pattern = '.maf$|.maf.gz', recursive = TRUE);
 
 # read them in and store them
 samples <- c();
@@ -152,12 +119,20 @@ for (i in 1:length(maf.files)) {
 		}
 
 	## do some filtering
-	# remove any poor quality variants
 	# for some reason WGS:SomaticSniper output has FILTER = '.'
 	if (!(is.wgs & grepl('SomaticSniper', getwd()))) {
 		tmp <- tmp[which(tmp$FILTER == 'PASS'),];
 		}
 
+	# add a depth filter (some 'PASS' calls (MuTect2 only) have depth = 0 
+	# 	despite depth > 0 reported by other callers at the same positions)
+	# we will only remove these low/no depth calls if the normal is also low/absent
+	idx <- which(tmp$t_depth < 5 & (tmp$n_depth < 5 | is.na(tmp$n_depth)));
+	if (length(idx) > 0) {
+		tmp <- tmp[-idx,];
+		}
+
+	# if RNA-Seq, add a further depth filter
 	if (is.rnaseq) {
 		tmp <- tmp[which(tmp$t_depth > arguments$t_depth),];
 		}
@@ -176,12 +151,12 @@ if (length(norm.idx) > 0) {
 	}
 
 if (!is.rnaseq & !is.germline) {
-	norm.idx <- which(full.maf.data$Matched_Norm_Sample_Barcode != 'NORMAL');
+	norm.idx <- !is.na(full.maf.data$Matched_Norm_Sample_Barcode);
 	if (length(norm.idx) > 0) { full.maf.data[norm.idx,]$Mutation_Status <- 'somatic'; }
 	}
 
 if (!is.rnaseq & is.germline) {
-	norm.idx <- which(full.maf.data$Matched_Norm_Sample_Barcode != 'NORMAL');
+	norm.idx <- !is.na(full.maf.data$Matched_Norm_Sample_Barcode);
 	if (length(norm.idx) > 0) { full.maf.data[norm.idx,]$Mutation_Status <- 'germline'; }
 	}
 
@@ -192,118 +167,78 @@ for (field in c('t_depth','t_ref_count','t_alt_count','n_depth','n_ref_count','n
 		}
 	}
 
-colnames(full.maf.data) <- gsub('vcf','variant',colnames(full.maf.data));
-exclude.field <- which(colnames(full.maf.data) == 'variant_pos');
+# fill in missing Entrez_Gene_Ids where possible
+if (any(full.maf.data$Entrez_Gene_Id == 0 & full.maf.data$SYMBOL_SOURCE == 'EntrezGene')) {
+	full.maf.data$Entrez_Gene_Id <- as.character(full.maf.data$Entrez_Gene_Id);
+	full.maf.data$Gene <- as.character(full.maf.data$Gene);
+	idx <- which(full.maf.data$Entrez_Gene_Id == 0 & full.maf.data$SYMBOL_SOURCE == 'EntrezGene');
+	full.maf.data[idx,]$Entrez_Gene_Id <- full.maf.data[idx,]$Gene;
+	if (any(grepl('ENSG', full.maf.data$Entrez_Gene_Id))) {
+		full.maf.data[grepl('ENSG', full.maf.data$Entrez_Gene_Id),]$Entrez_Gene_Id <- 0;
+		}
+	full.maf.data$Entrez_Gene_Id <- as.numeric(full.maf.data$Entrez_Gene_Id);
+	}
 
+# remove unnecessary columns
+colnames(full.maf.data) <- gsub('vcf','variant',colnames(full.maf.data));
+exclude.field <- grepl('variant', colnames(full.maf.data));
+
+
+### fix some weird cases
+# some cases where vcf2maf doesn't fill in Entrez_Gene_Id
+if (any(full.maf.data$Hugo_Symbol == 'ATXN7' & full.maf.data$Chromosome == 'chr3')) {
+        full.maf.data[which(full.maf.data$Hugo_Symbol == 'ATXN7' & full.maf.data$Chromosome == 'chr3'),]$Entrez_Gene_Id <- 6314;
+        }
+
+if (any(full.maf.data$Hugo_Symbol == 'EZHIP' & full.maf.data$Chromosome == 'chrX')) {
+        full.maf.data[which(full.maf.data$Hugo_Symbol == 'EZHIP' & full.maf.data$Chromosome == 'chrX'),]$Entrez_Gene_Id <- 340602;
+        }
+
+if (any(full.maf.data$Hugo_Symbol == 'MAP3K14' & full.maf.data$Chromosome == 'chr17')) {
+        full.maf.data[which(full.maf.data$Hugo_Symbol == 'MAP3K14' & full.maf.data$Chromosome == 'chr17'),]$Entrez_Gene_Id <- 9020;
+        }
+
+# some cases where vcf2maf fills in the wrong GeneID
+# ie, EIF4A2 is given GeneID for SNORA81 (which is within EIF4A2) but not necessarily on the variant position
+if (any(full.maf.data$Hugo_Symbol == 'EIF4A2' & full.maf.data$Chromosome == 'chr3')) {
+        full.maf.data[which(full.maf.data$Hugo_Symbol == 'EIF4A2' & full.maf.data$Chromosome == 'chr3'),]$Entrez_Gene_Id <- 1974;
+        }
+
+if (any(full.maf.data$Hugo_Symbol == 'MEF2B' & full.maf.data$Chromosome == 'chr19')) {
+        full.maf.data[which(full.maf.data$Hugo_Symbol == 'MEF2B' & full.maf.data$Chromosome == 'chr19'),]$Entrez_Gene_Id <- 100271849;
+        }
+
+if (any(full.maf.data$Hugo_Symbol == 'PRSS1' & full.maf.data$Chromosome == 'chr7')) {
+        full.maf.data[which(full.maf.data$Hugo_Symbol == 'PRSS1' & full.maf.data$Chromosome == 'chr7'),]$Entrez_Gene_Id <- 5644;
+        }
+
+if (any(full.maf.data$Hugo_Symbol == 'SMG1' & full.maf.data$Chromosome == 'chr16')) {
+        full.maf.data[which(full.maf.data$Hugo_Symbol == 'SMG1' & full.maf.data$Chromosome == 'chr16'),]$Entrez_Gene_Id <- 23049;
+        }
+
+if (any(full.maf.data$Hugo_Symbol == 'SRSF2' & full.maf.data$Chromosome == 'chr17')) {
+        full.maf.data[which(full.maf.data$Hugo_Symbol == 'SRSF2' & full.maf.data$Chromosome == 'chr17'),]$Entrez_Gene_Id <- 6427;
+        }
+
+# vcf2maf mis-annotates a common downstream/regulartory_region TERC mutation (rs2293607) 
+# as a downstream variant in ACTRT3; therefore we will manually update this for plotting
+if (any(full.maf.data$dbSNP_RS == 'rs2293607' & full.maf.data$SYMBOL == 'ACTRT3')) {
+        full.maf.data[which(full.maf.data$dbSNP_RS == 'rs2293607' & full.maf.data$SYMBOL == 'ACTRT3'),]$Hugo_Symbol <- 'TERC';
+        full.maf.data[which(full.maf.data$dbSNP_RS == 'rs2293607' & full.maf.data$SYMBOL == 'ACTRT3'),]$Entrez_Gene_Id <- 7012;
+        }
+
+# there are most likely more wierd cases and I will add them as I find them
+###
+
+
+# save to file
 write.table(
-	full.maf.data[,-exclude.field],
+	full.maf.data[,!exclude.field],
 	file = generate.filename(arguments$project, 'mutations_for_cbioportal', 'tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
 	sep = '\t'
 	);
-
-# if this is RNA-Seq, format variant calls for downstream analyses
-if (is.rnaseq) {
-
-	gc();
-
-	# extract variant info
-	maf.fields <- c(
-		'Chromosome',
-		'Start_Position',
-		'End_Position',
-		'Reference_Allele',
-		'Allele',
-		'dbSNP_RS',
-		'Hugo_Symbol',
-		'Variant_Classification',
-		'Tumor_Sample_Barcode'
-		);
-
-	# first, apply coverage filter
-	trimmed.data <- full.maf.data[,maf.fields];
-	colnames(trimmed.data) <- c('Chromosome','Start','End','Ref','Alt','dbSNP','Symbol','Variant_Classification','Sample');
-
-	# focus on genic regions only
-	trimmed.data <- trimmed.data[which(trimmed.data$Variant_Classification %in% classes.to.keep),];
-
-	# indicate variant code (functional impact)
-	trimmed.data$Code <- variant.codes$Code[match(trimmed.data$Variant_Classification, variant.codes$Classification)];
-
-	# remove variant_classification column (no longer needed)
-	trimmed.data <- trimmed.data[,-which(colnames(trimmed.data) == 'Variant_Classification')];
-
-	smp.data <- list();
-
-	# reshape is memory intensive, so do this in batches
-	tumour.ids <- unique(trimmed.data$Sample);
-	for (smp in tumour.ids) {
-		tmp <- trimmed.data[which(trimmed.data$Sample == smp),];
-		colnames(tmp)[which(colnames(tmp) == 'Code')] <- smp;
-		tmp <- tmp[,-which(colnames(tmp) == 'Sample')];
-		smp.data[[smp]] <- tmp;
-		}
-
-	variant.data <- join_all(
-		smp.data,
-		type = 'full',
-		match = 'first'
-		);
-
-	# add in empty samples
-	for (smp in samples) {
-		if (smp %in% colnames(variant.data)) { next; }
-		variant.data[,smp] <- NA;
-		}
-
-	variant.data$Chromosome <- factor(variant.data$Chromosome, levels = paste0('chr',c(1:22,'X','Y','M')));
-	variant.data <- variant.data[order(variant.data$Chromosome, variant.data$Start, variant.data$End),];
-
-	# save data to file
-	write.table(
-		variant.data,
-		file = generate.filename(arguments$project, 'variant_by_patient', 'tsv'),
-		row.names = FALSE,
-		col.names = TRUE,
-		sep = '\t'
-		);
-
-	# collapse to per-gene
-	gene.by.patient <- aggregate(
-		variant.data[,samples],
-		by = list(
-			Symbol = variant.data$Symbol,
-			Chromosome = variant.data$Chromosome
-			),
-		FUN = min,
-		na.rm = TRUE
-		);
-
-	# filter data
-	gene.by.patient <- merge(
-		refGene[,c('Symbol','Chromosome','Start','End')],
-		gene.by.patient,
-		all.x = TRUE
-		);
-
-	for (smp in samples) {
-		smp.codes <- gene.by.patient[,smp];
-		smp.codes[is.na(smp.codes)] <- 0;
-		smp.codes[which(smp.codes == 'Inf')] <- 0;
-		gene.by.patient[,smp] <- smp.codes;
-		}
-
-	gene.by.patient <- gene.by.patient[order(gene.by.patient$Chromosome, gene.by.patient$Start),];
-
-	write.table(
-		gene.by.patient,
-		file = generate.filename(arguments$project, 'gene_by_patient', 'tsv'),
-		row.names = FALSE,
-		col.names = TRUE,
-		sep = '\t'
-		);
-	}
 
 ### SAVE SESSION INFO ##############################################################################
 save.session.profile(generate.filename('CollectVariantData','SessionProfile','txt'));

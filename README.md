@@ -1,4 +1,4 @@
-# PughLab pipeline-suite (version 0.4.0)
+# PughLab pipeline-suite (version 0.4.1)
 
 ## Introduction
 This is a collection of pipelines to be used for NGS (both DNA and RNA) analyses, from alignment to variant calling.
@@ -139,8 +139,7 @@ See ./configs/dna_fastq_config.yaml and ./configs/rna_fastq_config.yaml for exam
 
 ### Check FASTQs prior to running:
 Be sure to run FASTQC to verify fastq quality prior to running downstream pipelines. In particular, ensure read length is consistent, GC content is similar (typically between 40-60%) and files are unique (no duplicated md5sums):
-<pre><code>
-perl collect_fastqc_metrics.pl \
+<pre><code>perl collect_fastqc_metrics.pl \
 -d /path/to/fastq_config.yaml \
 -t /path/to/fastqc_tool_config.yaml \
 -c slurm \
@@ -150,8 +149,7 @@ perl collect_fastqc_metrics.pl \
 ### Prepare interval files (ie, for WXS):
 For WXS or targeted-sequencing panels, a bed file containing target regions should be provided (listing at minimum: chromosome, start and end positions). Variant calling pipelines MuTect and Mutect2 will add 100bp of padding to each region provided. For consistency, this padding must be manually added prior to variant calling with other tools (ie, Strelka, SomaticSniper, VarDict and VarScan). This will additionally create a bgzipped version required by Strelka.
 
-<pre><code>
-perl format_interval_bed.pl \
+<pre><code>perl format_interval_bed.pl \
 -b /path/to/base/intervals.bed \
 -r /path/to/reference.fa
 </code></pre>
@@ -628,11 +626,11 @@ On completion, certain steps will collate and format the tool output from all pa
   - will use collect_sequenza_output.R to collect optimized CNV calls from all processed samples
   - output includes:
     - DATE_projectname_Sequenza_ploidy_purity.tsv (*best* purity and ploidy estimates)
-    - DATE_projectname_Sequenza_cna_gene_matrix.tsv (gene x patient matrix; a gene is considered to have a CNA if >20 bases overlap with a discovered segment)
-- gatk_cnv.pl
-  - will use collect_gatk_cnv_output.R to collect somatic CNV calls from all processed samples
-  - output includes DATE_projectname_gatk_cna_gene_matrix.tsv and DATE_projectname_gatk_pga_estimates.tsv
-- mavis.pl 
+    - DATE_projectname_Sequenza_cna_gene_matrix.tsv (thresholded CN status; gene x patient matrix; a gene is considered to have a CNA if >20 bases overlap with a discovered segment)
+    - DATE_projectname_Sequenza_ratio_gene_matrix.tsv (log2(depth.ratio); gene x patient matrix; a gene is considered to have a CNA if >20 bases overlap with a discovered segment)
+    - DATE_projectname_segments_for_gistic.tsv and DATE_projectname_markerss_for_gistic.tsv (log2(depth.ratio) for input to GISTIC2.0)
+    - DATE_projectname_segments_for_cbioportal.tsv (log2(depth.ratio) formatted for cbioportal)
+- mavis.pl
   - will use collect_mavis_output.R to collect SV calls from all samples
   - output includes:
     - DATE_projectname_mavis_output.tsv (concatenated output across samples)

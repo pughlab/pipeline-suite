@@ -179,6 +179,10 @@ sub get_create_pon_command {
 		'-O', $args{output}
 		);
 
+	$gatk_command .= "\n\n" . join(' ',
+		"echo 'Finished PoN creation.'", '>', "$args{output}.COMPLETE"
+		);
+
 	return($gatk_command);
 	}
 
@@ -632,7 +636,7 @@ sub main {
 		}
 
 	# initiate objects to hold key info
-	my (%final_outputs, %patient_jobs, %cleanup);
+	my (%final_outputs, %patient_jobs);
 
 	# prep directories for pon
 	my $pon_directory = join('/', $output_directory, 'PanelOfNormals');
@@ -738,7 +742,7 @@ sub main {
 		);
 
 	# check if this should be run
-	if ('Y' eq missing_file($pon)) {
+	if ('Y' eq missing_file("$pon.COMPLETE")) {
 
 		# record command (in log directory) and then run job
 		print $log "Submitting job for CreateReadCountPanelOfNormals...\n";

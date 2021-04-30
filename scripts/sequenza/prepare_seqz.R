@@ -54,19 +54,13 @@ option_list <- list(
 		help="varscan copy number file name [default= %default]", metavar="character"),
 	make_option(c("-o", "--out_dir"), type="character", default=NULL,
 		help="output directory [default= %default]", metavar="character"),
-	make_option(c("-m", "--min.reads.normal"), type="double", default=10,
-		help="min reads to make genotype call [default= %default]", metavar="double"),
 	make_option(c("-n", "--remove_centromeres"), type="logical", default=TRUE,
 		help="remove all snp and copy-number data from centromeric regions", metavar="logical"),
-	make_option(c("-w", "--window"), type="integer", default=1000000,
-		help="window size for plotting [default= %default]", metavar="integer"),
-	make_option(c("-r", "--ratio_priority"), type="logical", default=FALSE,
-		help="Use only depth ratio for segmentation? [default= %default]", metavar="logical"),
 	make_option(c("-a", "--assembly"), type="character", default='hg38',
 		help="Reference type (one of hg19, GRCh37, hg38, GRCh38) [default= %default]",
 		metavar="character"),
-	make_option(c("-f", "--min_reads_baf"), type="integer", default=1,
-		help="Threshold on the depth of the positions included to calculate the average BAF for segment. Set to extreme value (ex. 1x10^6) to exclude BAF from calculations [default= %default]", metavar="integer")
+	make_option(c("-w", "--is_wgs"), type = "logical", default = FALSE, metavar = "logical",
+		help="is the input data generated from WGS?")
 	); 
 
 opt_parser <- OptionParser(option_list = option_list);
@@ -77,10 +71,9 @@ snp.file <- opt$snp_file;
 cnv.file <- opt$cnv_file;
 outdir <- opt$out_dir;
 
-min.reads.normal <- opt$min.reads.normal;
-min.reads.baf <- opt$min_reads_baf;
-
 assembly <- opt$assembly;
+
+is.wgs <- opt$is_wgs;
 
 print("Running Sequenza with the following options:");
 print(opt);
@@ -100,8 +93,8 @@ cnv <- read.delim(cnv.file);
 # remove any non-canonical chromosomes
 chr_list <- c(paste0("chr",1:22),"chrX");
 
-snp <- subset(snp,chrom %in% chr_list);
-cnv <- subset(cnv,chrom %in% chr_list);
+#snp <- subset(snp,chrom %in% chr_list);
+#cnv <- subset(cnv,chrom %in% chr_list);
 
 # remove centromeric regions
 if (opt$remove_centromeres) {
@@ -131,23 +124,65 @@ if (opt$remove_centromeres) {
 if (! 'log2_ratio' %in% colnames(cnv)) {
 	colnames(cnv)[which(colnames(cnv) == 'raw_ratio')] <- 'log2_ratio';
 	}
-
-# prepare sequenza data file
-print("Preparing SEQZ data");
-seqz.data <- VarScan2seqz(
-	varscan.somatic = snp, 
-	varscan.copynumber = cnv
-	);
-
+	
 filestem <- gsub(".snp", "", basename(snp.file));
 
+if (! is.wgs) {
+
+	snp_subset <- subset(snp,chrom %in% chr_list);
+	cnv_subset <- subset(cnv,chrom %in% chr_list);
+
+	# prepare sequenza data file
+	print("Preparing SEQZ data");
+	seqz.data <- VarScan2seqz(
+		varscan.somatic = snp_subset, 
+		varscan.copynumber = cnv_subset
+		);
+
+	write.table(
+		seqz.data,
+		file = paste0(outdir, '/', filestem, '.seqz'),
+		col.names = TRUE,
+		row.names = FALSE,
+		sep = "\t"
+		);
+
+	} else {
+
+	seqz.list <- list();
+
+	for (chr in chr_list) {
+
+		snp_subset <- subset(snp,chrom == chr);
+		cnv_subset <- subset(cnv,chrom == chr);
+
+		# prepare sequenza data file
+		print(paste0("Preparing SEQZ data for ", chr, "..."));
+		seqz.list[[chr]] <- VarScan2seqz(
+			varscan.somatic = snp_subset, 
+			varscan.copynumber = cnv_subset
+			);
+		gc();
+
+		if (chr == chr_list[1]) {
+			write.table(
+				seqz.list[[chr]],
+				file = paste0(outdir, '/', filestem, '.seqz'),
+				col.names = TRUE,
+				row.names = FALSE,
+				sep = "\t"
+				);
+			} else {
+			write.table(
+				seqz.list[[chr]],
+				file = paste0(outdir, '/', filestem, '.seqz'),
+				col.names = FALSE,
+				row.names = FALSE,
+				sep = "\t",
+				append = TRUE
+				);
+			}
+		}
+	}
+	
 print(paste0("Writing SEQZ to file: ", paste0(outdir, '/', filestem, '.seqz')));
-
-write.table(
-	seqz.data,
-	file = paste0(outdir, '/', filestem, '.seqz'),
-	col.names = TRUE,
-	row.names = FALSE,
-	sep = "\t"
-	);
-
