@@ -1,8 +1,7 @@
 ### format_ensemble_mutations.R ####################################################################
 # Collect and filter mutation calls from multiple tools using an ensemble approach.
 # INPUT (must be in MAF format):
-#	tool-specific mutation calls (output by collect_snv_output.R [usually DATE_PROJECT_mutations_for_cbioportal.tsv]) OR
-#	2-column, tab-delimited file listing Tool and Path [ordered by priority]
+#	tool-specific mutation calls (output by collect_snv_output.R [usually DATE_PROJECT_mutations_for_cbioportal.tsv from each tool directory])
 
 ### FUNCTIONS ######################################################################################
 # function to generate a standardized filename
@@ -54,10 +53,7 @@ parser$add_argument('--strelka', type = 'character', help = 'path to combined st
 parser$add_argument('--somaticsniper', type = 'character', help = 'path to combined somaticsniper output');
 parser$add_argument('--varscan', type = 'character', help = 'path to combined varscan output');
 parser$add_argument('--vardict', type = 'character', help = 'path to combined vardict output');
-parser$add_argument('-n', '--n_tools', type = 'character', help = 'minimum number of tools required to call a variant');
 parser$add_argument('-c', '--coverage', type = 'character', help = 'minimum depth for tumour and normal to be considered callable; length 1 or 2 (comma separated)', default = '20,15');
-
-parser$add_argument('-i', '--input', type = 'character', help = 'tab-delimited file listing Tool and Path to tool output; overrides tool-specific input (--mutect, --mutect2, --strelka, --varscan --vardict --somaticsniper)');
 
 arguments <- parser$parse_args();
 
@@ -71,7 +67,7 @@ run.vardict <- !is.null(arguments$vardict);
 
 tool.count <- sum(run.mutect,run.mutect2,run.strelka,run.varscan,run.somaticsniper,run.vardict);
 
-if (is.null(arguments$input) & (tool.count < 2)) {
+if (tool.count < 2) {
 	stop('Must provide path to input file or paths to 2+ tool-specific outputs');
 	}
 
@@ -94,35 +90,23 @@ if (is.na(n_depth)) { n_depth <- 0; }
 # get data
 mutation.data <- list();
 
-if (!is.null(arguments$input)) {
-
-	input <- read.delim(arguments$input, as.is = TRUE);
-
-	for (i in 1:nrow(input)) {
-		tool <- as.character(input[i,1]);
-		mutation.data[[tool]] <- read.delim(input[i,2]);
-		}
-
-	} else {
-
-	if (!is.null(arguments$strelka)) {
-		mutation.data[['Strelka']] <- read.delim(arguments$strelka);
-		}
-	if (!is.null(arguments$somaticsniper)) {
-		mutation.data[['SomaticSniper']] <- read.delim(arguments$somaticsniper);
-		}
-	if (!is.null(arguments$varscan)) {
-		mutation.data[['VarScan']] <- read.delim(arguments$varscan);
-		}
-	if (!is.null(arguments$vardict)) {
-		mutation.data[['VarDict']] <- read.delim(arguments$vardict);
-		}
-	if (!is.null(arguments$mutect2)) {
-		mutation.data[['MuTect2']] <- read.delim(arguments$mutect2);
-		}
-	if (!is.null(arguments$mutect)) {
-		mutation.data[['MuTect']] <- read.delim(arguments$mutect);
-		}
+if (!is.null(arguments$strelka)) {
+	mutation.data[['Strelka']] <- read.delim(arguments$strelka);
+	}
+if (!is.null(arguments$somaticsniper)) {
+	mutation.data[['SomaticSniper']] <- read.delim(arguments$somaticsniper);
+	}
+if (!is.null(arguments$varscan)) {
+	mutation.data[['VarScan']] <- read.delim(arguments$varscan);
+	}
+if (!is.null(arguments$vardict)) {
+	mutation.data[['VarDict']] <- read.delim(arguments$vardict);
+	}
+if (!is.null(arguments$mutect2)) {
+	mutation.data[['MuTect2']] <- read.delim(arguments$mutect2);
+	}
+if (!is.null(arguments$mutect)) {
+	mutation.data[['MuTect']] <- read.delim(arguments$mutect);
 	}
 
 setwd(arguments$output);
@@ -180,11 +164,11 @@ combined.data$Count <- apply(
 
 combined.data$FILTER <- NA;
 
-min.snp.count <- if (!is.null(arguments$n_tools)) { arguments$n_tools
-	} else { ceiling(length(mutation.data)*0.5)
+min.snp.count <- if (tool.count == 6) { 4
+	} else { ceiling(tool.count*0.5)
 	}
 
-min.indel.count <- if (sum(run.mutect2, run.varscan, run.strelka, run.vardict) < 4) { 2
+min.indel.count <- if (sum(run.mutect2, run.varscan, run.strelka, run.vardict) == 4) { 3
 	} else { ceiling(sum(run.mutect2, run.varscan, run.strelka, run.vardict)*0.5)
 	}
 

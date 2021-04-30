@@ -85,7 +85,7 @@ sub main {
 
 	my @job_ids;
 	my ($qc_dir, $germ_dir, $cpsr_dir);
-	my ($correlations, $qc_data, $seqqc_data, $contest_data, $cpsr_calls) = undef;
+	my ($correlations, $qc_data, $cb_data, $seqqc_data, $contest_data, $cpsr_calls) = undef;
 	my ($run_script, $run_id);
 
 	### find the required input files
@@ -409,7 +409,7 @@ sub main {
 			closedir(COVERAGE);
 
 			$qc_data = join('/', $qc_dir, 'Coverage', $coverage_files[-1]);
-			my $cb_data = join('/', $qc_dir, 'Coverage', $cb_files[-1]);
+			$cb_data = join('/', $qc_dir, 'Coverage', $cb_files[-1]);
 
 			if ( -l join('/', $data_directory, 'Coverage_summary.tsv')) {
 				unlink join('/', $data_directory, 'Coverage_summary.tsv');
@@ -530,8 +530,7 @@ sub main {
 		my $ensemble_command .= join(' ',
 			"Rscript $cwd/report/format_ensemble_mutations.R",
 			'-p', $tool_data->{project_name},
-			'-o', $plot_directory,
-			'-s', join('/', $plot_directory, 'sample_info.txt')
+			'-o', $plot_directory
 			);
 
 		# get mutation calls from MuTect
@@ -719,9 +718,10 @@ sub main {
 			my $gatk_cnv_dir = join('/', $output_directory, 'GATK_CNV');
 
 			opendir(GATKCNV, $gatk_cnv_dir) or die "Cannot open '$gatk_cnv_dir' !";
-			my @cnv_files = grep { /ratio_gene_matrix.tsv/ } readdir(GATKCNV);
+			my @gatk_cnv_files = readdir(GATKCNV);
+			my @cnv_files = grep { /ratio_gene_matrix.tsv/ } @gatk_cnv_files;
 			@cnv_files = sort @cnv_files;
-			my @pga_files = grep { /pga_estimates.tsv/ } readdir(GATKCNV);
+			my @pga_files = grep { /pga_estimates.tsv/ } @gatk_cnv_files;
 			@pga_files = sort @pga_files;
 			closedir(GATKCNV);
 
@@ -821,8 +821,6 @@ sub main {
 			}
 
 		# find ENSEMBLE mutations
-		$ensemble_command .= " -n 4"; # ($n_tools-1);
-
 		# run command
 		print $log "Submitting job to collect somatic variants...\n";
 		$run_script = write_script(

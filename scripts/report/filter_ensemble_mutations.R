@@ -1,8 +1,6 @@
-### plot_snv_summary.R ############################################################################
-# Identify and plot recurrent SNVs.
-# INPUT:
-#	- mutation calls (either single tool or ensemble output by format_ensemble_mutations.R)
-#	- callable bases (output by count_callable_bases.R) 
+### filter_ensemble_mutations.R ####################################################################
+# FILTERs ensemble mutations (using OncoKB annotations as a white list) and plots results
+# replaces output from plot_snv_summary.R for use in report
 
 ### FUNCTIONS ######################################################################################
 # function to generate a standardized filename
@@ -84,9 +82,15 @@ driver.genes <- read.delim(
 
 driver.genes <- driver.genes[which(driver.genes$Hallmark == 'Yes'),];
 
-### READ DATA ######################################################################################
+### READ DATA #####################################################################################
 # get data
 input.data <- read.delim(arguments$maf);
+
+# stop if no OncoKB annotations available
+if (! 'GENE_IN_ONCOKB' %in% colnames(input.data)) {
+	stop('No OncoKB annotations available in input maf; please run OncoKB first.');
+	}
+
 callable.bases <- read.delim(arguments$callable, row.names = 1);
 
 # collect list of all samples
@@ -114,9 +118,68 @@ if (!any(all.samples %in% rownames(callable.bases))) {
 # move to output directory
 setwd(arguments$output);
 
+### FILTER DATA ####################################################################################
+# oncokb seems to select genes *purely* on gene symbol (including alternate names)
+# for example, TEP1 is selected because of PTEN (aka TEP1), even though they are
+# on different chromosomes
+oncokb.columns <- c(grep('GENE_IN_ONCOKB', colnames(input.data)):ncol(input.data));
+known.bugs <- which(input.data$Hugo_Symbol %in% c('PRMT9','RAD1','TEP1','FAH'));
+if (length(known.bugs) > 0) {
+	input.data[known.bugs,oncokb.columns] <- NA;
+	}
+
+# find probable false positives to remove
+remove.these <- which(input.data$FLAG.tumour_only & input.data$FLAG.high_pop);
+also.remove.these <- which(
+	input.data$FLAG.tumour_only & 
+	input.data$FLAG.low_vaf
+	);
+
+# but whitelist these
+keep.these <- grep('Oncogenic', input.data$ONCOGENIC);
+
+# apply filter
+if (length(setdiff(unique(c(remove.these,also.remove.these)), keep.these)) > 0) {
+	input.data <- input.data[-setdiff(unique(c(remove.these,also.remove.these)), keep.these),];
+	}
+
+# extract key hits
+significant.hits <- which(
+	input.data$ONCOGENIC == 'Oncogenic' |
+	input.data$MUTATION_EFFECT %in% c('Loss-of-function','Likely Loss-of-function') |
+	input.data$MUTATION_EFFECT %in% c('Switch-of-function') |
+	input.data$MUTATION_EFFECT %in% c('Gain-of-function','Likely Gain-of-function')
+	);
+
+# format for latex
+oncokb.hits <- input.data[significant.hits,];
+
+oncokb.to.print <- data.frame(
+	ID = oncokb.hits$Tumor_Sample_Barcode,
+	Gene = oncokb.hits$Hugo_Symbol,
+	Position = oncokb.hits$Start_Position,
+	VAF = round(oncokb.hits$t_alt_count / oncokb.hits$t_depth,2),
+	VARIANT_IN_ONCOKB = as.logical(oncokb.hits$VARIANT_IN_ONCOKB),
+	Effect = oncokb.hits$MUTATION_EFFECT
+	);
+
+# order by count and median VAF
+gene.counts <- aggregate(VAF ~ Gene, oncokb.to.print, length);
+colnames(gene.counts)[2] <- 'Count';
+gene.counts$VAF <- aggregate(VAF ~ Gene, oncokb.to.print, median)$VAF;
+gene.counts <- gene.counts[order(-gene.counts$Count, -gene.counts$VAF),];
+gene.counts <- gene.counts[1:min(40,nrow(gene.counts)),];
+
+oncokb.to.print$Gene <- factor(oncokb.to.print$Gene, levels = gene.counts$Gene);
+oncokb.to.print <- oncokb.to.print[!is.na(oncokb.to.print$Gene),];
+oncokb.to.print <- oncokb.to.print[order(
+	oncokb.to.print$Gene,
+	oncokb.to.print$VAF
+	),];
+
 ### FORMAT DATA ####################################################################################
 # indicate key fields
-keep.fields <- c('Tumor_Sample_Barcode','Hugo_Symbol','Chromosome','Variant_Classification','Reference_Allele','Tumor_Seq_Allele2');
+keep.fields <- c('Tumor_Sample_Barcode','Hugo_Symbol','Chromosome','Variant_Classification','Reference_Allele','Tumor_Seq_Allele2','t_depth','t_alt_count','VARIANT_IN_ONCOKB','ONCOGENIC','MUTATION_EFFECT');
 mutation.data <- input.data[,keep.fields];
 
 # apply variant coding
@@ -335,7 +398,7 @@ create.heatmap(
 	height = 6,
 	width = 8,
 	resolution = 200,
-	filename = generate.filename(arguments$project, 'snv_recurrent_genes','png')
+	filename = generate.filename(arguments$project, 'snv_recurrent_genes_filtered','png')
 	);
 
 # create plot for mutation rates
@@ -413,7 +476,7 @@ functional.plot <- create.barplot(
 	yat = seq(0,1,0.5),
 	yaxis.cex = 1,
 	axes.lwd = 1,
-	top.padding = 0,
+	top.padding = 0
 	);
 
 # create plot for basechange summary
@@ -453,7 +516,7 @@ if (arguments$seq_type == 'wgs') {
 		height = 10,
 		width = 8,
 		resolution = 200,
-		filename = generate.filename(arguments$project, 'mutation_summary','png'),
+		filename = generate.filename(arguments$project, 'mutation_summary_filtered','png'),
 		plot.objects.heights = c(2,3,4),
 		left.legend.padding = 0,
 		right.legend.padding = 0,
@@ -473,7 +536,7 @@ if (arguments$seq_type == 'wgs') {
 		height = 10,
 		width = 8,
 		resolution = 200,
-		filename = generate.filename(arguments$project, 'mutation_summary','png'),
+		filename = generate.filename(arguments$project, 'mutation_summary_filtered','png'),
 		plot.objects.heights = c(1.5,2,2,4),
 		left.legend.padding = 0,
 		right.legend.padding = 0,
@@ -488,13 +551,50 @@ if (arguments$seq_type == 'wgs') {
 		);
 	}
 
+# plot oncoKB hits (if present)
+effect.colours <- c(default.colours(8,'div')[c(2,4,6,8)],'purple4');
+names(effect.colours) <- c('Loss-of-function','Likely Loss-of-function','Likely Gain-of-function','Gain-of-function','Switch-of-function');
+
+create.boxplot(
+	VAF ~ Gene,
+	oncokb.to.print,
+	add.stripplot = TRUE,
+	points.col = effect.colours[match(oncokb.to.print$Effect, names(effect.colours))],
+	points.alpha = 0.8,
+	points.cex = 0.8,
+	xaxis.rot = 90,
+	yaxis.tck = c(0.5,0),
+	xaxis.tck = c(0.5,0),
+	ylab.label = 'Variant Allele Frequency',
+	ylab.cex = 1.2,
+	ylab.axis.padding = 1,
+	xlab.label = NULL,
+	ylimits = c(0,1),
+	yat = seq(0,1,0.2),
+	yaxis.cex = 1,
+	xaxis.cex = if (nrow(gene.counts) < 30) { 1 } else { 0.75 },
+	style = 'Nature',
+	key = list(
+		points = list(col = effect.colours, pch = 19, cex = 1),
+		text = list(lab = names(effect.colours), cex = 0.8, col = 'black'),
+		title = 'Mutation Effect',
+		cex.title = 1.2,
+		x = if (nrow(gene.counts) >= 30) { 0.7 } else { 0.6 },
+		y = 1
+		),
+	filename = generate.filename(arguments$project, 'oncoKB_hits', 'png'),
+	height = 4,
+	width = if (nrow(gene.counts) < 30) { 6 } else { 8 }
+	);
+
 save(
 	sample.counts,
 	functional.summary,
 	basechange.summary,
 	plot.data,
 	variant.colours,
-	file = generate.filename(arguments$project, 'mutation_summary', 'RData')
+	oncokb.hits,
+	file = generate.filename(arguments$project, 'mutation_summary_filtered', 'RData')
 	);
 
 ### LATEX ##########################################################################################
@@ -512,66 +612,120 @@ if (tophit.flag) {
 	}
 
 # write for latex
-write("\\section{SNV Summary}", file = 'somatic_snv_summary.tex');
+write("\\section{SNV Summary}", file = 'somatic_snv_summary_filtered.tex');
 
 # first, check for mutation_overlap plot
 overlap.plot <- rev(sort(list.files(pattern = 'mutation_overlap.png')));
 if (length(overlap.plot) > 0) {
-	write("\\begin{figure}[h!]", file = 'somatic_snv_summary.tex', append = TRUE);
-	write("\\begin{center}", file = 'somatic_snv_summary.tex', append = TRUE);
+	write("\\begin{figure}[h!]", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+	write("\\begin{center}", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
 	write(paste0(
 		"\\includegraphics[width=0.8\\textwidth]{",
 		getwd(), '/',
 		overlap.plot[1], '}'
-		), file = 'somatic_snv_summary.tex', append = TRUE);
-	write("\\end{center}", file = 'somatic_snv_summary.tex', append = TRUE);
+		), file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+	write("\\end{center}", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
 	write(paste0(
 		"\\caption{From top to bottom: number of variants called by each tool (Mutect, MuTect2, SomaticSniper, Strelka, VarDict and VarScan) and the ensemble variants carried forward.}"
-		), file = 'somatic_snv_summary.tex', append = TRUE);
-	write("\\end{figure}\n\\pagebreak\n", file = 'somatic_snv_summary.tex', append = TRUE);
+		), file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+	write("\\end{figure}\n\\pagebreak\n", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
 	}
 
+# describe filtering (if any tumour-only)
+if (any(input.data$FLAG.tumour_only)) {
+	write('Ensemble calls were filtered to remove probable false positives from tumour-only samples using the following criteria:',	file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+
+	write("\\begin{itemize}", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+	write("\\item remove any variant with AF $>$ 0.001 in any population", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+	write("\\item remove any variant with VAF $<$ 0.05", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+	write("\\item keep any variant identified by OncoKB as oncogenic or ", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+	write("\\item keep any variant identified by OncoKB as Loss-of-function, Likely Loss-of-function, Gain-of-function, Likely Gain-of-function or Switch-of-function", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+	write("\\end{itemize}", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+	}
+
+# summarize key OncoKB findings
+if (nrow(oncokb.hits) > 0) {
+	write("\\vskip 1cm\n\\textbf{OncoKB}\n", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+
+	oncokb.caption <- paste0('OncoKB was used to annotate known/suspected oncogenic variants; this identified ', nlevels(droplevels(oncokb.hits$Hugo_Symbol)), ' genes (', nrow(oncokb.hits), ' total mutations) across the cohort.');
+
+	if (nrow(gene.counts) > 5) {
+		write("\\begin{figure}[h!]", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+		write("\\begin{center}", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+		write(paste0(
+			"\\includegraphics[width=0.9\\textwidth]{",
+			getwd(), '/',
+			generate.filename(arguments$project, 'oncoKB_hits', 'png'), '}'
+			), file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+		write("\\end{center}", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+		write(paste0(
+			"\\caption{", paste0(oncokb.caption, " Top hits are shown, sorted by recurrence and median VAF."), "}"
+			), file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+		write("\\end{figure}\n", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+
+		write("\\pagebreak\n", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+		}
+
+	if (nrow(oncokb.to.print) <= 20) {
+		print(
+			xtable(
+				oncokb.to.print,
+				caption = oncokb.caption
+				),
+			file = 'somatic_snv_summary_filtered.tex',
+			include.rownames = FALSE,
+			size = 'scriptsize',
+			append = TRUE
+			);
+		}
+
+	write("\\pagebreak\n", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+	}
+
+# summarize filtered dataset	
+write("\\textbf{Filtered Mutation Summary}\n", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+
+write("\\begin{figure}[h!]", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+write("\\begin{center}", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+write(paste0(
+	"\\includegraphics[width=0.8\\textwidth]{",
+	getwd(), '/',
+	generate.filename(arguments$project, 'mutation_summary_filtered','png'), '}'
+	), file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+write("\\end{center}", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+write(paste0(
+	"\\caption{", summary.caption, "}"
+	), file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+write("\\end{figure}\n", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+
+# summarize recurrent mutations
 if (nrow(plot.data) == 0) {
-	write("No genes were recurrently mutated across the cohort.", file = 'somatic_snv_summary.tex', append = TRUE);
+	write("No genes were recurrently mutated across the cohort.", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
 	} else {
-	write("\\begin{figure}[h!]", file = 'somatic_snv_summary.tex', append = TRUE);
-	write("\\begin{center}", file = 'somatic_snv_summary.tex', append = TRUE);
-	write(paste0(
-		"\\includegraphics[width=0.8\\textwidth]{",
-		getwd(), '/',
-		generate.filename(arguments$project, 'mutation_summary','png'), '}'
-		), file = 'somatic_snv_summary.tex', append = TRUE);
-	write("\\end{center}", file = 'somatic_snv_summary.tex', append = TRUE);
-	write(paste0(
-		"\\caption{", summary.caption, "}"
-		), file = 'somatic_snv_summary.tex', append = TRUE);
-	write("\\end{figure}\n", file = 'somatic_snv_summary.tex', append = TRUE);
-
-	write("\\pagebreak\n", file = 'somatic_snv_summary.tex', append = TRUE);
-
+	write("\\pagebreak\n", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
 	print(
 		xtable(
 			rev(recurrence.summary)[1:(min(nrow(recurrence.summary),10)),],
 			caption = 'Summary of recurrently-mutated genes across the cohort. Table shows number of genes with functionally relevant mutations in N samples.'
 			),
-		file = 'somatic_snv_summary.tex',
+		file = 'somatic_snv_summary_filtered.tex',
 		include.rownames = FALSE,
 		append = TRUE
 		);
 
-	write("\n\\begin{figure}[h!]", file = 'somatic_snv_summary.tex', append = TRUE);
-	write("\\begin{center}", file = 'somatic_snv_summary.tex', append = TRUE);
+	write("\n\\begin{figure}[h!]", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+	write("\\begin{center}", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
 	write(paste0(
 		"\\includegraphics[width=0.8\\textwidth]{",
 		getwd(), '/',
-		generate.filename(arguments$project, 'snv_recurrent_genes','png'), '}'
-		), file = 'somatic_snv_summary.tex', append = TRUE);
-	write("\\end{center}", file = 'somatic_snv_summary.tex', append = TRUE);
+		generate.filename(arguments$project, 'snv_recurrent_genes_filtered','png'), '}'
+		), file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+	write("\\end{center}", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
 	write(paste0(
 		"\\caption{", recurrence.caption, "}"
-		), file = 'somatic_snv_summary.tex', append = TRUE);
-	write("\\end{figure}\n", file = 'somatic_snv_summary.tex', append = TRUE);
+		), file = 'somatic_snv_summary_filtered.tex', append = TRUE);
+	write("\\end{figure}\n", file = 'somatic_snv_summary_filtered.tex', append = TRUE);
 	}
 
 ### SAVE SESSION INFO ##############################################################################
-save.session.profile(generate.filename('MutationSummary','SessionProfile','txt'));
+save.session.profile(generate.filename('MutationSummaryFiltered','SessionProfile','txt'));

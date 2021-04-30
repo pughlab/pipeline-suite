@@ -429,7 +429,7 @@ sub main {
 		$methods .= join("\n",
 			"{\\scriptsize \\begin{itemize}",
 			"  \\vspace{-0.2cm}\\item SNPs identified by 4 or more tools (of 6 total)",
-			"  \\vspace{-0.2cm}\\item INDELs identified by 2 or more tools (of 5 total)",
+			"  \\vspace{-0.2cm}\\item INDELs identified by 3 or more tools (of 5 total)",
 			"  \\vspace{-0.2cm}\\item variants identified by MuTect2, with VAF \$<\$ 0.1",
 			"  \\vspace{-0.2cm}\\item variants with intra-patient evidence (any of the above 3 criteria)",
 			"\\end{itemize} }"
