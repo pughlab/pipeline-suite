@@ -132,6 +132,9 @@ NOTE: The RNA-Seq pipeline is currently only configured for use with GRCh38 refe
     - path to reference genome (requires .fa, .dict and .fai files)
     - paths to mavis references (annotations, masking, aligner, etc.)
 
+   - other tools:
+    - msi_run: Y (or N) to run msi sensor
+
 ## Running a pipeline
 
 ### Prepare a yaml file containing paths to FASTQ files:
@@ -447,6 +450,18 @@ perl mavis.pl \
 --no-wait { if not a dry-run and you don't want to wait around for it to finish }
 </code></pre>
 
+### run MSI-Sensor
+<pre><code>Generate MSI estimates:
+perl msi_sensor.pl \
+-t /path/to/dna_pipeline_config.yaml \
+-d /path/to/gatk_bam_config.yaml \
+-o /path/to/output/directory \
+-c slurm \
+--remove \
+--dry-run { if this is a dry-run } \
+--no-wait { if not a dry-run and you don't want to wait around for it to finish }
+</code></pre>
+
 ### create final report
 <pre><code>Create a pretty report summarizing pipeline output (wip):
 perl pughlab_pipeline_auto_report.pl \
@@ -491,7 +506,7 @@ This will generate the directory structure in the output directory (provided in 
 
 ### run STAR to align to a reference genome
 <pre><code>perl star.pl \
--t /path/to/star_aligner_config.yaml \
+-t /path/to/rna_pipeline_config.yaml \
 -d /path/to/fastq_rna_config.yaml \
 -o /path/to/output/directory \
 -b /path/to/output/bam.yaml \
@@ -505,7 +520,7 @@ This will again write individual commands to file: /path/to/output/directory/STA
 
 ### run Fusioncatcher on raw FASTQ data
 <pre><code>perl fusioncatcher.pl \
--t /path/to/fusioncatcher_config.yaml \
+-t /path/to/rna_pipeline_config.yaml \
 -d /path/to/fastq_rna_config.yaml \
 -o /path/to/output/directory \
 -c slurm \
@@ -516,7 +531,7 @@ This will again write individual commands to file: /path/to/output/directory/STA
 
 ### run RSEM on STAR-aligned BAMs
 <pre><code>perl rsem.pl \
--t /path/to/rsem_expression_config.yaml \
+-t /path/to/rna_pipeline_config.yaml \
 -d /path/to/star_bam_config.yaml \
 -o /path/to/output/directory \
 -c slurm \
@@ -527,7 +542,7 @@ This will again write individual commands to file: /path/to/output/directory/STA
 
 ### run STAR-Fusion on STAR-aligned BAMs
 <pre><code>perl star_fusion.pl \
--t /path/to/star_fusion_config.yaml \
+-t /path/to/rna_pipeline_config.yaml \
 -d /path/to/star_bam_config.yaml \
 -o /path/to/output/directory \
 -c slurm \
@@ -539,7 +554,7 @@ This will again write individual commands to file: /path/to/output/directory/STA
 ### run GATK split CIGAR, indel realignment and base quality score recalibration on MarkDup BAMs
 <pre><code>perl gatk.pl \
 --rna \
--t /path/to/gatk_tool_config.yaml \
+-t /path/to/rna_pipeline_config.yaml \
 -d /path/to/star/bam_config.yaml \
 -o /path/to/output/directory \
 -b /path/to/output/bam.yaml \
@@ -552,7 +567,7 @@ This will again write individual commands to file: /path/to/output/directory/STA
 ### run GATK HaplotypeCaller, variant filtration and annotataion
 <pre><code>perl haplotype_caller.pl \
 --rna \
--t /path/to/haplotype_caller_config.yaml \
+-t /path/to/rna_pipeline_config.yaml \
 -d /path/to/gatk_bam_config.yaml \
 -o /path/to/output/directory \
 -c slurm \
@@ -635,6 +650,8 @@ On completion, certain steps will collate and format the tool output from all pa
   - output includes:
     - DATE_projectname_mavis_output.tsv (concatenated output across samples)
     - DATE_projectname_svs_for_cbioportal.tsv (SVs in format required by cBioportal)
+- msi_sensor.pl
+  - will use collect_msi_estimates.R to collect MSI output from all samples: DATE_projectname_msi_estimates.tsv 
 
 # RNASeq
 - star.pl
