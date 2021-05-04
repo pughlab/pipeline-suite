@@ -30,32 +30,34 @@ There are example config files located in the "configs" folder:
 ### RNA-Seq
 NOTE: The RNA-Seq pipeline is currently only configured for use with GRCh38 reference. It will, in theory, run on GRCh37, however you must set up the reference files as needed and update the config file as necessary!
 
+- rna_pipeline_config.yaml
   - star requires:
     - path to STAR reference directory
 
   - fusioncatcher requires:
     - path to Fusioncatcher reference directory
 
-   - rsem requires:
+  - rsem requires:
     - path/stem to RSEM reference directory
     - strandedness type (probably reverse, other options: forward or none)
 
-   - star_fusion requires:
+  - star_fusion requires:
     - path/stem to STAR-Fusion reference directory
     - path to tool (because it isn't currently installed as a module)
     - optional step: FusionInspect (either inspect, validate; if not wanted, leave blank)
   
-   - gatk requires:
+  - gatk requires:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to dbSNP file (if undefined, a default will be used)
 
-   - haplotype_caller requires:
+  - haplotype_caller requires:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to vcf2maf.pl
     - path to VEP (tool/version, cache data)
     - path to ExAC data (for filtering/annotating with population allele frequencies)
 
 ### DNA-Seq
+- dna_pipeline_config.yaml
   - bwa requires:
     - path to bwa-indexed reference
     - optional step: mark_dup (either Y or N)
@@ -65,31 +67,31 @@ NOTE: The RNA-Seq pipeline is currently only configured for use with GRCh38 refe
     - path to target intervals (such as bed file for exome capture kit) if seq_type is exome or targeted
     - path to dbSNP file (if undefined, a default will be used)
 
-   - bamqc requires:
+  - bamqc requires:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to hapmap/SNP file with population frequencies (for ContEst)
     - path to gnomAD/SNP vcf file with allele frequencies (must have accompanying .idx file)
     - path to target intervals (such as bed file for exome capture kit) if seq_type is exome or targeted
 
-   - haplotype_caller requires:
+  - haplotype_caller requires:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to target intervals (exome capture kit [bed], if defined)
     - path to dbSNP file (if undefined, a default will be used)
     - path to known pathogenic germline variants (ie, from TCGA)
 
-   - annotate requires:
+  - annotate requires:
     - path to vcf2maf.pl
     - path to VEP (tool/version, cache data)
     - path to ExAC data (for filtering/annotating with population allele frequencies)
 
-   - mutect requires:
+  - mutect requires:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to target intervals (exome capture kit [bed], if defined)
     - path to dbSNP file (if undefined, a default will be used)
     - path to COSMIC file (if desired)
     - path to panel of normals (optional if developed elsewhere)
 
-   - mutect2 requires:
+  - mutect2 requires:
     - path to reference genome (requires .fa, .dict and .fai files)
     - comma separated list of chromosomes to run (optional)
     - path to target intervals (exome capture kit [bed], if defined)
@@ -97,36 +99,36 @@ NOTE: The RNA-Seq pipeline is currently only configured for use with GRCh38 refe
     - path to COSMIC file (if desired)
     - path to panel of normals (optional if developed elsewhere)
 
-   - strelka requires:
+  - strelka requires:
     - sequence type (one of exome, targeted, rna or wgs)
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to target intervals (exome capture kit [bed], if defined)
     - path to panel of normals (optional if developed elsewhere)
 
-   - varscan requires:
+  - varscan requires:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to sequenza.R script
     - path to target intervals (exome capture kit [bed], if defined)
     - path to panel of normals (optional if developed elsewhere)
 
-   - somaticsniper requires:
+  - somaticsniper requires:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to target intervals (exome capture kit [bed], if defined)
     - path to panel of normals (optional)
 
-   - vardict requires:
+  - vardict requires:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to target intervals (exome capture kit [bed], if defined)
     - path to panel of normals (optional)
 
-   - gatk_cnv requires:
+  - gatk_cnv requires:
     - path to reference genome (requires .fa, .dict and .fai files)
     - path to gnomAD/SNP vcf file with allele frequencies (must have accompanying .idx file)
 
-   - delly requires:
+  - delly requires:
     - path to reference genome (requires .fa, .dict and .fai files)
 
-   - mavis requires:
+  - mavis requires:
     - path to reference genome (requires .fa, .dict and .fai files)
     - paths to mavis references (annotations, masking, aligner, etc.)
 
@@ -155,7 +157,7 @@ For WXS or targeted-sequencing panels, a bed file containing target regions shou
 -r /path/to/reference.fa
 </code></pre>
 
-This will produce a padded bed file in the same directory as the original bed file (if the original file is /path/to/intervals.bed then this will produce /path/to/intervals_padding100bp.bed and intervals_padding100bp.bed.gz) and a picard-style intervals.list file.
+This will produce a padded bed file in the same directory as the original bed file and a picard-style intervals_list file (if the original file is /path/to/intervals.bed then this will produce /path/to/intervals_padding100bp.bed, /path/to/intervals_padding100bp.intervals_list and intervals_padding100bp.bed.gz).
 
 ### DNA pipeline:
 <pre><code>cd /path/to/git/pipeline-suite/
@@ -441,7 +443,7 @@ perl mavis.pl \
 --delly /path/to/delly/directory \
 --rna /path/to/gatk_rnaseq_bam_config.yaml { optional if pughlab_rnaseq_pipeline.pl was run previously } \
 --starfusion /path/to/starfusion/directory { optional if pughlab_rnaseq_pipeline.pl was run previously } \
---fusioncatcher /path/to/fusioncatcher/directory { optional if pughlab_rnaseq_pipeline.pl was run } \
+--fusioncatcher /path/to/fusioncatcher/directory { optional if pughlab_rnaseq_pipeline.pl was run previously } \
 -c slurm \
 --remove \
 --dry-run { if this is a dry-run } \
@@ -461,7 +463,7 @@ perl msi_sensor.pl \
 </code></pre>
 
 ### create final report
-<pre><code>Create a pretty report summarizing pipeline output:
+<pre><code>Create a pretty report summarizing pipeline output (wip):
 perl pughlab_pipeline_auto_report.pl \
 -t /path/to/dna_pipeline_config.yaml \
 -d DATE \
@@ -482,7 +484,7 @@ Panel of Normals for SNV callers: Whenever possible, variant callers will genera
 - VarDict: germline variants as determined by VarDict; only applied to tumour-only samples 
 
 VCF2MAF produces very large log files. Once complete, please remove/trim these to free up space! For example
-<pre><code>for i in logs/run_vcf2maf_and_VEP_INS-\*/slurm/s\*out; do
+<pre><code>for i in logs/run_vcf2maf_and_VEP_INS-*/slurm/s*out; do
   grep -v 'WARNING' $i > $i.trim; rm $i;
 done
 </code></pre>
@@ -615,6 +617,9 @@ On completion, certain steps will collate and format the tool output from all pa
 - contest.pl
   - will use collect_contest_output.R to collect contamination estimates from all processed samples
   - output includes: DATE_projectname_ContEst_output.tsv (combined META and READGROUP estimates)
+- get_sequencing_metrics.pl
+  - will use collect_sequencing_metrics.R to collect contamination estimates and summarize sequencing artefacts from all processed samples
+  - output includes: DATE_projectname_ContaminationEstimates.tsv and DATE_projectname_SequenceArtefacts.tsv
 - get_coverage.pl
   - will use collect_coverage_output.R to collect depth of coverage metrics from all processed samples
   - output includes:
@@ -628,12 +633,12 @@ On completion, certain steps will collate and format the tool output from all pa
   - output includes:
     - DATE_projectname_germline_genotypes.tsv (position x sample matrix)
     - DATE_projectname_germline_correlation.tsv (sample x sample matrix)
-- mutect.pl, mutect2.pl, varscan.pl, vardict.pl, somaticsniper.pl and strelka.pl
-  - will use collect_snv_output.R to collect somatic SNV/INDEL calls from all processed samples
+- annotate_germline.pl, mutect.pl, mutect2.pl, varscan.pl, vardict.pl, varscan.pl, somaticsniper.pl and strelka.pl
+  - will use collect_snv_output.R to collect SNV/INDEL calls from all processed samples
   - output includes:
     - DATE_projectname_mutations_for_cbioportal.tsv (SNV and INDEL calls in format required by cBioportal)
-- varscan.pl
-  - will use collect_sequenza_output.R to collect CNV calls from all processed samples
+- run_sequenza_with_optimal_gamma.pl
+  - will use collect_sequenza_output.R to collect optimized CNV calls from all processed samples
   - output includes:
     - DATE_projectname_Sequenza_ploidy_purity.tsv (*best* purity and ploidy estimates)
     - DATE_projectname_Sequenza_cna_gene_matrix.tsv (thresholded CN status; gene x patient matrix; a gene is considered to have a CNA if >20 bases overlap with a discovered segment)
