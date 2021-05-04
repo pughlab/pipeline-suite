@@ -83,7 +83,7 @@ sub main {
 
 	my $run_script;
 	my ($bwa_run_id, $gatk_run_id, $contest_run_id, $qc_run_id, $coverage_run_id, $hc_run_id);
-	my ($strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id);
+	my ($strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id, $msi_run_id);
 	my ($somaticsniper_run_id, $delly_run_id, $vardict_run_id, $gatk_cnv_run_id);
 	my ($mavis_run_id, $report_run_id);
 
@@ -98,6 +98,7 @@ sub main {
 	my $coverage_directory = join('/', $output_directory, 'BAMQC', 'Coverage');
 	my $hc_directory = join('/', $output_directory, 'HaplotypeCaller');
 	my $strelka_directory = join('/', $output_directory, 'Strelka');
+	my $msi_directory = join('/', $output_directory, 'MSI');
 	my $mutect_directory = join('/', $output_directory, 'MuTect');
 	my $mutect2_directory = join('/', $output_directory, 'MuTect2');
 	my $varscan_directory = join('/', $output_directory, 'VarScan');
@@ -1155,6 +1156,58 @@ sub main {
 
 				print $log ">>> Delly job id: $delly_run_id\n\n";
 				push @job_ids, $delly_run_id;
+				}
+			}
+
+		## MSI-Sensor pipeline
+		if ('Y' eq $tool_data->{other_tools}->{msi_run}) {
+
+			unless(-e $msi_directory) { make_path($msi_directory); }
+
+			my $msi_command = join(' ',
+				"perl $cwd/scripts/msi_sensor.pl",
+				"-o", $msi_directory,
+				"-t", $tool_config,
+				"-d", $gatk_output_yaml,
+				"-c", $args{cluster}
+				);
+
+			if ($args{cleanup}) {
+				$msi_command .= " --remove";
+				}
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for msi_sensor.pl\n";
+			print $log "  COMMAND: $msi_command\n\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_msi',
+				cmd	=> $msi_command,
+				modules	=> ['perl'],
+				dependencies	=> $gatk_run_id,
+				mem		=> '256M',
+				max_time	=> $max_time,
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
+
+				$msi_command .= " --dry-run";
+				`$msi_command`;
+
+				} else {
+
+				$msi_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> MSI-Sensor job id: $msi_run_id\n\n";
+				push @job_ids, $msi_run_id;
 				}
 			}
 

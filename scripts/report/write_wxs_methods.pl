@@ -509,6 +509,18 @@ sub main {
 		$methods .= "No tools were run to detect copy-number alterations.\\newline\n";
 		}
 
+	# for MSI
+	if ('Y' eq $tool_data->{other_tools}->{msi_run}) {
+
+		$msi	= 'msisensor-pro/1.2.0';
+
+		# fill in methods
+		$methods .= "\\subsection{MSI:}\n";
+		$methods .= "MSI-Sensor pro (v1.2.0) was run using recommended best practices with target regions provided to msi (T/N pairs) or pro (tumour only) commands and coverage threshold of 20x (as recommended).\\newline\n";
+		} else {
+		$methods .= "MSI-Sensor was not run.\\newline\n";
+		}
+
 	# clean up special characters
 	$methods =~ s/_/\\_/g;
 

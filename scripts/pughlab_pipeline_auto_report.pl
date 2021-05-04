@@ -523,7 +523,7 @@ sub main {
 
 		# somatic variants
 		my ($mutect_data, $mutect2_data, $strelka_data, $varscan_data, $sniper_data, $vardict_data);
-		my ($sequenza_data, $ploidy_data, $gatk_cnv, $gatk_pga);
+		my ($sequenza_data, $ploidy_data, $gatk_cnv, $gatk_pga, $msi_data);
 		my $n_tools = 0;
 
 		# find ENSEMBLE mutations
@@ -632,6 +632,7 @@ sub main {
 			$ensemble_command .= " --vardict $vardict_data";
 			$n_tools++;
 			}
+
 
 		# get mutation calls from VarScan
 		my (@cna_calls, @ploidy);
@@ -820,6 +821,23 @@ sub main {
 			push @job_ids, $run_id;
 			}
 
+		# get MSI estimates
+		if ('Y' eq $tool_data->{other_tools}->{msi_run}) {
+			my $msi_dir = join('/', $output_directory, 'MSI');
+			opendir(MSI, $msi_dir) or die "Cannot open '$msi_dir' !";
+			my @msi_estimates = grep { /msi_estimates.tsv/ } readdir(MSI);
+			@msi_estimates = sort @msi_estimates;
+			closedir(MSI);
+
+			$msi_data = join('/', $msi_dir, $msi_estimates[-1]);
+
+			if ( -l join('/', $data_directory, 'msi_estimates.tsv')) {
+				unlink join('/', $data_directory, 'msi_estimates.tsv');
+				}
+
+			symlink($msi_data, join('/', $data_directory, 'msi_estimates.tsv'));
+			}
+
 		# find ENSEMBLE mutations
 		# run command
 		print $log "Submitting job to collect somatic variants...\n";
@@ -849,10 +867,14 @@ sub main {
 			"Rscript $cwd/report/plot_snv_summary.R",
 			'-p', $tool_data->{project_name},
 			'-o', $plot_directory,
-			'-m', join('/', $plot_directory, 'ensemble_mutation_data.tsv'),
+			'-i', join('/', $plot_directory, 'ensemble_mutation_data.tsv'),
 			'-c', $cb_data,
 			'-t', $tool_data->{seq_type}
 			);
+
+		if ('Y' eq $tool_data->{other_tools}->{msi_run}) {
+			$snv_plot_command .= " -m $msi_data";
+			}
 
 		# run command
 		print $log "Submitting job to plot (short) somatic variants...\n";

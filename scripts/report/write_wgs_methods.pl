@@ -35,7 +35,7 @@ sub main {
 	$methods .= "\\subsection{Alignment and Quality Checks:}\n";
 
 	my ($bwa, $gatk, $gatk_cnv);
-	my ($mutect, $mutect2, $strelka, $manta, $varscan, $delly, $mavis, $vardict, $somaticsniper);
+	my ($mutect, $mutect2, $strelka, $manta, $varscan, $delly, $mavis, $vardict, $somaticsniper, $msi);
 	my ($ref_type, $samtools, $picard, $bedtools, $vcftools);
 	my ($k1000g, $mills, $kindels, $dbsnp, $hapmap, $omni, $cosmic, $pon);
 	my ($vep, $vcf2maf);
@@ -500,6 +500,18 @@ sub main {
 
 	if (!defined($varscan) & !defined($gatk_cnv)) {
 		$methods .= "No tools were run to detect copy-number alterations.\\newline\n";
+		}
+
+	# for MSI
+	if ('Y' eq $tool_data->{other_tools}->{msi_run}) {
+
+		$msi	= 'msisensor-pro/1.2.0';
+
+		# fill in methods
+		$methods .= "\\subsection{MSI:}\n";
+		$methods .= "MSI-Sensor pro (v1.2.0) was run using recommended best practices with coverage threshold of 15x (as recommended).\\newline\n";
+		} else {
+		$methods .= "MSI-Sensor was not run.\\newline\n";
 		}
 
 	# clean up special characters

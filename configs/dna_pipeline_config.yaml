@@ -115,6 +115,8 @@ bamqc:
                 normal: 15
             mem: 4G
             time: '48:00:00'
+other_tools:
+    run_msi: Y
 haplotype_caller:
     run: Y
     parameters:
