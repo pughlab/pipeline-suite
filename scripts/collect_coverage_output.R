@@ -81,7 +81,7 @@ cov.data <- data.frame(t(cov.data[,-1]));
 cov.data$Coverage <- sapply(rownames(cov.data), function(i) { unlist(strsplit(i,'_'))[2] });
 
 summary.data <- do.call(rbind, summary.list)[,-1];
-colnames(summary.data)[6] <- 'percent_bases_above_15';
+colnames(summary.data)[6] <- sub('X.', 'percent', colnames(summary.data)[6]);
 
 # save data to file
 write.table(

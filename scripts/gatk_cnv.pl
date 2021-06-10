@@ -310,7 +310,7 @@ sub get_modelsegments_command {
 		'--output-prefix', $args{output_stem}
 		);
 
-	if ('exome' eq $args{seq_type}) {
+	if (('exome' eq $args{seq_type}) || ('targeted' eq $args{seq_type})) {
 		$gatk_command .= ' --number-of-smoothing-iterations-per-fit 1';
 		} elsif ('wgs' eq $args{seq_type}) {
 		$gatk_command .= ' --number-of-changepoints-penalty-factor 2.0 --number-of-smoothing-iterations-per-fit 1';
@@ -423,10 +423,11 @@ sub main {
 	$dictionary =~ s/.fa/.dict/;
 	print $log "\n    Reference used: $tool_data->{reference}";
 
-	if (('exome' eq $tool_data->{seq_type}) & (defined($tool_data->{intervals_bed}))) {
+	if ( (('exome' eq $tool_data->{seq_type}) || ('targeted' eq $tool_data->{seq_type})) &&
+		(defined($tool_data->{intervals_bed}))) {
 		$intervals_bed = $tool_data->{intervals_bed};
 		print $log "\n    Target intervals (exome): $intervals_bed";
-		}	
+		}
 
 	my $is_wgs = 0;
 	if ('wgs' eq $tool_data->{seq_type}) {

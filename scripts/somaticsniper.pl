@@ -293,7 +293,7 @@ sub main {
 	if (defined($tool_data->{intervals_bed})) {
 		$intervals_bed = $tool_data->{intervals_bed};
 		$intervals_bed =~ s/\.bed/_padding100bp.bed/;
-		print $log "\n    Target intervals (exome): $intervals_bed";
+		print $log "\n    Target intervals: $intervals_bed";
 		}
 
 	print $log "\n    Output directory: $output_directory";
