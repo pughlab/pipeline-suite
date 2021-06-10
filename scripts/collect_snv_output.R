@@ -86,7 +86,7 @@ names(variant.colours) <- c("nonstop","frameshift_indel","other", "missense", "n
 
 # determine type of experiment that was run
 is.rnaseq <- grepl('RNASeq', getwd());
-is.exome <- grepl('Exome|WEX|WXS', getwd());
+is.exome <- grepl('Exome|WEX|WXS|ctDNA', getwd());
 is.wgs <- grepl('WGS', getwd());
 is.germline <- grepl('CPSR', getwd());
 
@@ -151,12 +151,12 @@ if (length(norm.idx) > 0) {
 	}
 
 if (!is.rnaseq & !is.germline) {
-	norm.idx <- !is.na(full.maf.data$Matched_Norm_Sample_Barcode);
+	norm.idx <- which(!is.na(full.maf.data$Matched_Norm_Sample_Barcode));
 	if (length(norm.idx) > 0) { full.maf.data[norm.idx,]$Mutation_Status <- 'somatic'; }
 	}
 
 if (!is.rnaseq & is.germline) {
-	norm.idx <- !is.na(full.maf.data$Matched_Norm_Sample_Barcode);
+	norm.idx <- which(!is.na(full.maf.data$Matched_Norm_Sample_Barcode));
 	if (length(norm.idx) > 0) { full.maf.data[norm.idx,]$Mutation_Status <- 'germline'; }
 	}
 
