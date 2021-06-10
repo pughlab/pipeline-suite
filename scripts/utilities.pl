@@ -420,14 +420,14 @@ sub collect_job_stats {
 
 	my $sacct_command = join(' ',
 		'sacct -P --delimiter=","',
-		'--format="User,JobID,Start,End,AllocCPUS,CPUTime,MaxRSS,State,ExitCode"',
+		'--format="User,JobID,JobName,Start,End,AllocCPUS,CPUTime,MaxRSS,State,ExitCode"',
 		'-j', $args{job_ids},
 		'>', $args{outfile} . ';',
 		'sed -i "s/,/\t/g"', $args{outfile}
 		);
 
 	$sacct_command .= "\n\n" . join(' ',
-		'STATUS_COUNT=$(cut -f8', $args{outfile},
+		'STATUS_COUNT=$(cut -f9', $args{outfile},
 		"| awk '", '$1 != "COMPLETED" { print $0 }', "' | wc -l)",
 		);
 
@@ -445,6 +445,7 @@ sub get_vcf2maf_command {
 	my %args = (
 		input		=> undef,
 		tumour_id	=> undef,
+		tumour_vcf_id	=> undef,
 		normal_id	=> undef,
 		reference	=> undef,
 		ref_type	=> undef,
@@ -488,9 +489,14 @@ sub get_vcf2maf_command {
 		if ($args{input} =~ m/Strelka|VarScan|MuTect2|SomaticSniper/) {
 			$maf_command .= " --vcf-tumor-id TUMOR --vcf-normal-id NORMAL";
 			}
-	} elsif ($args{input} =~ m/VarScan/) {
-		$maf_command .= " --vcf-tumor-id Sample1";
+	} else {
+		if ($args{input} =~ m/VarScan/) {
+			$maf_command .= " --vcf-tumor-id Sample1";
 		}
+		if ( (defined($args{tumour_vcf_id})) && ($args{input} =~ m/MuTect2|Strelka/)) {
+			$maf_command .= " --vcf-tumor-id $args{tumour_vcf_id}";
+		}
+	}
 
 	return($maf_command);
 	}
