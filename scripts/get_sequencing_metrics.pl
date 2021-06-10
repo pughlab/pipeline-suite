@@ -54,6 +54,55 @@ sub get_format_intervals_command {
 	return($format_command);
 	}
 
+# format command to extract alignment metrics
+sub get_alignment_metrics_command {
+	my %args = (
+		input		=> undef,
+		output_stem	=> undef,
+		java_mem	=> undef,
+		tmp_dir		=> undef,
+		@_
+		);
+
+	my $qc_command = join(' ',
+		'java -Xmx' . $args{java_mem},
+		'-Djava.io.tmpdir=' . $args{tmp_dir},
+		'-jar $picard_dir/picard.jar CollectAlignmentSummaryMetrics',
+		'R=' . $reference,
+		'I=' . $args{input},
+		'O=' . $args{output_stem} . '.txt',
+		'LEVEL=ALL_READS LEVEL=SAMPLE LEVEL=LIBRARY LEVEL=READ_GROUP'
+		);
+
+	$qc_command .= "\n\necho 'CollectAlignmentSummaryMetrics completed successfully.' > $args{output_stem}.COMPLETE";
+
+	return($qc_command);
+	}
+
+# format command to extract metrics for WGS experiments
+sub get_wgs_metrics_command {
+	my %args = (
+		input		=> undef,
+		output_stem	=> undef,
+		java_mem	=> undef,
+		tmp_dir		=> undef,
+		@_
+		);
+
+	my $qc_command = join(' ',
+		'java -Xmx' . $args{java_mem},
+		'-Djava.io.tmpdir=' . $args{tmp_dir},
+		'-jar $picard_dir/picard.jar CollectWgsMetrics',
+		'R=' . $reference,
+		'I=' . $args{input},
+		'O=' . $args{output_stem} . '.txt'
+		);
+
+	$qc_command .= "\n\necho 'CollectWGSMetrics completed successfully.' > $args{output_stem}.COMPLETE";
+
+	return($qc_command);
+	}
+
 # format command to extract metrics on sequencing artefacts
 sub get_artefacts_command {
 	my %args = (
@@ -352,6 +401,93 @@ sub main {
 
 			push @final_outputs, $output_stem . '.bait_bias_summary_metrics';
 			push @final_outputs, $output_stem . '.pre_adapter_summary_metrics';
+
+			## Collect alignment metrics
+			$output_stem = join('/', $patient_directory, $sample . '_alignment_metrics');
+
+			$qc_command = get_alignment_metrics_command(
+				input		=> $smp_data->{$patient}->{$type}->{$sample},
+				output_stem	=> $output_stem,
+				java_mem	=> $parameters->{qc}->{java_mem},
+				tmp_dir		=> $tmp_directory
+				);
+
+			# check if this should be run
+			if ('Y' eq missing_file($output_stem . '.COMPLETE')) {
+
+				# record command (in log directory) and then run job
+				print $log "Submitting job for CollectAlignmentMetrics...\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_collect_alignment_metrics_' . $sample,
+					cmd	=> $qc_command,
+					modules	=> [$picard],
+					max_time	=> $parameters->{qc}->{time},
+					mem		=> $parameters->{qc}->{mem},
+					hpc_driver	=> $args{hpc_driver}
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_collect_alignment_metrics_' . $sample,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
+				} else {
+				print $log "Skipping CollectAlignmentMetrics because this has already been completed!\n";
+				}
+
+			push @final_outputs, $output_stem . '.txt';
+
+			## Collect WGS metrics
+			if ('wgs' eq $tool_data->{seq_type}) {
+
+				$output_stem = join('/', $patient_directory, $sample . '_wgs_metrics');
+
+				$qc_command = get_wgs_metrics_command(
+					input		=> $smp_data->{$patient}->{$type}->{$sample},
+					output_stem	=> $output_stem,
+					java_mem	=> $parameters->{qc}->{java_mem},
+					tmp_dir		=> $tmp_directory
+					);
+
+				# check if this should be run
+				if ('Y' eq missing_file($output_stem . '.COMPLETE')) {
+
+					# record command (in log directory) and then run job
+					print $log "Submitting job for CollectWgsMetrics...\n";
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_collect_wgs_metrics_' . $sample,
+						cmd	=> $qc_command,
+						modules	=> [$picard],
+						max_time	=> $parameters->{qc}->{time},
+						mem		=> $parameters->{qc}->{mem},
+						hpc_driver	=> $args{hpc_driver}
+						);
+
+					$run_id = submit_job(
+						jobname		=> 'run_collect_wgs_metrics_' . $sample,
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @patient_jobs, $run_id;
+					push @all_jobs, $run_id;
+					} else {
+					print $log "Skipping CollectWgsMetrics because this has already been completed!\n";
+					}
+
+				push @final_outputs, $output_stem . '.txt';
+				}
 
 			## Collect contamination estimates
 			my $pileup_out = join('/', $patient_directory, $sample . '_pileup.table');
