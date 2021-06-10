@@ -62,7 +62,7 @@ arguments <- parser$parse_args();
 date <- Sys.Date();
 
 # clarify input files
-is.dna <- (arguments$seq_type == 'exome' || arguments$seq_type == 'wgs');
+is.dna <- !(arguments$seq_type == 'rna');
 summary.file <- arguments$coverage;
 contest.file <- arguments$contest;
 other.contamination <- arguments$contamination;
@@ -143,7 +143,10 @@ if (is.dna) {
 	qc.metrics <- merge(metric.data, contam.data, by = 'row.names', all.x = TRUE);
 	qc.metrics <- qc.metrics[which(qc.metrics$Row.names %in% smp.names),];
 	qc.metrics$Sample <- factor(qc.metrics$Row.names, levels = smp.names);
-	qc.metrics$percent_bases_above_15 <- qc.metrics$percent_bases_above_15/100;
+	target_coverage <- as.numeric(unlist(
+		strsplit(colnames(qc.metrics)[grepl('percent_bases_above_', colnames(qc.metrics))],'_')
+		)[4]);
+	qc.metrics$percent_bases_above_targetX <- qc.metrics[,paste0('percent_bases_above_', target_coverage)]/100;
 	} else {
 	keep.metrics <- c('Total.Purity.Filtered.Reads.Sequenced','Mapping.Rate','Exonic.Rate','Intronic.Rate','Intergenic.Rate','rRNA.rate','Mean.Per.Base.Cov','Mean.CV','Duplication.Rate.of.Mapped','Base.Mismatch.Rate');
 	qc.metrics <- metric.data[intersect(rownames(metric.data), smp.names),keep.metrics];
@@ -190,7 +193,7 @@ axis.cex <- if (nrow(cor.data) <= 30) { 1
 if (is.dna) {
 
 	max.cov <- max(qc.metrics$granular_third_quartile, na.rm = TRUE);
-	if (max.cov == 1) { max.cov <- max(qc.metrics$mean, na.rm = TRUE); }
+	if ( (max.cov == 1) || (max.cov == 500) ) { max.cov <- max(qc.metrics$mean, na.rm = TRUE); }
 
 	if (max.cov <= 100) {
 		total.cov.limits <- c(0, 100);
@@ -326,8 +329,8 @@ if (is.dna) {
 		}
 
 	# plot coverage metrics
-	qc.metrics$percent_15 <- qc.metrics$percent_bases_above_15 * total.cov.limits[2];
-	qc.metrics$Point <- if (all(qc.metrics$granular_median) == 1) { qc.metrics$mean
+	qc.metrics$percent_target <- qc.metrics$percent_bases_above_targetX * total.cov.limits[2];
+	qc.metrics$Point <- if (all(qc.metrics$granular_median == 1)) { qc.metrics$mean
 		} else { qc.metrics$granular_median }
 
 	total.coverage.plot <- create.scatterplot(
@@ -360,7 +363,7 @@ if (is.dna) {
 		xleft.rectangle = seq(0.5, length(smp.names)-0.5, 1),
 		xright.rectangle = seq(1.5, length(smp.names)+0.5,1),
 		ybottom.rectangle = -1,
-		ytop.rectangle = qc.metrics$percent_15,
+		ytop.rectangle = qc.metrics$percent_target,
 		col.rectangle = 'red',
 		alpha.rectangle = 0.5,
 		top.padding = 1,
@@ -391,11 +394,17 @@ if (is.dna) {
 		);		
 
 	# identify cases with poor coverage
-	poor.coverage <- qc.metrics[which(qc.metrics$percent_bases_above_15 < 0.8),c(1,2,3,5)];
-	coverage.caption <- "Samples with low coverage ($<$80\\% bases with at least 15x coverage).";
+	poor.coverage <- qc.metrics[which(qc.metrics$percent_bases_above_targetX < 0.8),c(1,2,3,5)];
+	coverage.caption <- paste0(
+		"Samples with low coverage ($<$80\\% bases with at least ", target_coverage,
+		"x coverage)."
+		);
 	if (nrow(poor.coverage) > 20) {
-		poor.coverage <- qc.metrics[which(qc.metrics$percent_bases_above_15 < 0.5),c(1,2,3,5)];
-		coverage.caption <- "Samples with low coverage ($<$50\\% bases with at least 15x coverage)."
+		poor.coverage <- qc.metrics[which(qc.metrics$percent_bases_above_targetX < 0.5),c(1,2,3,5)];
+		coverage.caption <- paste0(
+			"Samples with low coverage ($<$50\\% bases with at least ",
+			target_coverage, "x coverage)."
+			);
 		}
 	colnames(poor.coverage) <- c('Sample','Total','Mean','Median');
 
@@ -463,7 +472,8 @@ if (is.dna) {
 					key = list(
 						rect = list(col = 'red', alpha = 0.5, size = 1),
 						text = list(
-							lab = 'Percent bases\nabove 15x',
+							lab = paste0('Percent bases\nabove ', 
+								target_coverage, 'x'),
 							cex = 1
 							)
 						)
@@ -689,6 +699,8 @@ if (arguments$seq_type == 'rna') {
 	caption <- "Top plot: Summary of coverage across target bases. Points indicate median read depth (range from first to third quartiles) while red bars show percent of target bases with $>$15x coverage. Right plot: Contamination estimate (as a percent $\\pm$ 95\\% CI if ContEst [available for T/N pairs only] or $\\pm$ error if GATK:Pileup was used). Central heatmap: Spearman's correlation ($\\rho$) of germline variant genotypes across all samples.";
 	} else if (arguments$seq_type == 'wgs') {
 	caption <- "Top plot: Summary of coverage across the genome. Points indicate mean read depth while red bars show percent of bases with $>$15x coverage. Right plot: Contamination estimate (as a percent $\\pm$ 95\\% CI if ContEst [available for T/N pairs only] or $\\pm$ error if GATK:Pileup was used). Central heatmap: Spearman's correlation ($\\rho$) of germline variant genotypes across all samples.";
+	} else if (arguments$seq_type == 'targeted') {
+	caption <- "Top plot: Summary of coverage across target bases. Points indicate mean read depth while red bars show percent of target bases with $>$200x coverage. Right plot: Contamination estimate (as a percent $\\pm$ 95\\% CI if ContEst [available for T/N pairs only] or $\\pm$ error if GATK:Pileup was used). Central heatmap: Spearman's correlation ($\\rho$) of germline variant genotypes across all samples.";
 	}
 
 write(

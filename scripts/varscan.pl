@@ -320,6 +320,8 @@ sub main {
 		$string = $tool_data->{varscan}->{chromosomes};
 		} elsif (('exome' eq $tool_data->{seq_type}) && (defined($tool_data->{intervals_bed}))) {
 		$string = 'exome';
+		} elsif (('targeted' eq $tool_data->{seq_type}) && (defined($tool_data->{intervals_bed}))) {
+		$string = 'exome';
 		} elsif ( ('hg38' eq $tool_data->{ref_type}) || ('hg19' eq $tool_data->{ref_type})) {
 		$string = 'chr' . join(',chr', 1..22) . ',chrX,chrY';
 		} elsif ( ('GRCh37' eq $tool_data->{ref_type}) || ('GRCh37' eq $tool_data->{ref_type})) {
@@ -333,10 +335,10 @@ sub main {
 
 	my @chroms = split(',', $string);
 
-	if ('exome' eq $tool_data->{seq_type}) {
+	if ( ('exome' eq $tool_data->{seq_type}) || ('targeted' eq $tool_data->{seq_type})) {
 		$intervals_bed = $tool_data->{intervals_bed};
 		$intervals_bed =~ s/\.bed/_padding100bp.bed/;
-		print $log "\n    Target intervals (exome): $intervals_bed";
+		print $log "\n    Target intervals: $intervals_bed";
 		}
 
 	print $log "\n    Output directory: $output_directory";

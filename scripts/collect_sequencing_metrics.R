@@ -58,13 +58,18 @@ detail.files <- list.files(pattern = 'pre_adapter_detail_metrics', recursive = T
 summary.files <- list.files(pattern = 'pre_adapter_summary_metrics', recursive = TRUE);
 contamination.files <- list.files(pattern = 'contamination.table', recursive = TRUE);
 
+alignment.files <- list.files(pattern = 'alignment_metrics.txt', recursive = TRUE);
+wgs.files <- list.files(pattern = 'wgs_metrics.txt', recursive = TRUE);
+
 # read them in
 artefact.list <- list();
 contamination.list <- list();
+alignment.list <- list();
+wgs.list <- list();
 
 for (file in detail.files) {
 	# extract sample ID
-	smp <- sub('_artifact_metrics.txt.pre_adapter_detail_metrics','',basename(file));
+	smp <- sub('_artifact_metrics.pre_adapter_detail_metrics','',basename(file));
 	# store data in list
 	detailed <- read.delim(file, comment.char = '#');
 	summarized <- read.delim(sub('detail','summary',file), comment.char = '#');
@@ -83,9 +88,40 @@ for (file in contamination.files) {
 	contamination.list[[smp]] <- read.delim(file);
 	}
 
+for (file in alignment.files) {
+	# extract sample ID
+	smp <- sub('_alignment_metrics.txt','',basename(file));
+	# store data in list
+	tmp <- read.delim(file, skip = 6);
+	tmp$LEVEL <- apply(
+		tmp[,c('SAMPLE','LIBRARY','READ_GROUP')], 1, function(i) {
+			if (i[1] == '') { 'ALL_READS' } else if (i[2] == '') { 'SAMPLE'
+			} else if (i[3] == '') { 'LIBRARY' } else { 'READ_GROUP' }
+			}
+		);
+	tmp$SAMPLE <- smp;
+	alignment.list[[smp]] <- tmp[,c(23,26,1:22,24:25)];
+	}
+
+if (length(wgs.files) > 0) {
+
+	for (file in wgs.files) {
+		# extract sample ID
+		smp <- sub('_wgs_metrics.txt','',basename(file));
+		# read in data
+		metrics <- read.delim(file, skip = 6, nrow = 1);
+		counts <- read.delim(file, skip = 10);
+		colnames(counts)[2] <- smp;
+		# store data in list
+		wgs.list$metrics[[smp]] <- metrics;
+		wgs.list$counts[[smp]] <- counts;
+		}
+	}
+
 # reshape/format data
 artefact.data <- do.call(rbind, artefact.list);
 contest.data <- do.call(rbind, contamination.list);
+metric.data <- do.call(rbind, alignment.list);
 
 # format data
 artefact.data <- artefact.data[,c('SAMPLE_ALIAS','REF_BASE','ALT_BASE','ARTIFACT_NAME','CONTEXT','QSCORE')];
@@ -107,5 +143,38 @@ write.table(
 	sep = '\t'
 	);
 
+write.table(
+	metric.data,
+	file = generate.filename(arguments$project, 'AlignmentMetrics','tsv'),
+	row.names = FALSE,
+	col.names = TRUE,
+	sep = '\t'
+	);
+
+# format WGS metrics if available
+if (length(wgs.files) > 0) {
+
+	wgs.metrics <- do.call(rbind, wgs.list$metrics);
+
+	library(plyr);
+	wgs.histogram <- join_all(wgs.list$counts);
+
+	write.table(
+		wgs.metrics,
+		file = generate.filename(arguments$project, 'WGSMetrics','tsv'),
+		row.names = TRUE,
+		col.names = NA,
+		sep = '\t'
+		);
+
+	write.table(
+		wgs.histogram,
+		file = generate.filename(arguments$project, 'CoverageHistogram','tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+	}
+
 ### SAVE SESSION INFO ##############################################################################
-save.session.profile(generate.filename('CollectArtefacts','SessionProfile','txt'));
+save.session.profile(generate.filename('CollectMetrics','SessionProfile','txt'));

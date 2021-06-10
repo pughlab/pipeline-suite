@@ -301,7 +301,7 @@ sub pon {
 		}
 
 	if (defined($tool_data->{intervals_bed})) {
-		print $log "\n    Target intervals (exome): $tool_data->{intervals_bed}";
+		print $log "\n    Target intervals: $tool_data->{intervals_bed}";
 		}
 
 	print $log "\n    Output directory: $output_directory";
@@ -706,7 +706,7 @@ sub main {
 		}
 
 	if (defined($tool_data->{intervals_bed})) {
-		print $log "\n    Target intervals (exome): $tool_data->{intervals_bed}";
+		print $log "\n    Target intervals: $tool_data->{intervals_bed}";
 		}
 
 	print $log "\n    Output directory: $output_directory";

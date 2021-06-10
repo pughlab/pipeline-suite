@@ -78,6 +78,7 @@ sub main {
 	# indicate maximum time limit for parent jobs to wait
 	my $max_time = '7-00:00:00';
 	if ('wgs' eq $tool_data->{seq_type}) { $max_time = '21-00:00:00'; }
+	if ('targeted' eq $tool_data->{seq_type}) { $max_time = '5-00:00:00'; }
 
 	### MAIN ###########################################################################################
 
@@ -1068,6 +1069,10 @@ sub main {
 				"-c", $args{cluster}
 				);
 
+			if (defined($tool_data->{vardict}->{pon})) {
+				$vardict_command .= " --pon $tool_data->{vardict}->{pon}";
+				}
+
 			if ($args{cleanup}) {
 				$vardict_command .= " --remove";
 				}
@@ -1160,7 +1165,7 @@ sub main {
 			}
 
 		## MSI-Sensor pipeline
-		if ('Y' eq $tool_data->{other_tools}->{msi_run}) {
+		if ('Y' eq $tool_data->{other_tools}->{run_msi}) {
 
 			unless(-e $msi_directory) { make_path($msi_directory); }
 

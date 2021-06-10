@@ -188,7 +188,7 @@ sub get_rnaseqc_cmd {
 	$format_gtf_command .= " | grep -e '#' -e 'transcript_id'";
 	$format_gtf_command .= " > $args{tmp_dir}/transcript_ids.gtf";
 
-	my $qc_command = join(' ',
+	my $qc_command = $format_gtf_command . "\n\n" . join(' ',
 		'java -Xmx' . $args{java_mem},
 		'-Djava.io.tmpdir=' . $args{tmp_dir},
 		'-jar $rnaseqc_dir/RNA-SeQC.jar',

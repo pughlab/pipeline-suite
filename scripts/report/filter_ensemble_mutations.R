@@ -149,6 +149,14 @@ if (length(setdiff(unique(c(remove.these,also.remove.these)), keep.these)) > 0) 
 	input.data <- input.data[-setdiff(unique(c(remove.these,also.remove.these)), keep.these),];
 	}
 
+write.table(
+	input.data,
+	file = sub('.tsv','_filtered.tsv', basename(arguments$input)),
+	row.names = FALSE,
+	col.names = TRUE,
+	sep = '\t'
+	);
+
 # extract key hits
 significant.hits <- which(
 	input.data$ONCOGENIC == 'Oncogenic' |
@@ -164,7 +172,7 @@ oncokb.to.print <- data.frame(
 	ID = oncokb.hits$Tumor_Sample_Barcode,
 	Gene = oncokb.hits$Hugo_Symbol,
 	Position = oncokb.hits$Start_Position,
-	VAF = round(oncokb.hits$t_alt_count / oncokb.hits$t_depth,2),
+	VAF = round(oncokb.hits$t_alt_count / oncokb.hits$t_depth,4),
 	VARIANT_IN_ONCOKB = as.logical(oncokb.hits$VARIANT_IN_ONCOKB),
 	Effect = oncokb.hits$MUTATION_EFFECT
 	);
@@ -565,7 +573,7 @@ if (arguments$seq_type == 'wgs') {
 	create.multipanelplot(
 		plot.objects = plot.list,
 		height = 10,
-		width = 8,
+		width = 8.5,
 		resolution = 200,
 		filename = generate.filename(arguments$project, 'mutation_summary_filtered','png'),
 		plot.objects.heights = if (is.null(msi)) { c(2,3,4) } else { c(2,0.5,2,4) },
@@ -578,9 +586,9 @@ if (arguments$seq_type == 'wgs') {
 		ylab.axis.padding = 0.5,
 		legend = list(
 			inside = if (is.null(msi)) {
-				list(fun = functional.legend, x = 0.88, y = 0.65)
+				list(fun = functional.legend, x = 0.89, y = 0.65)
 				} else {
-				list(fun = msi.legend, x = 0.88, y = 0.66)
+				list(fun = msi.legend, x = 0.89, y = 0.66)
 				}
 			)
 		);
@@ -595,7 +603,7 @@ if (arguments$seq_type == 'wgs') {
 	create.multipanelplot(
 		plot.objects = plot.list,
 		height = 10,
-		width = 8,
+		width = 8.5,
 		resolution = 200,
 		filename = generate.filename(arguments$project, 'mutation_summary_filtered','png'),
 		plot.objects.heights = if (is.null(msi)) { c(1.5,2,2,4) } else { c(1.5,0.5,2,2,4) },
@@ -608,9 +616,9 @@ if (arguments$seq_type == 'wgs') {
 		ylab.axis.padding = 0.5,
 		legend = list(
 			inside = if (is.null(msi)) {
-				list(fun = functional.legend, x = 0.88, y = 0.65)
+				list(fun = functional.legend, x = 0.89, y = 0.65)
 				} else {
-				list(fun = msi.legend, x = 0.88, y = 0.75)
+				list(fun = msi.legend, x = 0.89, y = 0.75)
 				}
 			)
 		);
@@ -639,17 +647,20 @@ create.boxplot(
 	yaxis.cex = 1,
 	xaxis.cex = if (nrow(gene.counts) < 30) { 1 } else { 0.75 },
 	style = 'Nature',
+	top.padding = 2,
+	right.padding =if (nrow(gene.counts) >= 30) { 3 } else { 15 },
 	key = list(
 		points = list(col = effect.colours, pch = 19, cex = 1),
 		text = list(lab = names(effect.colours), cex = 0.8, col = 'black'),
 		title = 'Mutation Effect',
-		cex.title = 1.2,
-		x = if (nrow(gene.counts) >= 30) { 0.7 } else { 0.6 },
-		y = 1
+		cex.title = 1,
+		between = 0.3,
+		x = if (nrow(gene.counts) >= 30) { 0.82 } else { 0.95 },
+		y = if (nrow(gene.counts) >= 30) { 1.1 } else { 1 }
 		),
 	filename = generate.filename(arguments$project, 'oncoKB_hits', 'png'),
 	height = 4,
-	width = if (nrow(gene.counts) < 30) { 6 } else { 8 }
+	width = 8
 	);
 
 save(

@@ -32,7 +32,7 @@ sub main {
 	# for each tool (indicated in config file), read in and extract parameters
 	my $methods = "\\section{Methods}\n";
 	$methods .= "For all tools, default parameters were used unless otherwise indicated.\\newline\n";
-	$methods .= "\\subsection{Alignment and Quality Checks:}\n";
+	$methods .= "\\subsection{Alignment and Quality Checks}\n";
 
 	my ($bwa, $gatk, $gatk_cnv);
 	my ($mutect, $mutect2, $strelka, $manta, $varscan, $delly, $mavis, $somaticsniper, $vardict);
@@ -141,7 +141,7 @@ sub main {
 	# how was haplotypecaller run?
 	if ('Y' eq $tool_data->{haplotype_caller}->{run}) {
 
-		$methods .= "\\subsection{Germline Variant calling:}\n";
+		$methods .= "\\subsection{Germline Variant calling}\n";
 
 		$gatk = $tool_data->{gatk_version};
 		my $cpsr = $tool_data->{cpsr_version};
@@ -194,7 +194,7 @@ sub main {
 		}
 
 	# how were somatic SNVs called?
-	$methods .= "\\subsection{Somatic Variant Calling:}\n";
+	$methods .= "\\subsection{Somatic Variant Calling}\n";
 
 	if ('Y' eq $tool_data->{mutect}->{run}) {
 
@@ -227,7 +227,7 @@ sub main {
 		$vcf2maf = $parts[-2];
 
 		# fill in methods
-		$methods .= "\\subsubsection{MuTect (v$mutect):}\n";
+		$methods .= "\\subsubsection{MuTect (v$mutect)}\n";
 
 		if (defined($tool_data->{mutect}->{pon})) {
 			$methods .= "A pre-made panel of normals ($pon) was used for additional filtering.\\newline\n";
@@ -270,7 +270,7 @@ sub main {
 		$vcf2maf = $parts[-2];
 
 		# fill in methods
-		$methods .= "\\subsubsection{MuTect2 (GATK v$gatk):}\n";
+		$methods .= "\\subsubsection{MuTect2 (GATK v$gatk)}\n";
 
 		if (defined($tool_data->{mutect2}->{pon})) {
 			$methods .= "A pre-made panel of normals ($pon) was used for additional filtering.\\newline\n";
@@ -302,7 +302,7 @@ sub main {
 		$vcf2maf = $parts[-2];
 
 		# fill in methods
-		$methods .= "\\subsubsection{SomaticSniper (v$somaticsniper):}\n";
+		$methods .= "\\subsubsection{SomaticSniper (v$somaticsniper)}\n";
 		$methods .= "SomaticSniper was run on each T/N pair using options -q 1 -Q 40 -G and -L . For filtering, bcftools (v$samtools) mpileup was run with results filtered for quality using bcftools vcfutils.pl varFilter -Q 20. SomaticSniper's filters were then applied as suggested (snpfilter.pl was first applied to the initial VCF using the normal indel pileup, with the results then filtered using the tumour pileup). The resulting positions were fed into bam-readcount (-b 15 -q 1) for the tumour BAM and SomaticSnipers fpfilter.pl and highconfidence.pl applied to remove probable false positives (min mapping quality = 40 and min somatic score = 40). ";
 
 		if (defined($tool_data->{somaticsniper}->{pon})) {
@@ -333,7 +333,7 @@ sub main {
 		$vcf2maf = $parts[-2];
 
 		# fill in methods
-		$methods .= "\\subsubsection{VarDict (v$vardict):}\n";
+		$methods .= "\\subsubsection{VarDict (v$vardict)}\n";
 		$methods .= "VarDict was run using the recommended protocol for either paired (T/N) or tumour-only, with default parameters and target regions (\$\\pm\$ 50bp padding) provided. Variants were filtered by significance (p-value \$<\$ 0.05) using bcftools (v$bcftools).\\newline\n";
 
 		if (defined($tool_data->{vardict}->{pon})) {
@@ -370,7 +370,7 @@ sub main {
 		$vcf2maf = $parts[-2];
 
 		# fill in methods
-		$methods .= "\\subsubsection{Strelka (v$strelka):}\n";
+		$methods .= "\\subsubsection{Strelka (v$strelka)}\n";
 		$methods .= "Strelka and Manta were run using default parameters in exome mode, with callable regions restricted to target regions (\$\\pm\$ 50bp padding).\\newline\n";
 
 		if (defined($tool_data->{strelka}->{pon})) {
@@ -402,7 +402,7 @@ sub main {
 		$vcf2maf = $parts[-2];
 
 		# fill in methods
-		$methods .= "\\subsubsection{VarScan (v$varscan):}\n";
+		$methods .= "\\subsubsection{VarScan (v$varscan)}\n";
 		$methods .= "For variant calling in T/N pairs, samtools (v$samtools) mpileup was run on each T/N pair, using -B -q1 -d 10000 and restricting call regions to target regions (\$\\pm\$ 50bp padding). Positions with 0 coverage in both the tumour and normal were excluded and the resulting output provided to VarScan. VarScan somatic and processSomatic were used to generate lists of high-confidence germline and somatic variant positions. VarScan somatic was run again, using --output-vcf, and the resulting VCF was filtered (using bcftools v$samtools) to produce a high-confidence germline VCF file and a high-confidence somatic VCF file.\\newline\n";
 
 		if (!defined($tool_data->{vardict}->{pon})) {
@@ -421,7 +421,7 @@ sub main {
 		}
 
 	if (defined($vep)) {
-		$methods .= "\\subsubsection{Annotation:}\n";
+		$methods .= "\\subsubsection{Annotation}\n";
 		$methods .= "Somatic short variants (SNVs and INDELs) were annotated using VEP (v$vep) and vcf2maf ($vcf2maf), with population frequencies for known common variants annotated from ExAC (nonTCGA version r1) and gnomAD.\\newline\n";
 		$methods .= "\\noindent\nLastly, an ensemble approach was applied, such that variants meeting the following criteria were carried forward for downstream analyses:\\newline\n";
 		# based on suggested criteria here:
@@ -448,7 +448,7 @@ sub main {
 		}
 
 	# how were SVs called?
-	$methods .= "\\subsection{Structural Variant Calling:}\n";
+	$methods .= "\\subsection{Structural Variant Calling}\n";
 
 	if ('Y' eq $tool_data->{delly}->{run}) {
 
@@ -510,12 +510,12 @@ sub main {
 		}
 
 	# for MSI
-	if ('Y' eq $tool_data->{other_tools}->{msi_run}) {
+	if ('Y' eq $tool_data->{other_tools}->{run_msi}) {
 
-		$msi	= 'msisensor-pro/1.2.0';
+		my $msi	= 'msisensor-pro/1.2.0';
 
 		# fill in methods
-		$methods .= "\\subsection{MSI:}\n";
+		$methods .= "\\subsection{MSI}\n";
 		$methods .= "MSI-Sensor pro (v1.2.0) was run using recommended best practices with target regions provided to msi (T/N pairs) or pro (tumour only) commands and coverage threshold of 20x (as recommended).\\newline\n";
 		} else {
 		$methods .= "MSI-Sensor was not run.\\newline\n";

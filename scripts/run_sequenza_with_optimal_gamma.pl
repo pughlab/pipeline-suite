@@ -362,7 +362,8 @@ sub main {
 		'-g', $tool_data->{gtf}
 		);
 
-	if ( ('exome' eq $tool_data->{seq_type}) && (defined($tool_data->{intervals_bed})) ) {
+	if ( (('exome' eq $tool_data->{seq_type}) || ('targeted' eq $tool_data->{seq_type})) &&
+		(defined($tool_data->{intervals_bed})) ) {
 		$collect_output .= " -t $tool_data->{intervals_bed}";
 		}
 

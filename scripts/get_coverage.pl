@@ -46,8 +46,14 @@ sub get_coverage_command {
 		java_mem	=> undef,
 		tmp_dir		=> undef,
 		intervals	=> undef,
+		seq_type	=> undef,
 		@_
 		);
+
+	my $target_depth = 15;
+	if ('targeted' eq $args{seq_type}) {
+		$target_depth = 200;
+		}	
 
 	my $coverage_command;
 
@@ -64,7 +70,8 @@ sub get_coverage_command {
 			'-Djava.io.tmpdir=' . $args{tmp_dir},
 			'-jar $gatk_dir/GenomeAnalysisTK.jar -T DepthOfCoverage',
 			'-o', $args{output},
-			'-omitBaseOutput -omitIntervals -omitLocusTable -nt 2'
+			'-omitBaseOutput -omitIntervals -omitLocusTable -nt 2',
+			'-ct', $target_depth
 			);
 		}
 
@@ -304,7 +311,8 @@ sub main {
 				output		=> $coverage_out,
 				intervals	=> $tool_data->{intervals_bed},
 				java_mem	=> $parameters->{coverage}->{java_mem},
-				tmp_dir		=> $tmp_directory
+				tmp_dir		=> $tmp_directory,
+				seq_type	=> $tool_data->{seq_type}
 				);
 				
 			my $md5_cmds = "  " . join("\n  ",

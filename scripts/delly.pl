@@ -239,6 +239,7 @@ sub get_finalize_command {
 		$job_command = "echo $sm_tag $tumour_id > $args{output}.reheader";
 		$job_command .= "\n\n" . join(' ',
 			'bcftools view',
+			'-f PASS -e' . "'" . 'GT="ref" | FORMAT/FT="LowQual"' . "'",
 			'-s', $sm_tag,
 			$args{input},
 			'| bcftools reheader',
@@ -1140,18 +1141,31 @@ sub main {
 			my $filter_output = join('/', $sample_directory, $sample . '_Delly_SVs_somatic_filtered.bcf');
 			my $final_output = join('/', $sample_directory, $sample . '_Delly_SVs_somatic_hc.bcf');
 
-			my $finalize_somatic_svs = get_delly_filter_command(
-				input	=> $merged_somatic_output,
-				output	=> $filter_output,
-				type	=> 'somatic',
-				samples	=> $sample_sheet
-				);
+			my $finalize_somatic_svs;
 
-			$finalize_somatic_svs .= "\n\n" . get_finalize_command(
-				id		=> @{$sample_sheet_tumour{$sample}},
-				output		=> $final_output,
-				input		=> $filter_output
-				);
+			if (scalar(@sample_sheet_normal) > 0) {
+
+				$finalize_somatic_svs = get_delly_filter_command(
+					input	=> $merged_somatic_output,
+					output	=> $filter_output,
+					type	=> 'somatic',
+					samples	=> $sample_sheet
+					);
+
+				$finalize_somatic_svs .= "\n\n" . get_finalize_command(
+					id		=> @{$sample_sheet_tumour{$sample}},
+					output		=> $final_output,
+					input		=> $filter_output
+					);
+
+				} else {
+
+				$finalize_somatic_svs = get_finalize_command(
+					id		=> @{$sample_sheet_tumour{$sample}},
+					output		=> $final_output,
+					input		=> $merged_somatic_output
+					);
+				}
 
 			$finalize_somatic_svs .= "\n\n" . "md5sum $final_output > $final_output.md5";
 
