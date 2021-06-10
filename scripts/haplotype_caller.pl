@@ -294,7 +294,7 @@ sub main{
 			my $hc_vcf = join('/', $sample_directory, $sample . '_HaplotypeCaller.vcf');
 			if ('dna' eq $data_type) {
 				$hc_vcf = join('/', $sample_directory, $sample . '_HaplotypeCaller.g.vcf');
-				push @gvcfs, " -V:$sample $hc_vcf";
+				push @gvcfs, " -V:$sample $hc_vcf.gz";
 				}
 
 			my $call_variants_cmd = get_haplotype_command(
@@ -306,12 +306,16 @@ sub main{
 				tmp_dir		=> $tmp_directory
 				);
 
-			# this is a java-based command, so run a final check
-			$java_check = "\n" . check_java_output(
-				extra_cmd => "\nmd5sum $hc_vcf > $hc_vcf.md5"
+			# if samples were aligned elsewhere, the @RG SM tag may differ from the sample ID
+			# this causes problems if there are multiple files with the same SM tag (ie, when
+			# running combined output from ConsensusCruncher)
+			$call_variants_cmd .= "\n\n" . join("\n",
+				"echo $sample | bcftools reheader -s - $hc_vcf -o $hc_vcf.reheadered",
+				"mv $hc_vcf.reheadered $hc_vcf",
+				"md5sum $hc_vcf > $hc_vcf.md5",
+				"bgzip $hc_vcf",
+				"tabix -p vcf $hc_vcf.gz"
 				);
-
-			$call_variants_cmd .= "\n$java_check";
 
 			# check if this should be run
 			if ('Y' eq missing_file($hc_vcf . '.md5')) {
@@ -323,7 +327,7 @@ sub main{
 					log_dir	=> $log_directory,
 					name	=> 'run_haplotype_caller_' . $sample,
 					cmd	=> $call_variants_cmd,
-					modules	=> [$gatk],
+					modules	=> [$gatk, $samtools],
 					max_time	=> $parameters->{haplotype_call}->{time},
 					mem		=> $parameters->{haplotype_call}->{mem},
 					hpc_driver	=> $args{hpc_driver}
@@ -347,8 +351,7 @@ sub main{
 			# if this is RNA-Seq, run filter + vcf2maf
 			if ('rna' eq $data_type) {
 
-				$cleanup_cmd_rna .= "\nrm $hc_vcf";
-				$cleanup_cmd_rna .= "\nrm $hc_vcf.idx";
+				$cleanup_cmd_rna .= "\nrm $hc_vcf.gz";
 
 				# run filter variants
 				my $filtered_vcf = join('/',
@@ -357,10 +360,9 @@ sub main{
 					);
 
 				$cleanup_cmd_rna .= "\nrm $filtered_vcf";
-				$cleanup_cmd_rna .= "\nrm $filtered_vcf.idx";
 
 				my $filter_cmd = get_filter_command(
-					input		=> $hc_vcf,
+					input		=> "$hc_vcf.gz",
 					output		=> $filtered_vcf,
 					reference	=> $tool_data->{reference},
 					java_mem	=> $parameters->{filter_raw}->{java_mem},

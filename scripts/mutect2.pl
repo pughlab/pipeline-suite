@@ -9,6 +9,7 @@ use Getopt::Std;
 use Getopt::Long;
 use POSIX qw(strftime);
 use File::Basename;
+use List::Util qw(any first);
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
 use IO::Handle;
@@ -218,6 +219,28 @@ sub get_filter_command {
 	return($filter_command);
 	}
 
+# function to extract SM tag from BAM header
+sub get_sm_tag {
+	my %args = (
+		bam => undef,
+		@_
+		);
+
+	# read in bam header (RG tags only)
+	open (my $bam_fh, "samtools view -H $args{bam} | grep '^\@RG' |");
+	# only look at first line
+	my $line = <$bam_fh>;
+	close($bam_fh);
+	chomp($line);
+
+	my @header_parts = split(/\t/, $line);
+	# pull out and clean SM tag
+	my $sm_tag = first { $_ =~ m/SM:/ } @header_parts;
+	$sm_tag =~ s/^SM://;
+
+	return($sm_tag);
+	}
+
 ### PANEL OF NORMALS ###############################################################################
 sub pon {
 	my %args = (
@@ -300,7 +323,7 @@ sub pon {
 		}
 
 	if (defined($tool_data->{intervals_bed})) {
-		print $log "\n    Target intervals (exome): $tool_data->{intervals_bed}";
+		print $log "\n    Target intervals: $tool_data->{intervals_bed}";
 		}
 
 	print $log "\n    Output directory: $output_directory";
@@ -720,7 +743,7 @@ sub main {
 		}
 
 	if (defined($tool_data->{intervals_bed})) {
-		print $log "\n    Target intervals (exome): $tool_data->{intervals_bed}";
+		print $log "\n    Target intervals: $tool_data->{intervals_bed}";
 		}
 
 	print $log "\n    Output directory: $output_directory";
@@ -1082,12 +1105,16 @@ sub main {
 			$final_vcf = join('_', $filtered_stem, "annotated.vcf");
 			$final_maf = join('_', $filtered_stem, "annotated.maf");
 
+			# get tumour id used in vcf header (from bam header)
+			my $tumour_tag = get_sm_tag(bam => $smp_data->{$patient}->{tumour}->{$sample});
+
 			# Tumour only, with a panel of normals
 			if ( (defined($pon)) && (scalar(@normal_ids) == 0) ) {
 
 				$vcf2maf_cmd = get_vcf2maf_command(
 					input           => "$filtered_stem.vcf",
 					tumour_id       => $sample,
+					tumour_vcf_id	=> $tumour_tag,
 					reference       => $reference,
 					ref_type        => $tool_data->{ref_type},
 					output          => $final_maf,

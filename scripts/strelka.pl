@@ -9,6 +9,7 @@ use Getopt::Long;
 use POSIX qw(strftime);
 use File::Basename;
 use File::Path qw(make_path);
+use List::Util qw(any first);
 use YAML qw(LoadFile);
 use IO::Handle;
 
@@ -48,19 +49,27 @@ sub get_manta_command {
 		@_
 		);
 
-	my $manta_cmd;
+	my $manta_cmd = 'configManta.py ';
+	
+	if ('targeted' eq $seq_type) {
+		$manta_cmd = join("\n",
+			'DIRNAME=$(which configManta.py | xargs dirname)',
+			'cp $DIRNAME/configManta.py.ini ' . $args{output_dir},
+			"sed -i 's/minEdgeObservations = 3/minEdgeObservations = 2/' $args{output_dir}/configManta.py.ini",
+			"sed -i 's/minCandidateSpanningCount = 3/minCandidateSpanningCount = 2/' $args{output_dir}/configManta.py.ini",
+			"\n" . "configManta.py --config $args{output_dir}/configManta.py.ini "
+			);
+		}
 
 	if (defined($args{normal})) {
-		$manta_cmd = join(' ',
-			'configManta.py',
+		$manta_cmd .= join(' ',
 			'--normalBam', $args{normal},
 			'--tumorBam', $args{tumour},
 			'--referenceFasta', $reference,
 			'--runDir', $args{output_dir}
 			);
 		} else {
-		$manta_cmd = join(' ',
-			'configManta.py',
+		$manta_cmd .= join(' ',
 			'--tumorBam', $args{tumour},
 			'--referenceFasta', $reference,
 			'--runDir', $args{output_dir}
@@ -72,7 +81,7 @@ sub get_manta_command {
 		} elsif ( ('rna' eq $seq_type) && (!defined($args{normal})) ) {
 		$manta_cmd .= " --rna";
 		}
-	
+
 	return($manta_cmd);
 	}
 
@@ -208,6 +217,28 @@ sub  generate_pon {
 		}
 
 	return($pon_command);
+	}
+
+# function to extract SM tag from BAM header
+sub get_sm_tag {
+	my %args = (
+		bam => undef,
+		@_
+		);
+
+	# read in bam header (RG tags only)
+	open (my $bam_fh, "samtools view -H $args{bam} | grep '^\@RG' |");
+	# only look at first line
+	my $line = <$bam_fh>;
+	close($bam_fh);
+	chomp($line);
+
+	my @header_parts = split(/\t/, $line);
+	# pull out and clean SM tag
+	my $sm_tag = first { $_ =~ m/SM:/ } @header_parts;
+	$sm_tag =~ s/^SM://;
+
+	return($sm_tag);
 	}
 
 ### MAIN ###########################################################################################
@@ -687,7 +718,7 @@ sub main {
 	$reference = $tool_data->{reference};
 	$seq_type = $tool_data->{seq_type};
 
-	if ('exome' eq $seq_type) {
+	if ( ('exome' eq $seq_type) || ('targeted' eq $seq_type) ) {
 		$intervals = $tool_data->{intervals_bed};
 		$intervals =~ s/\.bed/_padding100bp.bed.gz/;
 		print $log "\n    Target intervals: $intervals";
@@ -849,10 +880,12 @@ sub main {
 
 			# next, run Strelka Somatic variant caller (T/N only)
 			my $somatic_snv_command;
+			my $depends = undef;
 
 			# run on T/N pairs
 			if (scalar(@normal_ids) > 0) {
 
+				$depends = $manta_run_id;
 				$somatic_snv_command = get_strelka_somatic_command(
 					tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
 					normal		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
@@ -884,16 +917,13 @@ sub main {
 
 
 			# filter variant calls
-			my ($filter_command, $depends);
+			my $filter_command;
 			my $filtered_output = join('/',
 				$sample_directory,
 				$sample . '_Strelka_somatic_filtered.vcf'
 				);
 
-			if ('rna' eq $seq_type) {
-				$depends  = '';
-				} else {
-				$depends  = $manta_run_id;
+			unless ('rna' eq $seq_type) {
 				$cleanup{$patient} .= "\nrm $filtered_output";
 				}
 
@@ -1017,9 +1047,13 @@ sub main {
 			$final_maf = join('/', $sample_directory, $sample . '_somatic_annotated.maf');
 			$final_vcf = join('/', $sample_directory, $sample . '_somatic_annotated.vcf');
 
+			# get tumour id used in vcf header (from bam header)
+			my $tumour_tag = get_sm_tag(bam => $smp_data->{$patient}->{tumour}->{$sample});
+
 			$vcf2maf_cmd = get_vcf2maf_command(
 				input		=> $filtered_output,
 				tumour_id	=> $sample,
+				tumour_vcf_id	=> $tumour_tag,
 				normal_id	=> $normal_id,
 				reference	=> $reference,
 				ref_type	=> $tool_data->{ref_type},
