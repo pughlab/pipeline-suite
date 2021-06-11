@@ -27,7 +27,7 @@ sub error_checking {
 	# is ref_type either hg38 or hg19?
 	# is this RNA?
 	if ('rna' eq $data_type) {
-		if ( ('GRCh38' ne $tool_data->{ref_type}) || ('hg38' ne $tool_data->{ref_type}) ) {
+		if ( ('GRCh38' ne $tool_data->{ref_type}) && ('hg38' ne $tool_data->{ref_type}) ) {
 			die("RNA-Seq pipeline only configured for use with GRCh38/hg38.");
 		}
 	} else {
