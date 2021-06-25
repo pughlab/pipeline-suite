@@ -7,10 +7,13 @@ use Getopt::Std;
 use Getopt::Long;
 use File::Basename;
 use File::Path qw(make_path);
+use YAML qw(DumpFile);
+use Data::Dumper;
 
 ####################################################################################################
 # version       author          comment
 # 1.0		sprokopec	create config file in yaml format
+# 2.0		sprokopec	default to TGL input format
 
 ### USAGE ##########################################################################################
 # create_fastq_yaml.pl -i INPUT.samples -d DATA_DIR -o /path/to/OUTPUT_CONFIG.yaml -t dna|rna
@@ -41,23 +44,16 @@ GetOptions(
 $data_directory =~ s/\/$//;
 
 ### HANDLING FILES #################################################################################
-# open output file
-open (my $fh, '>', $output_config) or die "Cannot open '$output_config' !";
-print $fh "---\n";
-
-# identify pattern to use
-my $pattern = 'R1.fastq.gz$';
-	
 # find all fastq files
 opendir(RAWFILES, $data_directory) or die "Cannot open '$data_directory' !";
-my @fastqfiles = grep {/$pattern/} readdir(RAWFILES);
+my @fastqfiles = grep {/fastq.gz/} readdir(RAWFILES);
 closedir(RAWFILES);
 
 # open sample file
 open(my $INPUT, '<', $sample_info) or die "Cannot open '$sample_info' file\n";
 my $header = <$INPUT>;
 
-my @subject_names = ();
+my $smp_data = {};
 
 # process each sample in SAMPLES
 while (my $line = <$INPUT>) {
@@ -70,55 +66,60 @@ while (my $line = <$INPUT>) {
 	my $sample = $file_info[1];
 	my $type = $file_info[2];
 
+	$smp_data->{$subject}->{$sample}->{type} = $type;
+
 	# find sample fastq files
 	my @subset = grep {/$sample/} @fastqfiles;
 	@subset = sort(@subset);
-	my $size = scalar @subset;	
+	my $size = scalar @subset;
 
-	# if the subject has already been written (if multiple samples per patient)
-	if (grep /$subject/, @subject_names) {
-		print "$subject already exists; continuing with next sample for this patient\n";
-		}
-	else {
-		push @subject_names, $subject;
-		print $fh "$subject:\n";
-		}
-	
-	print $fh "    $sample:\n";
-	print $fh "        type: $type\n";
+	# Extract library and lane names
+	my @parts;
+	my ($lib,$lane,$read_dir);
 
-	if ('dna' eq $data_type) {
-		print $fh "        libraries:\n";
-		print $fh "            $sample:\n";  # for now we are assuming that only 1 library was used
-		print $fh "                runlanes:\n";
-	} else {
-		print $fh "        runlanes:\n";
-		}
+	foreach my $fastq ( @subset ) {
+		if (grep /WG/, $fastq) {
+			@parts = split(/WG_/, $fastq);
+			$lib = $parts[0] . 'WG';
+			$lane = $parts[1];
+			$lane =~ s/_R1.fastq.gz|_R2.fastq.gz//;
+			} elsif (grep /EX/, $fastq) {
+			@parts = split(/EX_/, $fastq);
+			$lib = $parts[0] . 'EX';
+			$lane = $parts[1];
+			$lane =~ s/_R1.fastq.gz|_R2.fastq.gz//;
+			} elsif (grep /WT/, $fastq) {
+			@parts = split(/WT_/, $fastq);
+			$lib = $parts[0] . 'WT';
+			$lane = $parts[1];
+			$lane =~ s/_R1.fastq.gz|_R2.fastq.gz//;
+			} else {
+			@parts = split(/_|\./, $fastq);
+			$lib = $sample;
 
-	for (my $i = 1; $i <= $size; $i++) {
+			my $lane_idx = first_index { $_ eq 'L00' } @parts;
+			if ($lane_idx) {
+				$lane = $parts[$lane_idx];
+				} else {
+				$lane = 'lane_name';
+				}
+			}
 
-		my $r1 = join('/', $data_directory, $subset[$i-1]);
-		my $r2 = join('/', $data_directory, $subset[$i-1]);
-		$r2 =~ s/R1.fastq.gz/R2.fastq.gz/;
-
-		my $lane = $subset[$i-1];
-		$lane =~ s/$sample//;
-		$lane =~ s/^_//;
-		$lane =~ s/.R1.fastq.gz//;
+		$read_dir = 'R1';
+		if (grep /R2.fastq/, $fastq) { $read_dir = 'R2'; }
 
 		if ('dna' eq $data_type) {
-			print $fh "                    $lane:\n";
-			print $fh "                        fastq:\n";
-			print $fh "                            R1: $r1\n";
-			print $fh "                            R2: $r2\n";
-		} else {
-			print $fh "           $lane:\n";
-			print $fh "               R1: $r1\n";
-			print $fh "               R2: $r2\n";
+			$smp_data->{$subject}->{$sample}->{libraries}->{$lib}->{runlanes}->{$lane}->{fastq}->{$read_dir} = $data_directory . '/' . $fastq;
+			} else {
+			$smp_data->{$subject}->{$sample}->{runlanes}->{$lane}->{$read_dir} = $data_directory . '/' . $fastq;
 			}
 		}
 	}
 
 close $INPUT;
-close $fh;
+
+local $YAML::Indent = 4;
+DumpFile($output_config, $smp_data);
+
+
 exit;
