@@ -261,7 +261,8 @@ sub get_sm_tag {
 		);
 
 	# read in bam header (RG tags only)
-	open (my $bam_fh, "samtools view -H $args{bam} | grep '^\@RG' |");
+	open (my $bam_fh, "samtools view -H $args{bam} | grep '^\@RG' |") or die "Could not run samtools view; did you forget to module load samtools?";
+
 	# only look at first line
 	my $line = <$bam_fh>;
 	close($bam_fh);
