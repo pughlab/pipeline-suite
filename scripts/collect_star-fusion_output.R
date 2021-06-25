@@ -133,6 +133,7 @@ write.table(
 
 # format data for cbioportal
 tmp <- formatted.fusions[which(formatted.fusions$SpanningFragCount > 0),];
+tmp <- unique(tmp[,c('Sample','X.FusionName','SpliceType')]);
 
 cbio.data <- data.frame(
 	Hugo_Symbol = c(
@@ -152,13 +153,18 @@ cbio.data <- data.frame(
 	);
 
 tmp <- tmp[which(tmp$SpliceType == 'INCL_NON_REF_SPLICE'),];
-for (i in 1:nrow(tmp)) {
-	idx <- which(cbio.data$Tumor_Sample_Barcode == tmp[i,]$Sample & cbio.data$Fusion == tmp[i,]$X.FusionName);
-	cbio.data[idx,]$Frame <- 'frameshift';
+if (nrow(tmp) > 0) {
+	for (i in 1:nrow(tmp)) {
+		idx <- which(
+			cbio.data$Tumor_Sample_Barcode == tmp[i,]$Sample & 
+			cbio.data$Fusion == tmp[i,]$X.FusionName
+			);
+		cbio.data[idx,]$Frame <- 'frameshift';
+		}
 	}
 
 write.table(
-	unique(cbio.data),
+	cbio.data,
 	file = generate.filename(arguments$project, 'star-fusion_for_cbioportal', 'tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
