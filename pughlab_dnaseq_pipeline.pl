@@ -12,7 +12,7 @@ use File::Path qw(make_path);
 use YAML qw(LoadFile);
 use List::Util qw(any none);
 
-my $cwd = dirname($0);
+my $cwd = dirname(__FILE__);
 require "$cwd/scripts/utilities.pl";
 
 ####################################################################################################
@@ -156,6 +156,7 @@ sub main {
 
 				$bwa_command .= " --dry-run";
 				`$bwa_command`;
+				$bwa_run_id = 'pughlab_dna_pipeline__run_bwa';
 
 				} else {
 
@@ -209,6 +210,7 @@ sub main {
 
 				$gatk_command .= " --dry-run";
 				`$gatk_command`;
+				$gatk_run_id = 'pughlab_dna_pipeline__run_gatk';
 
 				} else {
 
@@ -265,6 +267,7 @@ sub main {
 
 				$contest_command .= " --dry-run";
 				`$contest_command`;
+				$contest_run_id = 'pughlab_dna_pipeline__run_contest';
 
 				} else {
 
@@ -312,6 +315,7 @@ sub main {
 
 				$qc_command .= " --dry-run";
 				`$qc_command`;
+				$qc_run_id = 'pughlab_dna_pipeline__run_qc';
 
 				} else {
 
@@ -359,6 +363,7 @@ sub main {
 
 				$coverage_command .= " --dry-run";
 				`$coverage_command`;
+				$coverage_run_id = 'pughlab_dna_pipeline__run_coverage';
 
 				} else {
 
@@ -416,6 +421,7 @@ sub main {
 
 				$hc_command .= " --dry-run";
 				`$hc_command`;
+				$hc_run_id = 'pughlab_dna_pipeline__run_haplotypecaller';
 
 				} else {
 
@@ -463,6 +469,7 @@ sub main {
 
 				$hc_command .= " --dry-run";
 				`$hc_command`;
+				$hc_run_id = 'pughlab_dna_pipeline__run_genotype_gvcfs';
 
 				} else {
 
@@ -507,8 +514,9 @@ sub main {
 				hpc_driver	=> $args{cluster}
 				);
 		
-			unless ($args{dry_run}) {
-
+			if ($args{dry_run}) {
+				$hc_run_id = 'pughlab_dna_pipeline__run_annotate_germline';
+				} else {
 				$hc_run_id = submit_job(
 					jobname		=> $log_directory,
 					shell_command	=> $run_script,
@@ -569,6 +577,7 @@ sub main {
 
 					$strelka_command .= " --dry-run";
 					`$strelka_command`;
+					$strelka_run_id = 'pughlab_dna_pipeline__run_strelka_pon';
 
 					} else {
 
@@ -618,6 +627,7 @@ sub main {
 
 				$strelka_command .= " --dry-run";
 				`$strelka_command`;
+				$strelka_run_id = 'pughlab_dna_pipeline__run_strelka';
 
 				} else {
 
@@ -680,6 +690,7 @@ sub main {
 
 					$mutect_command .= " --dry-run";
 					`$mutect_command`;
+					$mutect_run_id = 'pughlab_dna_pipeline__run_mutect_pon';
 
 					} else {
 
@@ -729,6 +740,7 @@ sub main {
 
 				$mutect_command .= " --dry-run";
 				`$mutect_command`;
+				$mutect_run_id = 'pughlab_dna_pipeline__run_mutect';
 
 				} else {
 
@@ -791,6 +803,7 @@ sub main {
 
 					$mutect2_command .= " --dry-run";
 					`$mutect2_command`;
+					$mutect2_run_id = 'pughlab_dna_pipeline__run_mutect2_pon';
 
 					} else {
 
@@ -840,6 +853,7 @@ sub main {
 
 				$mutect2_command .= " --dry-run";
 				`$mutect2_command`;
+				$mutect2_run_id = 'pughlab_dna_pipeline__run_mutect2';
 
 				} else {
 
@@ -896,6 +910,7 @@ sub main {
 			
 				$varscan_command .= " --dry-run";
 				`$varscan_command`;
+				$varscan_run_id = 'pughlab_dna_pipeline__run_varscan';
 
 				} else {
 
@@ -936,7 +951,8 @@ sub main {
 				);
 
 			if ($args{dry_run}) {
-			
+				$varscan_run_id = 'pughlab_dna_pipeline__run_sequenza';
+				} else {			
 				$varscan_run_id = submit_job(
 					jobname		=> $log_directory,
 					shell_command	=> $run_script,
@@ -986,6 +1002,7 @@ sub main {
 
 				$somaticsniper_command .= " --dry-run";
 				`$somaticsniper_command`;
+				$somaticsniper_run_id = 'pughlab_dna_pipeline__run_somaticsniper';
 
 				} else {
 
@@ -1038,6 +1055,7 @@ sub main {
 
 				$gatk_cnv_command .= " --dry-run";
 				`$gatk_cnv_command`;
+				$gatk_cnv_run_id = 'pughlab_dna_pipeline__run_gatk_cnv';
 
 				} else {
 
@@ -1051,64 +1069,6 @@ sub main {
 
 				print $log ">>> GATK-CNV job id: $gatk_cnv_run_id\n\n";
 				push @job_ids, $gatk_cnv_run_id;
-				}
-			}
-
-		## VarDict pipeline
-		if ('Y' eq $tool_data->{vardict}->{run}) {
-
-			unless(-e $vardict_directory) { make_path($vardict_directory); }
-
-			my $vardict_command = "perl $cwd/scripts/vardict.pl";
-			if ('wgs' eq $seq_type) { $vardict_command = "perl $cwd/scripts/vardict_wgs.pl"; }
-
-			$vardict_command .= ' '. join(' ',
-				"-o", $vardict_directory,
-				"-t", $tool_config,
-				"-d", $gatk_output_yaml,
-				"-c", $args{cluster}
-				);
-
-			if (defined($tool_data->{vardict}->{pon})) {
-				$vardict_command .= " --pon $tool_data->{vardict}->{pon}";
-				}
-
-			if ($args{cleanup}) {
-				$vardict_command .= " --remove";
-				}
-
-			# record command (in log directory) and then run job
-			print $log "Submitting job for vardict.pl\n";
-			print $log "  COMMAND: $vardict_command\n\n";
-
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'pughlab_dna_pipeline__run_vardict',
-				cmd	=> $vardict_command,
-				modules	=> ['perl'],
-				dependencies	=> $gatk_run_id,
-				mem		=> '256M',
-				max_time	=> $max_time,
-				hpc_driver	=> $args{cluster}
-				);
-
-			if ($args{dry_run}) {
-
-				$vardict_command .= " --dry-run";
-				`$vardict_command`;
-
-				} else {
-
-				$vardict_run_id = submit_job(
-					jobname		=> $log_directory,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{cluster},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
-					);
-
-				print $log ">>> VarDict job id: $vardict_run_id\n\n";
-				push @job_ids, $vardict_run_id;
 				}
 			}
 
@@ -1148,6 +1108,7 @@ sub main {
 
 				$delly_command .= " --dry-run";
 				`$delly_command`;
+				$delly_run_id = 'pughlab_dna_pipeline__run_delly';
 
 				} else {
 
@@ -1200,6 +1161,7 @@ sub main {
 
 				$msi_command .= " --dry-run";
 				`$msi_command`;
+				$msi_run_id = 'pughlab_dna_pipeline__run_msi';
 
 				} else {
 
@@ -1213,6 +1175,77 @@ sub main {
 
 				print $log ">>> MSI-Sensor job id: $msi_run_id\n\n";
 				push @job_ids, $msi_run_id;
+				}
+			}
+
+		## VarDict pipeline
+		if ('Y' eq $tool_data->{vardict}->{run}) {
+
+			unless(-e $vardict_directory) { make_path($vardict_directory); }
+
+			my $vardict_command = "perl $cwd/scripts/vardict.pl";
+			if ('wgs' eq $seq_type) { $vardict_command = "perl $cwd/scripts/vardict_wgs.pl"; }
+
+			$vardict_command .= ' '. join(' ',
+				"-o", $vardict_directory,
+				"-t", $tool_config,
+				"-d", $gatk_output_yaml,
+				"-c", $args{cluster}
+				);
+
+			if (defined($tool_data->{vardict}->{pon})) {
+				$vardict_command .= " --pon $tool_data->{vardict}->{pon}";
+				}
+
+			if ($args{cleanup}) {
+				$vardict_command .= " --remove";
+				}
+
+			# specify dependencies (if WGS, should wait for others to finish to avoid
+			# maxing out the users job limit)
+			my $vardict_dependencies = $gatk_run_id;
+			if ('wgs' eq $seq_type) {
+				$vardict_dependencies = join(':',
+					$gatk_run_id,
+					$strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id,
+					$somaticsniper_run_id, $gatk_cnv_run_id, $msi_run_id,
+					$delly_run_id
+					);
+				}
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for vardict.pl\n";
+			print $log "  COMMAND: $vardict_command\n\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_vardict',
+				cmd	=> $vardict_command,
+				modules	=> ['perl'],
+				dependencies	=> $vardict_dependencies,
+				mem		=> '256M',
+				max_time	=> $max_time,
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
+
+				$vardict_command .= " --dry-run";
+				`$vardict_command`;
+				$vardict_run_id = 'pughlab_dna_pipeline__run_vardict';
+
+				} else {
+
+				$vardict_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> VarDict job id: $vardict_run_id\n\n";
+				push @job_ids, $vardict_run_id;
 				}
 			}
 
@@ -1256,14 +1289,15 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_mavis',
 				cmd	=> $mavis_command,
 				modules	=> ['perl'],
-				dependencies	=> $depends,
+				dependencies	=> join(':',$depends,$vardict_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
 				);
 
-			unless ($args{dry_run}) {
-
+			if ($args{dry_run}) {
+				$mavis_run_id = 'pughlab_dna_pipeline__run_mavis';
+				} else {
 				$mavis_run_id = submit_job(
 					jobname		=> $log_directory,
 					shell_command	=> $run_script,
@@ -1305,8 +1339,9 @@ sub main {
 			hpc_driver	=> $args{cluster}
 			);
 
-		unless ($args{dry_run}) {
-
+		if ($args{dry_run}) {
+			$report_run_id = 'pughlab_dna_pipeline__run_report';
+			} else {
 			$report_run_id = submit_job(
 				jobname		=> $log_directory,
 				shell_command	=> $run_script,
