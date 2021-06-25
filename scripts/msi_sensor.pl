@@ -193,6 +193,21 @@ sub main {
 	my ($run_script, $run_id, $link, $intervals_run_id, $baseline_run_id);
 	my @all_jobs;
 
+	# get sample data
+	my $smp_data = LoadFile($data_config);
+
+	# do an initial check for normals; no normals = don't bother running
+	my @has_normals;
+	foreach my $patient (sort keys %{$smp_data}) {
+		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
+		if (scalar(@normal_ids) > 0) { push @has_normals, $patient; }
+		}
+
+	if (scalar(@has_normals) == 0) {
+		die("No normals provided. MSI-Sensor requires at least 1 normal to estimate baseline distributions, therefore we will exit now.");
+		}
+
+
 	# prep MSI intervals file
 	my $msi_intervals = join('/', $output_directory, 'msi_reference.list');
 	my $format_intervals_cmd = get_format_intervals_command(
@@ -228,9 +243,6 @@ sub main {
 		} else {
 		print $log "Skipping SCAN as this has already been completed!\n";
 		}
-
-	# get sample data
-	my $smp_data = LoadFile($data_config);
 
 	# generate necessary samples.tsv for baseline
 	my $sample_sheet = join('/', $output_directory, 'normal_bams.txt');
