@@ -256,8 +256,7 @@ sub get_filter_command {
 				'--vcf -',
 				'--keep-filtered PASS',
 				'--stdout --recode --recode-INFO-all',
-				'--exclude-positions', $args{pon},
-				'--temp', $args{tmp_dir}
+				'--exclude-positions', $args{pon}
 				);
 			}
 
@@ -1347,7 +1346,8 @@ sub main {
 			my $filter_command = get_filter_command(
 				input_vcf	=> $merged_stem . '.vcf', 
 				output_stem	=> $merged_stem,
-				somatic		=> 1,
+				somatic		=> 0,
+				tmp_dir		=> $tmp_directory,
 				pon		=> $pon
 				);
 
