@@ -178,7 +178,6 @@ sub main {
 				name		=> 'plot_rna_expression_summary',
 				cmd		=> $rna_plot_command,
 				modules		=> [$r_version],
-				dependencies	=> $run_id,
 				max_time	=> '04:00:00',
 				mem		=> '2G',
 				hpc_driver	=> $args{cluster}
@@ -199,7 +198,7 @@ sub main {
 		if ('Y' eq $tool_data->{haplotype_caller}->{run}) {
 			my $snv_dir = join('/', $output_directory, 'HaplotypeCaller');
 			opendir(VARIANTS, $snv_dir) or die "Cannot open '$snv_dir' !";
-			my @snv_calls = grep { /_variant_by_patient.tsv/ } readdir(VARIANTS);
+			my @snv_calls = grep { /_mutations_for_cbioportal.tsv/ } readdir(VARIANTS);
 			@snv_calls = sort @snv_calls;
 			closedir(VARIANTS);
 
