@@ -806,7 +806,10 @@ sub main {
 			$link = join('/', $link_directory, $tmp[-1]);
 			symlink($smp_data->{$patient}->{normal}->{$normal}, $link);
 
-			my $sm_tag = get_sm_tag(bam => $smp_data->{$patient}->{normal}->{$normal});
+			my $sm_tag = $normal;
+			if ('N' eq missing_file($smp_data->{$patient}->{normal}->{$normal})) { 
+				$sm_tag = get_sm_tag(bam => $smp_data->{$patient}->{normal}->{$normal});
+				}
 
 			print $fh "$sm_tag\tcontrol\t$normal\n";
 			push @normal_bams, $smp_data->{$patient}->{normal}->{$normal};
@@ -817,7 +820,10 @@ sub main {
 			$link = join('/', $link_directory, $tmp[-1]);
 			symlink($smp_data->{$patient}->{tumour}->{$tumour}, $link);
 
-			my $sm_tag = get_sm_tag(bam => $smp_data->{$patient}->{tumour}->{$tumour});
+			my $sm_tag = $tumour;
+			if ('N' eq missing_file($smp_data->{$patient}->{tumour}->{$tumour})) {
+				$sm_tag = get_sm_tag(bam => $smp_data->{$patient}->{tumour}->{$tumour});
+				}
 
 			print $fh "$sm_tag\ttumor\t$tumour\n";
 			push @tumour_bams, $smp_data->{$patient}->{tumour}->{$tumour};

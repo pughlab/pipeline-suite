@@ -1106,7 +1106,10 @@ sub main {
 			$final_maf = join('_', $filtered_stem, "annotated.maf");
 
 			# get tumour id used in vcf header (from bam header)
-			my $tumour_tag = get_sm_tag(bam => $smp_data->{$patient}->{tumour}->{$sample});
+			my $tumour_tag = $sample;
+			if ('N' eq missing_file($smp_data->{$patient}->{tumour}->{$sample})) {
+				$tumour_tag = get_sm_tag(bam => $smp_data->{$patient}->{tumour}->{$sample});
+				}
 
 			# Tumour only, with a panel of normals
 			if ( (defined($pon)) && (scalar(@normal_ids) == 0) ) {

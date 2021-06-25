@@ -1048,7 +1048,10 @@ sub main {
 			$final_vcf = join('/', $sample_directory, $sample . '_somatic_annotated.vcf');
 
 			# get tumour id used in vcf header (from bam header)
-			my $tumour_tag = get_sm_tag(bam => $smp_data->{$patient}->{tumour}->{$sample});
+			my $tumour_tag = $sample;
+			if ('N' eq missing_file($smp_data->{$patient}->{tumour}->{$sample})) {
+				$tumour_tag = get_sm_tag(bam => $smp_data->{$patient}->{tumour}->{$sample});
+				}
 
 			$vcf2maf_cmd = get_vcf2maf_command(
 				input		=> $filtered_output,
