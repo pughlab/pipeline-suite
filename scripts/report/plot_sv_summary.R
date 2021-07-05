@@ -198,32 +198,34 @@ legend.pos <- if (plot.height == 6) { 1.2
 	} else { 1.1 }
 
 # create plot for functional summary
-create.barplot(
-	Tumor_Sample_Barcode ~ Freq,
-	functional.summary[which(functional.summary$library %in% normal.samples),],
-	groups = functional.summary$event_type,
-	stack = TRUE,
-	plot.horizontal = TRUE,
-	col = sv.colour.scheme,
-	yaxis.tck = if (axis.cex == 0) { 0 } else { c(0.5,0) },
-	xaxis.tck = c(0.5,0),
-	xaxis.fontface = 'plain',
-	yaxis.fontface = 'plain',
-	xlab.label = 'Count',
-	xlab.cex = 1.2,
-	ylab.label = NULL,
-	yaxis.cex = axis.cex,
-	xaxis.cex = 1,
-	axes.lwd = 1,
-	top.padding = 10,
-	legend = list(
-		inside = list(fun = functional.legend, x = 0.1, y = legend.pos)
-		),
-	height = plot.height,
-	width = 7,
-	resolution = 200,
-	filename = generate.filename(arguments$project, 'germline_sv_summary', 'png')
-	);
+if (length(normal.samples) > 1) {
+	create.barplot(
+		Tumor_Sample_Barcode ~ Freq,
+		functional.summary[which(functional.summary$library %in% normal.samples),],
+		groups = functional.summary$event_type,
+		stack = TRUE,
+		plot.horizontal = TRUE,
+		col = sv.colour.scheme,
+		yaxis.tck = if (axis.cex == 0) { 0 } else { c(0.5,0) },
+		xaxis.tck = c(0.5,0),
+		xaxis.fontface = 'plain',
+		yaxis.fontface = 'plain',
+		xlab.label = 'Count',
+		xlab.cex = 1.2,
+		ylab.label = NULL,
+		yaxis.cex = axis.cex,
+		xaxis.cex = 1,
+		axes.lwd = 1,
+		top.padding = 10,
+		legend = list(
+			inside = list(fun = functional.legend, x = 0.1, y = legend.pos)
+			),
+		height = plot.height,
+		width = 7,
+		resolution = 200,
+		filename = generate.filename(arguments$project, 'germline_sv_summary', 'png')
+		);
+	}
 
 # grab some parameters
 axis.cex <- if (length(tumour.samples) <= 30) { 1
@@ -291,17 +293,19 @@ if (nrow(sv.data) == 0) {
 		append = TRUE
 		);
 
-	write("\\pagebreak\n\\begin{figure}[h!]", file = 'sv_summary.tex', append = TRUE);
-	write("\\begin{center}", file = 'sv_summary.tex', append = TRUE);
-	write(paste0(
-		"\\includegraphics[width=0.9\\textwidth]{",
-		getwd(), '/',
-		generate.filename(arguments$project, 'germline_sv_summary','png'), '}'
-		), file = 'sv_summary.tex', append = TRUE);
-	write("\\end{center}", file = 'sv_summary.tex', append = TRUE);
-	write("\\caption{Number of structural variants detected in germline samples, split by event type.}",
-		file = 'sv_summary.tex', append = TRUE);
-	write("\\end{figure}\n", file = 'sv_summary.tex', append = TRUE);
+	if (length(normal.samples) > 1) {
+		write("\\pagebreak\n\\begin{figure}[h!]", file = 'sv_summary.tex', append = TRUE);
+		write("\\begin{center}", file = 'sv_summary.tex', append = TRUE);
+		write(paste0(
+			"\\includegraphics[width=0.9\\textwidth]{",
+			getwd(), '/',
+			generate.filename(arguments$project, 'germline_sv_summary','png'), '}'
+			), file = 'sv_summary.tex', append = TRUE);
+		write("\\end{center}", file = 'sv_summary.tex', append = TRUE);
+		write("\\caption{Number of structural variants detected in germline samples, split by event type.}",
+			file = 'sv_summary.tex', append = TRUE);
+		write("\\end{figure}\n", file = 'sv_summary.tex', append = TRUE);
+		}
 
 	write("\\pagebreak\n\\begin{figure}[h!]", file = 'sv_summary.tex', append = TRUE);
 	write("\\begin{center}", file = 'sv_summary.tex', append = TRUE);
@@ -311,7 +315,8 @@ if (nrow(sv.data) == 0) {
 		generate.filename(arguments$project, 'somatic_sv_summary','png'), '}'
 		), file = 'sv_summary.tex', append = TRUE);
 	write("\\end{center}", file = 'sv_summary.tex', append = TRUE);
-	write("\\caption{Number of structural variants detected in tumour samples, split by event type.}",		file = 'sv_summary.tex', append = TRUE);
+	write("\\caption{Number of structural variants detected in tumour samples, split by event type.}",
+		file = 'sv_summary.tex', append = TRUE);
 	write("\\end{figure}\n", file = 'sv_summary.tex', append = TRUE);
 
 	if (nrow(event.counts) == 0) {

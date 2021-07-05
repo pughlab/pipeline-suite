@@ -206,16 +206,28 @@ if ('MuTect2' %in% colnames(combined.data)) {
 passed.variants <- unique(combined.data[which(combined.data$FILTER == 'PASS'),c('Chromosome','Start_Position','End_Position','Reference_Allele','Tumor_Seq_Allele2','Variant_Type','Matched_Norm_Sample_Barcode')]);
 passed.variants <- passed.variants[!is.na(passed.variants$Matched_Norm_Sample_Barcode),];
 
-passed.variants$C4 <- 1;
+if (nrow(passed.variants) > 0) {
 
-combined.data <- merge(
-	combined.data,
-	passed.variants,
-	all.x = TRUE
-	);
+	passed.variants$C4 <- 1;
 
-combined.data[which(combined.data$C4 == 1),]$FILTER <- 'PASS';
+	combined.data <- merge(
+		combined.data,
+		passed.variants,
+		all.x = TRUE
+		);
+
+	combined.data[which(combined.data$C4 == 1),]$FILTER <- 'PASS';
+	}
+
 save(combined.data, file = generate.filename(arguments$project, 'CombinedMutationData','RData'));
+
+# run unlink, in case it exists from a previous run
+unlink('CombinedMutationData.RData');
+
+file.symlink(
+	generate.filename(arguments$project, 'CombinedMutationData', 'RData'),
+	'CombinedMutationData.RData'
+	);
 
 # filter data
 filtered.calls <- unique(combined.data[which(combined.data$FILTER == 'PASS'),]);
@@ -273,7 +285,7 @@ if (any(vaf < 0.05)) {
 if (any(as.numeric(annotated.data$t_depth) < t_depth)) {
 	annotated.data[which(as.numeric(annotated.data$t_depth) < t_depth),]$FLAG.low_coverage <- TRUE;
 	}
-if (any(as.numeric(annotated.data$n_depth) < n_depth)) {
+if (!all(is.na(annotated.data$n_depth)) & (any(as.numeric(annotated.data$n_depth) < n_depth))) {
 	annotated.data[which(as.numeric(annotated.data$n_depth) < n_depth),]$FLAG.low_coverage <- TRUE;
 	}
 
