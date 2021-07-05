@@ -26,6 +26,7 @@ strelka_version: 2.9.10
 manta_version: 1.6.0
 varscan_version: 2.4.2
 delly_version: 0.8.1
+novobreak_version: 1.1
 somaticsniper_version: bam-somaticsniper/1.0.5.0 # or SomaticSniper/1.0.4 currently available on h4h
 vardict_version: 1.7.0
 mavis_version: 2.2.5
@@ -296,6 +297,24 @@ delly:
             mem: 2G
             time: '24:00:00'
         filter:
+            mem: 2G
+            time: '12:00:00'
+novobreak:
+    run: Y
+    chromosomes:
+    parameters:
+        novobreak:
+            mem: 40G # for wxs
+            time: '24:00:00'
+        ssake: # wgs only
+            mem: 6G
+            time: '48:00:00'
+            n_cpu: 4
+        process: # used for wxs and for part2 of WGS
+            mem: 16G
+            time: '24:00:00'
+            n_cpu: 4
+        merge: # wgs only
             mem: 2G
             time: '12:00:00'
 mavis:
