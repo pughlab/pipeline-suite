@@ -13,9 +13,6 @@ use List::Util qw(any all first);
 use List::MoreUtils qw(first_index);
 use YAML qw(LoadFile);
 
-my $cwd = dirname($0);
-require "$cwd/utilities.pl";
-
 ####################################################################################################
 # version       author		comment
 # 1.0		sprokopec       script to filter germline/somatic SNVs/INDELs from haplotypecaller

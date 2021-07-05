@@ -12,7 +12,7 @@ use File::Path qw(make_path);
 use List::Util 'any';
 use YAML qw(LoadFile);
 
-my $cwd = dirname($0);
+my $cwd = dirname(__FILE__);
 require "$cwd/scripts/utilities.pl";
 
 ####################################################################################################

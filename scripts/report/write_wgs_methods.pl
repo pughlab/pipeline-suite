@@ -11,7 +11,7 @@ use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
 
-my $cwd = dirname($0);
+my $cwd = dirname(__FILE__);
 require "$cwd/../utilities.pl";
 
 ####################################################################################################
