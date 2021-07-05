@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-### write_wxs_methods.pl ###########################################################################
+### write_targetseq_methods.pl #####################################################################
 use AutoLoader 'AUTOLOAD';
 use strict;
 use warnings;
@@ -34,74 +34,11 @@ sub main {
 	$methods .= "For all tools, default parameters were used unless otherwise indicated.\\newline\n";
 	$methods .= "\\subsection{Alignment and Quality Checks}\n";
 
-	my ($bwa, $gatk, $gatk4);
+	my ($gatk, $gatk4);
 	my ($mutect, $mutect2, $strelka, $manta, $varscan, $delly, $mavis, $somaticsniper, $vardict, $novobreak);
 	my ($ref_type, $samtools, $picard, $intervals, $bedtools, $vcftools, $bcftools);
 	my ($k1000g, $mills, $kindels, $dbsnp, $hapmap, $omni, $cosmic, $pon, $gnomad);
 	my ($vep, $vcf2maf);
-
-	# how was BWA run?
-	if ('Y' eq $tool_data->{bwa}->{run}) {
-
-		$bwa		= $tool_data->{bwa_version};
-		$samtools	= $tool_data->{samtools_version};
-		$picard		= $tool_data->{picard_version};
-		$ref_type	= $tool_data->{ref_type};
-
-		$methods .= "Fastq files were aligned to $ref_type using the BWA-MEM algorithm (v$bwa), with -M. Resulting SAM files were coordinate sorted, converted to BAM format and indexed using using samtools (v$samtools).";
-
-		if ('Y' eq $tool_data->{bwa}->{parameters}->{merge}->{mark_dup}) {
-			$methods .= " Duplicate reads were marked and lane- and library-level BAMs were merged using Picard tools (v$picard).\\newline\n";
-			} else {
-			$methods .= "Lane- and library-level BAMs were merged using Picard tools (v$picard).\\newline\n";
-			}
-		$methods .= "\\newline\n";
-		} else {
-		$methods .= "BWA not run.\\newline\n";
-		}
-
-	# how was GATK run?
-	if ('Y' eq $tool_data->{gatk}->{run}) {
-
-		$gatk = $tool_data->{gatk_version};
-		my @parts = split('\\/', $tool_data->{intervals_bed});
-		$intervals = $parts[-1];
-
-		# find reference files
-		if ('hg38' eq $tool_data->{ref_type}) {
-
-			$k1000g		= 'hg38bundle/1000G_phase1.snps.high_confidence.hg38.vcf.gz';
-			$kindels	= 'hg38bundle/Homo_sapiens_assembly38.known_indels.vcf.gz';
-			$mills		= 'hg38bundle/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz';
-			$dbsnp		= 'hg38bundle/dbsnp_144.hg38.vcf.gz';
-
-			} elsif ('hg19' eq $tool_data->{ref_type}) {
-
-			$k1000g		= '1000G_phase1.snps.high_confidence.hg19.vcf';
-			$kindels	= '1000G_phase1.indels.hg19.vcf';
-			$mills		= 'Mills_and_1000G_gold_standard.indels.hg19.vcf';
-			$dbsnp		= 'dbsnp_138.hg19.vcf';
-
-			}
-
-		if (defined($tool_data->{dbsnp})) {
-			@parts = split('\\/', $tool_data->{dbsnp});
-			$dbsnp = $parts[-1];
-			}
-
-		$methods .= "Indel realignment and base-quality recalibration were performed for each patient using GATK (v$gatk), with analyses restricted to target regions with interval padding set to 100bp. Known indels were provided for indel realignment and known snps were provided for recalibration. Additional options --disable_auto_index_creation_and_locking_when_reading_rods and -dt None were indicated throughout, -nWayOut for IndelRealigner, options -rf BadCigar, --covariate {ReadGroupCovariate, QualityScoreCovariate, CycleCovariate, ContextCovariate} for BaseRecalibrator and -rf BadCigar for PrintReads.\\newline\n";
-		$methods .= join("\n",
-			"{\\scriptsize \\begin{itemize}",
-			"  \\vspace{-0.2cm}\\item $intervals",
-			"  \\vspace{-0.2cm}\\item Known INDELs: $mills",
-			"  \\vspace{-0.2cm}\\item Known INDELs: $kindels",
-			"  \\vspace{-0.2cm}\\item Known SNPs: $dbsnp",
-			"  \\vspace{-0.2cm}\\item Known SNPs: $k1000g",
-			"\\end{itemize} }"
-			) . "\n";
-		} else {
-		$methods .= "GATK not run.\\newline\n";
-		}
 
 	# how was QC run?
 	my $threshold = '3.0';
@@ -138,7 +75,7 @@ sub main {
 			"\\end{itemize} }"
 			) . "\n";
 		} else {
-		$methods .= "BAM quality checks were not performed.\\newline\n";
+		$methods .= "BAM quality checks not performed.\\newline\n";
 		}
 
 	# how was haplotypecaller run?
