@@ -11,7 +11,7 @@ use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
 
-my $cwd = dirname($0);
+my $cwd = dirname(__FILE__);
 require "$cwd/../utilities.pl";
 
 ####################################################################################################
@@ -34,10 +34,10 @@ sub main {
 	$methods .= "For all tools, default parameters were used unless otherwise indicated.\\newline\n";
 	$methods .= "\\subsection{Alignment and Quality Checks}\n";
 
-	my ($bwa, $gatk, $gatk_cnv);
-	my ($mutect, $mutect2, $strelka, $manta, $varscan, $delly, $mavis, $vardict, $somaticsniper, $msi);
+	my ($bwa, $gatk, $gatk4);
+	my ($mutect, $mutect2, $strelka, $manta, $varscan, $delly, $mavis, $vardict, $somaticsniper, $msi, $novobreak);
 	my ($ref_type, $samtools, $picard, $bedtools, $vcftools);
-	my ($k1000g, $mills, $kindels, $dbsnp, $hapmap, $omni, $cosmic, $pon);
+	my ($k1000g, $mills, $kindels, $dbsnp, $hapmap, $omni, $cosmic, $pon, $gnomad);
 	my ($vep, $vcf2maf);
 
 	# how was BWA run?
@@ -108,9 +108,12 @@ sub main {
 	if ('Y' eq $tool_data->{bamqc}->{run}) {
 
 		$gatk = $tool_data->{gatk_version};
+		$picard = $tool_data->{picard_version};
+		$gatk4 = $tool_data->{gatk_cnv_version};
 		$bedtools = $tool_data->{bedtools_version};
-		my @parts = split('\\/', $tool_data->{hapmap});
-		$hapmap = $parts[-1];
+
+		my @parts = split('\\/', $tool_data->{gnomad});
+		$gnomad = $parts[-1];
 
 		if (defined($tool_data->{bamqc}->{parameters}->{contest}->{threshold})) {
 			$threshold = $tool_data->{bamqc}->{parameters}->{contest}->{threshold};
@@ -125,10 +128,10 @@ sub main {
 			$n_depth .= 'x';
 			}
 
-		$methods .= "\\noindent\nFor tumours with a matched normal, GATK's implementation of ContEst was used to estimate cross-sample contamination. Population frequencies from hapmap were provided, and --interval_set_rule set to INTERSECTION. It is recommended that tumours with a contamination estimate \$>$threshold\\%\$ be excluded from downstream analyses. GATK's DepthOfCoverage was used to assess genome coverage, again on both sample and readgroup levels (with -omitBaseOutput -omitIntervals -omitLocusTable), and callable bases defined as those with a minimum of $t_depth (tumour) or $n_depth (normal) coverage using bedtools (v$bedtools).\\newline\n";
+		$methods .= "\\noindent\nGATK's ($gatk4) GetPileupSummaries and CalculateContamination were used to estimate contamination for each sample, based on common germline SNPs from gnomAD. It is recommended that tumours with a contamination estimate \$>$threshold\\%\$ be excluded from downstream analyses. GATK's ($gatk) DepthOfCoverage was used to assess genome coverage, again on both sample and readgroup levels (with -omitBaseOutput -omitIntervals -omitLocusTable), and callable bases defined as those with a minimum of $t_depth (tumour) or $n_depth (normal) coverage using bedtools (v$bedtools). Picard's ($picard) CollectAlignmentSummaryMetrics, CollectWgsMetrics and CollectSequencingArtifactMetrics were run to obtain various alignment metrics.\\newline\n";
 		$methods .= join("\n",
 			"{\\scriptsize \\begin{itemize}",
-			"  \\vspace{-0.2cm}\\item $hapmap",
+			"  \\vspace{-0.2cm}\\item $gnomad",
 			"\\end{itemize} }"
 			) . "\n";
 		} else {
@@ -445,28 +448,48 @@ sub main {
 	# how were SVs called?
 	$methods .= "\\subsection{Structural Variant Calling}\n";
 
+	$delly = $tool_data->{delly_version};
+	$manta = $tool_data->{manta_version};
+	$novobreak = $tool_data->{novobreak_version};
+	$samtools = $tool_data->{samtools_version};
+
+	# fill in methods
+	if ( ('Y' eq $tool_data->{delly}->{run}) && 
+		('Y' eq $tool_data->{strelka}->{run}) && ('Y' eq $tool_data->{novobreak}->{run}) ) {
+		$methods .= "Somatic structural variants (SVs) including large insertions/deletions, duplications, inversions and translocations were identified using Delly (v$delly), Manta (v$manta) and NovoBreak (v$novobreak).\\newline\n";
+		} elsif ( ('Y' eq $tool_data->{delly}->{run}) && 
+		('Y' eq $tool_data->{strelka}->{run}) && ('N' eq $tool_data->{novobreak}->{run}) ) {
+		$methods .= "Somatic structural variants (SVs) including large insertions/deletions, duplications, inversions and translocations were identified using Delly (v$delly) and Manta (v$manta).\\newline\n";
+		} elsif ( ('Y' eq $tool_data->{delly}->{run}) && 
+		('N' eq $tool_data->{strelka}->{run}) && ('Y' eq $tool_data->{novobreak}->{run}) ) {
+		$methods .= "Somatic structural variants (SVs) including large insertions/deletions, duplications, inversions and translocations were identified using Delly (v$delly) and NovoBreak (v$novobreak).\\newline\n";
+		} elsif ( ('N' eq $tool_data->{delly}->{run}) && 
+		('Y' eq $tool_data->{strelka}->{run}) && ('Y' eq $tool_data->{novobreak}->{run}) ) {
+		$methods .= "Somatic structural variants (SVs) including large insertions/deletions, duplications, inversions and translocations were identified using Manta (v$manta) and NovoBreak (v$novobreak).\\newline\n";
+		} elsif ( ('Y' eq $tool_data->{delly}->{run}) && 
+		('N' eq $tool_data->{strelka}->{run}) && ('N' eq $tool_data->{novobreak}->{run}) ) {
+		$methods .= "Somatic structural variants (SVs) including large insertions/deletions, duplications, inversions and translocations were identified using Delly (v$delly).\\newline\n";
+		} elsif ( ('N' eq $tool_data->{delly}->{run}) && 
+		('Y' eq $tool_data->{strelka}->{run}) && ('N' eq $tool_data->{novobreak}->{run}) ) {
+		$methods .= "Somatic structural variants (SVs) including large insertions/deletions, duplications, inversions and translocations were identified using Manta (v$manta).\\newline\n";
+		} elsif ( ('N' eq $tool_data->{delly}->{run}) && 
+		('N' eq $tool_data->{strelka}->{run}) && ('Y' eq $tool_data->{novobreak}->{run}) ) {
+		$methods .= "Somatic structural variants (SVs) including large insertions/deletions, duplications, inversions and translocations were identified using NovoBreak (v$novobreak).\\newline\n";
+		} else {
+		$methods .= "No structural variant calling performed or this was performed outside of the present pipeline.\\newline\n";
+		}
+	$methods .= "\\newline\n";
+
 	if ('Y' eq $tool_data->{delly}->{run}) {
-
-		$delly = $tool_data->{delly_version};
-		$samtools = $tool_data->{samtools_version};
-
-		# fill in methods
-		if (defined($manta)) {
-			$methods .= "Somatic structural variants (SVs) including large insertions/deletions, duplications, inversions and translocations were identified using Delly (v$delly) and Manta (v$manta).\\newline\n";
-			} else {
-			$methods .= "Somatic structural variants (SVs) including large insertions/deletions, duplications, inversions and translocations were identified using Delly (v$delly).\\newline\n";
-			}
-		$methods .= "\\newline\n";
 		$methods .= "Delly was run on each T/N pair or tumour-only sample, with variants filtered (per patient; -m 0 -a 0.1 -r 0.5 -v 10 -p) and merged (cohort; -m 0 -n 250000000 -b 0 -r 1.0) to identify a joint site list. Sites were genotyped in each sample, merged using bcftools (v$samtools) and finalized (per tumour, filtered against all available normals; -m 0 -a 0.1 -r 0.5 -v 10 -p), according to published best practices.\\newline\n\\newline\n";
 		}
 
-	if (defined($manta)) {
-		if (!defined($delly)) {
-			$methods .= "Somatic structural variants (SVs) including large insertions/deletions, duplications, inversions and translocations were identified using Manta (v$manta).\\newline\n\\newline\n";
-			}
+	if ('Y' eq $tool_data->{strelka}->{run}) {
 		$methods .= "Manta was run using default settings on each T/N pair or tumour-only sample.\\newline\n\\newline\n";
-		} elsif ( (!defined($manta)) && (!defined($delly)) ) {
-		$methods .= "No structural variant calling performed or this was performed outside of the present pipeline.\\newline\n";
+		}
+
+	if ('Y' eq $tool_data->{novobreak}->{run}) {
+		$methods .= "NovoBreak was run on each T/N pair (if available). To reduce runtime and still catch any inter-chromosomal events, BAMs were produced for each chromosomal pair, and NovoBreak run on each of these subsets. The final set of SV calls were combined, and any duplicates collapsed (taking the highest quality variant).\\newline\n\\newline\n";
 		}
 
 	if ('Y' eq $tool_data->{mavis}->{run}) {
@@ -478,12 +501,12 @@ sub main {
 
 	# for copy number variants
 	if ('Y' eq $tool_data->{gatk_cnv}->{run}) {
-		$gatk_cnv = $tool_data->{gatk_cnv_version};
+		$gatk4 = $tool_data->{gatk_cnv_version};
 		} else {
-		$gatk_cnv = 0;
+		$gatk4 = 0;
 		}
 
-	if (defined($varscan) & defined($gatk_cnv)) {
+	if (defined($varscan) & defined($gatk4)) {
 		$methods .= "\\newline\n\\noindent Somatic copy-number aberrations (SCNAs) were identified using VarScan and Sequenza, as well as GATK's CNV pipeline.\\newline\n";
 		} elsif (defined($varscan)) {
 		$methods .= "\\newline\n\\noindent Somatic copy-number aberrations (SCNAs) were identified using VarScan and Sequenza.\\newline\n";
@@ -494,11 +517,11 @@ sub main {
 		$methods .= "VarScan was run as above on T/N pairs, using the copynumber and copyCaller tools. Input for Sequenza was formatted using VarScan2seqz (Sequenza v2.1, R v3.3.0). Sequenza functions (extract and fit) were run using Sequenza v3.0.0; R v3.6.1, with the modified copynumber package (v1.29.0.9000 - to ensure compatibility with hg38). Tuning of the gamma parameter within sequenza.extract was performed to obtain the optimal value, and sequenza.fit performed utilizing ploidy priors obtained from TGCA. Resulting copy number segments were mapped to gene IDs and ploidy-adjusted.\\newline\n";
 		}
 
-	if (defined($gatk_cnv)) {
-		$methods .= "GATK's CNV pipeline (v$gatk_cnv) was run using best practice guidelines. Pipeline was run with default parameters except model step which was run using number of smoothing iterations = 1 and number-of-changepoints-penalty-factor = 2.0.\\newline";
+	if (defined($gatk4)) {
+		$methods .= "GATK's CNV pipeline (v$gatk4) was run using best practice guidelines. Pipeline was run with default parameters except model step which was run using number of smoothing iterations = 1 and number-of-changepoints-penalty-factor = 2.0.\\newline";
 		}
 
-	if (!defined($varscan) & !defined($gatk_cnv)) {
+	if (!defined($varscan) & !defined($gatk4)) {
 		$methods .= "No tools were run to detect copy-number alterations.\\newline\n";
 		}
 

@@ -14,7 +14,7 @@ use YAML qw(LoadFile);
 use List::Util qw(any);
 use IO::Handle;
 
-my $cwd = dirname($0);
+my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
 our ($reference, $gatk_v4);

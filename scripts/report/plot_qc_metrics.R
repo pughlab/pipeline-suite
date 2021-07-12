@@ -48,10 +48,11 @@ library(xtable);
 # import command line arguments
 parser <- ArgumentParser();
 
-parser$add_argument('-t', '--seq_type', type = 'character', help = 'either wgs, exome or rna', default = 'exome');
+parser$add_argument('-t', '--seq_type', type = 'character', help = 'either wgs, exome, targeted or rna', 
+	default = 'exome');
 parser$add_argument('-g', '--correlations', type = 'character', help = 'path to germline correlation file');
-parser$add_argument('-c', '--contest', type = 'character', help = 'path to contest file');
-parser$add_argument('-m', '--contamination', type = 'character', help = 'path to contamination file');
+parser$add_argument('-c', '--contest', type = 'character', help = 'path to contest file', default = NULL);
+parser$add_argument('-m', '--contamination', type = 'character', help = 'path to contamination file', default = NULL);
 parser$add_argument('-q', '--coverage', type = 'character', help = 'path to coverage metrics');
 parser$add_argument('-o', '--output_dir', type = 'character', help = 'path to output directory');
 parser$add_argument('-p', '--project', type = 'character', help = 'project name');
@@ -111,21 +112,28 @@ sample.info <- as.data.frame(matrix(nrow = 0, ncol = 2));
 colnames(sample.info) <- c('Patient','Sample');
 
 if (is.dna) {
-	path <- 'BWA';
-	patients <- list.dirs(path = path, full.names = FALSE, recursive = FALSE);
+	if ('targeted' == arguments$seq_type) {
+		path <- 'BAMQC/SequenceMetrics/';
+		} else {
+		path <- 'BWA';
+		}
 	} else {
 	path <- 'STAR';
-	patients <- list.dirs(path = path, full.names = FALSE, recursive = FALSE);
 	}
 
+patients <- list.dirs(path = path, full.names = FALSE, recursive = FALSE);
 patients <- patients[!grepl('logs|RNASeQC|STAR|2020|configs', patients)];
 
 for (patient in patients) {
-	smps <- list.dirs(
-		path = paste0(path, '/', patient), 
-		full.names = FALSE, 
-		recursive = FALSE
-		);
+	if ('targeted' == arguments$seq_type) { 
+		smps <- rownames(metric.data)[grep(patient, rownames(metric.data))];
+		} else {
+		smps <- list.dirs(
+			path = paste0(path, '/', patient), 
+			full.names = FALSE, 
+			recursive = FALSE
+			);
+		}
 
 	sample.info <- rbind(sample.info, 
 		data.frame(Patient = rep(patient, length(smps)), Sample = smps)

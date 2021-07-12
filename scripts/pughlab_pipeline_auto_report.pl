@@ -13,7 +13,7 @@ use List::Util qw(any all first);
 use List::MoreUtils qw(first_index);
 use YAML qw(LoadFile);
 
-my $cwd = dirname($0);
+my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
 ####################################################################################################
@@ -446,10 +446,11 @@ sub main {
 			'-q', $qc_data,
 			'-o', $plot_directory,
 			'-p', $tool_data->{project_name},
-			'-t', $tool_data->{seq_type},
-			'-c', $contest_data,
-			'-m', $seqqc_data
+			'-t', $tool_data->{seq_type}
 			);
+
+		if (defined($contest_data)) { $qc_command .= " -c $contest_data"; }
+		if (defined($seqqc_data)) { $qc_command .= " -m $seqqc_data"; }
 
 		# run command
 		print $log "Submitting job to create QC plots...\n";
@@ -821,7 +822,7 @@ sub main {
 			}
 
 		# get MSI estimates
-		if ('Y' eq $tool_data->{other_tools}->{msi_run}) {
+		if ('Y' eq $tool_data->{other_tools}->{run_msi}) {
 			my $msi_dir = join('/', $output_directory, 'MSI');
 			opendir(MSI, $msi_dir) or die "Cannot open '$msi_dir' !";
 			my @msi_estimates = grep { /msi_estimates.tsv/ } readdir(MSI);
@@ -844,15 +845,45 @@ sub main {
 			log_dir		=> $log_directory,
 			name		=> 'collect_somatic_variant_calls',
 			cmd		=> $ensemble_command,
-			dependencies	=> $qc_run_id,
 			modules		=> [$r_version],
 			max_time	=> '48:00:00',
 			mem		=> '4G',
 			hpc_driver	=> $args{cluster}
 			);
 
-		$run_id = submit_job(
+		my $run_id = submit_job(
 			jobname		=> 'collect_somatic_variant_calls',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{cluster},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @job_ids, $run_id;
+
+		# plot mutation overlap (by tool)
+		my $snv_overlap_command = join(' ',
+			"Rscript $cwd/report/plot_snv_tool_summary.R",
+			'-p', $tool_data->{project_name},
+			'-o', $plot_directory,
+			'-i', join('/', $plot_directory, 'CombinedMutationData.RData')
+			);
+
+		# run command
+		print $log "Submitting job to plot tool overlap for somatic variants...\n";
+		$run_script = write_script(
+			log_dir		=> $log_directory,
+			name		=> 'plot_snv_tool_overlap',
+			cmd		=> $snv_overlap_command,
+			modules		=> [$r_version],
+			dependencies	=> $run_id,
+			max_time	=> '04:00:00',
+			mem		=> '2G',
+			hpc_driver	=> $args{cluster}
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'plot_snv_tool_summary',
 			shell_command	=> $run_script,
 			hpc_driver	=> $args{cluster},
 			dry_run		=> $args{dry_run},
@@ -871,7 +902,7 @@ sub main {
 			'-t', $tool_data->{seq_type}
 			);
 
-		if ('Y' eq $tool_data->{other_tools}->{msi_run}) {
+		if ('Y' eq $tool_data->{other_tools}->{run_msi}) {
 			$snv_plot_command .= " -m $msi_data";
 			}
 
@@ -905,6 +936,8 @@ sub main {
 		$methods_command = "perl $cwd/report/write_wgs_methods.pl";
 		} elsif ('rna' eq $tool_data->{seq_type}) {
 		$methods_command = "perl $cwd/report/write_rna_methods.pl";
+		} elsif ('targeted' eq $tool_data->{seq_type}) {
+		$methods_command = "perl $cwd/report/write_targetseq_methods.pl";
 		}
 
 	$methods_command .= " -t $args{config} -d $plot_directory";

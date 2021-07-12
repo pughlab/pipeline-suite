@@ -16,7 +16,7 @@ use Data::Dumper;
 
 use IO::Handle;
 
-my $cwd = dirname($0);
+my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
 # define some global variables

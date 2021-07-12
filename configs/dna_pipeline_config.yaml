@@ -26,6 +26,7 @@ strelka_version: 2.9.10
 manta_version: 1.6.0
 varscan_version: 2.4.2
 delly_version: 0.8.1
+novobreak_version: 1.1
 somaticsniper_version: bam-somaticsniper/1.0.5.0 # or SomaticSniper/1.0.4 currently available on h4h
 vardict_version: 1.7.0
 mavis_version: 2.2.5
@@ -208,6 +209,7 @@ strelka:
 varscan:
     run: Y
     pon: /cluster/projects/pughlab/references/panel_of_normals/hg38/VarScan/v2.4.2/varscan_v2.4.2_hg38_panel_of_normals_20210330.vcf
+#    chromosomes: chr1,chr2,chr3,chr4,chr5,chr6,chr7,chr8,chr9,chr10,chr11,chr12,chr13,chr14,chr15,chr16,chr17,chr18,chr19,chr20,chr21,chr22,chrX,chrY
     parameters:
         varscan:
             java_mem: 3g
@@ -296,6 +298,24 @@ delly:
             mem: 2G
             time: '24:00:00'
         filter:
+            mem: 2G
+            time: '12:00:00'
+novobreak:
+    run: Y
+    chromosomes:
+    parameters:
+        novobreak:
+            mem: 40G # for WGS, use less memory (24G) and more time (5-00:00:00)
+            time: '24:00:00'
+        ssake: # wgs only
+            mem: 6G
+            time: '48:00:00'
+            n_cpu: 4
+        process: # used for wxs and for part2 of WGS
+            mem: 16G
+            time: '48:00:00'
+            n_cpu: 8
+        merge:
             mem: 2G
             time: '12:00:00'
 mavis:

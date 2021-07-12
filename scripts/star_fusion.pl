@@ -13,7 +13,7 @@ use YAML qw(LoadFile);
 use List::Util 'any';
 use IO::Handle;
 
-my $cwd = dirname($0);
+my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
 ####################################################################################################
