@@ -731,7 +731,7 @@ sub main {
 		print $log "\n      Panel of Normals: $args{pon}";
 		$pon = $args{pon};
 		} else {
-		print $log "\n      No panel of normals defined! Tumour-only samples will not be run!!";
+		print $log "\n      No panel of normals defined! Additional filtering will not be performed!";
 		}
 
 	print $log "\n    Output directory: $output_directory";

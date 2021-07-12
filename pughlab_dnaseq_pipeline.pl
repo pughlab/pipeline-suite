@@ -85,7 +85,7 @@ sub main {
 	my $run_script;
 	my ($bwa_run_id, $gatk_run_id, $contest_run_id, $qc_run_id, $coverage_run_id, $hc_run_id);
 	my ($strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id, $msi_run_id);
-	my ($somaticsniper_run_id, $delly_run_id, $vardict_run_id, $gatk_cnv_run_id);
+	my ($somaticsniper_run_id, $delly_run_id, $vardict_run_id, $gatk_cnv_run_id, $novobreak_run_id);
 	my ($mavis_run_id, $report_run_id);
 
 	my @job_ids;
@@ -106,6 +106,7 @@ sub main {
 	my $vardict_directory = join('/', $output_directory, 'VarDict');
 	my $somaticsniper_directory = join('/', $output_directory, 'SomaticSniper');
 	my $delly_directory = join('/', $output_directory, 'Delly');
+	my $novobreak_directory = join('/', $output_directory, 'NovoBreak');
 	my $mavis_directory = join('/', $output_directory, 'Mavis');
 
 	# indicate YAML files for processed BAMs
@@ -1249,6 +1250,72 @@ sub main {
 				}
 			}
 
+		## NovoBreak pipeline
+		if ('Y' eq $tool_data->{novobreak}->{run}) {
+
+			unless(-e $novobreak_directory) { make_path($novobreak_directory); }
+
+			my $novobreak_command = "perl $cwd/scripts/novobreak.pl";
+
+			$novobreak_command .= ' '. join(' ',
+				"-o", $novobreak_directory,
+				"-t", $tool_config,
+				"-d", $gatk_output_yaml,
+				"-c", $args{cluster}
+				);
+
+			if ($args{cleanup}) {
+				$novobreak_command .= " --remove";
+				}
+
+			# specify dependencies (if WGS, should wait for others to finish to avoid
+			# maxing out the users job limit)
+			my $novobreak_dependencies = $gatk_run_id;
+			if ('wgs' eq $seq_type) {
+				$novobreak_dependencies = join(':',
+					$gatk_run_id,
+					$strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id,
+					$somaticsniper_run_id, $gatk_cnv_run_id, $msi_run_id,
+					$delly_run_id, $vardict_run_id
+					);
+				}
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for novobreak.pl\n";
+			print $log "  COMMAND: $novobreak_command\n\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_novobreak',
+				cmd	=> $novobreak_command,
+				modules	=> ['perl'],
+				dependencies	=> $novobreak_dependencies,
+				mem		=> '256M',
+				max_time	=> $max_time,
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
+
+				$novobreak_command .= " --dry-run";
+				`$novobreak_command`;
+				$novobreak_run_id = 'pughlab_dna_pipeline__run_novobreak';
+
+				} else {
+
+				$novobreak_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> VarDict job id: $novobreak_run_id\n\n";
+				push @job_ids, $novobreak_run_id;
+				}
+			}
+
 		## run Mavis SV annotation pipeline
 		if ('Y' eq $tool_data->{mavis}->{run}) {
 
@@ -1272,24 +1339,20 @@ sub main {
 			print $log "Submitting job for mavis.pl\n";
 			print $log "  COMMAND: $mavis_command\n\n";
 
-			my $depends;
-			if ( (defined($delly_run_id)) && (defined($strelka_run_id)) ) {
-				$depends = join(':', $delly_run_id, $strelka_run_id);
-				} elsif ( (defined($delly_run_id)) && !(defined($strelka_run_id)) ) {
-				$depends = $delly_run_id;
-				} elsif ( !(defined($delly_run_id)) && (defined($strelka_run_id)) ) {
-				$depends = $strelka_run_id;
-				}
+			my @depends;
+			if (defined($delly_run_id)) { push @depends, $delly_run_id; }
+			if (defined($strelka_run_id)) { push @depends, $strelka_run_id; }
+			if (defined($novobreak_run_id)) { push @depends, $novobreak_run_id; }
 
 			# because mavis.pl will search provided directories and run based on what it finds
-			# (Manta/Delly resuts), this can only be run AFTER these respective jobs finish
+			# (Manta/Delly/NovoBreak resuts), this can only be run AFTER these respective jobs finish
 			# so, we will submit this with dependencies
 			$run_script = write_script(
 				log_dir	=> $log_directory,
 				name	=> 'pughlab_dna_pipeline__run_mavis',
 				cmd	=> $mavis_command,
 				modules	=> ['perl'],
-				dependencies	=> join(':',$depends,$vardict_run_id),
+				dependencies	=> join(':', @depends, $vardict_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}

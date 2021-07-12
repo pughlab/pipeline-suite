@@ -1,0 +1,6 @@
+2021-07-08: PughLab pipeline-suite (version 0.5.0)
+- initial add of this log
+- updated readme [moved most information to the wiki]
+- initial addition of novobreak
+- fixed method for finding cwd
+- minor updates to documentation and final report

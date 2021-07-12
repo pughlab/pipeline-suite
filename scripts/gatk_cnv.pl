@@ -119,7 +119,7 @@ sub get_format_gnomad_command {
 		$gatk_command .= "\n\n" . join("\n",
 			"for chr in $args{chrom_list}; do",
 			join(' ',
-				'  bcftools filter -r $chr -O z -o',
+				'  bcftools filter -r $chr -O v -o',
 				$args{output_stem} . '_minAF_$chr.vcf',
 				"$args{output_stem}.vcf.gz"
 				),

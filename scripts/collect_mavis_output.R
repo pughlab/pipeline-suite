@@ -98,10 +98,12 @@ tmp <- tmp[!grepl('None',tmp$Fusion),];
 
 tmp$Status <- 'unknown';
 for (i in 1:nrow(tmp)) {
+#	smp <- substr(gsub('-','\\.',tmp[i,]$library),0,10);
 	smp <- gsub('-','\\.',tmp[i,]$library);
-	title <- smp.fields[which(smp.fields.names == smp)];
-	if (grepl('diseased', title)) { tmp[i,]$Status <- 'somatic'; }
-	else if (grepl('normal', title)) { tmp[i,]$Status <- 'germline'; }
+	titles <- smp.fields[grepl(smp, smp.fields.names)];
+	id <- tmp[i,]$tracking_id;
+	raw.calls <- sv.data[which(sv.data$tracking_id == tmp[i,]$tracking_id),];
+	tmp[i,]$Status <- if (any(grepl('germline', raw.calls[,titles]))) { 'germline'; } else { 'somatic'; }
 	}
 
 tmp$Frame <- 'unknown';
