@@ -959,6 +959,17 @@ sub main {
 							extra_cmd => "md5sum $merged_output > $merged_output.md5"
 							);
 						push @required, "$merged_output.md5";
+						} elsif (scalar(@chroms) == 1) {
+						my $add_on_cmd = join("\n",
+							"mv $chr_stem\_$chr.vcf > $merged_output",
+							"md5sum $merged_output > $merged_output.md5"
+							);
+
+						$mutect_command .= "\n\n" . check_java_output(
+							extra_cmd => $add_on_cmd 
+							);
+						push @required, "$merged_output.md5";
+						
 						} else {
 						$mutect_command .= "\n\n" . check_java_output(
 							extra_cmd => "md5sum $chr_stem\_$chr.vcf > $chr_stem\_$chr.vcf.md5"
@@ -1048,8 +1059,8 @@ sub main {
 					}
 				}
 
-			$cleanup_cmd .= "\nrm $merged_output";
-			$cleanup_cmd .= "\nrm $merged_output.idx";
+			$cleanup_cmd .= "\n  rm $merged_output";
+			$cleanup_cmd .= "\n  rm $merged_output.idx";
 
 			# filter results
 			my $filtered_stem = join('/', $sample_directory, $sample . '_MuTect2_filtered');
@@ -1065,7 +1076,7 @@ sub main {
 				'>', "$filtered_stem.vcf.md5"
 				);
 
-			$cleanup_cmd .= "\nrm $filtered_stem.vcf";
+			$cleanup_cmd .= "\n  rm $filtered_stem.vcf";
 
 			# check if this should be run
 			if ('Y' eq missing_file($filtered_stem . '.vcf.md5')) {
