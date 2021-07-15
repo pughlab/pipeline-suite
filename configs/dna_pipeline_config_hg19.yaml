@@ -22,13 +22,14 @@ gatk_version: 3.8
 gatk_cnv_version: 4.1.8.1
 vcftools_version: 0.1.15
 mutect_version: 1.1.5
-strelka_version: 2.9.10
-manta_version: 1.6.0
-varscan_version: 2.4.2
-delly_version: 0.8.1
-novobreak_version: 1.1
 somaticsniper_version: bam-somaticsniper/1.0.5.0 # or SomaticSniper/1.0.4 currently available on h4h
 vardict_version: 1.7.0
+varscan_version: 2.4.2
+strelka_version: 2.9.10
+manta_version: 1.6.0
+delly_version: 0.8.1
+novobreak_version: 1.1
+svict_version: 1.0.1
 mavis_version: 2.2.5
 cpsr_version: 0.6.1
 pcgr_version: 0.9.1
@@ -311,6 +312,12 @@ novobreak:
         merge: # wgs only
             mem: 2G
             time: '12:00:00'
+svict:
+    run: N # only for ctDNA (targeted panel or exome)
+    parameters:
+        svict:
+            mem: 16G
+            time: '24:00:00'
 mavis:
     run: Y
     mavis_annotations: /cluster/projects/pughlab/references/MAVIS_ref_hg19/ensembl69_hg19_annotations.json
