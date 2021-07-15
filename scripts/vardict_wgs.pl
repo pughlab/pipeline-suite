@@ -166,7 +166,7 @@ sub get_test_somatic_command_wgs {
 
 	$vardict_command .= "\n\n" . join("\n",
 		join(' ', 'md5sum', $args{output_stem} . '_${REGION}.vcf', '>', $args{output_stem} . '_${REGION}.vcf.md5'),
-		join(' ', 'bgzip', $args{output_stem} . '_${REGION}.vcf'),
+		join(' ', 'bgzip -f', $args{output_stem} . '_${REGION}.vcf'),
 		join(' ', 'tabix -p vcf', $args{output_stem} . '_${REGION}.vcf.gz')
 		);
 
@@ -191,7 +191,7 @@ sub get_merge_command_wgs {
 
 	$merge_command .= "\n\n" . join("\n",
 		join(' ', 'md5sum', $args{output}, '>', $args{output} . '.md5'),
-		join(' ', 'bgzip', $args{output}),
+		join(' ', 'bgzip -f', $args{output}),
 		join(' ', 'tabix -p vcf', $args{output} . '.gz')
 		);
 

@@ -452,27 +452,31 @@ sub main {
 		if (defined($contest_data)) { $qc_command .= " -c $contest_data"; }
 		if (defined($seqqc_data)) { $qc_command .= " -m $seqqc_data"; }
 
-		# run command
-		print $log "Submitting job to create QC plots...\n";
-		$run_script = write_script(
-			log_dir		=> $log_directory,
-			name		=> 'create_qc_plots',
-			cmd		=> $qc_command,
-			modules		=> [$r_version],
-			max_time	=> '01:00:00',
-			mem		=> '2G',
-			hpc_driver	=> $args{cluster}
-			);
+		my $qc_run_id;
+		if ('Y' eq $tool_data->{bamqc}->{run}) {
 
-		my $qc_run_id = submit_job(
-			jobname		=> 'create_qc_plots',
-			shell_command	=> $run_script,
-			hpc_driver	=> $args{cluster},
-			dry_run		=> $args{dry_run},
-			log_file	=> $log
-			);
+			# run command
+			print $log "Submitting job to create QC plots...\n";
+			$run_script = write_script(
+				log_dir		=> $log_directory,
+				name		=> 'create_qc_plots',
+				cmd		=> $qc_command,
+				modules		=> [$r_version],
+				max_time	=> '01:00:00',
+				mem		=> '2G',
+				hpc_driver	=> $args{cluster}
+				);
 
-		push @job_ids, $qc_run_id;
+			$qc_run_id = submit_job(
+				jobname		=> 'create_qc_plots',
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @job_ids, $qc_run_id;
+			}
 
 		# significant germline variants
 		if (-e $cpsr_dir) {

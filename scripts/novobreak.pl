@@ -1298,7 +1298,6 @@ sub main {
 
 					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
-					push @final_outputs, $output_to_check;
 					} else {
 					print $log "Skipping post-process step as this is already complete!\n";
 					}
