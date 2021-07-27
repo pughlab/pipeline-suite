@@ -198,7 +198,8 @@ if (length(which(is.indel & callers.min)) > 0) {
 
 # 3) is called by MuTect2 and VAF is < 0.1 (because many tools don't call low vaf/coverage variants)
 if ('MuTect2' %in% colnames(combined.data)) {
-	combined.data[which(combined.data$MuTect2 == 1 & combined.data$VAF < 0.1),]$FILTER <- 'PASS';
+	low.vaf.idx <- which(combined.data$MuTect2 == 1 & combined.data$VAF < 0.1);
+	if (length(low.vaf.idx) > 0) { combined.data[low.vaf.idx,]$FILTER <- 'PASS'; }
 	}
 
 # 4) keep position if it passes any of the above in any sample AND called by MuTect2
@@ -277,7 +278,7 @@ annotated.data[,c('FLAG.low_vaf','FLAG.low_coverage','FLAG.high_pop','FLAG.tumou
 
 # low VAF flag
 vaf <- annotated.data$t_alt_count / annotated.data$t_depth;
-if (any(vaf < 0.05)) {
+if (any(na.omit(vaf) < 0.05)) {
 	annotated.data[which(vaf < 0.05),]$FLAG.low_vaf <- TRUE;
 	}
 
