@@ -903,9 +903,12 @@ sub main {
 			'-o', $plot_directory,
 			'-i', join('/', $plot_directory, 'ensemble_mutation_data.tsv'),
 			'-r', $tool_data->{ref_type},
-			'-t', $tool_data->{seq_type},
-			'-s', $tool_data->{mutation_signatures}
+			'-t', $tool_data->{seq_type}
 			);
+
+		if (defined($tool_data->{mutation_signatures})) {
+			$sig_plot_command .= " -s $tool_data->{mutation_signatures}";
+			}
 
 		# run command
 		print $log "Submitting job to check mutation signatures...\n";
