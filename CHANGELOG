@@ -1,3 +1,11 @@
+2021-07-27: PughLab pipeline-suite (version 0.5.2)
+- minor updates to report code (plotting and ensemble caller)
+- adding mutation signatures to final report
+
+2021-07-15: PughLab pipeline-suite (version 0.5.1)
+- function to convert novobreak output for mavis
+- initial add of SViCT
+
 2021-07-08: PughLab pipeline-suite (version 0.5.0)
 - initial add of this log
 - updated readme [moved most information to the wiki]

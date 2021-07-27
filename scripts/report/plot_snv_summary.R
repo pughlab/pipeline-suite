@@ -680,5 +680,22 @@ if (nrow(plot.data) == 0) {
 	write("\\end{figure}\n", file = 'somatic_snv_summary.tex', append = TRUE);
 	}
 
+# finally, check for mutation_signatures plot
+sigs.plot <- rev(sort(list.files(pattern = 'mutation_signatures.png')));
+if (length(sigs.plot) > 0) {
+	write("\\pagebreak\n\\begin{figure}[h!]", file = 'somatic_snv_summary.tex', append = TRUE);
+	write("\\begin{center}", file = 'somatic_snv_summary.tex', append = TRUE);
+	write(paste0(
+		"\\includegraphics[width=0.8\\textwidth]{",
+		getwd(), '/',
+		sigs.plot[1], '}'
+		), file = 'somatic_snv_summary.tex', append = TRUE);
+	write("\\end{center}", file = 'somatic_snv_summary.tex', append = TRUE);
+	write(paste0(
+		"\\caption{COSMIC mutation signatures were applied to the current dataset using deconstructSig. Heatmap shows weights attributed to each signature for each sample.}"
+		), file = 'somatic_snv_summary.tex', append = TRUE);
+	write("\\end{figure}\n", file = 'somatic_snv_summary.tex', append = TRUE);
+	}
+
 ### SAVE SESSION INFO ##############################################################################
 save.session.profile(generate.filename('MutationSummary','SessionProfile','txt'));

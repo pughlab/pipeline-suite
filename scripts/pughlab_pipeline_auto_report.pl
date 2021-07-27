@@ -855,7 +855,7 @@ sub main {
 			hpc_driver	=> $args{cluster}
 			);
 
-		my $run_id = submit_job(
+		my $ensemble_run_id = submit_job(
 			jobname		=> 'collect_somatic_variant_calls',
 			shell_command	=> $run_script,
 			hpc_driver	=> $args{cluster},
@@ -863,7 +863,7 @@ sub main {
 			log_file	=> $log
 			);
 
-		push @job_ids, $run_id;
+		push @job_ids, $ensemble_run_id;
 
 		# plot mutation overlap (by tool)
 		my $snv_overlap_command = join(' ',
@@ -880,13 +880,13 @@ sub main {
 			name		=> 'plot_snv_tool_overlap',
 			cmd		=> $snv_overlap_command,
 			modules		=> [$r_version],
-			dependencies	=> $run_id,
+			dependencies	=> $ensemble_run_id,
 			max_time	=> '04:00:00',
 			mem		=> '2G',
 			hpc_driver	=> $args{cluster}
 			);
 
-		$run_id = submit_job(
+		my $plot1_run_id = submit_job(
 			jobname		=> 'plot_snv_tool_summary',
 			shell_command	=> $run_script,
 			hpc_driver	=> $args{cluster},
@@ -894,7 +894,41 @@ sub main {
 			log_file	=> $log
 			);
 
-		push @job_ids, $run_id;
+		push @job_ids, $plot1_run_id;
+
+		# plot mutation signatures
+		my $sig_plot_command = join(' ',
+			"Rscript $cwd/report/apply_cosmic_mutation_signatures.R",
+			'-p', $tool_data->{project_name},
+			'-o', $plot_directory,
+			'-i', join('/', $plot_directory, 'ensemble_mutation_data.tsv'),
+			'-r', $tool_data->{ref_type},
+			'-t', $tool_data->{seq_type},
+			'-s', $tool_data->{mutation_signatures}
+			);
+
+		# run command
+		print $log "Submitting job to check mutation signatures...\n";
+		$run_script = write_script(
+			log_dir		=> $log_directory,
+			name		=> 'plot_snv_mutation_signatures',
+			cmd		=> $sig_plot_command,
+			modules		=> [$r_version],
+			dependencies	=> $ensemble_run_id,
+			max_time	=> '04:00:00',
+			mem		=> '2G',
+			hpc_driver	=> $args{cluster}
+			);
+
+		my $plot2_run_id = submit_job(
+			jobname		=> 'plot_snv_mutation_signatures',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{cluster},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @job_ids, $plot2_run_id;
 
 		# plot mutation summary
 		my $snv_plot_command = join(' ',
@@ -917,7 +951,7 @@ sub main {
 			name		=> 'plot_snv_summary',
 			cmd		=> $snv_plot_command,
 			modules		=> [$r_version],
-			dependencies	=> $run_id,
+			dependencies	=> join(':', $plot1_run_id, $plot2_run_id),
 			max_time	=> '04:00:00',
 			mem		=> '2G',
 			hpc_driver	=> $args{cluster}

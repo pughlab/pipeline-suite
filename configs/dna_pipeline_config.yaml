@@ -13,6 +13,7 @@ dbsnp: /cluster/projects/pughlab/references/dbSNP/GRCh38/b151/dbSNP_GRCh38p7_b15
 cosmic: /cluster/projects/pughlab/references/COSMIC/GRCh38/v91/CosmicVariants_full_sorted_chr.vcf.gz
 hapmap: /cluster/projects/pughlab/references/hapmap/hg38_population_stratified_af_hapmap_3.3.vcf.gz
 gtf: /cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.annotation.gtf
+mutation_signatures: /cluster/projects/pughlab/references/COSMIC/Mutational_Sigatures/COSMIC_v3.2_SBS_GRCh38.txt
 # tool versions
 bwa_version: 0.7.15
 samtools_version: 1.9
