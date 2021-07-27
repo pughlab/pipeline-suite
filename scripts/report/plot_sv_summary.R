@@ -111,7 +111,8 @@ functional.summary$Tumor_Sample_Barcode <- factor(
 
 functional.summary$event_type <- factor(
 	functional.summary$event_type,
-	levels = as.character(unique(sv.data$event_type))
+	levels = c('deletion','duplication','insertion','inversion','inverted translocation','translocation')
+	#as.character(unique(sv.data$event_type))
 	);
 
 functional.summary <- functional.summary[order(functional.summary$Tumor_Sample_Barcode, functional.summary$event_type),];
@@ -165,8 +166,9 @@ for (type in unique(sv.data$event_type)) {
 	}
 
 ### PLOT DATA ######################################################################################
-sv.colour.scheme <- rev(default.colours(12))[1:length(unique(sv.data$event_type))];
-names(sv.colour.scheme) <- gsub(' ', '_', unique(sv.data$event_type));
+sv.colour.scheme <- rev(default.colours(12))[1:6]; #length(unique(sv.data$event_type))];
+names(sv.colour.scheme) <- c('deletion','duplication','insertion','inversion','inverted translocation','translocation');
+#gsub(' ', '_', unique(sv.data$event_type));
 
 # make the plot legend (mutation type/consequence)
 functional.legend <- legend.grob(
