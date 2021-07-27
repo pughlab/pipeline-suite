@@ -88,7 +88,11 @@ driver.genes <- driver.genes[which(driver.genes$Hallmark == 'Yes'),];
 ### READ DATA ######################################################################################
 # get data
 input.data <- read.delim(arguments$input);
-callable.bases <- read.delim(arguments$callable, row.names = 1);
+
+if (is.null(arguments$callable)) {
+	callable.bases <- NULL; } else {
+	callable.bases <- read.delim(arguments$callable, row.names = 1);
+	}
 
 if (is.null(arguments$msi)) {
 	msi <- NULL; } else {
@@ -100,21 +104,23 @@ all.samples <- sort(as.character(unique(input.data$Tumor_Sample_Barcode)));
 alt.sample.names <- all.samples;
 
 # ensure sample names match
-if (!any(all.samples %in% rownames(callable.bases))) {
-	if ( (any(grepl('-', all.samples))) & (!any(grepl('-', rownames(callable.bases)))) ) {
-		alt.sample.names <- gsub('-', '.', all.samples);
+if (!is.null(callable.bases)) {
+	if (!any(all.samples %in% rownames(callable.bases))) {
+		if ( (any(grepl('-', all.samples))) & (!any(grepl('-', rownames(callable.bases)))) ) {
+			alt.sample.names <- gsub('-', '.', all.samples);
+			}
+		if ( (any(grepl("^[[:digit:]]", all.samples))) & (any(grepl('^X',rownames(callable.bases)))) ) {
+			alt.sample.names <- paste0('X', alt.sample.names);
+			}
+		if (!any(alt.sample.names %in% rownames(callable.bases))) {
+			stop('Correlation sample names do not match names from other tables');
+			}
+		callable.bases <- callable.bases[alt.sample.names,];
+		callable.bases$Sample <- rownames(callable.bases);
+		rownames(callable.bases) <- all.samples;
+		} else {
+		callable.bases <- callable.bases[all.samples,];
 		}
-	if ( (any(grepl("^[[:digit:]]", all.samples))) & (any(grepl('^X',rownames(callable.bases)))) ) {
-		alt.sample.names <- paste0('X', alt.sample.names);
-		}
-	if (!any(alt.sample.names %in% rownames(callable.bases))) {
-		stop('Correlation sample names do not match names from other tables');
-		}
-	callable.bases <- callable.bases[alt.sample.names,];
-	callable.bases$Sample <- rownames(callable.bases);
-	rownames(callable.bases) <- all.samples;
-	} else {
-	callable.bases <- callable.bases[all.samples,];
 	}
 
 # move to output directory
@@ -141,19 +147,25 @@ if (!is.null(msi)) {
 	}
 
 # convert these to mutation rates
-sample.counts$Callable <- NA;
+if (!is.null(callable.bases)) {
 
-for (smp in rownames(sample.counts)) {
-	if (arguments$seq_type == 'wgs') {
-		sample.counts[smp,]$Callable <- callable.bases[smp,]$Patient.total;
-		} else {
-		sample.counts[smp,]$Callable <- callable.bases[smp,]$Patient.targeted;
+	sample.counts$Callable <- NA;
+
+	for (smp in rownames(sample.counts)) {
+		if (arguments$seq_type == 'wgs') {
+			sample.counts[smp,]$Callable <- callable.bases[smp,]$Patient.total;
+			} else {
+			sample.counts[smp,]$Callable <- callable.bases[smp,]$Patient.targeted;
+			}
 		}
+
+	sample.counts$SNVsPerMb <- sample.counts$Total / sample.counts$Callable * 10**6;
+	sample.counts$NonSilent.Rate.Mb <- sample.counts$Non.Silent / sample.counts$Callable * 10**6;
+	sample.counts <- sample.counts[order(sample.counts$SNVsPerMb, decreasing = TRUE),];
+	} else {
+	sample.counts <- sample.counts[order(sample.counts$Total, decreasing = TRUE),];
 	}
 
-sample.counts$SNVsPerMb <- sample.counts$Total / sample.counts$Callable * 10**6;
-sample.counts$NonSilent.Rate.Mb <- sample.counts$Non.Silent / sample.counts$Callable * 10**6;
-sample.counts <- sample.counts[order(sample.counts$SNVsPerMb, decreasing = TRUE),];
 sample.counts$Order <- 1:nrow(sample.counts);
 
 # summarize mutations
@@ -169,15 +181,18 @@ functional.summary$Code <- factor(functional.summary$Code, levels = rev(c(1:6,9)
 rm(tmp);
 
 alt.functional <- data.frame(table(mutation.data[which(mutation.data$Code < 9),c('Tumor_Sample_Barcode','Code')]));
-tmp <- aggregate(Freq ~ Tumor_Sample_Barcode, alt.functional, sum);
-alt.functional <- merge(alt.functional, tmp, by = 'Tumor_Sample_Barcode');
-alt.functional$Proportion <- alt.functional$Freq.x / alt.functional$Freq.y;
-alt.functional$Tumor_Sample_Barcode <- factor(
-	alt.functional$Tumor_Sample_Barcode,
-	levels = rownames(sample.counts)
-	);
-alt.functional$Code <- factor(alt.functional$Code, levels = rev(c(1:6,9)));
-rm(tmp);
+if (nrow(alt.functional) > 0) {
+	tmp <- aggregate(Freq ~ Tumor_Sample_Barcode, alt.functional, sum);
+	alt.functional <- merge(alt.functional, tmp, by = 'Tumor_Sample_Barcode');
+	alt.functional$Proportion <- alt.functional$Freq.x / alt.functional$Freq.y;
+	alt.functional$Tumor_Sample_Barcode <- factor(
+		alt.functional$Tumor_Sample_Barcode,
+		levels = rownames(sample.counts)
+		);
+	alt.functional$Code <- factor(alt.functional$Code, levels = rev(c(1:6,9)));
+	rm(tmp);
+	} else { alt.functional <- NULL;
+	}
 
 mutation.data$Basechange <- paste0(mutation.data$Reference_Allele, '>', mutation.data$Tumor_Seq_Allele2);
 mutation.data[which(input.data$Variant_Type %in% c('DEL', 'INS')),]$Basechange <- 'indel';
@@ -230,6 +245,12 @@ plot.data <- plot.data[,c('Hugo_Symbol', 'Chromosome', all.samples)];
 plot.data$Count <- apply(plot.data[,all.samples],1,function(i) { length(i[which(i < 9)]) } );
 plot.data$Priority <- apply(plot.data[,all.samples],1,function(i) { sum(i[which(i < 9)]) } )/plot.data$Count;
 plot.data <- plot.data[order(-plot.data$Count, plot.data$Priority),];
+
+if (all(is.na(plot.data$Priority))) {
+	plot.data$Count <- apply(plot.data[,all.samples],1,function(i) { length(i[!is.na(i)]) } );
+	plot.data$Priority <- apply(plot.data[,all.samples],1,function(i) { sum(i[!is.na(i)]) } )/plot.data$Count;
+	plot.data <- plot.data[order(-plot.data$Count, plot.data$Priority),];
+	}
 
 # order samples by recurrence for prettier heatmap
 heatmap.data <- t(plot.data[,all.samples]);
@@ -364,16 +385,18 @@ create.heatmap(
 	);
 
 # create plot for mutation rates
-ylim <- c(floor(min(log10(sample.counts$SNVsPerMb))), ceiling(max(log10(sample.counts$SNVsPerMb))));
+tmb <- if (!is.null(callable.bases)) { 'SNVsPerMb' } else { 'Total'; }
+	
+ylim <- c(floor(min(log10(sample.counts[,tmb]))), ceiling(max(log10(sample.counts[,tmb]))));
 yat <- seq(ylim[1], ylim[2], 1);
 yaxis.labels <- 10**yat;
-sample.counts$Rate <- log10(sample.counts$SNVsPerMb);
+sample.counts$Rate <- log10(sample.counts[,tmb]);
 
 if (ylim[2] == 1) {
-	ylim <- c(0, ceiling(max(sample.counts$SNVsPerMb)));
+	ylim <- c(0, ceiling(max(sample.counts[,tmb])));
 	yat <- if (ylim[2] > 5) { seq(0,ylim[2],2); } else { seq(0,ylim[2],1); }
 	yaxis.labels <- yat;
-	sample.counts$Rate <- sample.counts$SNVsPerMb;
+	sample.counts$Rate <- sample.counts[,tmb];
 	}
 
 rate.plot <- create.scatterplot(
@@ -385,7 +408,7 @@ rate.plot <- create.scatterplot(
 	yaxis.tck = c(0.5,0),
 	yaxis.fontface = 'plain',
 	axes.lwd = 1,
-	ylab.label = 'SNVs/Mbp',
+	ylab.label = if (!is.null(callable.bases)) { 'SNVs/Mbp' } else { 'Total SNVs' },
 	ylab.cex = 1.2,
 	ylimits = ylim,
 	yat = yat,
@@ -439,28 +462,30 @@ mutation.type.plot <- create.barplot(
 	top.padding = 0
 	);
 
-functional.plot <- create.barplot(
-	Proportion ~ Tumor_Sample_Barcode,
-	alt.functional,
-	groups = alt.functional$Code,
-	stack = TRUE,
-	col = rev(variant.colours),
-	xaxis.lab = rep('',length(all.samples)),
-	xlimits = c(0.5, length(all.samples)+0.5),
-	xat = seq(1,length(all.samples)),
-	yaxis.tck = c(0.5,0),
-	xaxis.tck = 0,
-	xaxis.fontface = 'plain',
-	yaxis.fontface = 'plain',
-	ylab.label = 'Proportion',
-	ylab.cex = 1.2,
-	xlab.label = NULL,
-	ylimits = c(0,1),
-	yat = seq(0,1,0.5),
-	yaxis.cex = 1,
-	axes.lwd = 1,
-	top.padding = 0
-	);
+if (!is.null(alt.functional)) {
+	functional.plot <- create.barplot(
+		Proportion ~ Tumor_Sample_Barcode,
+		alt.functional,
+		groups = alt.functional$Code,
+		stack = TRUE,
+		col = rev(variant.colours),
+		xaxis.lab = rep('',length(all.samples)),
+		xlimits = c(0.5, length(all.samples)+0.5),
+		xat = seq(1,length(all.samples)),
+		yaxis.tck = c(0.5,0),
+		xaxis.tck = 0,
+		xaxis.fontface = 'plain',
+		yaxis.fontface = 'plain',
+		ylab.label = 'Proportion',
+		ylab.cex = 1.2,
+		xlab.label = NULL,
+		ylimits = c(0,1),
+		yat = seq(0,1,0.5),
+		yaxis.cex = 1,
+		axes.lwd = 1,
+		top.padding = 0
+		);
+	}
 
 # create plot for basechange summary
 basechange.plot <- create.barplot(
@@ -494,6 +519,10 @@ basechange.plot <- create.barplot(
 # combine them!
 if (arguments$seq_type == 'wgs') {
 
+	if (is.null(alt.functional)) {
+		functional.plot <- mutation.type.plot;
+		}
+
 	if (is.null(msi)) { plot.list <- list(rate.plot, functional.plot, basechange.plot);
 		} else {
 		plot.list <- list(rate.plot, msi.plot, functional.plot, basechange.plot);
@@ -505,7 +534,7 @@ if (arguments$seq_type == 'wgs') {
 		width = 8,
 		resolution = 200,
 		filename = generate.filename(arguments$project, 'mutation_summary','png'),
-		plot.objects.heights = if (is.null(msi)) { c(2,3,4) } else { c(2,0.5,2,4) },
+		plot.objects.heights = if (length(plot.list) == 3) { c(2,3,4) } else { c(2,0.5,2,4) },
 		left.legend.padding = 0,
 		right.legend.padding = 0,
 		top.legend.padding = 0,
@@ -524,9 +553,18 @@ if (arguments$seq_type == 'wgs') {
 
 	} else {
 
-	if (is.null(msi)) { plot.list <- list(rate.plot, mutation.type.plot, functional.plot, basechange.plot);
+	if (is.null(msi)) {
+		if (is.null(alt.functional)) {
+			plot.list <- list(rate.plot, mutation.type.plot, basechange.plot);
+			} else {
+			plot.list <- list(rate.plot, mutation.type.plot, functional.plot, basechange.plot);
+			}
 		} else {
-		plot.list <- list(rate.plot, msi.plot, mutation.type.plot, functional.plot, basechange.plot);	
+		if (is.null(alt.functional)) {
+			plot.list <- list(rate.plot, msi.plot, mutation.type.plot, basechange.plot);
+			} else {
+			plot.list <- list(rate.plot, msi.plot, mutation.type.plot, functional.plot, basechange.plot);
+			}
 		}
 
 	create.multipanelplot(
@@ -535,7 +573,7 @@ if (arguments$seq_type == 'wgs') {
 		width = 8,
 		resolution = 200,
 		filename = generate.filename(arguments$project, 'mutation_summary','png'),
-		plot.objects.heights = if (is.null(msi)) { c(1.5,2,2,4) } else { c(1.5,0.5,2,2,4) },
+		plot.objects.heights = if (length(plot.list) == 3) { c(2,3,4) } else if (length(plot.list) == 4) { c(1.5,2,2,4) } else { c(1.5,0.5,2,2,4) },
 		left.legend.padding = 0,
 		right.legend.padding = 0,
 		top.legend.padding = 0,
