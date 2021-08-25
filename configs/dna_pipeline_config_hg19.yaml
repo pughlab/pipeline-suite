@@ -31,6 +31,7 @@ manta_version: 1.6.0
 delly_version: 0.8.1
 novobreak_version: 1.1
 svict_version: 1.0.1
+pindel_version: 0.2.5b8
 mavis_version: 2.2.5
 cpsr_version: 0.6.1
 pcgr_version: 0.9.1
@@ -279,6 +280,18 @@ vardict:
         create_pon:
             java_mem: 3g
             mem: 4G
+            time: '24:00:00'
+pindel:
+    run: Y
+    chromosomes:
+    parameters:
+        pindel:
+            mem: 6G
+            time: '48:00:00'
+            n_cpu: 1
+        convert:
+            filter_depth: 5
+            mem: 2G
             time: '24:00:00'
 delly:
     run: Y

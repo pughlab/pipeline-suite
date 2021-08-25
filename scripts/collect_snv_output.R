@@ -137,6 +137,12 @@ for (i in 1:length(maf.files)) {
 		tmp <- tmp[which(tmp$t_depth > arguments$t_depth),];
 		}
 
+	# if this is Pindel, remove extra fields (if present)
+	if (grepl('Pindel', file)) {
+		tmp <- tmp[!grepl('ONP', tmp$Variant_Type),];
+		tmp <- tmp[,setdiff(colnames(tmp),c('Fusion','Method','Frame','CONSENSUS'))];
+		}
+
 	maf.data[[i]] <- tmp;
 
 	rm(tmp);

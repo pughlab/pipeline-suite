@@ -84,9 +84,9 @@ sub main {
 
 	my $run_script;
 	my ($bwa_run_id, $gatk_run_id, $contest_run_id, $qc_run_id, $coverage_run_id, $hc_run_id);
-	my ($strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id, $msi_run_id);
+	my ($strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id, $msi_run_id, $pindel_run_id);
 	my ($somaticsniper_run_id, $delly_run_id, $vardict_run_id, $gatk_cnv_run_id, $novobreak_run_id);
-	my ($mavis_run_id, $report_run_id);
+	my ($svict_run_id, $mavis_run_id, $report_run_id);
 
 	my @job_ids;
 
@@ -104,9 +104,11 @@ sub main {
 	my $mutect2_directory = join('/', $output_directory, 'MuTect2');
 	my $varscan_directory = join('/', $output_directory, 'VarScan');
 	my $vardict_directory = join('/', $output_directory, 'VarDict');
+	my $pindel_directory = join('/', $output_directory, 'Pindel');
 	my $somaticsniper_directory = join('/', $output_directory, 'SomaticSniper');
 	my $delly_directory = join('/', $output_directory, 'Delly');
 	my $novobreak_directory = join('/', $output_directory, 'NovoBreak');
+	my $svict_directory = join('/', $output_directory, 'SViCT');
 	my $mavis_directory = join('/', $output_directory, 'Mavis');
 
 	# indicate YAML files for processed BAMs
@@ -1020,6 +1022,59 @@ sub main {
 				}
 			}
 
+		## Pindel pipeline
+		if ('Y' eq $tool_data->{pindel}->{run}) {
+
+			unless(-e $pindel_directory) { make_path($pindel_directory); }
+
+			my $pindel_command = join(' ',
+				"perl $cwd/scripts/pindel.pl",
+				"-o", $pindel_directory,
+				"-t", $tool_config,
+				"-d", $gatk_output_yaml,
+				"-c", $args{cluster}
+				);
+
+			if ($args{cleanup}) {
+				$pindel_command .= " --remove";
+				}
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for pindel.pl\n";
+			print $log "  COMMAND: $pindel_command\n\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_pindel',
+				cmd	=> $pindel_command,
+				modules	=> ['perl'],
+				dependencies	=> $gatk_run_id,
+				mem		=> '256M',
+				max_time	=> $max_time,
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
+
+				$pindel_command .= " --dry-run";
+				`$pindel_command`;
+				$pindel_run_id = 'pughlab_dna_pipeline__run_pindel';
+
+				} else {
+
+				$pindel_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> Pindel job id: $pindel_run_id\n\n";
+				push @job_ids, $pindel_run_id;
+				}
+			}
+
 		## GATK-CNV pipeline
 		if ('Y' eq $tool_data->{gatk_cnv}->{run}) {
 
@@ -1070,6 +1125,59 @@ sub main {
 
 				print $log ">>> GATK-CNV job id: $gatk_cnv_run_id\n\n";
 				push @job_ids, $gatk_cnv_run_id;
+				}
+			}
+
+		## SViCT pipeline
+		if ('Y' eq $tool_data->{svict}->{run}) {
+
+			unless(-e $svict_directory) { make_path($svict_directory); }
+
+			my $svict_command = join(' ',
+				"perl $cwd/scripts/svict.pl",
+				"-o", $svict_directory,
+				"-t", $tool_config,
+				"-d", $gatk_output_yaml,
+				"-c", $args{cluster}
+				);
+
+			if ($args{cleanup}) {
+				$svict_command .= " --remove";
+				}
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for svict.pl\n";
+			print $log "  COMMAND: $svict_command\n\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_svict',
+				cmd	=> $svict_command,
+				modules	=> ['perl'],
+				dependencies	=> $gatk_run_id,
+				mem		=> '256M',
+				max_time	=> $max_time,
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
+
+				$svict_command .= " --dry-run";
+				`$svict_command`;
+				$svict_run_id = 'pughlab_dna_pipeline__run_svict';
+
+				} else {
+
+				$svict_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> SViCT job id: $svict_run_id\n\n";
+				push @job_ids, $svict_run_id;
 				}
 			}
 
@@ -1326,8 +1434,6 @@ sub main {
 				"-o", $mavis_directory,
 				"-t", $tool_config,
 				"-d", $gatk_output_yaml,
-				"--manta", $strelka_directory,
-				"--delly", $delly_directory,
 				"-c", $args{cluster}
 				);
 
@@ -1335,18 +1441,35 @@ sub main {
 				$mavis_command .= " --remove";
 				}
 
+			# because mavis.pl will search provided directories and run based on what it finds
+			# (Manta/Delly/NovoBreak/Pindel/SViCT resuts), this can only be run AFTER these
+			# respective jobs finish
+			my @depends;
+			if (defined($delly_run_id)) {
+				$mavis_command .= " --delly $delly_directory";
+				push @depends, $delly_run_id;
+				}
+			if (defined($strelka_run_id)) {
+				$mavis_command .= " --manta $strelka_directory";
+				push @depends, $strelka_run_id;
+				}
+			if (defined($novobreak_run_id)) {
+				$mavis_command .= " --novobreak $novobreak_directory";
+				push @depends, $novobreak_run_id;
+				}
+			if (defined($pindel_run_id)) {
+				$mavis_command .= " --pindel $pindel_directory";
+				push @depends, $pindel_run_id;
+				}
+			if (defined($svict_run_id)) {
+				$mavis_command .= " --svict $svict_directory";
+				push @depends, $svict_run_id;
+				}
+
 			# record command (in log directory) and then run job
 			print $log "Submitting job for mavis.pl\n";
 			print $log "  COMMAND: $mavis_command\n\n";
 
-			my @depends;
-			if (defined($delly_run_id)) { push @depends, $delly_run_id; }
-			if (defined($strelka_run_id)) { push @depends, $strelka_run_id; }
-			if (defined($novobreak_run_id)) { push @depends, $novobreak_run_id; }
-
-			# because mavis.pl will search provided directories and run based on what it finds
-			# (Manta/Delly/NovoBreak resuts), this can only be run AFTER these respective jobs finish
-			# so, we will submit this with dependencies
 			$run_script = write_script(
 				log_dir	=> $log_directory,
 				name	=> 'pughlab_dna_pipeline__run_mavis',
