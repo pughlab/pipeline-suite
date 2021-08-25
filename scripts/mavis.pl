@@ -67,11 +67,16 @@ sub get_mavis_command {
 		normal_bam	=> undef,
 		manta		=> undef,
 		delly		=> undef,
+		novobreak	=> undef,
+		svict		=> undef,
+		pindel		=> undef,
 		starfusion	=> undef,
 		fusioncatcher	=> undef,
 		output		=> undef,
 		@_
 		);
+
+	my @tools = ('manta','delly');
 
 	my $mavis_cmd = join(' ',
 		'mavis config',
@@ -79,6 +84,39 @@ sub get_mavis_command {
 		'--convert delly', $args{delly}, 'delly',
 		'--convert manta', $args{manta}, 'manta'
 		);
+
+	if (defined($args{novobreak})) {
+
+		$mavis_cmd .= ' ' . join(' ',
+			'--external_conversion novobreak "Rscript',
+			"$cwd/convert_novobreak.R",
+			$args{novobreak} . '"'
+			);
+
+		push @tools, 'novobreak';
+		}
+
+	if (defined($args{svict})) {
+
+		$mavis_cmd .= ' ' . join(' ',
+			'--external_conversion svict "Rscript',
+			"$cwd/convert_svict.R",
+			$args{svict} . '"'
+			);
+
+		push @tools, 'svict';
+		}
+
+	if (defined($args{pindel})) {
+
+		$mavis_cmd .= ' ' . join(' ',
+			'--external_conversion pindel "Rscript',
+			"$cwd/convert_pindel.R",
+			$args{pindel} . '"'
+			);
+
+		push @tools, 'pindel';
+		}
 
 	foreach my $smp ( @{$args{tumour_ids}} ) {
 
@@ -90,7 +128,7 @@ sub get_mavis_command {
 
 		$mavis_cmd .= ' ' . join(' ',
 			'--library', $id, 'genome diseased False', $args{tumour_bams}->{$smp},
-			'--assign', $id, 'manta delly'
+			'--assign', $id, join(' ', @tools)
 			);
 		}
 
@@ -104,7 +142,7 @@ sub get_mavis_command {
 
 		$mavis_cmd .= ' ' . join(' ',
 			'--library', $id, 'genome normal False', $args{normal_bam},
-			'--assign', $id, 'manta delly'
+			'--assign', $id, join(' ', @tools)
 			);
 		}
 
@@ -145,6 +183,9 @@ sub main {
 		output_directory	=> undef,
 		manta_dir		=> undef,
 		delly_dir		=> undef,
+		novobreak_dir		=> undef,
+		pindel_dir		=> undef,
+		svict_dir		=> undef,
 		starfusion_dir		=> undef,
 		fusioncatcher_dir	=> undef,
 		hpc_driver		=> undef,
@@ -201,10 +242,29 @@ sub main {
 	print $log "\n    Manta directory: $args{manta_dir}";
 	print $log "\n    Delly directory: $args{delly_dir}";
 
+	if (defined($args{novobreak_dir})) {
+		print $log "\n    NovoBreak directory: $args{novobreak_dir}";
+		}
+
+	if (defined($args{pindel_dir})) {
+		print $log "\n    Pindel directory: $args{pindel_dir}";
+		}
+
+	if (defined($args{svict_dir})) {
+		print $log "\n    SViCT directory: $args{svict_dir}";
+		}
+
 	if (defined($args{starfusion_dir})) {
 		print $log "\n  RNA sample config used: $rna_config";
 		print $log "\n    STAR-Fusion directory: $args{starfusion_dir}";
 		print $log "\n    FusionCatcher directory: $args{fusioncatcher_dir}";
+		}
+
+	my $intervals_bed;
+	if (('targeted' eq $tool_data->{seq_type}) && (defined($tool_data->{intervals_bed}))) {
+		$intervals_bed = $tool_data->{intervals_bed};
+		$intervals_bed =~ s/\.bed/_padding100bp.bed/;
+		print $log "\n  Filtering final output to target intervals: $intervals_bed";
 		}
 
 	print $log "\n---";
@@ -222,7 +282,7 @@ sub main {
 		"export MAVIS_REFERENCE_GENOME=$tool_data->{reference}",
 		"export MAVIS_ALIGNER='$tool_data->{mavis}->{mavis_aligner}'",
 		"export MAVIS_ALIGNER_REFERENCE=$tool_data->{bwa}->{reference}",
-		"export MAVIS_DRAW_FUSIONS_ONLY=True",
+		"export MAVIS_DRAW_FUSIONS_ONLY=$tool_data->{mavis}->{mavis_draw_fusions_only}",
 		"export MAVIS_SCHEDULER=" . uc($args{hpc_driver})
 		);
 
@@ -246,6 +306,8 @@ sub main {
 
 	# find SV files in each directory
 	my (@manta_files, @delly_files, @starfusion_files, @fusioncatcher_files);
+	my (@novobreak_files, @svict_files, @pindel_files);
+
 	if (defined($args{manta_dir})) {
 		@manta_files = _get_files($args{manta_dir}, 'diploidSV.vcf.gz');
 		push @manta_files, _get_files($args{manta_dir}, 'somaticSV.vcf.gz');
@@ -253,6 +315,15 @@ sub main {
 		}
 	if (defined($args{delly_dir})) {
 		@delly_files = _get_files($args{delly_dir}, 'Delly_SVs_somatic_hc.bcf');
+		}
+	if (defined($args{novobreak_dir})) {
+		@novobreak_files = _get_files($args{novobreak_dir}, 'novoBreak_filtered.tsv');
+		}
+	if (defined($args{pindel_dir})) {
+		@pindel_files = _get_files($args{pindel_dir}, '_INV');
+		}
+	if (defined($args{svict_dir})) {
+		@svict_files = _get_files($args{svict_dir}, 'SViCT.vcf');
 		}
 	if (defined($args{starfusion_dir})) {
 		@starfusion_files = _get_files($args{starfusion_dir}, 'star-fusion.fusion_predictions.abridged.tsv');
@@ -297,7 +368,8 @@ sub main {
 
 		# and format input files
 		my (@manta_svs_formatted, @format_jobs);
-		my (@delly_svs_patient, @starfus_svs_patient, @fuscatch_svs_patient);
+		my (@delly_svs_patient, @novobreak_svs_patient, @svict_svs_patient, @pindel_svs_patient);
+		my (@starfus_svs_patient, @fuscatch_svs_patient);
 		my $format_command;
 
 		foreach my $tumour (@tumour_ids) {
@@ -306,12 +378,14 @@ sub main {
 			$link = join('/', $link_directory, $tmp[-1]);
 			symlink($smp_data->{$patient}->{tumour}->{$tumour}, $link);
 
+			# organize Delly input
 			my @delly_svs = grep { /$tumour/ } @delly_files;
 			$link = join('/', $link_directory, $tumour . '_Delly_SVs.bcf');
 			symlink($delly_svs[0], $link);
 
 			push @delly_svs_patient, $delly_svs[0];
 
+			# organize Manta input
 			my @manta_svs = grep { /$tumour/ } @manta_files;
 			foreach my $file ( @manta_svs ) {
 				my @tmp = split /\//, $file;
@@ -332,6 +406,38 @@ sub main {
 					);
 
 				push @manta_svs_formatted, $formatted_vcf;
+				}
+
+			# organize NovoBreak input
+			if (scalar(@novobreak_files) > 0) {
+				my @novobreak_svs = grep { /$tumour/ } @novobreak_files;
+				last if (scalar(@novobreak_svs) == 0);
+
+				$link = join('/', $link_directory, $tumour . '_NovoBreak.tsv');
+				symlink($novobreak_svs[0], $link);
+				push @novobreak_svs_patient, $novobreak_svs[0];
+				}
+
+			# organize Pindel input
+			if (scalar(@pindel_files) > 0) {
+				my @pindel_svs = grep { /$tumour/ } @pindel_files;
+				last if (scalar(@pindel_svs) == 0);
+
+				my $pindel_smp_dir = dirname($pindel_svs[0]);
+
+				$link = join('/', $link_directory, $tumour . '_Pindel');
+				symlink($pindel_smp_dir, $link);
+				push @pindel_svs_patient, $pindel_smp_dir;
+				}
+
+			# organize SViCT input
+			if (scalar(@svict_files) > 0) {
+				my @svict_svs = grep { /$tumour/ } @svict_files;
+				last if (scalar(@svict_svs) == 0);
+
+				$link = join('/', $link_directory, $tumour . '_SViCT.vcf');
+				symlink($svict_svs[0], $link);
+				push @svict_svs_patient, $svict_svs[0];
 				}
 			}
 
@@ -394,6 +500,16 @@ sub main {
 			);
 
 		my $memory = '4G';
+	
+		my ($novobreak_input, $pindel_input, $svict_input) = undef;
+		my ($starfus_input, $fuscatch_input) = undef;
+
+		if (scalar(@novobreak_svs_patient) > 0) { $novobreak_input = join(' ', @novobreak_svs_patient); }
+		if (scalar(@pindel_svs_patient) > 0)    { $pindel_input	   = join(' ', @pindel_svs_patient); }
+		if (scalar(@svict_svs_patient) > 0)     { $svict_input	   = join(' ', @svict_svs_patient); }
+		if (scalar(@starfus_svs_patient) > 0)	{ $starfus_input   = join(' ', @starfus_svs_patient); }
+		if (scalar(@fuscatch_svs_patient) > 0)	{ $fuscatch_input  = join(' ', @fuscatch_svs_patient); }
+
 		if (scalar(@rna_ids_patient) > 0) {
 
 			$mavis_cmd .= "\n\necho 'Running mavis config.';\n\n" . get_mavis_command(
@@ -405,8 +521,11 @@ sub main {
 				rna_bams	=> $smp_data->{$patient}->{rna},
 				manta		=> join(' ', @manta_svs_formatted),
 				delly		=> join(' ', @delly_svs_patient),
-				starfusion	=> join(' ', @starfus_svs_patient),
-				fusioncatcher	=> join(' ', @fuscatch_svs_patient),
+				novobreak	=> $novobreak_input,
+				pindel		=> $pindel_input,
+				svict		=> $svict_input,
+				starfusion	=> $starfus_input,
+				fusioncatcher	=> $fuscatch_input,
 				output		=> $mavis_cfg
 				);
 
@@ -421,6 +540,9 @@ sub main {
 				normal_bam	=> $smp_data->{$patient}->{normal}->{$normal_id},
 				manta		=> join(' ', @manta_svs_formatted),
 				delly		=> join(' ', @delly_svs_patient),
+				novobreak	=> $novobreak_input,
+				pindel		=> $pindel_input,
+				svict		=> $svict_input,
 				output		=> $mavis_cfg
 				);
 			}
@@ -524,6 +646,10 @@ sub main {
 		'-p', $tool_data->{project_name}
 		);
 
+	if (defined($intervals_bed)) {
+		$collect_output .= " -t $intervals_bed";
+		}
+
 	$run_script = write_script(
 		log_dir	=> $log_directory,
 		name	=> 'combine_variant_calls',
@@ -610,6 +736,7 @@ sub main {
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
 my ($tool_config, $data_config, $output_directory, $manta_directory, $delly_directory);
+my ($novobreak_directory, $pindel_directory, $svict_directory);
 my ($rna_config, $starfusion_directory, $fusioncatcher_directory);
 my $hpc_driver = 'slurm';
 my ($remove_junk, $dry_run, $help, $no_wait);
@@ -623,6 +750,9 @@ GetOptions(
 	'o|out_dir=s'	=> \$output_directory,
 	'm|manta=s'	=> \$manta_directory,
 	'e|delly=s'	=> \$delly_directory,
+	'n|novobreak=s'	=> \$novobreak_directory,
+	'p|pindel=s'	=> \$pindel_directory,
+	'v|svict=s'	=> \$svict_directory,
 	's|starfusion=s'	=> \$starfusion_directory,
 	'f|fusioncatcher=s'	=> \$fusioncatcher_directory,
 	'c|cluster=s'	=> \$hpc_driver,
@@ -641,6 +771,9 @@ if ($help) {
 		"\t--out_dir|-o\t<string> path to output directory",
 		"\t--manta|-m\t<string> path to manta (strelka) output directory",
 		"\t--delly|-e\t<string> path to delly output directory",
+		"\t--novobreak|-n\t<string> path to novobreak output directory",
+		"\t--pindel|-p\t<string> path to pindel output directory",
+		"\t--svict|-v\t<string> path to svict output directory",
 		"\t--starfusion|-s\t<string> path to star-fusion output directory <optional>",
 		"\t--fusioncatcher|-f\t<string> path to fusioncatcher output directory <optional>",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
@@ -667,6 +800,9 @@ main(
 	output_directory	=> $output_directory,
 	manta_dir		=> $manta_directory,
 	delly_dir		=> $delly_directory,
+	svict_dir		=> $svict_directory,
+	pindel_dir		=> $pindel_directory,
+	novobreak_dir		=> $novobreak_directory,
 	starfusion_dir		=> $starfusion_directory,
 	fusioncatcher_dir	=> $fusioncatcher_directory,
 	hpc_driver		=> $hpc_driver,
