@@ -17,7 +17,7 @@ use IO::Handle;
 my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
-our ($reference, $gtf);
+our ($reference, $gtf, $svict_path);
 
 ####################################################################################################
 # version	author		comment
@@ -48,9 +48,9 @@ sub get_svict_command {
 
 	my $svict_command = join(' ',
 		join('/', $svict_path, 'svict'),
-		'-r' . $reference,
-		'-i' . $args{input},
-		'-o' . $args{output_stem}
+		'-r', $reference,
+		'-i', $args{input},
+		'-o', $args{output_stem}
 		);
 
 	if (defined($gtf)) {
@@ -129,22 +129,12 @@ sub main {
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n---\n";
 
-#	my $string;
-#	if ( ('hg38' eq $tool_data->{ref_type}) || ('hg19' eq $tool_data->{ref_type})) {
-#		$string = 'chr' . join(',chr', 1..22) . ',chrX,chrY';
-#		} elsif ( ('GRCh37' eq $tool_data->{ref_type}) || ('GRCh37' eq $tool_data->{ref_type})) {
-#		$string = join(',', 1..22) . ',X,Y';
-#		} else {
-#		die("Unrecognized ref_type; must be one of hg19, hg38, GRCh37 or GRCh38");
-#		}
-
-#	my @chroms = split(',', $string);
-
 	# set tools and versions
 #	my $svict = 'svict/' . $tool_data->{svict_version};
-	my $svict_path = '/cluster/projects/pughlab/bin/svict';
+	$svict_path = '/cluster/projects/pughlab/bin/svict';
 
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
+	my $r_version   = 'R/' . $tool_data->{r_version};
 
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{svict}->{parameters};
@@ -219,7 +209,15 @@ sub main {
 				gtf		=> $gtf
 				);
 
-			$svict_command .= "\n\nmd5sum $output_stem.vcf > $output_stem.vcf.md5";
+			$svict_command .= "\n\n" . join("\n",
+				'if [ $? == 0 ]; then',
+				"  md5sum $output_stem.vcf > $output_stem.vcf.md5",
+				"elif [ -s $output_stem.vcf ]; then",
+				"  echo 'Job exited with 0 variants discovered.'",
+				'else',
+				"  echo 'Job failed - check logs and retry.'",
+				'fi'
+				);
 
 			# check if this should be run
 			if ('Y' eq missing_file($output_stem . '.vcf.md5')) {
@@ -234,7 +232,8 @@ sub main {
 					modules	=> [$samtools], # $svict
 					max_time	=> $parameters->{svict}->{time},
 					mem		=> $parameters->{svict}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					kill_on_error 	=> 0
 					);
 
 				$run_id = submit_job(
