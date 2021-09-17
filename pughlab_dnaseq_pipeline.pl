@@ -38,6 +38,7 @@ sub main {
 		step1		=> undef,
 		step2		=> undef,
 		step3		=> undef,
+		step4		=> undef,
 		cleanup		=> undef,
 		cluster		=> undef,
 		dry_run		=> undef,
@@ -118,6 +119,11 @@ sub main {
 	if ( (!$args{step1}) && ($args{step2}) ) {
 		$gatk_output_yaml = $data_config;
 		$gatk_run_id = '';
+		}
+
+	if ( (!$args{step3}) && ($args{step4}) ) {
+		print $log "Can not make final report without summarizing output; setting --summarize to true";
+		$args{step3} <- 1;
 		}
 
 	# Should pre-processing (alignment + GATK indel realignment/recalibration + QC) be performed?
@@ -1510,13 +1516,17 @@ sub main {
 			"-d", $date
 			);
 
+		if ($args{step4}) {
+			$report_command .= " --create_report";
+			}
+
 		# record command (in log directory) and then run job
 		print $log "Submitting job for pughlab_pipeline_auto_report.pl\n";
 		print $log "  COMMAND: $report_command\n\n";
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
-			name	=> 'pughlab_dna_pipeline__run_report',
+			name	=> 'pughlab_dna_pipeline__summarize_output',
 			cmd	=> $report_command,
 			modules	=> ['perl'],
 			dependencies	=> join(':', @job_ids),
@@ -1526,7 +1536,7 @@ sub main {
 			);
 
 		if ($args{dry_run}) {
-			$report_run_id = 'pughlab_dna_pipeline__run_report';
+			$report_run_id = 'pughlab_dna_pipeline__summarize_output';
 			} else {
 			$report_run_id = submit_job(
 				jobname		=> $log_directory,
@@ -1549,7 +1559,7 @@ sub main {
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
 my ($tool_config, $data_config);
-my ($preprocessing, $variant_calling, $create_report);
+my ($preprocessing, $variant_calling, $summarize, $create_report);
 my $hpc_driver = 'slurm';
 my ($remove_junk, $dry_run);
 my $help;
@@ -1561,6 +1571,7 @@ GetOptions(
 	'd|data=s'		=> \$data_config,
 	'preprocessing'		=> \$preprocessing,
 	'variant_calling'	=> \$variant_calling,
+	'summarize'		=> \$summarize,
 	'create_report'		=> \$create_report,
 	'c|cluster=s'		=> \$hpc_driver,
 	'remove'		=> \$remove_junk,
@@ -1575,6 +1586,7 @@ if ($help) {
 		"\t--tool|-t\t<string> tool config (yaml format)",
 		"\t--preprocessing\t<boolean> should data pre-processing be performed? (default: false)",
 		"\t--variant_calling\t<boolean> should variant calling be performed? (default: false)",
+		"\t--summarize\t<boolean> should output be summarized? (default: false)",
 		"\t--create_report\t<boolean> should a report be generated? (default: false)",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
@@ -1603,7 +1615,8 @@ main(
 	data_config	=> $data_config,
 	step1		=> $preprocessing,
 	step2		=> $variant_calling,
-	step3		=> $create_report,
+	step3		=> $summarize,
+	step4		=> $create_report,
 	cluster		=> $hpc_driver,
 	cleanup		=> $remove_junk,
 	dry_run		=> $dry_run

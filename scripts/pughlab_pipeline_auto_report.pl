@@ -25,11 +25,16 @@ sub main {
 	my %args = (
 		config		=> undef,
 		cluster		=> undef,
+		report		=> undef,
 		dry_run		=> undef,
 		run_date	=> undef,
 		no_wait		=> undef,
 		@_
 		);
+
+	unless($args{dry_run}) {
+		print "Initiating REPORT pipeline...\n";
+		}
 
 	my $tool_data = LoadFile($args{config});
 	my $run_date = $args{run_date};
@@ -1042,13 +1047,15 @@ sub main {
 		hpc_driver	=> $args{cluster}
 		);
 
-	$run_id = submit_job(
-		jobname		=> 'create_report',
-		shell_command	=> $run_script,
-		hpc_driver	=> $args{cluster},
-		dry_run		=> $args{dry_run},
-		log_file	=> $log
-		);
+	if ($args{report}) {
+		$run_id = submit_job(
+			jobname		=> 'create_report',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{cluster},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+		}
 
 	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
 	# collect job metrics (exit status, mem, run time)
@@ -1077,6 +1084,14 @@ sub main {
 			dry_run		=> $args{dry_run},
 			log_file	=> $log
 			);
+
+		push @all_jobs, $run_id;
+
+		# do some logging
+		print "Number of jobs submitted: " . scalar(@all_jobs) . "\n";
+
+		my $n_queued = `squeue -r | wc -l`;
+		print "Total number of jobs in queue: " . $n_queued . "\n";
 
 		# wait until it finishes
 		unless ($args{no_wait}) {
@@ -1111,13 +1126,14 @@ sub main {
  
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
-my ($help, $tool_config, $hpc_driver, $dry_run, $run_date, $no_wait);
+my ($help, $tool_config, $hpc_driver, $dry_run, $run_date, $no_wait, $create_report);
 
 # get command line arguments
 GetOptions(
 	'h|help'	=> \$help,
 	't|tools=s'	=> \$tool_config,
 	'd|date=s'	=> \$run_date,
+	'create_report'	=> \$create_report,
 	'c|cluster=s'	=> \$hpc_driver,
 	'dry-run'	=> \$dry_run,
 	'no-wait'	=> \$no_wait
@@ -1129,6 +1145,7 @@ if ($help) {
 		"\t--help|-h\tPrint this help message",
 		"\t--tools|-t\t<string> master tool config (yaml format)",
 		"\t--date|-d\t<string> Date the pipeline was initiated",
+		"\t--create_report\t<boolean> should the final report (pdf) be created? (default: false)",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
 		"\t--no-wait\t<boolean> should we exit after job submission (true) or wait until all jobs have completed (false)? (default: false)"
@@ -1142,6 +1159,7 @@ if ($help) {
 main(
 	config		=> $tool_config,
 	run_date	=> $run_date,
+	report		=> $create_report,
 	cluster		=> $hpc_driver,
 	dry_run		=> $dry_run,
 	no_wait		=> $no_wait

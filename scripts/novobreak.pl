@@ -452,6 +452,9 @@ sub main {
 	my $data_config = $args{data_config};
 
 	### PREAMBLE ######################################################################################
+	unless($args{dry_run}) {
+		print "Initiating NovoBreak pipeline...\n";
+		}
 
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
@@ -595,6 +598,10 @@ sub main {
 
 	# get sample data
 	my $smp_data = LoadFile($data_config);
+
+	unless($args{dry_run}) {
+		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
+		}
 
 	my $novobreak_check_run_id = '';
 
@@ -1032,6 +1039,14 @@ sub main {
 			dry_run		=> $args{dry_run},
 			log_file	=> $log
 			);
+
+		push @all_jobs, $run_id;
+
+		# do some logging
+		print "Number of jobs submitted: " . scalar(@all_jobs) . "\n";
+
+		my $n_queued = `squeue -r | wc -l`;
+		print "Total number of jobs in queue: " . $n_queued . "\n";
 
 		# wait until it finishes
 		unless ($args{no_wait}) {
