@@ -41,6 +41,7 @@ save.session.profile <- function(file.name) {
 # import libraries
 library(xtable);
 library(BoutrosLab.plotting.general);
+library(UpSetR);
 library(argparse);
 
 # import command line arguments
@@ -74,12 +75,15 @@ setwd(arguments$output);
 
 ### FORMAT DATA ####################################################################################
 # summarize tool data
+tool.list <- c('Manta','Delly','Pindel','SViCT','NovoBreak'); 
 tool.summary <- data.frame(
-	Tool = c('Manta','Delly','Overlap'),
+	Tool = tool.list,
 	Total = c(
 		nrow(sv.data[grepl('manta',sv.data$tool),]),
 		nrow(sv.data[grepl('delly',sv.data$tool),]),
-		nrow(sv.data[grepl('delly;manta',sv.data$tool),])
+		nrow(sv.data[grepl('pindel',sv.data$tool),]),
+		nrow(sv.data[grepl('svict',sv.data$tool),]),
+		nrow(sv.data[grepl('novobreak',sv.data$tool),])
 		)
 	);
 
@@ -88,12 +92,24 @@ for (type in unique(sv.data$event_type)) {
 	tool.summary[,type] <- c(
 		nrow(tmp[grepl('manta',tmp$tool),]),
 		nrow(tmp[grepl('delly',tmp$tool),]),
-		nrow(tmp[grepl('delly;manta',tmp$tool),])
+		nrow(tmp[grepl('pindel',tmp$tool),]),
+		nrow(tmp[grepl('svict',tmp$tool),]),
+		nrow(tmp[grepl('novobreak',tmp$tool),])
 		);
 	}
 
 rownames(tool.summary) <- tool.summary$Tool;
 tool.summary <- t(tool.summary[,-1]);
+
+# now format data for plotting
+tool.list <- unique(unlist(strsplit(as.character(sv.data$tools),';')));
+tool.data <- as.data.frame(matrix(nrow = nrow(sv.data), ncol = length(tool.list), data = 0));
+colnames(tool.data) <- tool.list;
+
+for (tool in tool.list) {
+	idx <- grepl(tool, sv.data$tools);
+	tool.data[idx,tool] <- 1;
+	}
 
 # count variants
 sample.counts <- data.frame(table(sv.data$library));
@@ -112,7 +128,6 @@ functional.summary$Tumor_Sample_Barcode <- factor(
 functional.summary$event_type <- factor(
 	functional.summary$event_type,
 	levels = c('deletion','duplication','insertion','inversion','inverted translocation','translocation')
-	#as.character(unique(sv.data$event_type))
 	);
 
 functional.summary <- functional.summary[order(functional.summary$Tumor_Sample_Barcode, functional.summary$event_type),];
@@ -166,9 +181,18 @@ for (type in unique(sv.data$event_type)) {
 	}
 
 ### PLOT DATA ######################################################################################
+# plot tool summary (overlap plot)
+png(filename = generate.filename(arguments$project, 'SV_tool_overlap','png'),
+	res = 200, units = 'in', height = 5, width = 7);
+
+upset(tool.data, sets = tool.list, mainbar.y.label = 'SVs Called By Indicated ToolSet',
+	sets.x.label = 'SVs Called Per Tool');
+
+dev.off();
+
+# now set up variables for SV plots
 sv.colour.scheme <- rev(default.colours(12))[1:6]; #length(unique(sv.data$event_type))];
 names(sv.colour.scheme) <- c('deletion','duplication','insertion','inversion','inverted translocation','translocation');
-#gsub(' ', '_', unique(sv.data$event_type));
 
 # make the plot legend (mutation type/consequence)
 functional.legend <- legend.grob(
@@ -294,6 +318,18 @@ if (nrow(sv.data) == 0) {
 		include.rownames = TRUE,
 		append = TRUE
 		);
+
+	write("\\pagebreak\n\\begin{figure}[h!]", file = 'sv_summary.tex', append = TRUE);
+	write("\\begin{center}", file = 'sv_summary.tex', append = TRUE);
+	write(paste0(
+		"\\includegraphics[width=0.9\\textwidth]{",
+		getwd(), '/',
+		generate.filename(arguments$project, 'SV_tool_overlap','png'), '}'
+		), file = 'sv_summary.tex', append = TRUE);
+	write("\\end{center}", file = 'sv_summary.tex', append = TRUE);
+	write("\\caption{Number of structural variants detected by each tool or set of tools.}",
+		file = 'sv_summary.tex', append = TRUE);
+	write("\\end{figure}\n", file = 'sv_summary.tex', append = TRUE);
 
 	if (length(normal.samples) > 1) {
 		write("\\pagebreak\n\\begin{figure}[h!]", file = 'sv_summary.tex', append = TRUE);

@@ -49,7 +49,7 @@ parser <- ArgumentParser();
 
 parser$add_argument('-p', '--project', type = 'character', help = 'PROJECT name');
 parser$add_argument('-o', '--output', type = 'character', help = 'path to output directory');
-parser$add_argument('-m', '--mutations', type = 'character', help = 'mutation calls (position by sample matrix output by collect_snv_output.R)');
+parser$add_argument('-m', '--mutations', type = 'character', help = 'mutation calls (combined maf output by collect_snv_output.R)');
 
 arguments <- parser$parse_args();
 
@@ -80,7 +80,7 @@ basechange.colours <- default.colours(8,'pastel')[-5];
 input.data <- read.delim(arguments$mutations);
 
 # collect list of all samples
-all.samples <- colnames(input.data)[8:ncol(input.data)];
+all.samples <- unique(input.data$Tumor_Sample_Barcode);
 
 # move to output directory
 setwd(arguments$output);
@@ -89,17 +89,9 @@ setwd(arguments$output);
 # get per-sample mutation counts
 sample.counts <- data.frame(
 	Sample = gsub('\\.','-',all.samples),
-	Total = apply(input.data[,all.samples],2,function(i) { length(i[!is.na(i)]) } ),
-	SNVs = apply(
-		input.data[!grepl('-',input.data$Ref) & !grepl('-', input.data$Alt),all.samples],
-		2,
-		function(i) { length(i[!is.na(i)]) }
-		),
-	INDELs = apply(
-		input.data[grepl('-',input.data$Ref) | grepl('-', input.data$Alt),all.samples],
-		2,
-		function(i) { length(i[!is.na(i)]) }
-		)
+	Total = as.numeric(table(input.data$Tumor_Sample_Barcode)[all.samples]),
+	SNVs = as.numeric(table(input.data[which(input.data$Variant_Type == 'SNP'),]$Tumor_Sample_Barcode)[all.samples]),
+	INDELs = as.numeric(table(input.data[which(!input.data$Variant_Type == 'SNP'),]$Tumor_Sample_Barcode)[all.samples]) 
 	);
 
 sample.counts <- sample.counts[order(sample.counts$Total, decreasing = F),];

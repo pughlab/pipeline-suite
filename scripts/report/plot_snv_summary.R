@@ -622,6 +622,22 @@ if (tophit.flag) {
 write("\\section{SNV Summary}", file = 'somatic_snv_summary.tex');
 
 # first, check for mutation_overlap plot
+tool.overlap.plot <- rev(sort(list.files(pattern = 'SNV_tool_overlap.png')));
+if (length(tool.overlap.plot) > 0) {
+	write("\\begin{figure}[h!]", file = 'somatic_snv_summary.tex', append = TRUE);
+	write("\\begin{center}", file = 'somatic_snv_summary.tex', append = TRUE);
+	write(paste0(
+		"\\includegraphics[width=0.8\\textwidth]{",
+		getwd(), '/',
+		tool.overlap.plot[1], '}'
+		), file = 'somatic_snv_summary.tex', append = TRUE);
+	write("\\end{center}", file = 'somatic_snv_summary.tex', append = TRUE);
+	write(paste0(
+		"\\caption{UpSet plot showing overlap across SNV/INDEL variant callers.}"
+		), file = 'somatic_snv_summary.tex', append = TRUE);
+	write("\\end{figure}\n\\pagebreak\n", file = 'somatic_snv_summary.tex', append = TRUE);
+	}
+
 overlap.plot <- rev(sort(list.files(pattern = 'mutation_overlap.png')));
 if (length(overlap.plot) > 0) {
 	write("\\begin{figure}[h!]", file = 'somatic_snv_summary.tex', append = TRUE);

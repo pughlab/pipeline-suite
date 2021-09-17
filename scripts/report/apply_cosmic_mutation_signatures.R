@@ -65,6 +65,7 @@ parser$add_argument('-o', '--output', type = 'character', help = 'path to output
 parser$add_argument('-t', '--seq_type', type = 'character', help = 'exome or wgs', default = 'exome');
 parser$add_argument('-r', '--ref_type', type = 'character', help = 'hg38 or hg19', default = 'hg38');
 parser$add_argument('-i', '--input', type = 'character', help = 'mutation calls in MAF format');
+parser$add_argument('-v', '--vaf_threshold', type = 'character', help = 'threshold to filter variants', default = 0.1);
 parser$add_argument('-s', '--signatures', type = 'character', help = 'path to signatures matrix (96 trinucleotide x N sigs)', default = NULL);
 
 arguments <- parser$parse_args();
@@ -82,6 +83,10 @@ if (arguments$seq_type == 'exome') {
 	normalization.method <- 'exome2genome';
 	}
 
+# indicate filtering thresholds
+vaf.threshold <- arguments$vaf_threshold;
+min.snps <- 50;
+
 ### READ DATA ######################################################################################
 # get data
 input.maf <- read.delim(arguments$input, stringsAsFactors = FALSE);
@@ -94,6 +99,12 @@ signatures.to.apply <- if (is.null(arguments$signatures)) { signatures.cosmic } 
 ### FORMAT DATA ####################################################################################
 # remove INDELs
 input.maf <- input.maf[which(input.maf$Variant_Type == 'SNP'),];
+
+# calculate VAF
+input.maf$VAF <- 1 - (input.maf$t_ref_count / input.maf$t_depth);
+
+# remove low VAF (if threshold > 0)
+input.maf <- input.maf[which(input.maf$VAF > vaf.threshold),];
 
 # indicate key fields
 snv.data <- input.maf[,c('Tumor_Sample_Barcode','Chromosome','Start_Position','Reference_Allele','Allele')];
@@ -112,6 +123,12 @@ sigs.input <- mut.to.sigs.input(
 assigned.sigs <- list();
 
 for (smp in all.samples) {
+
+	if (nrow(snv.data[which(snv.data$Sample == smp),]) < 50) {
+		assigned.sigs[[smp]]$weights <- rep(NA, ncol(signatures.to.apply));
+		next;
+		}
+
 	assigned.sigs[[smp]] <- whichSignatures(
 		tumor.ref = sigs.input,
 		signatures.ref = signatures.to.apply,
@@ -130,6 +147,7 @@ save(
 # extract weights
 sig.weights.list <- list();
 for (smp in all.samples) {
+#	if (is.na(sig.weights.list[[smp]])) { next; }
 	sig.weights.list[[smp]] <- assigned.sigs[[smp]]$weights;
 	}
 
