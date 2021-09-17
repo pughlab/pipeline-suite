@@ -158,9 +158,9 @@ sub get_split_pindel_command {
 # format command to run pindel2vcf
 sub get_pindel2vcf_command {
 	my %args = (
+		dir		=> undef,
 		input		=> undef,
 		output		=> undef,
-		chromosomes	=> undef,
 		min_depth	=> undef,
 		tmp_dir		=> undef,
 		@_
@@ -171,17 +171,19 @@ sub get_pindel2vcf_command {
 
 	if (!defined($args{min_depth})) { $args{min_depth} = 5; }
 
-	my $pindel_command = "for CHROM in $chrom_list; do";
+	my $pindel_command = "cd $args{dir}\n";
 
-	$pindel_command .= "\n" . join(' ',
+	$pindel_command = "for file in *_INT_final; do";
+
+	$pindel_command .= "\n  " . 'STEM=$(echo $file | sed ' . "'s/_INT_final//');\n  " . join(' ',
 		'pindel2vcf',
 		'-r', $reference,
 		'-R', $ref_type,
 		'-d', $today,
 		'-G -pr 3 -ir 3 -il 3 -pl 3 -e', $args{min_depth},
-		'-P', $args{input} . '_$CHROM',
-		'-v', $args{input} . '_$CHROM.vcf'
-		);	# can include --somatic_p to calculate somatic p-values (note, current version of pindel does not have this implemented properly - ignore for now)
+		'-P', '$STEM',
+		'-v', '$STEM.vcf'
+		);
 
 	$pindel_command .= "\ndone;";
 
@@ -194,6 +196,13 @@ sub get_pindel2vcf_command {
 		);
 
 	$pindel_command .= "\n\nmd5sum $args{output} > $args{output}.md5";
+
+	# do some minor cleanup
+	$pindel_command .= "\n\n" . join("\n",
+		"mv * > $args{tmp_dir}",			# move everything to TEMP
+		"mv $args{tmp_dir}/*filtered.vcf* > . ", 	# recall merged files
+		"mv $args{tmp_dir}/*_{D,INV,INT_final,LI,TD} > . " # recall files required for mavis
+		);
 
 	return($pindel_command);
 	}
@@ -501,15 +510,12 @@ sub main {
 					}
 				}
 
-			# add intermediate files to cleanup (all of the raw pindel files: smp_pindel_CHROM_{BP/D/INT/etc})
-			$cleanup_cmd .= "\nrm $output_stem*";
-
 			# merge and convert to VCF
 			my $convert_command = get_pindel2vcf_command(
-				input		=> $output_stem,
+				dir		=> $sample_directory,
+				input		=> $sample . '_pindel',
 				output		=> $merged_file,
 				min_depth	=> $parameters->{convert}->{filter_depth},
-				chromosomes	=> join(' ', @chroms),
 				tmp_dir		=> $tmp_directory
 				);
 
