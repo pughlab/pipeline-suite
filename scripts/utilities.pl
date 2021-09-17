@@ -94,6 +94,19 @@ sub error_checking {
 		}
 	}
 
+	# SViCT, Novobreak
+	if (('svict' eq $pipeline) | ('novobreak' eq $pipeline)) {
+		if (!defined($tool_data->{reference})) { die("Must supply path to reference genome!"); }
+
+		if ('novobreak' eq $pipeline) {
+			$is_ref_valid = validate_ref(
+				reference	=> $tool_data->{bwa}->{reference},
+				pipeline	=> 'bwa',
+				exts		=> [qw(.fa .fa.amb .fa.ann .fa.bwt .fa.pac .fa.sa)]
+			);
+		}
+	}
+
 	# Strelka, VarScan, SomaticSniper and Delly
 	my @pipeline_list = qw(strelka varscan delly somaticsniper vardict);
 	if ( any { /$pipeline/ } @pipeline_list ) {

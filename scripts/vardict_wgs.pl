@@ -166,7 +166,7 @@ sub get_test_somatic_command_wgs {
 
 	$vardict_command .= "\n\n" . join("\n",
 		join(' ', 'md5sum', $args{output_stem} . '_${REGION}.vcf', '>', $args{output_stem} . '_${REGION}.vcf.md5'),
-		join(' ', 'bgzip', $args{output_stem} . '_${REGION}.vcf'),
+		join(' ', 'bgzip -f', $args{output_stem} . '_${REGION}.vcf'),
 		join(' ', 'tabix -p vcf', $args{output_stem} . '_${REGION}.vcf.gz')
 		);
 
@@ -191,7 +191,7 @@ sub get_merge_command_wgs {
 
 	$merge_command .= "\n\n" . join("\n",
 		join(' ', 'md5sum', $args{output}, '>', $args{output} . '.md5'),
-		join(' ', 'bgzip', $args{output}),
+		join(' ', 'bgzip -f', $args{output}),
 		join(' ', 'tabix -p vcf', $args{output} . '.gz')
 		);
 
@@ -313,6 +313,9 @@ sub main {
 	my $data_config = $args{data_config};
 
 	### PREAMBLE ######################################################################################
+	unless($args{dry_run}) {
+		print "Initiating VarDict (WGS) pipeline...\n";
+		}
 
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
@@ -433,6 +436,10 @@ sub main {
 	### RUN ###########################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
+
+	unless($args{dry_run}) {
+		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
+		}
 
 	my ($run_script, $run_id, $link, $cleanup_cmd);
 	my (@all_jobs, @pon_vcfs, @pon_dependencies);
@@ -1555,6 +1562,14 @@ sub main {
 			dry_run		=> $args{dry_run},
 			log_file	=> $log
 			);
+
+		push @all_jobs, $run_id;
+
+		# do some logging
+		print "Number of jobs submitted: " . scalar(@all_jobs) . "\n";
+
+		my $n_queued = `squeue -r | wc -l`;
+		print "Total number of jobs in queue: " . $n_queued . "\n";
 
 		# wait until it finishes
 		unless ($args{no_wait}) {

@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-### get_coverage.pl ################################################################################
+### svict.pl #######################################################################################
 use AutoLoader 'AUTOLOAD';
 use strict;
 use warnings;
@@ -17,16 +17,14 @@ use IO::Handle;
 my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
-our ($reference, $gatk_v4);
+our ($reference, $gtf, $svict_path);
 
 ####################################################################################################
 # version	author		comment
-# 1.0		sprokopec	script to run DepthOfCoverage on GATK processed bams
-# 1.1		sprokopec	added help msg and cleaned up code
-# 1.2		sprokopec	minor updates for tool config
+# 1.0		sprokopec	script to run SViCT
 
 ### USAGE ##########################################################################################
-# get_coverage.pl -t tool.yaml -d data.yaml -o /path/to/output/dir -c slurm --remove --dry_run
+# svict.pl -t tool.yaml -d data.yaml -o /path/to/output/dir -c slurm --remove --dry_run
 #
 # where:
 # 	-t (tool.yaml) contains tool versions and parameters, reference information, etc.
@@ -38,132 +36,28 @@ our ($reference, $gatk_v4);
 # 	--dry_run indicates that this is a dry run
 
 ### DEFINE SUBROUTINES #############################################################################
-# format command to extract coverage metrics
-sub get_coverage_command {
-	my %args = (
-		input		=> undef,
-		output		=> undef,
-		java_mem	=> undef,
-		tmp_dir		=> undef,
-		intervals	=> undef,
-		seq_type	=> undef,
-		@_
-		);
-
-	my $target_depth = 15;
-	if ('targeted' eq $args{seq_type}) {
-		$target_depth = 200;
-		}	
-
-	my $coverage_command;
-
-	if ($gatk_v4) {
-		$coverage_command = join(' ',
-			'gatk DepthOfCoverage',
-			'-O', $args{output}, '--omit-genes-not-entirely-covered-by-traversal',
-			'--omit-interval-statistics --omit-locus-table --omit-depth-output-at-each-base',
-			'--output-format TABLE --tmp-dir', $args{tmp_dir}
-			);
-		} else {
-		$coverage_command = join(' ',
-			'java -Xmx' . $args{java_mem},
-			'-Djava.io.tmpdir=' . $args{tmp_dir},
-			'-jar $gatk_dir/GenomeAnalysisTK.jar -T DepthOfCoverage',
-			'-o', $args{output},
-			'-omitBaseOutput -omitIntervals -omitLocusTable -nt 2',
-			'-ct', $target_depth
-			);
-		}
-
-	$coverage_command .= ' ' . join(' ',
-		'-R', $reference,
-		'-I', $args{input},
-		'-pt sample -pt readgroup'
-		);
-
-	if (defined($args{intervals})) {
-		$coverage_command .= ' ' . join(' ',
-			'--intervals', $args{intervals},
-			'--interval_padding 100'
-			);
-		}
-
-	return($coverage_command);
-	}
-
-# format command to find callable bases
-# start with finding callable bases per sample
-sub find_callable_bases_step1 {
+# format command to run svict
+sub get_svict_command {
 	my %args = (
 		input		=> undef,
 		output_stem	=> undef,
-		min_depth	=> undef,
+		gtf		=> undef,
 		tmp_dir		=> undef,
 		@_
 		);
 
-	my $output1 = join('/', $args{tmp_dir}, $args{output_stem} . "\_$args{min_depth}.bed");
-	my $output2 = join('/', $args{tmp_dir}, $args{output_stem} . "\_$args{min_depth}\_collapsed.bed");
-	my $output3 = join('/', $args{tmp_dir}, $args{output_stem} . '_mincov_collapsed_sorted.bed');
-
-	my $cb_command = join(' ',
-		'samtools view -b', $args{input},
-		'| bedtools genomecov -bg -ibam -',
-		'| awk \'$4 >=', $args{min_depth},
-		'{print $0}\' >', $output1
+	my $svict_command = join(' ',
+		join('/', $svict_path, 'svict'),
+		'-r', $reference,
+		'-i', $args{input},
+		'-o', $args{output_stem}
 		);
 
-	$cb_command .= ";\n" . join(' ',
-		'bedtools merge',
-		'-i', $output1,
-		'>', $output2
-		);
-
-	$cb_command .= ";\n" . join(' ',
-		'sort -k1,1V -k2,2n', $output2,
-		'>', $output3
-		);
-
-	$cb_command .= ";\n" . join(' ',
-		'md5sum', $output3,
-		'>', $output3 . '.md5'
-		);
-
-	return($cb_command);
-	}
-
-# and finish by finding callable bases across all samples for a patient
-sub find_callable_bases_step2 {
-	my %args = (
-		input_files	=> undef,
-		sample_names	=> undef,
-		output		=> undef,
-		intervals	=> undef,
-		@_
-		);
-
-	my ($input, $smps);
-	if (defined($args{intervals})) {
-		$input = join(' ', $args{intervals}, @{$args{input_files}});
-		$smps = join(' ', 'TargetRegions', @{$args{sample_names}});
-		} else {
-		$input = join(' ', @{$args{input_files}});
-		$smps = join(' ', @{$args{sample_names}});
+	if (defined($gtf)) {
+		$svict_command .= " -g $args{gtf}";
 		}
 
-	my $cb_command = join(' ',
-		'bedtools multiinter',
-		'-i', $input,
-		'-header -names', $smps,
-		'>', $args{output}
-		);
-
-	$cb_command .= ";\n\n" . join(' ',
-		'md5sum', $args{output},
-		'>', $args{output} . '.md5'
-		);
-
-	return($cb_command);
+	return($svict_command);
 	}
 
 ### MAIN ###########################################################################################
@@ -184,12 +78,12 @@ sub main {
 
 	### PREAMBLE ######################################################################################
 	unless($args{dry_run}) {
-		print "Initiating Coverage (QC) pipeline...\n";
+		print "Initiating SViCT pipeline...\n";
 		}
 
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
-	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'gatk');
+	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'svict');
 
 	# organize output and log directories
 	my $output_directory = $args{output_directory};
@@ -198,7 +92,7 @@ sub main {
 	my $log_directory = join('/', $output_directory, 'logs');
 	unless(-e $log_directory) { make_path($log_directory); }
 
-	my $log_file = join('/', $log_directory, 'run_CoverageMetrics_pipeline.log');
+	my $log_file = join('/', $log_directory, 'run_SViCT_pipeline.log');
 
 	# create a file to hold job metrics
 	my (@files, $run_count, $outfile, $touch_exit_status);
@@ -213,7 +107,7 @@ sub main {
 		$touch_exit_status = system("touch $outfile");
 		if (0 != $touch_exit_status) { Carp::croak("Cannot touch file $outfile"); }
 
-		$log_file = join('/', $log_directory, 'run_CoverageMetrics_pipeline_' . $run_count . '.log');
+		$log_file = join('/', $log_directory, 'run_SViCT_pipeline_' . $run_count . '.log');
 		}
 
 	# start logging
@@ -221,42 +115,43 @@ sub main {
 	$log->autoflush;
 
 	print $log "---\n";
-	print $log "Running Coverage pipeline.\n";
+	print $log "Running SViCT pipeline.\n";
 	print $log "\n  Tool config used: $tool_config";
 	print $log "\n    Reference used: $tool_data->{reference}";
+
+	$reference = $tool_data->{reference};
+
+	if (defined($tool_data->{gtf})) {
+		$gtf = $tool_data->{gtf};
+		print $log "\n    Annotation GTF: $tool_data->{gtf}";
+		} else {
+		print $log "\nNo annotation file provided; will not perform annotation/fusion detection.";
+		}
+
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n---\n";
 
-	$reference = $tool_data->{reference};
-
 	# set tools and versions
-	my $gatk	= 'gatk/' . $tool_data->{gatk_version};
+#	my $svict = 'svict/' . $tool_data->{svict_version};
+	$svict_path = '/cluster/projects/pughlab/bin/svict';
+
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
-	my $bedtools	= 'bedtools/' . $tool_data->{bedtools_version};
-	my $r_version	= 'R/' . $tool_data->{r_version};
-
-	# check gatk version
-	my $threshold = version->declare('4.0')->numify;
-	my $given = version->declare($tool_data->{gatk_version})->numify;
-
-	if ($given < $threshold) {
-		$gatk_v4 = 0;
-		} else { $gatk_v4 = 1; }
+	my $r_version   = 'R/' . $tool_data->{r_version};
 
 	# get user-specified tool parameters
-	my $parameters = $tool_data->{bamqc}->{parameters};
+	my $parameters = $tool_data->{svict}->{parameters};
 
 	### RUN ###########################################################################################
+	my ($run_script, $run_id, $link, $cleanup_cmd);
+	my @all_jobs;
+
 	# get sample data
 	my $smp_data = LoadFile($data_config);
 
 	unless($args{dry_run}) {
 		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
 		}
-
-	my ($run_script, $run_id, $link, $cleanup_cmd);
-	my @all_jobs;
 
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
@@ -293,7 +188,7 @@ sub main {
 			}
 
 		# create an array to hold final outputs and all patient job ids
-		my (@final_outputs, @patient_jobs, @cb_jobs, @patient_cb_files);
+		my (@final_outputs, @patient_jobs);
 
 		my @sample_ids = @tumour_ids;
 		push @sample_ids, @normal_ids;
@@ -303,167 +198,66 @@ sub main {
 
 			print $log "  SAMPLE: $sample\n\n";
 
-			my $type;
+			my $sample_directory = join('/', $patient_directory, $sample);
+			unless(-e $sample_directory) { make_path($sample_directory); }
+
+			my $type = 'tumour';
 			if ( (any { $_ =~ m/$sample/ } @normal_ids) ) {
 				$type = 'normal';
+				}
+
+			# indicate output stem
+			my $output_stem = join('/', $sample_directory, $sample . '_SViCT');
+
+			# create SViCT command
+			my $svict_command = get_svict_command(
+				input		=> $smp_data->{$patient}->{$type}->{$sample},
+				output_stem	=> $output_stem,
+				gtf		=> $gtf
+				);
+
+			$svict_command .= "\n\n" . join("\n",
+				'if [ $? == 0 ]; then',
+				"  md5sum $output_stem.vcf > $output_stem.vcf.md5",
+				"elif [ -s $output_stem.vcf ]; then",
+				"  echo 'Job exited with 0 variants discovered.'",
+				'else',
+				"  echo 'Job failed - check logs and retry.'",
+				'fi'
+				);
+
+			# check if this should be run
+			if ('Y' eq missing_file($output_stem . '.vcf.md5')) {
+
+				# record command (in log directory) and then run job
+				print $log "Submitting job for SViCT...\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_svict_' . $sample,
+					cmd	=> $svict_command,
+					modules	=> [$samtools], # $svict
+					max_time	=> $parameters->{svict}->{time},
+					mem		=> $parameters->{svict}->{mem},
+					hpc_driver	=> $args{hpc_driver},
+					kill_on_error 	=> 0
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_svict_' . $sample,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
 				} else {
-				$type = 'tumour';
+				print $log "Skipping SViCT because this has already been completed!\n";
 				}
 
-			# Run DepthOfCoverage on all input BAMs
-			my $coverage_out = join('/', $patient_directory, $sample . '_DepthOfCoverage');
-
-			my $cov_command = get_coverage_command(
-				input		=> $smp_data->{$patient}->{$type}->{$sample},
-				output		=> $coverage_out,
-				intervals	=> $tool_data->{intervals_bed},
-				java_mem	=> $parameters->{coverage}->{java_mem},
-				tmp_dir		=> $tmp_directory,
-				seq_type	=> $tool_data->{seq_type}
-				);
-				
-			my $md5_cmds = "  " . join("\n  ",
-				"md5sum $coverage_out\.read_group_statistics > $coverage_out\.read_group_statistics.md5",
-				"md5sum $coverage_out\.read_group_summary > $coverage_out\.read_group_summary.md5",
-				"md5sum $coverage_out\.sample_statistics > $coverage_out\.sample_statistics.md5",
-				"md5sum $coverage_out\.sample_summary > $coverage_out\.sample_summary.md5"
-				);
-
-			$cov_command .= "\n" . check_java_output(
-				extra_cmd => $md5_cmds
-				);
-
-			# check if this should be run
-			if ('Y' eq missing_file($coverage_out . '.sample_summary.md5')) {
-
-				# record command (in log directory) and then run job
-				print $log "Submitting job for DepthOfCoverage...\n";
-
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_depth_of_coverage_' . $sample,
-					cmd	=> $cov_command,
-					modules	=> [$gatk],
-					cpus_per_taks	=> 2,
-					max_time	=> $parameters->{coverage}->{time},
-					mem		=> $parameters->{coverage}->{mem},
-					hpc_driver	=> $args{hpc_driver}
-					);
-
-				$run_id = submit_job(
-					jobname		=> 'run_depth_of_coverage_' . $sample,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{hpc_driver},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
-					);
-
-				push @patient_jobs, $run_id;
-				push @all_jobs, $run_id;
-				}
-			else {
-				print $log "Skipping DepthOfCoverage because this has already been completed!\n";
-				}
-
-			push @final_outputs, $coverage_out . ".read_group_statistics";
-
-			## Find CallableBases on all input BAMs
-			my $cb_output = join('/', $tmp_directory, $sample . '_mincov_collapsed_sorted.bed');
-
-			my $cb_command = find_callable_bases_step1(
-				input		=> $smp_data->{$patient}->{$type}->{$sample},
-				output_stem	=> $sample,
-				min_depth	=> $parameters->{callable_bases}->{min_depth}->{$type},
-				tmp_dir		=> $tmp_directory
-				);
-
-			push @patient_cb_files, $sample . "_mincov_collapsed_sorted.bed";
-
-			# check if this should be run
-			if (
-				('Y' eq missing_file($cb_output . '.md5')) &&
-				('Y' eq missing_file("$patient_directory/callable_bases.tar.gz"))
-				) {
-
-				# record command (in log directory) and then run job
-				print $log "Submitting job for Callable Bases...\n";
-
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_get_callable_bases_' . $sample,
-					cmd	=> $cb_command,
-					modules	=> [$samtools, $bedtools],
-					max_time	=> $parameters->{callable_bases}->{time},
-					mem		=> $parameters->{callable_bases}->{mem},
-					hpc_driver	=> $args{hpc_driver}
-					);
-
-				$run_id = submit_job(
-					jobname		=> 'run_get_callable_bases_' . $sample,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{hpc_driver},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
-					);
-
-				push @cb_jobs, $run_id;
-				push @patient_jobs, $run_id;
-				push @all_jobs, $run_id;
-				}
-			else {
-				print $log "Skipping Get Callable Bases because this has already been completed!\n";
-				}
-			}
-
-		# run callable bases per patient (intersect) ONLY IF there are multiple samples for this patient
-		my $cb_intersect = join('/', $patient_directory, 'CallableBases.tsv');
-
-		if ( (scalar(@sample_ids) == 1) && (!defined($tool_data->{intervals_bed})) ) {
-			`mv $patient_cb_files[0] $cb_intersect`;
-			`mv $patient_cb_files[0].md5 $cb_intersect.md5`;
-			} elsif ( (scalar(@sample_ids) > 1) || (defined($tool_data->{intervals_bed})) ) {
-
-			my $cb_command2 = "\ncd $tmp_directory\n\n";
-			$cb_command2 .= find_callable_bases_step2(
-				input_files	=> \@patient_cb_files,
-				sample_names	=> \@sample_ids,
-				output		=> $cb_intersect,
-				intervals	=> $tool_data->{intervals_bed}
-				);
-
-			$cb_command2 .= "\n\n" . join(' ',
-				"tar -czf $patient_directory/callable_bases.tar.gz",
-				"*_mincov_collapsed_sorted.bed*"
-				);
-
-			if ('Y' eq missing_file($cb_intersect . '.md5')) {
-
-				print $log "Submitting job for CallableBases Intersect...\n";
-
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_callable_bases_intersect_' . $patient,
-					cmd	=> $cb_command2,
-					modules	=> [$samtools, $bedtools],
-					dependencies	=> join(':', @cb_jobs),
-					max_time	=> $parameters->{callable_bases}->{time},
-					mem		=> $parameters->{callable_bases}->{mem},
-					hpc_driver	=> $args{hpc_driver}
-					);
-
-				$run_id = submit_job(
-					jobname		=> 'run_callable_bases_intersect_' . $patient,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{hpc_driver},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
-					);
-				}
-			else {
-				print $log "Skipping CallableBases Intersect because this has already been completed!\n";
-				}
-
-			push @final_outputs, $cb_intersect;
+			push @final_outputs, $output_stem . '.vcf';
 
 			}
 
@@ -478,13 +272,8 @@ sub main {
 				print $log "Submitting job to clean up temporary/intermediate files...\n";
 
 				# make sure final output exists before removing intermediate files!
-				my @files_to_check;
-				foreach my $tmp ( @final_outputs ) {
-					push @files_to_check, $tmp . '.md5';
-					}
-
 				$cleanup_cmd = join("\n",
-					"if [ -s " . join(" ] && [ -s ", @files_to_check) . " ]; then",
+					"if [ -s " . join(" ] && [ -s ", @final_outputs) . " ]; then",
 					"  $cleanup_cmd",
 					"else",
 					'  echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
@@ -517,17 +306,14 @@ sub main {
 
 	# collate results
 	my $collect_output = join(' ',
-		"Rscript $cwd/collect_coverage_output.R",
+		"Rscript $cwd/collect_svict_output.R",
 		'-d', $output_directory,
 		'-p', $tool_data->{project_name},
-		"\n\nRscript $cwd/count_callable_bases.R",
-		'-d', $output_directory,
-		'-p', $tool_data->{project_name}
 		);
 
 	$run_script = write_script(
 		log_dir	=> $log_directory,
-		name	=> 'combine_coverage_output',
+		name	=> 'combine_svict_output',
 		cmd	=> $collect_output,
 		modules	=> [$r_version],
 		dependencies	=> join(':', @all_jobs),
@@ -537,7 +323,7 @@ sub main {
 		);
 
 	$run_id = submit_job(
-		jobname		=> 'combine_coverage_output',
+		jobname		=> 'combine_svict_output',
 		shell_command	=> $run_script,
 		hpc_driver	=> $args{hpc_driver},
 		dry_run		=> $args{dry_run},
@@ -604,7 +390,7 @@ sub main {
 					}
 				# if none of the above, we will exit with an error
 				else {
-					die("Final Coverage accounting job: $run_id finished with errors.");
+					die("Final SequenceMetrics accounting job: $run_id finished with errors.");
 					}
 				}
 			}

@@ -457,7 +457,7 @@ sub main {
 
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
-my ($tool_config, $data_config, $report);
+my ($tool_config, $data_config, $summarize);
 my $hpc_driver = 'slurm';
 my ($remove_junk, $dry_run);
 
@@ -470,7 +470,7 @@ GetOptions(
 	'd|data=s'	=> \$data_config,
 	'c|cluster=s'	=> \$hpc_driver,
 	'remove'	=> \$remove_junk,
-	'create-report'	=> \$report,
+	'summarize'	=> \$summarize,
 	'dry-run'	=> \$dry_run
 	 );
 
@@ -482,7 +482,7 @@ if ($help) {
 		"\t--tool|-t\t<string> tool config (yaml format)",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
-		"\t--create-report\t<boolean> should final report be generated? (default: false)",
+		"\t--summarize\t<boolean> should output be summarized and a final report be generated? (default: false)",
 		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)"
 		);
 
@@ -505,6 +505,6 @@ main(
 	data_config	=> $data_config,
 	cluster		=> $hpc_driver,
 	cleanup		=> $remove_junk,
-	report		=> $report,
+	report		=> $summarize,
 	dry_run		=> $dry_run
 	);

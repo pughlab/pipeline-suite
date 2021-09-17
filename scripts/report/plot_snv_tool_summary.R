@@ -53,6 +53,7 @@ simplify.ids <- function(x) {
 ### PREPARE SESSION ################################################################################
 # import libraries
 library(BoutrosLab.plotting.general);
+library(UpSetR);
 library(argparse);
 
 # import command line arguments
@@ -74,7 +75,7 @@ if (!'combined.data' %in% ls()) {
 setwd(arguments$output);
 
 ### FORMAT DATA ####################################################################################
-all.tools <- c('MuTect2','MuTect','Strelka','VarScan','SomaticSniper','VarDict');
+all.tools <- c('MuTect2','MuTect','Strelka','VarScan','SomaticSniper','VarDict','Pindel');
 tool.list <- c();
 for (tool in all.tools) {
 	if (tool %in% colnames(combined.data)) { tool.list <- c(tool.list, tool); }
@@ -114,7 +115,20 @@ save(
 	file = generate.filename(arguments$project, 'mutation_overlap', 'RData')
 	);
 
+# now format data for plotting (UPSET plot)
+tool.data <- combined.data[,tool.list];
+tool.data[is.na(tool.data)] <- 0;
+
 ### PLOT DATA ######################################################################################
+# plot tool summary (overlap plot)
+png(filename = generate.filename(arguments$project, 'SNV_tool_overlap','png'),
+	res = 200, units = 'in', height = 5, width = 7);
+
+upset(tool.data, sets = tool.list, mainbar.y.label = 'Number of Variants',
+	sets.x.label = 'Number of Variants', show.numbers = FALSE); #, set_size.scale_max = 85000);
+
+dev.off();
+
 # grab some parameters
 axis.cex <- if (nrow(plot.data$per_tool) <= 30) { 1
 	} else if (nrow(plot.data$per_tool) <= 50) { 0.75

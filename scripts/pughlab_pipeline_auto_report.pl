@@ -25,11 +25,16 @@ sub main {
 	my %args = (
 		config		=> undef,
 		cluster		=> undef,
+		report		=> undef,
 		dry_run		=> undef,
 		run_date	=> undef,
 		no_wait		=> undef,
 		@_
 		);
+
+	unless($args{dry_run}) {
+		print "Initiating REPORT pipeline...\n";
+		}
 
 	my $tool_data = LoadFile($args{config});
 	my $run_date = $args{run_date};
@@ -452,27 +457,31 @@ sub main {
 		if (defined($contest_data)) { $qc_command .= " -c $contest_data"; }
 		if (defined($seqqc_data)) { $qc_command .= " -m $seqqc_data"; }
 
-		# run command
-		print $log "Submitting job to create QC plots...\n";
-		$run_script = write_script(
-			log_dir		=> $log_directory,
-			name		=> 'create_qc_plots',
-			cmd		=> $qc_command,
-			modules		=> [$r_version],
-			max_time	=> '01:00:00',
-			mem		=> '2G',
-			hpc_driver	=> $args{cluster}
-			);
+		my $qc_run_id;
+		if ('Y' eq $tool_data->{bamqc}->{run}) {
 
-		my $qc_run_id = submit_job(
-			jobname		=> 'create_qc_plots',
-			shell_command	=> $run_script,
-			hpc_driver	=> $args{cluster},
-			dry_run		=> $args{dry_run},
-			log_file	=> $log
-			);
+			# run command
+			print $log "Submitting job to create QC plots...\n";
+			$run_script = write_script(
+				log_dir		=> $log_directory,
+				name		=> 'create_qc_plots',
+				cmd		=> $qc_command,
+				modules		=> [$r_version],
+				max_time	=> '01:00:00',
+				mem		=> '2G',
+				hpc_driver	=> $args{cluster}
+				);
 
-		push @job_ids, $qc_run_id;
+			$qc_run_id = submit_job(
+				jobname		=> 'create_qc_plots',
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @job_ids, $qc_run_id;
+			}
 
 		# significant germline variants
 		if (-e $cpsr_dir) {
@@ -851,7 +860,7 @@ sub main {
 			hpc_driver	=> $args{cluster}
 			);
 
-		my $run_id = submit_job(
+		my $ensemble_run_id = submit_job(
 			jobname		=> 'collect_somatic_variant_calls',
 			shell_command	=> $run_script,
 			hpc_driver	=> $args{cluster},
@@ -859,7 +868,7 @@ sub main {
 			log_file	=> $log
 			);
 
-		push @job_ids, $run_id;
+		push @job_ids, $ensemble_run_id;
 
 		# plot mutation overlap (by tool)
 		my $snv_overlap_command = join(' ',
@@ -876,13 +885,13 @@ sub main {
 			name		=> 'plot_snv_tool_overlap',
 			cmd		=> $snv_overlap_command,
 			modules		=> [$r_version],
-			dependencies	=> $run_id,
+			dependencies	=> $ensemble_run_id,
 			max_time	=> '04:00:00',
 			mem		=> '2G',
 			hpc_driver	=> $args{cluster}
 			);
 
-		$run_id = submit_job(
+		my $plot1_run_id = submit_job(
 			jobname		=> 'plot_snv_tool_summary',
 			shell_command	=> $run_script,
 			hpc_driver	=> $args{cluster},
@@ -890,7 +899,44 @@ sub main {
 			log_file	=> $log
 			);
 
-		push @job_ids, $run_id;
+		push @job_ids, $plot1_run_id;
+
+		# plot mutation signatures
+		my $sig_plot_command = join(' ',
+			"Rscript $cwd/report/apply_cosmic_mutation_signatures.R",
+			'-p', $tool_data->{project_name},
+			'-o', $plot_directory,
+			'-i', join('/', $plot_directory, 'ensemble_mutation_data.tsv'),
+			'-r', $tool_data->{ref_type},
+			'-t', $tool_data->{seq_type}
+			);
+
+		if (defined($tool_data->{mutation_signatures})) {
+			$sig_plot_command .= " -s $tool_data->{mutation_signatures}";
+			}
+
+		# run command
+		print $log "Submitting job to check mutation signatures...\n";
+		$run_script = write_script(
+			log_dir		=> $log_directory,
+			name		=> 'plot_snv_mutation_signatures',
+			cmd		=> $sig_plot_command,
+			modules		=> [$r_version],
+			dependencies	=> $ensemble_run_id,
+			max_time	=> '04:00:00',
+			mem		=> '2G',
+			hpc_driver	=> $args{cluster}
+			);
+
+		my $plot2_run_id = submit_job(
+			jobname		=> 'plot_snv_mutation_signatures',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{cluster},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @job_ids, $plot2_run_id;
 
 		# plot mutation summary
 		my $snv_plot_command = join(' ',
@@ -913,7 +959,7 @@ sub main {
 			name		=> 'plot_snv_summary',
 			cmd		=> $snv_plot_command,
 			modules		=> [$r_version],
-			dependencies	=> $run_id,
+			dependencies	=> join(':', $plot1_run_id, $plot2_run_id),
 			max_time	=> '04:00:00',
 			mem		=> '2G',
 			hpc_driver	=> $args{cluster}
@@ -1001,13 +1047,15 @@ sub main {
 		hpc_driver	=> $args{cluster}
 		);
 
-	$run_id = submit_job(
-		jobname		=> 'create_report',
-		shell_command	=> $run_script,
-		hpc_driver	=> $args{cluster},
-		dry_run		=> $args{dry_run},
-		log_file	=> $log
-		);
+	if ($args{report}) {
+		$run_id = submit_job(
+			jobname		=> 'create_report',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{cluster},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+		}
 
 	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
 	# collect job metrics (exit status, mem, run time)
@@ -1036,6 +1084,14 @@ sub main {
 			dry_run		=> $args{dry_run},
 			log_file	=> $log
 			);
+
+		push @all_jobs, $run_id;
+
+		# do some logging
+		print "Number of jobs submitted: " . scalar(@all_jobs) . "\n";
+
+		my $n_queued = `squeue -r | wc -l`;
+		print "Total number of jobs in queue: " . $n_queued . "\n";
 
 		# wait until it finishes
 		unless ($args{no_wait}) {
@@ -1070,13 +1126,14 @@ sub main {
  
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
-my ($help, $tool_config, $hpc_driver, $dry_run, $run_date, $no_wait);
+my ($help, $tool_config, $hpc_driver, $dry_run, $run_date, $no_wait, $create_report);
 
 # get command line arguments
 GetOptions(
 	'h|help'	=> \$help,
 	't|tools=s'	=> \$tool_config,
 	'd|date=s'	=> \$run_date,
+	'create_report'	=> \$create_report,
 	'c|cluster=s'	=> \$hpc_driver,
 	'dry-run'	=> \$dry_run,
 	'no-wait'	=> \$no_wait
@@ -1088,6 +1145,7 @@ if ($help) {
 		"\t--help|-h\tPrint this help message",
 		"\t--tools|-t\t<string> master tool config (yaml format)",
 		"\t--date|-d\t<string> Date the pipeline was initiated",
+		"\t--create_report\t<boolean> should the final report (pdf) be created? (default: false)",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
 		"\t--no-wait\t<boolean> should we exit after job submission (true) or wait until all jobs have completed (false)? (default: false)"
@@ -1101,6 +1159,7 @@ if ($help) {
 main(
 	config		=> $tool_config,
 	run_date	=> $run_date,
+	report		=> $create_report,
 	cluster		=> $hpc_driver,
 	dry_run		=> $dry_run,
 	no_wait		=> $no_wait

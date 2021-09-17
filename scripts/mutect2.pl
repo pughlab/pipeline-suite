@@ -258,6 +258,9 @@ sub pon {
 	my $data_config = $args{data_config};
 
 	### PREAMBLE ######################################################################################
+	unless($args{dry_run}) {
+		print "Initiating MuTect2 (create panel of normals) pipeline...\n";
+		}
 
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
@@ -340,6 +343,10 @@ sub pon {
 	### RUN ###########################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
+
+	unless($args{dry_run}) {
+		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
+		}
 
 	my ($run_script, $run_id, $link, $cleanup_cmd);
 	my (@all_jobs, @pon_vcfs);
@@ -598,6 +605,14 @@ sub pon {
 			log_file	=> $log
 			);
 
+		push @all_jobs, $run_id;
+
+		# do some logging
+		print "Number of jobs submitted: " . scalar(@all_jobs) . "\n";
+
+		my $n_queued = `squeue -r | wc -l`;
+		print "Total number of jobs in queue: " . $n_queued . "\n";
+
 		# wait until it finishes
 		unless ($args{no_wait}) {
 
@@ -652,6 +667,9 @@ sub main {
 	my $data_config = $args{data_config};
 
 	### PREAMBLE ######################################################################################
+	unless($args{dry_run}) {
+		print "Initiating MuTect2 (somatic variant) pipeline...\n";
+		}
 
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
@@ -762,6 +780,10 @@ sub main {
 	### RUN ###########################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
+
+	unless($args{dry_run}) {
+		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
+		}
 
 	my ($run_script, $run_id, $link, $java_check, $cleanup_cmd);
 	my @all_jobs;
@@ -959,6 +981,17 @@ sub main {
 							extra_cmd => "md5sum $merged_output > $merged_output.md5"
 							);
 						push @required, "$merged_output.md5";
+						} elsif (scalar(@chroms) == 1) {
+						my $add_on_cmd = join("\n",
+							"mv $chr_stem\_$chr.vcf > $merged_output",
+							"md5sum $merged_output > $merged_output.md5"
+							);
+
+						$mutect_command .= "\n\n" . check_java_output(
+							extra_cmd => $add_on_cmd 
+							);
+						push @required, "$merged_output.md5";
+						
 						} else {
 						$mutect_command .= "\n\n" . check_java_output(
 							extra_cmd => "md5sum $chr_stem\_$chr.vcf > $chr_stem\_$chr.vcf.md5"
@@ -1048,8 +1081,8 @@ sub main {
 					}
 				}
 
-			$cleanup_cmd .= "\nrm $merged_output";
-			$cleanup_cmd .= "\nrm $merged_output.idx";
+			$cleanup_cmd .= "\n  rm $merged_output";
+			$cleanup_cmd .= "\n  rm $merged_output.idx";
 
 			# filter results
 			my $filtered_stem = join('/', $sample_directory, $sample . '_MuTect2_filtered');
@@ -1065,7 +1098,7 @@ sub main {
 				'>', "$filtered_stem.vcf.md5"
 				);
 
-			$cleanup_cmd .= "\nrm $filtered_stem.vcf";
+			$cleanup_cmd .= "\n  rm $filtered_stem.vcf";
 
 			# check if this should be run
 			if ('Y' eq missing_file($filtered_stem . '.vcf.md5')) {
@@ -1309,6 +1342,14 @@ sub main {
 			dry_run		=> $args{dry_run},
 			log_file	=> $log
 			);
+
+		push @all_jobs, $run_id;
+
+		# do some logging
+		print "Number of jobs submitted: " . scalar(@all_jobs) . "\n";
+
+		my $n_queued = `squeue -r | wc -l`;
+		print "Total number of jobs in queue: " . $n_queued . "\n";
 
 		# wait until it finishes
 		unless ($args{no_wait}) {

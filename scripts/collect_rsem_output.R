@@ -109,8 +109,8 @@ for (file in genes.files) {
 	# read in data
 	tmp <- read.delim(file);
 	# store data in list
-	genes.list[[smp]] <- tmp[,c('gene_id', 'transcript_id.s.', 'TPM', 'FPKM')];
-	colnames(genes.list[[smp]]) <- c('gene_id', 'transcript_id', paste0(smp, c('.TPM','.FPKM')));
+	genes.list[[smp]] <- tmp[,c('gene_id', 'transcript_id.s.', 'expected_count', 'TPM', 'FPKM')];
+	colnames(genes.list[[smp]]) <- c('gene_id', 'transcript_id', paste0(smp, c('.expected_count', '.TPM','.FPKM')));
 	}
 
 for (file in isoforms.files) {
@@ -119,8 +119,8 @@ for (file in isoforms.files) {
 	# read in data
 	tmp <- read.delim(file);
 	# store
-	isoforms.list[[smp]] <- tmp[,c('transcript_id', 'gene_id', 'TPM', 'FPKM')];
-	colnames(isoforms.list[[smp]]) <- c('transcript_id', 'gene_id', paste0(smp, c('.TPM','.FPKM')));
+	isoforms.list[[smp]] <- tmp[,c('transcript_id', 'gene_id', 'expected_count', 'TPM', 'FPKM')];
+	colnames(isoforms.list[[smp]]) <- c('transcript_id', 'gene_id', paste0(smp, c('.expected_count','.TPM','.FPKM')));
 	}
 
 # reshape/format data
@@ -154,15 +154,19 @@ genes.tmp <- genes.tmp[order(genes.tmp$GeneID),];
 
 genes.formatted$fpkm <- genes.tmp[,c(1,2, grep('FPKM', colnames(genes.tmp)))];
 genes.formatted$tpm  <- genes.tmp[,c(1,2, grep('TPM', colnames(genes.tmp)))];
+genes.formatted$expected_count  <- genes.tmp[,c(1,2, grep('expected_count', colnames(genes.tmp)))];
 
 colnames(genes.formatted$fpkm) <- gsub('.FPKM', '', colnames(genes.formatted$fpkm));
 colnames(genes.formatted$tpm)  <- gsub('.TPM', '', colnames(genes.formatted$tpm));
+colnames(genes.formatted$expected_count)  <- gsub('.expected_count', '', colnames(genes.formatted$expected_count));
 
 isoforms.formatted$fpkm <- isoforms.tmp[,c(1,2, grep('FPKM', colnames(isoforms.tmp)))];
 isoforms.formatted$tpm  <- isoforms.tmp[,c(1,2, grep('TPM', colnames(isoforms.tmp)))];
+isoforms.formatted$expected_count  <- isoforms.tmp[,c(1,2, grep('expected_count', colnames(isoforms.tmp)))];
 
 colnames(isoforms.formatted$fpkm) <- gsub('.FPKM', '', colnames(isoforms.formatted$fpkm));
 colnames(isoforms.formatted$tpm)  <- gsub('.TPM', '', colnames(isoforms.formatted$tpm));
+colnames(isoforms.formatted$expected_count)  <- gsub('.expected_count', '', colnames(isoforms.formatted$expected_count));
 
 # save combined/formatted data to file
 write.table(

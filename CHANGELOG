@@ -1,3 +1,22 @@
+2021-09-17: PughLab pipeline-suite (version 0.5.4)
+- changed 'create_report' argument to 'summarize' to more accurately reflect function
+- added additional info to logs for use with debugging
+- updates to pindel and novobreak (wip; trying to improve mem/time/space requirements)
+- minor updates to plotting functions for final report 
+
+2021-08-24: PughLab pipeline-suite (version 0.5.3)
+- initial add of Pindel
+- updates to SViCT pipeline
+- addition/update to mavis pipeline (convert scripts + processing new tools)
+
+2021-07-27: PughLab pipeline-suite (version 0.5.2)
+- minor updates to report code (plotting and ensemble caller)
+- adding mutation signatures to final report
+
+2021-07-15: PughLab pipeline-suite (version 0.5.1)
+- function to convert novobreak output for mavis
+- initial add of SViCT
+
 2021-07-08: PughLab pipeline-suite (version 0.5.0)
 - initial add of this log
 - updated readme [moved most information to the wiki]

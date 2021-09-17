@@ -87,6 +87,86 @@ sub get_novobreak_command {
 	return($novobreak_command);
 	}
 
+# format command to prepare ssake 
+sub get_prep_ssake_command {
+	my %args = (
+		output_file	=> undef,
+		n_cpus		=> 1,
+		@_
+		);
+
+	my $nb_output = $args{output_file};
+
+	my $part1_command = join("\n",
+		'  if [ ! -s bp_reads.tsv ] && [ ! -s ssake.sam.md5 ]; then',
+		'    samtools bam2fq -1 read1.fq -2 read2.fq somaticreads.bam;',
+		'    group_bp_reads.pl ' . $nb_output . ' read1.fq read2.fq > bp_reads.tsv;',
+		'    rm {somaticreads,germlinereads}.bam;',
+		'    rm read{1,2}.fq;',
+		'  fi',
+		'  if [ -s bp_reads.tsv ] && [ ! -s ssake.sam.md5 ]; then',
+		'    cls=$(tail -1 bp_reads.tsv | cut -f1);',
+		'    rec=$(echo $cls/' . $args{n_cpus} . ' | bc);',
+		'    rec=$((rec+1));',
+		'    awk -v rec=$rec ' . "'{print" . ' > int($1/rec)".txt"' . "}' bp_reads.tsv;",
+		'    for file in *.txt; do',
+		'      run_ssake.pl $file > /dev/null &',
+		'    done',
+		'    wait',
+		"\n    awk 'length(\$0)>1' *.ssake.asm.out > ssake.fa;",
+		'    bwa mem -t ' . $args{n_cpus} . " -M $bwa_ref ssake.fa > ssake.sam;",
+		'    md5sum ssake.sam > ssake.sam.md5;',
+		'  fi',
+		'  if [ -s ssake.sam.md5 ]; then',
+		'    rm bp_reads.tsv;',
+		"    rm {0..$args{n_cpus}}.txt*;",
+		'    rm ssake.fa;',
+		'  fi'
+		);
+
+	return($part1_command);
+	}
+
+# format command to infer breakpoints
+sub get_infer_breakpoints_command {
+	my %args = (
+		output_file	=> undef,
+		tumour_bam	=> undef,
+		normal_bam	=> undef,
+		n_cpus		=> 1,
+		@_
+		);
+
+	my $nb_output = $args{output_file};
+
+	my $part2_command = join("\n",
+		"  if [ ! -s ssake.pass.vcf ] && [ ! -s $nb_output.md5 ]; then",
+		'    infer_sv.pl ssake.sam > ssake.vcf',
+		"    grep -v '^#' ssake.vcf | sed 's/|/\t/g' | sed 's/read//' |  awk '{ if (!x[\$1\$2]) { y[\$1\$2]=\$14; x[\$1\$2]=\$0 } else { if (\$14 > y[\$1\$2]) { y[\$1\$2]=\$14; x[\$1\$2]=\$0 }}} END { for (i in x) { print x[i]}}' | sort -k1,1 -k2,2n | perl -ne 'if (/TRA/) { print } elsif (/SVLEN=(\\d+)/) { if (\$1 > 100) { print \$_ }} elsif (/SVLEN=-(\\d+)/) { if (\$1 > 100 ) { print }}' > ssake.pass.vcf",
+		"\n" . '    num=$(wc -l ssake.pass.vcf | cut -f1 -d' . "' ');",
+		'  fi',
+		"  if [ -s ssake.pass.vcf ] && [ ! -s $nb_output.md5 ]; then",
+		'    rec=$(echo $num/' . $args{n_cpus} . ' | bc);',
+		'    rec=$((rec+1));',
+		'    split -l $rec ssake.pass.vcf',
+		'    for file in x??; do',
+		'      infer_bp_v4.pl $file '. "$args{tumour_bam} $args{normal_bam}" . ' > $file.sp.vcf & ',
+		'    done',
+		'    wait',
+		"\n" . "    grep '^#' ssake.vcf > header.txt;",
+		'    filter_sv_icgc.pl *.sp.vcf | cat header.txt - > ' . $nb_output . ';',
+		"    md5sum $nb_output > $nb_output.md5;",
+		'  fi',
+		"  if [ -s $nb_output.md5 ]; then",
+		'    rm ssake.{sam,vcf,pass.vcf};',
+		'    rm x??;',
+		'    rm x??.sp.vcf;',
+		'  fi'
+		);
+
+	return($part2_command);
+	}
+
 # format command to run novobreak (WXS)
 sub novobreak_for_wxs_command {
 	my %args = (
@@ -120,163 +200,6 @@ sub novobreak_for_wxs_command {
 	return($nb_command);
 	}
 
-# format command to split bam by chromosome
-sub novobreak_by_split_bam_command {
-	my %args = (
-		tumour_id	=> undef,
-		normal_id	=> undef,
-		tumour_bam	=> undef,
-		normal_bam	=> undef,
-		intervals	=> undef,
-		ref_dir		=> undef,
-		tmp_dir		=> undef,
-		chr_pair	=> undef,
-		@_
-		);
-
-	my $split_command = "cd $args{tmp_dir}\n";
-	if (defined($args{chr_pair})) { 
-		$split_command .= 'CHRS=$(sed -n "' . $args{chr_pair} . '"p ' . $args{intervals} . ');';
-		} else {
-		$split_command .= 'CHRS=$(sed -n "$SLURM_ARRAY_TASK_ID"p ' . $args{intervals} . ');';
-		}
-
-	$split_command .= "\n" . join("\n",
-		"CHR_PAIR=\$(echo \$CHRS | sed s/' '/_/g);",
-		"\n" . 'if [[ ! -e $CHR_PAIR ]]; then mkdir $CHR_PAIR; fi',
-		'cd $CHR_PAIR',
-		"\nif [ -s $args{tumour_id}" . '_${CHR_PAIR}.tsv.md5 ]; then',
-		"  echo Final output file $args{tumour_id}" . '_${CHR_PAIR}.tsv.md5 already exists.',
-		'  exit;',
-		'fi',
-		"\nif [ -s $args{tumour_id}" . '_${CHR_PAIR}.bam.bai ]; then',
-		"  echo $args{tumour_id}" . '_${CHR_PAIR}.bam.bai already exists.',
-		'else',
-		"  samtools view -b $args{tumour_bam} " . '$CHRS' . " > $args{tumour_id}" . '_${CHR_PAIR}.bam;',
-		"  samtools index $args{tumour_id}" . '_${CHR_PAIR}.bam;',
-		'fi',
-		"\nif [ -s $args{normal_id}" . '_${CHR_PAIR}.bam.bai ]; then',
-		"  echo $args{normal_id}" . '_${CHR_PAIR}.bam.bai already exists.',
-		'else',
-		"  samtools view -b $args{normal_bam} " . '$CHRS' . " > $args{normal_id}" . '_${CHR_PAIR}.bam;',
-		"  samtools index $args{normal_id}" . '_${CHR_PAIR}.bam;',
-		'fi'
-		);
-
-	my $nb_command = $split_command . "\n\n" . get_novobreak_command(
-		tumour		=> $args{tumour_id} . '_${CHR_PAIR}.bam',
-		normal		=> $args{normal_id} . '_${CHR_PAIR}.bam',
-		reference	=> join('/', $args{ref_dir}, '$CHR_PAIR.fa'),
-		output_stem	=> $args{tumour_id} . '_${CHR_PAIR}.tsv'
-		);
-
-	$nb_command .= "\n\nmd5sum $args{tumour_id}\_\${CHR_PAIR}.tsv > $args{tumour_id}\_\${CHR_PAIR}.tsv.md5";
-
-	$nb_command .="\n\n" . join("\n",
-		"if [ -s $args{tumour_id}" . '_${CHR_PAIR}.tsv.md5 ]; then',
-		"  rm $args{tumour_id}" . '_${CHR_PAIR}.bam*',
-		"  rm $args{normal_id}" . '_${CHR_PAIR}.bam*',
-		'else',
-		"  echo " . "Final output: $args{tumour_id}" . '_${CHR_PAIR}.tsv.md5 is missing; something went wrong',
-		'fi'
-		);
-
-	return($nb_command);
-	}
-
-# format command to check output of split
-sub confirm_split_command {
-	my %args = (
-		tmp_dir		=> undef,
-		intervals	=> undef,
-		@_
-		);
-
-	my $confirm_command = "cd $args{tmp_dir}\n\n";
-
-	$confirm_command .= join("\n",
-		"while IFS=' ' read -r CHRS || [ -n " . '"${CHRS}" ]; do',
-		'  echo "Checking for NovoBreak output for $CHRS";',
-		'  CHR_PAIR=$(echo $CHRS | ' . "sed s/' '/_/g );",
-		'  if [ -s $CHR_PAIR/*_${CHR_PAIR}.tsv ] && [ -s $CHR_PAIR/*_${CHR_PAIR}.tsv.md5 ]; then',
-		'    echo ">> NovoBreak output for $CHR_PAIR already exists";',
-		'  else',
-		'    echo ">> NovoBreak output for $CHR_PAIR missing or incomplete";',
-		'    exit 1;',
-		'  fi',
-		"done < $args{intervals}"
-		);
-
-	$confirm_command .= "\n\necho 'All NovoBreak runs completed successfully.' > novobreak.COMPLETE";
-
-	return($confirm_command);
-	}
-
-# format command to prepare ssake 
-sub get_prep_ssake_command {
-	my %args = (
-		output_file	=> undef,
-		n_cpus		=> 1,
-		@_
-		);
-
-	my $nb_output = $args{output_file};
-
-	my $part1_command = join("\n",
-		'  samtools bam2fq -1 read1.fq -2 read2.fq somaticreads.bam;',
-		'  group_bp_reads.pl ' . $nb_output . ' read1.fq read2.fq > bp_reads.tsv;'
-		);
-
-	$part1_command .= "\n" . join("\n",
-		'  cls=$(tail -1 bp_reads.tsv | cut -f1);',
-		'  rec=$(echo $cls/' . $args{n_cpus} . ' | bc);',
-		'  rec=$((rec+1));',
-		'  awk -v rec=$rec ' . "'{print" . ' > int($1/rec)".txt"' . "}' bp_reads.tsv;",
-		'  for file in *.txt; do',
-		'    run_ssake.pl $file > /dev/null &',
-		'  done',
-		'  wait',
-		"\n  awk 'length(\$0)>1' *.ssake.asm.out > ssake.fa;",
-		'  bwa mem -t ' . $args{n_cpus} . " -M $bwa_ref ssake.fa > ssake.sam;",
-		'  md5sum ssake.sam > ssake.sam.md5',
-		'fi'
-		);
-
-	return($part1_command);
-	}
-
-# format command to infer breakpoints
-sub get_infer_breakpoints_command {
-	my %args = (
-		output_file	=> undef,
-		tumour_bam	=> undef,
-		normal_bam	=> undef,
-		n_cpus		=> 1,
-		@_
-		);
-
-	my $nb_output = $args{output_file};
-
-	my $part2_command = join("\n",
-		'  infer_sv.pl ssake.sam > ssake.vcf',
-		"  grep -v '^#' ssake.vcf | sed 's/|/\t/g' | sed 's/read//' |  awk '{ if (!x[\$1\$2]) { y[\$1\$2]=\$14; x[\$1\$2]=\$0 } else { if (\$14 > y[\$1\$2]) { y[\$1\$2]=\$14; x[\$1\$2]=\$0 }}} END { for (i in x) { print x[i]}}' | sort -k1,1 -k2,2n | perl -ne 'if (/TRA/) { print } elsif (/SVLEN=(\\d+)/) { if (\$1 > 100) { print \$_ }} elsif (/SVLEN=-(\\d+)/) { if (\$1 > 100 ) { print }}' > ssake.pass.vcf",
-		"\n" . '  num=$(wc -l ssake.pass.vcf | cut -f1 -d' . "' ');",
-		'  rec=$(echo $num/' . $args{n_cpus} . ' | bc);',
-		'  rec=$((rec+1));',
-		'  split -l $rec ssake.pass.vcf',
-		'  for file in x??; do',
-		'    infer_bp_v4.pl $file '. "$args{tumour_bam} $args{normal_bam}" . ' > $file.sp.vcf & ',
-		'  done',
-		'  wait',
-		"\n" . "  grep '^#' ssake.vcf > header.txt;",
-		'  filter_sv_icgc.pl *.sp.vcf | cat header.txt - > ' . $nb_output,
-		"  md5sum $nb_output > $nb_output.md5",
-		'fi'
-		);
-
-	return($part2_command);
-	}
-
 # format command to process novoBreak output (WXS)
 sub get_process_novobreak_command {
 	my %args = (
@@ -305,6 +228,8 @@ sub get_process_novobreak_command {
 		n_cpus		=> $args{n_cpus}
 		);
 
+	$part1_command .= "\nfi";
+
 	# part 2
 	my $final_output = join('/', $args{tmp_dir}, '..', $args{tumour_id} . '_novoBreak.pass.vcf');
 
@@ -322,115 +247,118 @@ sub get_process_novobreak_command {
 		n_cpus		=> $args{n_cpus}
 		);
 
+	$part2_command .= "\nfi";
+
 	my $final_command = $part1_command . "\n" . $part2_command;
 
 	return($final_command);
 	}
 
-# format command to process novoBreak output (WGS)
-sub get_process_novobreak_command_part1 {
+# format command to split bam by chromosome
+sub novobreak_by_split_bam_command {
 	my %args = (
 		tumour_id	=> undef,
-		intervals	=> undef,
-		tmp_dir		=> undef,
-		n_cpus		=> 1,
-		chr_pair	=> undef,
-		@_
-		);
-
-	my $split_command = 'CHRS=$(sed -n "$SLURM_ARRAY_TASK_ID"p ' . $args{intervals} . ');';
-	if (defined($args{chr_pair})) { 
-		$split_command = 'CHRS=$(sed -n "' . $args{chr_pair} . '"p ' . $args{intervals} . ');';
-		}
-
-	$split_command .= "\n" . join("\n",
-		"CHR_PAIR=\$(echo \$CHRS | sed s/' '/_/g);",
-		"\n" . 'echo Processing output for: $CHR_PAIR',
-		"cd $args{tmp_dir}/" . '$CHR_PAIR',
-		"\n" . 'if [ -s ssake.sam.md5 ]; then',
-		'  echo Final output file: ssake.sam already exists;',
-		'else'
-		);
-
-	my $nb_output = $args{tumour_id} . '_${CHR_PAIR}.tsv';
-
-	my $part1_command = get_prep_ssake_command(
-		output_file	=> $nb_output,
-		n_cpus		=> $args{n_cpus}
-		);
-
-	my $final_command = $split_command . "\n" . $part1_command;
-
-	return($final_command);
-	}
-
-# format command to check output of ssake
-sub confirm_ssake_command {
-	my %args = (
-		tmp_dir		=> undef,
-		intervals	=> undef,
-		@_
-		);
-
-	my $confirm_command = "cd $args{tmp_dir}\n\n";
-
-	$confirm_command .= join("\n",
-		"while IFS=' ' read -r CHRS || [ -n " . '"${CHRS}" ]; do',
-		'  echo "Checking for NovoBreak output for $CHRS";',
-		'  CHR_PAIR=$(echo $CHRS | ' . "sed s/' '/_/g );",
-		'  if [ -s $CHR_PAIR/ssake.sam.md5 ]; then',
-		'    echo ">> NovoBreak ssake output for $CHR_PAIR already exists";',
-		'  else',
-		'    echo ">> NovoBreak ssake output for $CHR_PAIR missing or incomplete";',
-		'    exit 1;',
-		'  fi',
-		"done < $args{intervals}"
-		);
-
-	$confirm_command .= "\n\necho 'All SSAKE runs completed successfully.' > ssake.COMPLETE";
-
-	return($confirm_command);
-	}
-
-# format command to process novoBreak output
-sub get_process_novobreak_command_part2 {
-	my %args = (
-		tumour_id	=> undef,
+		normal_id	=> undef,
 		tumour_bam	=> undef,
 		normal_bam	=> undef,
 		intervals	=> undef,
+		ref_dir		=> undef,
 		tmp_dir		=> undef,
-		n_cpus		=> 1,
 		chr_pair	=> undef,
 		@_
 		);
 
-	my $nb_output = $args{tumour_id} . '_${CHR_PAIR}_novoBreak.pass.vcf';
-
-	my $split_command = 'CHRS=$(sed -n "$SLURM_ARRAY_TASK_ID"p ' . $args{intervals} . ');';
+	# initialize
+	my $submit_command = "cd $args{tmp_dir}\n";
 	if (defined($args{chr_pair})) { 
-		$split_command = 'CHRS=$(sed -n "' . $args{chr_pair} . '"p ' . $args{intervals} . ');';
+		$submit_command .= 'CHRS=$(sed -n "' . $args{chr_pair} . '"p ' . $args{intervals} . ');';
+		} else {
+		$submit_command .= 'CHRS=$(sed -n "$SLURM_ARRAY_TASK_ID"p ' . $args{intervals} . ');';
 		}
 
-	$split_command .= "\n" . join("\n",
+	# check to see if this has already run
+	$submit_command .= "\n" . join("\n",
 		"CHR_PAIR=\$(echo \$CHRS | sed s/' '/_/g);",
-		"\n" . 'echo Processing output for: $CHR_PAIR',
-		"cd $args{tmp_dir}/" . '$CHR_PAIR',
-		"\n" . "if [ -s $nb_output.md5 ]; then",
-		"  echo Final output file: $nb_output already exists;",
-		'else'
+		"\n" . 'if [[ ! -e $CHR_PAIR ]]; then mkdir $CHR_PAIR; fi',
+		'cd $CHR_PAIR',
+		# check to see if this has already run
+		"\nif [ -s $args{tumour_id}" . '_${CHR_PAIR}_novoBreak.pass.vcf.md5 ]; then',
+		"  echo Final output file $args{tumour_id}" . '_${CHR_PAIR}_novoBreak.pass.vcf.md5 already exists.',
+		'  exit;',
+		'fi',
+		# check to see if split bams already exist 
+		"\nif [ -s $args{tumour_id}" . '_${CHR_PAIR}.bam.bai ]; then',
+		"  echo $args{tumour_id}" . '_${CHR_PAIR}.bam.bai already exists.',
+		'else',
+		"  samtools view -b $args{tumour_bam} " . '$CHRS' . " > $args{tumour_id}" . '_${CHR_PAIR}.bam;',
+		"  samtools index $args{tumour_id}" . '_${CHR_PAIR}.bam;',
+		'fi',
+		"\nif [ -s $args{normal_id}" . '_${CHR_PAIR}.bam.bai ]; then',
+		"  echo $args{normal_id}" . '_${CHR_PAIR}.bam.bai already exists.',
+		'else',
+		"  samtools view -b $args{normal_bam} " . '$CHRS' . " > $args{normal_id}" . '_${CHR_PAIR}.bam;',
+		"  samtools index $args{normal_id}" . '_${CHR_PAIR}.bam;',
+		'fi'
 		);
 
-	my $part2_command = get_infer_breakpoints_command(
-		output_file	=> $nb_output,
-		tumour_bam	=> $args{tumour_bam},
-		normal_bam	=> $args{normal_bam},
+	# run NovoBreak on split bams
+	my $nb_command = ' ' . get_novobreak_command(
+		tumour		=> $args{tumour_id} . '_${CHR_PAIR}.bam',
+		normal		=> $args{normal_id} . '_${CHR_PAIR}.bam',
+		reference	=> join('/', $args{ref_dir}, '$CHR_PAIR.fa'),
+		output_stem	=> $args{tumour_id} . '_${CHR_PAIR}.tsv'
+		);
+
+	$nb_command .= "\n md5sum $args{tumour_id}\_\${CHR_PAIR}.tsv > $args{tumour_id}\_\${CHR_PAIR}.tsv.md5";
+
+	$submit_command .= "\n" . join("\n",
+		# check to see if this has already run
+		"if [ -s $args{tumour_id}" . '_${CHR_PAIR}.tsv.md5 ]; then',
+		"  echo Initial output file $args{tumour_id}" . '_${CHR_PAIR}.tsv.md5 already exists.',
+		'else',
+		$nb_command,
+		'fi'
+		);
+
+	# run NovoBreak post-process (part 1)
+	my $part1_command = get_prep_ssake_command(
+		output_file	=> $args{tumour_id} . '_${CHR_PAIR}.tsv',
 		n_cpus		=> $args{n_cpus}
 		);
 
-	my $final_command = $split_command . "\n" . $part2_command;
+	# run NovoBreak post-process (part2)
+	my $part2_command = get_infer_breakpoints_command(
+		output_file	=> $args{tumour_id} . '_${CHR_PAIR}_novoBreak.pass.vcf',
+		tumour_bam	=> $args{tumour_id} . '_${CHR_PAIR}.bam',
+		normal_bam	=> $args{normal_id} . '_${CHR_PAIR}.bam',
+		n_cpus		=> $args{n_cpus}
+		);
 
-	return($final_command);
+	$submit_command .= "\n" . join("\n",
+		# check to see if this has already run
+		"\nif [ -s ssake.sam.md5 ]; then",
+		'  echo Intermediate file: ssake.sam already exists;',
+		'else',
+		$part1_command,
+		'fi',
+		"\nif [ -s $args{tumour_id}" . '_${CHR_PAIR}_novoBreak.pass.vcf.md5 ]; then',
+		"  echo Final output file: $args{tumour_id}" . '_${CHR_PAIR}_novoBreak.pass.vcf already exists.',
+		'else',
+		$part2_command,
+		'fi'
+		);
+
+	# remove intermediate files
+	$submit_command .="\n\n" . join("\n",
+		"if [ -s $args{tumour_id}" . '_${CHR_PAIR}_novoBreak.pass.vcf.md5 ]; then',
+		"  rm $args{tumour_id}" . '_${CHR_PAIR}.bam*',
+		"  rm $args{normal_id}" . '_${CHR_PAIR}.bam*',
+		'else',
+		"  echo " . "Final output: $args{tumour_id}" . '_${CHR_PAIR}.tsv.md5 is missing; something went wrong',
+		'fi'
+		);
+
+	return($submit_command);
 	}
 
 # format command to check output of infer breakpoints
@@ -456,10 +384,11 @@ sub confirm_breakpoint_command {
 		"done < $args{intervals}"
 		);
 
-	$confirm_command .= "\n\necho 'All NovoBreak SV calling steps completed successfully.' > breakpoint.COMPLETE";
+	$confirm_command .= "\n\necho 'All NovoBreak SV calling steps completed successfully.' > novobreak.COMPLETE";
 
 	return($confirm_command);
 	}
+
 
 # format command to check output of infer breakpoints
 sub merge_and_filter_command {
@@ -523,6 +452,9 @@ sub main {
 	my $data_config = $args{data_config};
 
 	### PREAMBLE ######################################################################################
+	unless($args{dry_run}) {
+		print "Initiating NovoBreak pipeline...\n";
+		}
 
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
@@ -568,7 +500,7 @@ sub main {
 
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
-	print $log "\n---";
+	print $log "\n---\n";
 
 	# set tools and versions
 	my $novobreak	= 'novoBreak/' . $tool_data->{novobreak_version};
@@ -666,6 +598,10 @@ sub main {
 
 	# get sample data
 	my $smp_data = LoadFile($data_config);
+
+	unless($args{dry_run}) {
+		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
+		}
 
 	my $novobreak_check_run_id = '';
 
@@ -766,10 +702,10 @@ sub main {
 					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
 
-					# check novoBreak output
-					my $confirm_nb_cmd = confirm_split_command(
+					# check novoBreak output (infer breakpoints)
+					my $confirm_nb_cmd = confirm_breakpoint_command(
 						tmp_dir		=> $tmp_directory,
-						intervals	=> $chr_file
+						intervals	=> $chr_file,
 						);
 
 					# record command (in log directory) and then run job
@@ -858,10 +794,10 @@ sub main {
 							}
 						}
 
-					# check novoBreak output
-					my $confirm_nb_cmd = confirm_split_command(
+					# check novoBreak output (infer breakpoints)
+					my $confirm_nb_cmd = confirm_breakpoint_command(
 						tmp_dir		=> $tmp_directory,
-						intervals	=> $chr_file
+						intervals	=> $chr_file,
 						);
 
 					# record command (in log directory) and then run job
@@ -930,336 +866,7 @@ sub main {
 					} else {
 					print $log "Skipping NovoBreak because step is already complete!\n";
 					}
-				}
 
-			# Run post-process steps
-			if ($is_wgs && $is_multi_slurm) {
-			
-				$output_to_check = join('/', $tmp_directory, 'ssake.COMPLETE');
-
-				if ('Y' eq missing_file($output_to_check)) {
-				
-					my $nb_part1_command = get_process_novobreak_command_part1(
-						tumour_id	=> $sample,
-						intervals	=> $chr_file,
-						tmp_dir		=> $tmp_directory,
-						n_cpus		=> $parameters->{process}->{n_cpu}
-						);
-
-					# record command (in log directory) and then run job
-					print $log "Submitting job for NovoBreak SSAKE...\n";
-
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> 'run_novobreak_ssake_' . $sample,
-						cmd	=> $nb_part1_command,
-						modules	=> [$samtools, $novobreak, $bwa, 'perl'],
-						dependencies	=> $run_id,
-						max_time	=> $parameters->{ssake}->{time},
-						mem		=> $parameters->{ssake}->{mem},
-						cpus_per_task	=> $parameters->{ssake}->{n_cpu},
-						hpc_driver	=> $args{hpc_driver},
-						extra_args	=> '--array=1-' . $pair_count . '%5'
-						);
-
-					$run_id = submit_job(
-						jobname		=> 'run_novobreak_ssake_' . $sample,
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
-						);
-
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
-
-					# check process novoBreak (ssake) output
-					my $confirm_ssake_cmd = confirm_ssake_command(
-						tmp_dir		=> $tmp_directory,
-						intervals	=> $chr_file,
-						);
-
-					# record command (in log directory) and then run job
-					print $log "Submitting job for Check NovoBreak SSAKE...\n";
-
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> 'run_check_novobreak_ssake_' . $sample,
-						cmd	=> $confirm_ssake_cmd,
-						dependencies	=> $run_id,
-						mem		=> '128M',
-						hpc_driver	=> $args{hpc_driver}
-						);
-
-					$run_id = submit_job(
-						jobname		=> 'run_check_novobreak_ssake' . $sample,
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
-						);
-
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
-					} else {
-					print $log "Skipping Part 1 of post-process as this is already complete.\n";
-					}
-
-				# Run post-process part 2
-				$output_to_check = join('/', $tmp_directory, 'breakpoint.COMPLETE');
-
-				if ('Y' eq missing_file($output_to_check)) {
-
-					my $nb_part2_command = get_process_novobreak_command_part2(
-						tumour_id	=> $sample,
-						tumour_bam	=> $smp_data->{$patient}->{tumour}->{$sample},
-						normal_bam	=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
-						intervals	=> $chr_file,
-						tmp_dir		=> $tmp_directory,
-						n_cpus		=> $parameters->{process}->{n_cpu} 
-						);
-
-					# record command (in log directory) and then run job
-					print $log "Submitting job for NovoBreak process part 2...\n";
-
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> 'run_novobreak_find_breakpoints_' . $sample,
-						cmd	=> $nb_part2_command,
-						modules	=> [$samtools, $novobreak, $bwa, 'perl'],
-						dependencies	=> $run_id,
-						max_time	=> $parameters->{process}->{time},
-						mem		=> $parameters->{process}->{mem},
-						cpus_per_task	=> $parameters->{process}->{n_cpu},
-						hpc_driver	=> $args{hpc_driver},
-						extra_args	=> '--array=1-' . $pair_count . '%5'
-						);
-
-					$run_id = submit_job(
-						jobname		=> 'run_novobreak_find_breakpoints_' . $sample,
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
-						);
-
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
-
-					# check process novoBreak (infer breakpoints) output
-					my $confirm_bp_cmd = confirm_breakpoint_command(
-						tmp_dir		=> $tmp_directory,
-						intervals	=> $chr_file,
-						);
-
-					# record command (in log directory) and then run job
-					print $log "Submitting job for Check NovoBreak BREAKPOINTS...\n";
-
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> 'run_check_novobreak_breakpoints_' . $sample,
-						cmd	=> $confirm_bp_cmd,
-						dependencies	=> $run_id,
-						mem		=> '128M',
-						hpc_driver	=> $args{hpc_driver}
-						);
-
-					$run_id = submit_job(
-						jobname		=> 'run_check_novobreak_breakpoints' . $sample,
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
-						);
-
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
-					} else {
-					print $log "Skipping Part 2 of post-process as this is already complete.\n";
-					}
-
-				} elsif ($is_wgs && ! $is_multi_slurm) {
-			
-				$output_to_check = join('/', $tmp_directory, 'ssake.COMPLETE');
-				my @chr_post_jobs;
-
-				if ('Y' eq missing_file($output_to_check)) {
-
-					foreach my $i (1..$pair_count) {
-
-						my $pair = $chr_pairs[$i - 1];
-						my $pair_output = join('/', $tmp_directory, $pair, 'ssake.sam.md5');
-
-						my $nb_part1_command = get_process_novobreak_command_part1(
-							tumour_id	=> $sample,
-							intervals	=> $chr_file,
-							chr_pair	=> $i,
-							tmp_dir		=> $tmp_directory,
-							n_cpus		=> $parameters->{process}->{n_cpu}
-							);
-
-						if ('Y' eq missing_file($pair_output)) {
-
-							# record command (in log directory) and then run job
-							print $log "Submitting job for NovoBreak SSAKE ($pair)...\n";
-
-							$run_script = write_script(
-								log_dir	=> $log_directory,
-								name	=> 'run_novobreak_ssake_' . $sample . '_' . $pair,
-								cmd	=> $nb_part1_command,
-								modules	=> [$samtools, $novobreak, $bwa, 'perl'],
-								dependencies	=> $run_id,
-								max_time	=> $parameters->{ssake}->{time},
-								mem		=> $parameters->{ssake}->{mem},
-								cpus_per_task	=> $parameters->{ssake}->{n_cpu},
-								hpc_driver	=> $args{hpc_driver}
-								);
-
-							$run_id = submit_job(
-								jobname		=> 'run_novobreak_ssake_' . $sample . '_' . $pair,
-								shell_command	=> $run_script,
-								hpc_driver	=> $args{hpc_driver},
-								dry_run		=> $args{dry_run},
-								log_file	=> $log
-								);
-
-							push @chr_post_jobs, $run_id;
-							push @patient_jobs, $run_id;
-							push @all_jobs, $run_id;
-
-							# add a pause because we are submitting A LOT of jobs here
-							unless($args{dry_run}) {
-								if (scalar(@chr_post_jobs) % 10 == 0) { sleep(10); }
-								}
-							} else {
-							print $log "Skipping SSAKE ($pair) as this is already completed!";
-							}
-						}
-
-					# check process novoBreak (ssake) output
-					my $confirm_ssake_cmd = confirm_ssake_command(
-						tmp_dir		=> $tmp_directory,
-						intervals	=> $chr_file
-						);
-
-					# record command (in log directory) and then run job
-					print $log "Submitting job for Check NovoBreak SSAKE...\n";
-
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> 'run_check_novobreak_ssake_' . $sample,
-						cmd	=> $confirm_ssake_cmd,
-						dependencies	=> join(':', @chr_post_jobs),
-						mem		=> '128M',
-						hpc_driver	=> $args{hpc_driver}
-						);
-
-					$run_id = submit_job(
-						jobname		=> 'run_check_novobreak_ssake' . $sample,
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
-						);
-
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
-					} else {
-					print $log "Skipping Part 1 of post-process as this is already complete.\n";
-					}
-
-				# Run post-process part 2
-				$output_to_check = join('/', $tmp_directory, 'breakpoint.COMPLETE');
-				my @chr_post2_jobs;
-
-				if ('Y' eq missing_file($output_to_check)) {
-
-					foreach my $i (1..$pair_count) {
-
-						my $pair = $chr_pairs[$i - 1];
-						my $pair_output = join('/', $tmp_directory, $pair, $sample . '_' . $pair . '_novoBreak.pass.vcf.md5');
-
-						my $nb_part2_command = get_process_novobreak_command_part2(
-							tumour_id	=> $sample,
-							tumour_bam	=> $smp_data->{$patient}->{tumour}->{$sample},
-							normal_bam	=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
-							intervals	=> $chr_file,
-							chr_pair	=> $i,
-							tmp_dir		=> $tmp_directory,
-							n_cpus		=> $parameters->{process}->{n_cpu} 
-							);
-
-						if ('Y' eq missing_file($pair_output)) {
-
-							# record command (in log directory) and then run job
-							print $log "Submitting job for NovoBreak process part 2 ($pair)...\n";
-
-							$run_script = write_script(
-								log_dir	=> $log_directory,
-								name	=> 'run_novobreak_find_breakpoints_' . $sample . '_' . $pair,
-								cmd	=> $nb_part2_command,
-								modules	=> [$samtools, $novobreak, $bwa, 'perl'],
-								dependencies	=> $run_id,
-								max_time	=> $parameters->{process}->{time},
-								mem		=> $parameters->{process}->{mem},
-								cpus_per_task	=> $parameters->{process}->{n_cpu},
-								hpc_driver	=> $args{hpc_driver}
-								);
-
-							$run_id = submit_job(
-								jobname		=> 'run_novobreak_find_breakpoints_' . $sample . '_' . $pair,
-								shell_command	=> $run_script,
-								hpc_driver	=> $args{hpc_driver},
-								dry_run		=> $args{dry_run},
-								log_file	=> $log
-								);
-
-							push @chr_post2_jobs, $run_id;
-							push @patient_jobs, $run_id;
-							push @all_jobs, $run_id;
-
-							# add a pause because we are submitting A LOT of jobs here
-							unless($args{dry_run}) {
-								if (scalar(@chr_post2_jobs) % 10 == 0) { sleep(10); }
-								}
-							} else {
-							print $log "Skipping BREAKPOINT ($pair) as this is already complete!";
-							}
-						}
-
-					# check process novoBreak (infer breakpoints) output
-					my $confirm_bp_cmd = confirm_breakpoint_command(
-						tmp_dir		=> $tmp_directory,
-						intervals	=> $chr_file
-						);
-
-					# record command (in log directory) and then run job
-					print $log "Submitting job for Check NovoBreak BREAKPOINTS...\n";
-
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> 'run_check_novobreak_breakpoints_' . $sample,
-						cmd	=> $confirm_bp_cmd,
-						dependencies	=> join(':', @chr_post2_jobs),
-						mem		=> '128M',
-						hpc_driver	=> $args{hpc_driver}
-						);
-
-					$run_id = submit_job(
-						jobname		=> 'run_check_novobreak_breakpoints' . $sample,
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
-						);
-
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
-					} else {
-					print $log "Skipping Part 2 of post-process as this is already complete.\n";
-					}
-
-				} else {
 				# run post-process steps on full novoBreak output
 				$output_to_check = join('/', $sample_directory, $sample . '_novoBreak.pass.vcf');
 
@@ -1298,7 +905,6 @@ sub main {
 
 					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
-					push @final_outputs, $output_to_check;
 					} else {
 					print $log "Skipping post-process step as this is already complete!\n";
 					}
@@ -1348,16 +954,17 @@ sub main {
 
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
-				push @final_outputs, $merged_output;
 				} else {
 				print $log "Skipping final merge step as this is already completed!\n";
 				}
+
+			push @final_outputs, $merged_output;
 
 			# should intermediate files be removed
 			# run per patient
 			if ($args{del_intermediates}) {
 
-				if (scalar(@patient_jobs) == 0) {
+				if ( (scalar(@patient_jobs) == 0) && (! $args{dry_run}) ) {
 					`rm -rf $tmp_directory`;
 
 					} else {
@@ -1405,32 +1012,6 @@ sub main {
 			}
 		}
 
-	# collate results
-	my $collect_output = join(' ',
-		"Rscript $cwd/collect_nb_output.R",
-		'-d', $output_directory,
-		'-p', $tool_data->{project_name}
-		);
-
-	$run_script = write_script(
-		log_dir	=> $log_directory,
-		name	=> 'combine_variant_calls',
-		cmd	=> $collect_output,
-		modules	=> [$r_version],
-		dependencies	=> join(':', @all_jobs),
-		mem		=> '4G',
-		max_time	=> '24:00:00',
-		hpc_driver	=> $args{hpc_driver}
-		);
-
-	$run_id = submit_job(
-		jobname		=> 'combine_variant_calls',
-		shell_command	=> $run_script,
-		hpc_driver	=> $args{hpc_driver},
-		dry_run		=> $args{dry_run},
-		log_file	=> $log
-		);
-
 	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
 	# collect job metrics (exit status, mem, run time)
 	unless ( ($args{dry_run}) || (scalar(@all_jobs) == 0) ) {
@@ -1458,6 +1039,14 @@ sub main {
 			dry_run		=> $args{dry_run},
 			log_file	=> $log
 			);
+
+		push @all_jobs, $run_id;
+
+		# do some logging
+		print "Number of jobs submitted: " . scalar(@all_jobs) . "\n";
+
+		my $n_queued = `squeue -r | wc -l`;
+		print "Total number of jobs in queue: " . $n_queued . "\n";
 
 		# wait until it finishes
 		unless ($args{no_wait}) {

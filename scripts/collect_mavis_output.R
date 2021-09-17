@@ -37,6 +37,7 @@ save.session.profile <- function(file.name) {
 
 ### PREPARE SESSION ################################################################################
 # import libraries
+library(GenomicRanges);
 library(argparse);
 library(plyr);
 
@@ -45,6 +46,7 @@ parser <- ArgumentParser();
 
 parser$add_argument('-d', '--directory', type = 'character', help = 'path to data directory');
 parser$add_argument('-p', '--project', type = 'character', help = 'project name');
+parser$add_argument('-t', '--targets', type = 'character', help = 'path to target regions', default = NULL);
 
 arguments <- parser$parse_args();
 
@@ -82,6 +84,31 @@ smp.fields.names <- sapply(smp.fields, function(i) { unlist(strsplit(i,'_'))[1] 
 
 sv.data <- sv.data.full[,c(key.fields, smp.fields)];
 
+# fill in missing tools (custom conversion scripts)
+new.tools <- apply(
+	sv.data[,c('tracking_id','tools')],
+	1,
+	function(i) {
+
+		ids <- unlist(strsplit(as.character(i[1]),';'));
+		tools <- setdiff(unlist(strsplit(as.character(i[2]),';')),'');
+
+		if (any(grepl('pindel', ids))) { tools <- c(tools,'pindel'); }
+		if (any(grepl('svict', ids))) { tools <- c(tools,'svict'); }
+		if (any(grepl('novobreak', ids))) { tools <- c(tools,'novobreak'); }
+		if (any(grepl('fusioncatcher', ids))) { tools <- c(tools,'fusioncatcher'); }
+
+		toolset <- paste(tools, collapse = ';');
+		if (length(tools) > 0) { 
+			return(toolset);
+			} else {
+			return('');
+			}
+		}
+	);
+
+sv.data$tools <- new.tools;
+
 # save combined/formatted data to file
 write.table(
 	sv.data,
@@ -91,14 +118,81 @@ write.table(
 	sep = '\t'
 	);
 
+# if target regions were provided
+if (!is.null(arguments$targets)) {
+
+	# get target regions
+	target_bed <- read.delim(arguments$targets, header = FALSE, comment.char = '#');
+	colnames(target_bed)[1:3] <- c('Chromosome','Start','End');
+
+	# create genomic ranges object for target regions
+	target.gr <- makeGRangesFromDataFrame(target_bed, starts.in.df.are.0based = TRUE);
+
+	# create genomic ranges object for each breakpoint
+	first_bp <- data.frame(
+		Chromosome = paste0('chr',sv.data$break1_chromosome),
+		Start = sv.data$break1_position_start,
+		End = sv.data$break1_position_end
+		);
+
+	second_bp <- data.frame(
+		Chromosome = paste0('chr',sv.data$break2_chromosome),
+		Start = sv.data$break2_position_start,
+		End = sv.data$break2_position_end
+		);
+
+	bp1.gr <- makeGRangesFromDataFrame(first_bp, starts.in.df.are.0based = FALSE);
+	bp2.gr <- makeGRangesFromDataFrame(second_bp, starts.in.df.are.0based = FALSE);
+
+	# find overlaps
+	overlaps.p1 <- as.data.frame(findOverlaps(bp1.gr, target.gr));
+	overlaps.p2 <- as.data.frame(findOverlaps(bp2.gr, target.gr));
+
+	overlap.data <- merge(
+		overlaps.p1,
+		overlaps.p2,
+		by = 'queryHits',
+		suffixes = c('.1','.2'),
+		all = TRUE
+		);
+
+	# only keep entries for which both breakpoints are within target regions
+	to.remove <- which(is.na(overlap.data$subjectHits.1) | is.na(overlap.data$subjectHits.2));
+	keep.idx <- unique(overlap.data[-to.remove,]$queryHits);
+
+	# filter initial input
+	sv.data.filtered <- sv.data[keep.idx,];
+
+	# save filtered data
+	write.table(
+		sv.data.filtered,
+		file = generate.filename(arguments$project, 'mavis_output_filtered','tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+
+	} else { 
+	sv.data.filtered <- sv.data;
+	}
+
 # format for cbioportal (not complete!)
-tmp <- sv.data[,key.fields];
+tmp <- sv.data.filtered[,key.fields];
 tmp$Fusion <- paste0(tmp$gene1_aliases, '--', tmp$gene2_aliases);
 tmp <- tmp[!grepl('None',tmp$Fusion),];
 
+# add in a length filter for pindel (to remove short indels)
+#tmp$Length <- apply(
+#	tmp[,grepl('position',colnames(tmp))],
+#	1,
+#	function(i) { max(i) - min(i) }
+#	);
+#tmp[which(tmp$break1_chromosome != tmp$break2_chromosome),]$Length <- NA;
+
+#short.idx <- which(sv.lengths < 30 & (tmp$break1_chromosome == tmp$break2_chromosome));
+
 tmp$Status <- 'unknown';
 for (i in 1:nrow(tmp)) {
-#	smp <- substr(gsub('-','\\.',tmp[i,]$library),0,10);
 	smp <- gsub('-','\\.',tmp[i,]$library);
 	titles <- smp.fields[grepl(smp, smp.fields.names)];
 	id <- tmp[i,]$tracking_id;
@@ -135,7 +229,6 @@ unique.calls <- aggregate(
 	);
 
 colnames(unique.calls)[which(colnames(unique.calls) == 'x')] <- 'Tool';
-
 unique.calls$Sample <- gsub('-wgs|-wxs|-rna','',unique.calls$library);
 
 # format for cbioportal

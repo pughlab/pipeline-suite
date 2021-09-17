@@ -49,6 +49,7 @@ parser$add_argument('-p', '--project', type = 'character', help = 'PROJECT name'
 parser$add_argument('-o', '--output', type = 'character', help = 'path to output directory');
 parser$add_argument('--mutect', type = 'character', help = 'path to combined mutect output');
 parser$add_argument('--mutect2', type = 'character', help = 'path to combined mutect2 output');
+parser$add_argument('--pindel', type = 'character', help = 'path to combined pindel output');
 parser$add_argument('--strelka', type = 'character', help = 'path to combined strelka output');
 parser$add_argument('--somaticsniper', type = 'character', help = 'path to combined somaticsniper output');
 parser$add_argument('--varscan', type = 'character', help = 'path to combined varscan output');
@@ -60,12 +61,15 @@ arguments <- parser$parse_args();
 # do some quick error checks
 run.mutect <- !is.null(arguments$mutect);
 run.mutect2 <- !is.null(arguments$mutect2);
+run.pindel <- !is.null(arguments$pindel);
 run.strelka <- !is.null(arguments$strelka);
 run.somaticsniper <- !is.null(arguments$somaticsniper);
 run.varscan <- !is.null(arguments$varscan);
 run.vardict <- !is.null(arguments$vardict);
 
-tool.count <- sum(run.mutect,run.mutect2,run.strelka,run.varscan,run.somaticsniper,run.vardict);
+tool.count <- sum(run.mutect,run.mutect2,run.pindel,run.strelka,run.varscan,run.somaticsniper,run.vardict);
+snp.tool.count <- sum(run.mutect,run.mutect2,run.strelka,run.varscan,run.somaticsniper,run.vardict);
+indel.tool.count <- sum(run.mutect2,run.pindel,run.strelka,run.varscan,run.vardict);
 
 if (tool.count < 2) {
 	stop('Must provide path to input file or paths to 2+ tool-specific outputs');
@@ -107,6 +111,9 @@ if (!is.null(arguments$mutect2)) {
 	}
 if (!is.null(arguments$mutect)) {
 	mutation.data[['MuTect']] <- read.delim(arguments$mutect);
+	}
+if (!is.null(arguments$pindel)) {
+	mutation.data[['Pindel']] <- read.delim(arguments$pindel);
 	}
 
 setwd(arguments$output);
@@ -156,21 +163,16 @@ combined.data$Count <- apply(
 
 ### FILTER VARIANTS ################################################################################
 # apply the following criteria to filter variants:
-#	1) is snv and called by a minimum n_tools (or 50% of tools)
+#	1) is snv and called by a minimum 4+ tools (or 50% of tools)
 #		EXCEPTION is if this is a tumour-only sample because somaticsniper doesn't run these
-#	2) is indel and called by 2+ tools (or 50% of indel-callers) (because mutect does not call indels)
+#	2) is indel and called by 3+ tools (or 50% of indel-callers) (because mutect does not call indels)
 #	3) is called by MuTect2 and VAF is < 0.1
 #	4) keep position if it passes any of the above in any sample AND called by MuTect2
 
 combined.data$FILTER <- NA;
 
-min.snp.count <- if (tool.count == 6) { 4
-	} else { ceiling(tool.count*0.5)
-	}
-
-min.indel.count <- if (sum(run.mutect2, run.varscan, run.strelka, run.vardict) == 4) { 3
-	} else { ceiling(sum(run.mutect2, run.varscan, run.strelka, run.vardict)*0.5)
-	}
+min.snp.count <- ceiling(snp.tool.count*0.55);
+min.indel.count <- ceiling(indel.tool.count*0.55);
 
 # 1) is snv and called by a minimum n_tools
 is.snp <- combined.data$Variant_Type == 'SNP';
@@ -180,10 +182,10 @@ if (length(which(is.snp & callers.min)) > 0) {
 	combined.data[which(is.snp & callers.min),]$FILTER <- 'PASS';
 	}
 
-# reduce n_tools if tumour_only (due to SomaticSniper)
-if (run.somaticsniper & tool.count <= 4) {
-	callers.min.mod <- combined.data$Count >= (min.snp.count-1);
-	if (length(which(is.snp & callers.min)) > 0) {
+# reduce n_tools if tumour_only (due to SomaticSniper) [only required if cohort is mixed T/N and T-only]
+if (run.somaticsniper) {
+	callers.min.mod <- combined.data$Count >= ceiling((snp.tool.count-1)*0.55);
+	if (length(which(is.snp & callers.min.mod)) > 0) {
 		combined.data[which(is.snp & callers.min.mod & is.na(combined.data$Matched_Norm_Sample_Barcode)),]$FILTER <- 'PASS';
 		}
 	}
@@ -198,7 +200,8 @@ if (length(which(is.indel & callers.min)) > 0) {
 
 # 3) is called by MuTect2 and VAF is < 0.1 (because many tools don't call low vaf/coverage variants)
 if ('MuTect2' %in% colnames(combined.data)) {
-	combined.data[which(combined.data$MuTect2 == 1 & combined.data$VAF < 0.1),]$FILTER <- 'PASS';
+	low.vaf.idx <- which(combined.data$MuTect2 == 1 & combined.data$VAF < 0.1);
+	if (length(low.vaf.idx) > 0) { combined.data[low.vaf.idx,]$FILTER <- 'PASS'; }
 	}
 
 # 4) keep position if it passes any of the above in any sample AND called by MuTect2
@@ -277,7 +280,7 @@ annotated.data[,c('FLAG.low_vaf','FLAG.low_coverage','FLAG.high_pop','FLAG.tumou
 
 # low VAF flag
 vaf <- annotated.data$t_alt_count / annotated.data$t_depth;
-if (any(vaf < 0.05)) {
+if (any(na.omit(vaf) < 0.05)) {
 	annotated.data[which(vaf < 0.05),]$FLAG.low_vaf <- TRUE;
 	}
 
