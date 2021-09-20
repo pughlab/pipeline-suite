@@ -123,7 +123,7 @@ sub main {
 
 	if ( (!$args{step3}) && ($args{step4}) ) {
 		print $log "Can not make final report without summarizing output; setting --summarize to true";
-		$args{step3} <- 1;
+		$args{step3} = 1;
 		}
 
 	# Should pre-processing (alignment + GATK indel realignment/recalibration + QC) be performed?
