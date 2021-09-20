@@ -96,7 +96,7 @@ sub get_pindel_command {
 	if (('ALL' eq $args{chrom}) || (!defined($args{chrom}))) {
 		$pindel_command .= ' --report_interchromosomal_events';
 		$pindel_command .= ' --report_long_insertions';
-#		$pindel_command .= ' --detect_DD';
+		$pindel_command .= ' --detect_DD';
 		}
 
 	if (defined($args{chrom})) {
@@ -138,6 +138,7 @@ sub get_split_pindel_command {
 		'-o', $args{output_stem} . '_$CHROM',
 		'-T', $args{n_cpus},
 		'-J', $exclude_regions,
+		'--report_long_insertions',
 		'-c $CHROM'
 		);
 
@@ -155,23 +156,70 @@ sub get_split_pindel_command {
 	return($pindel_command);
 	}
 
+# format command to merge SV output
+sub get_merge_pindel_command {
+	my %args = (
+		tmp_dir		=> undef,
+		input		=> undef,
+		output		=> undef,
+		@_
+		);
+
+	my $pindel_command = "cd $args{tmp_dir}\n\n";
+
+	# for deletions, inversions, tandem duplications, short insertions
+	# 	idx, type, bp1_chr, bp1_start, bp1_end, bp2_chr, bp2_start, bp2_end, support_1, support_2, qual
+	$pindel_command .= join(' ',
+		"cat $args{input}_chr*_{D,INV,TD}",
+		"| grep -v '#'",
+		"| awk -v FS=' ' -v OFS='\\t'", 
+		"'{ if ((\$1 ~ /^[0-9]+\$/) && (\$27 >= 30))",
+		'{ print $1, $2, $8, $10, $13, $8, $11, $14, $16, NA, $27 }}' . "'",
+		'> pindel_output_p1.txt'
+		);
+
+	# for long insertions:
+	# 	idx, type, bp1_chr, bp1_start, bp1_end, bp2_chr, bp2_start, bp2_end, support_1, support_2, qual
+	$pindel_command .= "\n\n" . join(' ',
+		"cat $args{input}_chr*_LI",
+		"| grep -v '#'",
+		"| awk -v FS=' ' -v OFS='\\t'",
+		"'{ if (\$1 ~ /^[0-9]+\$/)",
+		'{ print $1, $2, $4, $5, $5, $4, $8, $8, $7, $10, NA }}' . "'",
+		'> pindel_output_p2.txt'
+		);
+
+	# for translocations:
+	# 	idx, type, bp1_chr, bp1_start, bp1_end, bp2_chr, bp2_start, bp2_end, support_1, support_2, qual
+	$pindel_command .= "\n\n" . join(' ',
+		"cat $args{input}_chr*_INT_final",
+		"| awk -v FS=' ' -v OFS='\\t'",
+		"-v type='INT'",
+		'{ print NR, type, $2, $16, $25, $6, $19, $28, $12, NA, NA }' . "'",
+		'> pindel_output_p3.txt'
+		);
+	
+	$pindel_command .= "\ncat pindel_output_p*.txt > $args{output}";
+	$pindel_command .= "\nmd5sum $args{output} > $args{output}.md5";
+
+	return($pindel_command);
+	}
+
 # format command to run pindel2vcf
 sub get_pindel2vcf_command {
 	my %args = (
-		dir		=> undef,
+		tmp_dir		=> undef,
 		input		=> undef,
 		output		=> undef,
 		min_depth	=> undef,
-		tmp_dir		=> undef,
 		@_
 		);
 
 	my $today = strftime "%Y%m%d", localtime;
-	my $chrom_list = $args{chromosomes};
 
 	if (!defined($args{min_depth})) { $args{min_depth} = 5; }
 
-	my $pindel_command = "cd $args{dir}\n";
+	my $pindel_command = "cd $args{tmp_dir}\n";
 
 	$pindel_command = "for file in *_INT_final; do";
 
@@ -180,7 +228,7 @@ sub get_pindel2vcf_command {
 		'-r', $reference,
 		'-R', $ref_type,
 		'-d', $today,
-		'-G -pr 3 -ir 3 -il 3 -pl 3 -e', $args{min_depth},
+		'-G -pr 3 -ir 3 -il 3 -pl 3 -as 100 -e', $args{min_depth},
 		'-P', '$STEM',
 		'-v', '$STEM.vcf'
 		);
@@ -190,19 +238,14 @@ sub get_pindel2vcf_command {
 	$pindel_command .= "\n\n" . join(' ',
 		'vcf-concat',
 		$args{input} . '*.vcf',
-		"| uniq | grep -v -e 'RPL' -e 'SVLEN=0' |", # this will remove LI (no sequence info) and svtype=RPL
+		"| uniq | grep -v -e 'RPL' -e 'SVLEN=0' -e 'SVTYPE=DUP' -e 'SVTYPE=INV' |", 
+		# this will remove svtype=RPL, longer insertions (missing sequence details), 
+		# 	duplications and inversions
 		'vcf-sort -c >',
 		$args{output}
 		);
 
 	$pindel_command .= "\n\nmd5sum $args{output} > $args{output}.md5";
-
-	# do some minor cleanup
-	$pindel_command .= "\n\n" . join("\n",
-		"mv * > $args{tmp_dir}",			# move everything to TEMP
-		"mv $args{tmp_dir}/*filtered.vcf* > . ", 	# recall merged files
-		"mv $args{tmp_dir}/*_{D,INV,INT_final,LI,TD} > . " # recall files required for mavis
-		);
 
 	return($pindel_command);
 	}
@@ -416,8 +459,9 @@ sub main {
 				}
 
 			# indicate output stem
-			my $output_stem = join('/', $sample_directory, $sample . '_pindel');
-			my $merged_file = join('/', $sample_directory, $sample . '_Pindel_filtered.vcf');
+			my $output_stem = join('/', $tmp_directory, $sample . '_pindel');
+			my $merged_file = join('/', $sample_directory, $sample . '_combined_Pindel_output.txt');
+			my $merged_vcf = join('/', $sample_directory, $sample . '_Pindel_filtered.vcf');
 
 			# create Pindel command
 			my @pindel_jobs;
@@ -437,7 +481,7 @@ sub main {
 					);
 
 				# check if this should be run
-				if ('Y' eq missing_file($merged_file . '.md5')) {
+				if ('Y' eq missing_file($merged_vcf . '.md5')) {
 
 					# record command (in log directory) and then run job
 					print $log "Submitting job for Pindel...\n";
@@ -483,7 +527,7 @@ sub main {
 						);
 
 					# check if this should be run
-					if ( ('Y' eq missing_file($merged_file . '.md5')) &&
+					if ( ('Y' eq missing_file($merged_vcf . '.md5')) &&
 						('Y' eq missing_file($output_stem . '_' . $chr . '.COMPLETE'))) {
 
 						# record command (in log directory) and then run job
@@ -517,17 +561,53 @@ sub main {
 					}
 				}
 
-			# merge and convert to VCF
-			my $convert_command = get_pindel2vcf_command(
-				dir		=> $sample_directory,
+			# merge chromosome output (for mavis)
+			my $merge_command = get_merge_pindel_command(
 				input		=> $sample . '_pindel',
 				output		=> $merged_file,
-				min_depth	=> $parameters->{convert}->{filter_depth},
 				tmp_dir		=> $tmp_directory
 				);
 
 			# check if this should be run
 			if ('Y' eq missing_file($merged_file . '.md5')) {
+
+				# record command (in log directory) and then run job
+				print $log "Submitting job for merge step...\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_merge_pindel_' . $sample,
+					cmd	=> $merge_command,
+					dependencies	=> join(':', @pindel_jobs),
+					max_time	=> $parameters->{convert}->{time},
+					mem		=> $parameters->{convert}->{mem},
+					hpc_driver	=> $args{hpc_driver}
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_merge_pindel_' . $sample,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
+				} else {
+				print $log "Skipping merge step because this has already been completed!\n";
+				}
+
+			# merge and convert to VCF
+			my $convert_command = get_pindel2vcf_command(
+				input		=> $sample . '_pindel',
+				output		=> $merged_vcf,
+				min_depth	=> $parameters->{convert}->{filter_depth},
+				tmp_dir		=> $tmp_directory
+				);
+
+			# check if this should be run
+			if ('Y' eq missing_file($merged_vcf . '.md5')) {
 
 				# record command (in log directory) and then run job
 				print $log "Submitting job for Pindel2VCF...\n";
@@ -544,7 +624,7 @@ sub main {
 					);
 
 				$run_id = submit_job(
-					jobname		=> 'run_convert_' . $sample,
+					jobname		=> 'run_pindel2vcf_' . $sample,
 					shell_command	=> $run_script,
 					hpc_driver	=> $args{hpc_driver},
 					dry_run		=> $args{dry_run},
@@ -562,7 +642,7 @@ sub main {
 			my $final_maf = join('/', $sample_directory, $sample . '_Pindel_filtered_annotated.maf');
 
 			my $vcf2maf_cmd = get_vcf2maf_command(
-				input		=> $merged_file,
+				input		=> $merged_vcf,
 				tumour_id	=> $sample,
 				normal_id	=> $normal,
 				reference	=> $reference,
@@ -627,6 +707,14 @@ sub main {
 			push @final_outputs, $final_maf;
 
 			}
+
+	# do some minor cleanup
+	$pindel_command .= "\n\n" . join("\n",
+		"mv * $args{tmp_dir}",			# move everything to TEMP
+		"mv $args{tmp_dir}/*filtered.vcf* . ", 	# recall merged files
+		"mv $args{tmp_dir}/*_{D,INV,INT_final,LI,TD} . " # recall files required for mavis
+		);
+
 
 		# should intermediate files be removed
 		# run per patient
