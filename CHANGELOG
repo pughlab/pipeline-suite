@@ -1,3 +1,8 @@
+2021-09-20: PughLab pipeline-suite (version 0.5.5)
+- minor updates to pindel pipeline to improve run filtering
+- minor fix to novobreak (missing n_cpus args)
+- minor fix to pughlab_dnaseq_pipeline.pl (typo)
+
 2021-09-17: PughLab pipeline-suite (version 0.5.4)
 - changed 'create_report' argument to 'summarize' to more accurately reflect function
 - added additional info to logs for use with debugging
