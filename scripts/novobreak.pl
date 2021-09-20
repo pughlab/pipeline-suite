@@ -96,7 +96,7 @@ sub get_prep_ssake_command {
 		);
 
 	my $nb_output = $args{output_file};
-
+	my $cpu_count = $args{n_cpus} - 1;
 	my $part1_command = join("\n",
 		'  if [ ! -s bp_reads.tsv ] && [ ! -s ssake.sam.md5 ]; then',
 		'    samtools bam2fq -1 read1.fq -2 read2.fq somaticreads.bam;',
@@ -119,7 +119,7 @@ sub get_prep_ssake_command {
 		'  fi',
 		'  if [ -s ssake.sam.md5 ]; then',
 		'    rm bp_reads.tsv;',
-		"    rm {0..$args{n_cpus}}.txt*;",
+		"    rm {0..$cpu_count}.txt*;",
 		'    rm ssake.fa;',
 		'  fi'
 		);
@@ -265,6 +265,7 @@ sub novobreak_by_split_bam_command {
 		ref_dir		=> undef,
 		tmp_dir		=> undef,
 		chr_pair	=> undef,
+		n_cpus		=> 1,
 		@_
 		);
 
@@ -311,7 +312,7 @@ sub novobreak_by_split_bam_command {
 
 	$nb_command .= "\n md5sum $args{tumour_id}\_\${CHR_PAIR}.tsv > $args{tumour_id}\_\${CHR_PAIR}.tsv.md5";
 
-	$submit_command .= "\n" . join("\n",
+	$submit_command .= "\n\n" . join("\n",
 		# check to see if this has already run
 		"if [ -s $args{tumour_id}" . '_${CHR_PAIR}.tsv.md5 ]; then',
 		"  echo Initial output file $args{tumour_id}" . '_${CHR_PAIR}.tsv.md5 already exists.',
@@ -673,7 +674,8 @@ sub main {
 						normal_bam	=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
 						intervals	=> $chr_file,
 						ref_dir		=> $ref_dir,
-						tmp_dir		=> $tmp_directory
+						tmp_dir		=> $tmp_directory,
+						n_cpus		=> 4
 						);
 
 					# record command (in log directory) and then run job
@@ -687,8 +689,9 @@ sub main {
 						dependencies	=> $prep_ref_run_id,
 						max_time	=> $parameters->{novobreak}->{time},
 						mem		=> $parameters->{novobreak}->{mem},
+						cpus_per_task	=> 4,
 						hpc_driver	=> $args{hpc_driver},
-						extra_args	=> '--array=1-' . $pair_count . '%5'
+						extra_args	=> '--array=1-' . $pair_count . '%20'
 						);
 
 					$run_id = submit_job(
