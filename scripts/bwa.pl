@@ -73,9 +73,14 @@ sub get_bwa_command {
 		'bwa mem -M -t4',  # 4 threads
 		'-R', $args{readgroup},
 		$args{reference},
-		$args{r1}, $args{r2},
-		'>', $args{stem} . '.sam'
+		$args{r1}
 		);
+
+	if (defined($args{r2})) {
+		$bwa_command .= ' ' . $args{r2};
+		}
+
+	$bwa_command .= "> $args{stem}" . '.sam';
 
 	return($bwa_command);
 	}	
@@ -305,18 +310,36 @@ sub main {
 					unless(-e $raw_directory) { make_path($raw_directory); }
 
 					# collect input files
-					my $r1 = $smp_data->{$patient}->{$sample}->{libraries}->{$lib}->{runlanes}->{$lane}->{fastq}->{R1};
-					my $r2 = $smp_data->{$patient}->{$sample}->{libraries}->{$lib}->{runlanes}->{$lane}->{fastq}->{R2};
+					my ($r1, $r2, $se);
+					$r1 = $smp_data->{$patient}->{$sample}->{libraries}->{$lib}->{runlanes}->{$lane}->{fastq}->{R1};
+					$r2 = $smp_data->{$patient}->{$sample}->{libraries}->{$lib}->{runlanes}->{$lane}->{fastq}->{R2};
+					$se = $smp_data->{$patient}->{$sample}->{libraries}->{$lib}->{runlanes}->{$lane}->{fastq}->{SE};
 
-					print $log "	R1: $r1\n";
-					print $log "	R2: $r2\n\n";
+					my $is_paired = 1;
+					if ( (!defined($r1)) && (!defined($r2)) && (defined($se)) ) {
+						$is_paired = 0;
+						}
+
+					if ($is_paired) {
+						print $log "	R1: $r1\n";
+						print $log "	R2: $r2\n\n";
+						} else {
+						print $log "    SE: $se\n\n";
+						}
+
+					# if this is single-end data, let's just call it r1 so we don't need to 
+					# replicate so much code
+					unless ($is_paired) { $r1 = $se; }
 
 					my @tmp = split /\//, $r1;
 					$raw_link = join('/', $raw_directory, $tmp[-1]);
 					symlink($r1, $raw_link);
-					@tmp = split /\//, $r2;
-					$raw_link = join('/', $raw_directory, $tmp[-1]);
-					symlink($r2, $raw_link);
+
+					if ($is_paired) {
+						@tmp = split /\//, $r2;
+						$raw_link = join('/', $raw_directory, $tmp[-1]);
+						symlink($r2, $raw_link);
+						}
 
 					my $filestem = join('_', $sample, $lane);
 					($run_id, $run_id_extra) = '';
