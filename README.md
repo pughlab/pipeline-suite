@@ -1,4 +1,4 @@
-# PughLab pipeline-suite (version 0.5.5)
+# PughLab pipeline-suite (version 0.5.6)
 
 ## Introduction
 This is a collection of pipelines to be used for NGS (both DNA and RNA) analyses, from alignment to variant calling.

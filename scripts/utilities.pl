@@ -31,7 +31,7 @@ sub error_checking {
 			die("RNA-Seq pipeline only configured for use with GRCh38/hg38.");
 		}
 	} else {
-	# # or DNA?
+	# or DNA?
 		if ( ('hg38' ne $tool_data->{ref_type}) && ('hg19' ne $tool_data->{ref_type}) && 
 		('GRCh37' ne $tool_data->{ref_type}) && ('GRCh38' ne $tool_data->{ref_type})) {
 			die("Unrecognized ref_type; must be one of hg19, GRCh37, hg38 or GRCh38.");
@@ -94,8 +94,8 @@ sub error_checking {
 		}
 	}
 
-	# SViCT, Novobreak
-	if (('svict' eq $pipeline) | ('novobreak' eq $pipeline)) {
+	# Novobreak
+	if (('novobreak' eq $pipeline)) {
 		if (!defined($tool_data->{reference})) { die("Must supply path to reference genome!"); }
 
 		if ('novobreak' eq $pipeline) {
@@ -105,10 +105,26 @@ sub error_checking {
 				exts		=> [qw(.fa .fa.amb .fa.ann .fa.bwt .fa.pac .fa.sa)]
 			);
 		}
+
+	}
+
+	# SViCT
+	if ('svict' eq $pipeline) {
+		if (!defined($tool_data->{reference})) { die("Must supply path to reference genome!"); }
+		unless ( ('true' eq $tool_data->{is_ctdna}) && ('targeted' eq $tool_data->{seq_type}) ) {
+			die("Should only be run on targeted-panel ctDNA sequencing.");
+		}
+	}
+
+	# ichorCNA
+	if ('ichor' eq $pipeline) {
+		unless ( ('true' eq $tool_data->{is_ctdna}) && ('wgs' eq $tool_data->{seq_type}) ) {
+			die("Should only be run on WGS ctDNA cohorts.");
+		}
 	}
 
 	# Strelka, VarScan, SomaticSniper and Delly
-	my @pipeline_list = qw(strelka varscan delly somaticsniper vardict);
+	my @pipeline_list = qw(strelka varscan delly somaticsniper vardict pindel);
 	if ( any { /$pipeline/ } @pipeline_list ) {
 
 		if (!defined($tool_data->{reference})) { die("Must supply path to reference genome!"); }
@@ -132,7 +148,7 @@ sub error_checking {
 				}
 			}
 
-			if ( ( any { /$pipeline/ } qw(varscan somaticsniper vardict) ) &&
+			if ( ( any { /$pipeline/ } qw(varscan somaticsniper vardict pindel) ) &&
 				( any { /$tool_data->{seq_type}/ } qw(exome targeted) )
 				) {
 

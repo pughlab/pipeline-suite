@@ -117,13 +117,14 @@ sub get_split_pindel_command {
 	my %args = (
 		input		=> undef,
 		output_stem	=> undef,
+		chr_file	=> undef,
 		intervals	=> undef,
 		normal_id	=> undef,
 		n_cpus		=> 1,
 		@_
 		);
 
-	my $pindel_command = 'CHROM=$(sed -n "$SLURM_ARRAY_TASK_ID"p ' . $args{intervals} . ');';
+	my $pindel_command = 'CHROM=$(sed -n "$SLURM_ARRAY_TASK_ID"p ' . $args{chr_file} . ');';
 
 	$pindel_command .= "\n\n" . join("\n",
 		"if [ -s $args{output_stem}" . '_${CHROM}.COMPLETE ]; then',
@@ -144,6 +145,10 @@ sub get_split_pindel_command {
 
 	if (defined($args{normal_id})) {
 		$pindel_command .= ' --NormalSamples';
+		}
+
+	if (defined($args{intervals})) {
+		$pindel_command .= " --include $args{intervals}";
 		}
 
 	$pindel_command .= "\n" . join(' ',
@@ -316,7 +321,7 @@ sub main {
 	if (defined($tool_data->{intervals_bed})) {
 		$intervals_bed = $tool_data->{intervals_bed};
 		$intervals_bed =~ s/\.bed/_padding100bp.bed/;
-		print $log "\n    Target intervals: $tool_data->{intervals_bed}";
+		print $log "\n    Target intervals: $intervals_bed"; 
 		}
 
 	print $log "\n    Output directory: $output_directory";
@@ -475,7 +480,8 @@ sub main {
 					input		=> $sample_sheet, 
 					output_stem	=> $output_stem,
 					normal_id	=> $normal,
-					intervals	=> $chr_file,
+					chr_file	=> $chr_file,
+					intervals	=> $intervals_bed,
 					chrom		=> '$CHROM',
 					n_cpus		=> $parameters->{pindel}->{n_cpu}
 					);

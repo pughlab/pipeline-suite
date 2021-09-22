@@ -87,7 +87,7 @@ sub main {
 	my ($bwa_run_id, $gatk_run_id, $contest_run_id, $qc_run_id, $coverage_run_id, $hc_run_id);
 	my ($strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id, $msi_run_id, $pindel_run_id);
 	my ($somaticsniper_run_id, $delly_run_id, $vardict_run_id, $gatk_cnv_run_id, $novobreak_run_id);
-	my ($svict_run_id, $mavis_run_id, $report_run_id);
+	my ($svict_run_id, $ichor_run_id, $mavis_run_id, $report_run_id);
 
 	my @job_ids;
 
@@ -110,6 +110,7 @@ sub main {
 	my $delly_directory = join('/', $output_directory, 'Delly');
 	my $novobreak_directory = join('/', $output_directory, 'NovoBreak');
 	my $svict_directory = join('/', $output_directory, 'SViCT');
+	my $ichor_directory = join('/', $output_directory, 'IchorCNA');
 	my $mavis_directory = join('/', $output_directory, 'Mavis');
 
 	# indicate YAML files for processed BAMs
@@ -1184,6 +1185,59 @@ sub main {
 
 				print $log ">>> SViCT job id: $svict_run_id\n\n";
 				push @job_ids, $svict_run_id;
+				}
+			}
+
+		## IchorCNA pipeline
+		if ('Y' eq $tool_data->{ichor_cna}->{run}) {
+
+			unless(-e $ichor_directory) { make_path($ichor_directory); }
+
+			my $ichor_command = join(' ',
+				"perl $cwd/scripts/ichor_cna.pl",
+				"-o", $ichor_directory,
+				"-t", $tool_config,
+				"-d", $gatk_output_yaml,
+				"-c", $args{cluster}
+				);
+
+			if ($args{cleanup}) {
+				$ichor_command .= " --remove";
+				}
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for ichor_cna.pl\n";
+			print $log "  COMMAND: $ichor_command\n\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_ichor_cna',
+				cmd	=> $ichor_command,
+				modules	=> ['perl'],
+				dependencies	=> $gatk_run_id,
+				mem		=> '256M',
+				max_time	=> $max_time,
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
+
+				$ichor_command .= " --dry-run";
+				`$ichor_command`;
+				$ichor_run_id = 'pughlab_dna_pipeline__run_ichor_cna';
+
+				} else {
+
+				$ichor_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> IchorCNA job id: $ichor_run_id\n\n";
+				push @job_ids, $ichor_run_id;
 				}
 			}
 

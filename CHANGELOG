@@ -1,3 +1,8 @@
+2021-09-22: PughLab pipeline-suite (version 0.5.6)
+- added single-end alignment option to bwa.pl
+- initial add of ichorCNA
+- updated error checking criteria for pindel, novobreak, svict and ichorCNA
+
 2021-09-20: PughLab pipeline-suite (version 0.5.5)
 - minor updates to pindel pipeline to improve run filtering
 - minor fix to novobreak (missing n_cpus args)
