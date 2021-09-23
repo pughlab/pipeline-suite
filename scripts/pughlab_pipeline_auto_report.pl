@@ -1085,10 +1085,10 @@ sub main {
 			log_file	=> $log
 			);
 
-		push @all_jobs, $run_id;
+		push @job_ids, $run_id;
 
 		# do some logging
-		print "Number of jobs submitted: " . scalar(@all_jobs) . "\n";
+		print "Number of jobs submitted: " . scalar(@job_ids) . "\n";
 
 		my $n_queued = `squeue -r | wc -l`;
 		print "Total number of jobs in queue: " . $n_queued . "\n";
