@@ -629,10 +629,10 @@ sub pon {
 			log_file	=> $log
 			);
 
-		push @all_jobs, $run_id;
+		push @all_pon_jobs, $run_id;
 
 		# do some logging
-		print "Number of jobs submitted: " . scalar(@all_jobs) . "\n";
+		print "Number of jobs submitted: " . scalar(@all_pon_jobs) . "\n";
 
 		my $n_queued = `squeue -r | wc -l`;
 		print "Total number of jobs in queue: " . $n_queued . "\n";
