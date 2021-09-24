@@ -255,7 +255,7 @@ sub pon {
 	my $output_directory = $args{output_directory};
 	$output_directory =~ s/\/$//;
 
-	my $log_directory = join('/', $output_directory, '..', 'logs', 'CREATE_PanelOfNormals');
+	my $log_directory = join('/', $output_directory, 'logs', 'CREATE_PanelOfNormals');
 	unless(-e $log_directory) { make_path($log_directory); }
 
 	my $log_file = join('/', $log_directory, 'run_MuTect_panel_of_normals_pipeline.log');
@@ -331,13 +331,16 @@ sub pon {
 	my (@all_jobs, @pon_vcfs);
 
 	# create some directories
-	my $link_directory = join('/', $output_directory, 'bam_links');
+	my $pon_directory = join('/', $output_directory, 'PanelOfNormals');
+	unless(-e $pon_directory) { make_path($pon_directory); }
+
+	my $link_directory = join('/', $pon_directory, 'bam_links');
 	unless(-e $link_directory) { make_path($link_directory); }
 
-	my $intermediate_directory = join('/', $output_directory, 'intermediate_files');
+	my $intermediate_directory = join('/', $pon_directory, 'intermediate_files');
 	unless(-e $intermediate_directory) { make_path($intermediate_directory); }
 
-	my $tmp_directory = join('/', $output_directory, 'TEMP');
+	my $tmp_directory = join('/', $pon_directory, 'TEMP');
 	unless(-e $tmp_directory) { make_path($tmp_directory); }
 
 	# indicate this should be removed at the end
@@ -468,8 +471,8 @@ sub pon {
 		} # end patient
 
 	# combine results
-	my $pon_tmp	= join('/', $output_directory, $date . "_merged_panelOfNormals.vcf");
-	my $pon		= join('/', $output_directory, $date . "_merged_panelOfNormals_trimmed.vcf");
+	my $pon_tmp	= join('/', $pon_directory, $date . "_merged_panelOfNormals.vcf");
+	my $pon		= join('/', $pon_directory, $date . "_merged_panelOfNormals_trimmed.vcf");
 
 	# create a trimmed output (minN 2, sites_only) to use as pon
 	my $trimmed_merge_command = generate_pon(
@@ -480,7 +483,7 @@ sub pon {
 		out_type	=> 'trimmed'
 		);
 
-	my $final_link = join('/', $output_directory, '..', 'panel_of_normals.vcf');
+	my $final_link = join('/', $output_directory, 'panel_of_normals.vcf');
 	if (-l $final_link) {
 		unlink $final_link or die "Failed to remove previous symlink: $final_link";
 		}
