@@ -125,6 +125,40 @@ if (length(keep.idx) > 0) {
 
 		colnames(output.data)[1] <- '#tracking_id';
 
+		# refactor event type
+		output.data$event_type <- factor(
+			output.data$event_type,
+			levels = c('DEL','INS','INV','BND','DUP'),
+			labels = c('deletion','insertion','inversion','translocation','duplication')
+			);
+
+		# perform 1 final check to make sure all start < end
+		if (any(output.data$break1_position_start > output.data$break1_position_end)) {
+			idx <- which(output.data$break1_position_start > output.data$break1_position_end);
+			tmp <- output.data;
+			tmp[idx,'break1_position_start'] <- apply(
+				output.data[idx,c('break1_position_start','break1_position_end')],
+				1, function(i) { sort(i)[1]; } );
+			tmp[idx,'break1_position_end'] <- apply(
+				output.data[idx,c('break1_position_start','break1_position_end')],
+				1, function(i) { sort(i)[2]; } );
+
+			output.data <- tmp;
+			}
+
+		if (any(output.data$break2_position_start > output.data$break2_position_end)) {
+			idx <- which(output.data$break2_position_start > output.data$break2_position_end);
+			tmp <- output.data;
+			tmp[idx,'break2_position_start'] <- apply(
+				output.data[idx,c('break2_position_start','break2_position_end')],
+				1, function(i) { sort(i)[1]; } );
+			tmp[idx,'break2_position_end'] <- apply(
+				output.data[idx,c('break2_position_start','break2_position_end')],
+				1, function(i) { sort(i)[2]; } );
+
+			output.data <- tmp;
+			}
+
 		# save to file	
 		write.table(
 			output.data,
