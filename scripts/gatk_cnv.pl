@@ -506,6 +506,7 @@ sub main {
 
 	# begin by formatting intervals for gatk
 	my ($run_script, $run_id, $tmp_run_id, $intervals_run_id, $intervals_run_id2, $cleanup_cmd);
+	my $should_run_final;
 	my @all_jobs;
 
 	# do an initial check for normals; no normals = don't bother running
@@ -688,6 +689,9 @@ sub main {
 
 		# collect read counts for the normal sample(s)
 		foreach my $sample (@normal_ids) {
+
+			# if there are any samples to run, we will run the final combine job
+			$should_run_final = 1;
 
 			print $log "  SAMPLE: $sample\n\n";
 
@@ -1161,34 +1165,39 @@ sub main {
 		}
 
 	# collate results
-	my $collect_output = join(' ',
-		"Rscript $cwd/collect_gatk_cnv_output.R",
-		'-d', $output_directory,
-		'-p', $tool_data->{project_name}
-		);
+	if ($should_run_final) {
 
-	if (defined($intervals_bed)) {
-		$collect_output .= " -t $picard_intervals";
+		my $collect_output = join(' ',
+			"Rscript $cwd/collect_gatk_cnv_output.R",
+			'-d', $output_directory,
+			'-p', $tool_data->{project_name}
+			);
+
+		if (defined($intervals_bed)) {
+			$collect_output .= " -t $picard_intervals";
+			}
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'combine_gatk_cnv_output',
+			cmd	=> $collect_output,
+			modules	=> [$r_version],
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '4G',
+			max_time	=> '12:00:00',
+			hpc_driver	=> $args{hpc_driver}
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'combine_gatk_cnv_output',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @all_jobs, $run_id;
 		}
-
-	$run_script = write_script(
-		log_dir	=> $log_directory,
-		name	=> 'combine_gatk_cnv_output',
-		cmd	=> $collect_output,
-		modules	=> [$r_version],
-		dependencies	=> join(':', @all_jobs),
-		mem		=> '4G',
-		max_time	=> '12:00:00',
-		hpc_driver	=> $args{hpc_driver}
-		);
-
-	$run_id = submit_job(
-		jobname		=> 'combine_gatk_cnv_output',
-		shell_command	=> $run_script,
-		hpc_driver	=> $args{hpc_driver},
-		dry_run		=> $args{dry_run},
-		log_file	=> $log
-		);
 
 	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
 	# collect job metrics (exit status, mem, run time)

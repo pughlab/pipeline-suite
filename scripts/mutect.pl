@@ -751,7 +751,7 @@ sub main {
 		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
 		}
 
-	my ($run_script, $run_id, $link, $java_check, $cleanup_cmd);
+	my ($run_script, $run_id, $link, $java_check, $cleanup_cmd, $should_run_final);
 	my (@all_jobs, @pon_vcfs);
 
 	# process each sample in $smp_data
@@ -793,6 +793,9 @@ sub main {
 
 		# for T/N or T only mode
 		foreach my $sample (@tumour_ids) {
+
+			# if there are any samples to run, we will run the final combine job
+			$should_run_final = 1;
 
 			print $log "  SAMPLE: $sample\n\n";
 
@@ -1066,30 +1069,35 @@ sub main {
 		}
 
 	# collate results
-	my $collect_output = join(' ',
-		"Rscript $cwd/collect_snv_output.R",
-		'-d', $output_directory,
-		'-p', $tool_data->{project_name}
-		);
+	if ($should_run_final) {
 
-	$run_script = write_script(
-		log_dir	=> $log_directory,
-		name	=> 'combine_variant_calls',
-		cmd	=> $collect_output,
-		modules	=> [$r_version],
-		dependencies	=> join(':', @all_jobs),
-		mem		=> '4G',
-		max_time	=> '24:00:00',
-		hpc_driver	=> $args{hpc_driver}
-		);
+		my $collect_output = join(' ',
+			"Rscript $cwd/collect_snv_output.R",
+			'-d', $output_directory,
+			'-p', $tool_data->{project_name}
+			);
 
-	$run_id = submit_job(
-		jobname		=> 'combine_variant_calls',
-		shell_command	=> $run_script,
-		hpc_driver	=> $args{hpc_driver},
-		dry_run		=> $args{dry_run},
-		log_file	=> $log
-		);
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'combine_variant_calls',
+			cmd	=> $collect_output,
+			modules	=> [$r_version],
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '4G',
+			max_time	=> '24:00:00',
+			hpc_driver	=> $args{hpc_driver}
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'combine_variant_calls',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @all_jobs, $run_id;
+		}
 
 	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
 	# collect job metrics (exit status, mem, run time)

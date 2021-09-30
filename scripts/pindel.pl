@@ -96,7 +96,7 @@ sub get_pindel_command {
 	if (('ALL' eq $args{chrom}) || (!defined($args{chrom}))) {
 		$pindel_command .= ' --report_interchromosomal_events';
 		$pindel_command .= ' --report_long_insertions';
-		$pindel_command .= ' --detect_DD';
+#		$pindel_command .= ' --detect_DD';
 		}
 
 	if (defined($args{chrom})) {
@@ -200,7 +200,7 @@ sub get_merge_pindel_command {
 		"cat $args{input}_chr*_INT_final",
 		"| awk -v FS=' ' -v OFS='\\t'",
 		"-v type='INT'",
-		'{ print NR, type, $2, $16, $25, $6, $19, $28, $12, NA, NA }' . "'",
+		"'{ print NR, type, \$2, \$16, \$25, \$6, \$19, \$28, \$12, NA, NA }'",
 		'> pindel_output_p3.txt'
 		);
 	
@@ -226,7 +226,7 @@ sub get_pindel2vcf_command {
 
 	my $pindel_command = "cd $args{tmp_dir}\n";
 
-	$pindel_command = "for file in *_INT_final; do";
+	$pindel_command .= "for file in *_INT_final; do";
 
 	$pindel_command .= "\n  " . 'STEM=$(echo $file | sed ' . "'s/_INT_final//');\n  " . join(' ',
 		'pindel2vcf',
@@ -364,7 +364,7 @@ sub main {
 	my $parameters = $tool_data->{pindel}->{parameters};
 
 	### RUN ###########################################################################################
-	my ($run_script, $run_id, $link, $cleanup_cmd);
+	my ($run_script, $run_id, $link, $cleanup_cmd, $should_run_final);
 	my @all_jobs;
 
 	# if multiple chromosomes are to be run (separately):
@@ -433,6 +433,9 @@ sub main {
 		my (@final_outputs, @patient_jobs);
 
 		foreach my $sample (@tumour_ids) {
+
+			# if there are any samples to run, we will run the final combine job
+			$should_run_final = 1;
 
 			print $log "  SAMPLE: $sample\n\n";
 
@@ -714,14 +717,6 @@ sub main {
 
 			}
 
-	# do some minor cleanup
-	$pindel_command .= "\n\n" . join("\n",
-		"mv * $args{tmp_dir}",			# move everything to TEMP
-		"mv $args{tmp_dir}/*filtered.vcf* . ", 	# recall merged files
-		"mv $args{tmp_dir}/*_{D,INV,INT_final,LI,TD} . " # recall files required for mavis
-		);
-
-
 		# should intermediate files be removed
 		# run per patient
 		if ($args{del_intermediates}) {
@@ -766,30 +761,35 @@ sub main {
 		}
 
 	# collate results
-	my $collect_output = join(' ',
-		"Rscript $cwd/collect_snv_output.R",
-		'-d', $output_directory,
-		'-p', $tool_data->{project_name},
-		);
+	if ($should_run_final) {
 
-	$run_script = write_script(
-		log_dir	=> $log_directory,
-		name	=> 'combine_pindel_output',
-		cmd	=> $collect_output,
-		modules	=> [$r_version],
-		dependencies	=> join(':', @all_jobs),
-		mem		=> '4G',
-		max_time	=> '12:00:00',
-		hpc_driver	=> $args{hpc_driver}
-		);
+		my $collect_output = join(' ',
+			"Rscript $cwd/collect_snv_output.R",
+			'-d', $output_directory,
+			'-p', $tool_data->{project_name},
+			);
 
-	$run_id = submit_job(
-		jobname		=> 'combine_pindel_output',
-		shell_command	=> $run_script,
-		hpc_driver	=> $args{hpc_driver},
-		dry_run		=> $args{dry_run},
-		log_file	=> $log
-		);
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'combine_pindel_output',
+			cmd	=> $collect_output,
+			modules	=> [$r_version],
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '4G',
+			max_time	=> '12:00:00',
+			hpc_driver	=> $args{hpc_driver}
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'combine_pindel_output',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @all_jobs, $run_id;
+		}
 
 	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
 	# collect job metrics (exit status, mem, run time)

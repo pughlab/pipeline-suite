@@ -1,3 +1,14 @@
+2021-09-30: PughLab pipeline-suite (version 0.5.7)
+- turned all tools off by default
+- added extra layer of dependencies for pughlab_dnaseq_pipeline.pl --variant_calling to reduce failure due to job overload
+- fixes to convert_novobreak and convert_pindel for compatibility with mavis
+- updated paths for panel of normals for mutect and mutect2
+- added checks to make panel of normals (mutect, mutect2, strelka, vardict, varscan)
+- added checks to run final combine step (where necessary)
+- split mutect2 to run per-chromosome (somatic and artefact-detection)
+- simplified novobreak (removed split by chr-pairs); this requires more time/memory, but is much less error prone
+- minor edits/bug fixes throughout
+
 2021-09-22: PughLab pipeline-suite (version 0.5.6)
 - added single-end alignment option to bwa.pl
 - initial add of ichorCNA

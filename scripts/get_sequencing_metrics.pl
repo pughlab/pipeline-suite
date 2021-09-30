@@ -186,7 +186,7 @@ sub get_estimate_contamination_command {
 		$qc_command .= " --intervals $args{intervals}";
 		}
 
-#	$qc_command .= "\n\nmd5sum $args{output} > $args{output}.md5";
+	$qc_command .= "\n\nmd5sum $args{output} > $args{output}.md5";
 
 	return($qc_command);
 	}
@@ -295,7 +295,7 @@ sub main {
 	my $parameters = $tool_data->{bamqc}->{parameters};
 
 	### RUN ###########################################################################################
-	my ($run_script, $run_id, $link, $cleanup_cmd, $picard_intervals);
+	my ($run_script, $run_id, $link, $cleanup_cmd, $picard_intervals, $should_run_final);
 	my @all_jobs;
 
 	# use picard-style intervals list
@@ -355,6 +355,9 @@ sub main {
 		@sample_ids = sort(@sample_ids);
 
 		foreach my $sample (@sample_ids) {
+
+			# if there are any samples to run, we will run the final combine job
+			$should_run_final = 1;
 
 			print $log "  SAMPLE: $sample\n\n";
 
@@ -538,27 +541,25 @@ sub main {
 				} else {
 				print $log "Skipping GetPileupSummaries because this has already been completed!\n";
 				}
-			}
 
-		# for each tumour
-		foreach my $tumour (@tumour_ids) {
-
-			my $tumour_pileup = join('/', $patient_directory, $tumour . '_pileup.table');
+			# find contamination
+			my $tumour_pileup = join('/', $patient_directory, $sample . '_pileup.table');
 			my $normal_pileup = undef;
+
 			if (scalar(@normal_ids) > 0) {
-				$normal_pileup = join('/',
-					$patient_directory,
-					$normal_ids[0] . '_pileup.table'
-					);
+				if ( !(any { $_ =~ m/$sample/ } @normal_ids) ) {
+					$normal_pileup = join('/',
+						$patient_directory,
+						$normal_ids[0] . '_pileup.table'
+						);
+					}
 				}
 
-			my $contest_output = join('/', $patient_directory, $tumour . '_contamination.table');
+			my $contest_output = join('/', $patient_directory, $sample . '_contamination.table');
 			my $contest_command = get_estimate_contamination_command(
 				tumour		=> $tumour_pileup,
 				normal		=> $normal_pileup,
 				output		=> $contest_output,
-#				intervals	=> $picard_intervals,
-#				java_mem	=> $parameters->{qc}->{java_mem},
 				tmp_dir		=> $tmp_directory
 				);
 
@@ -570,17 +571,15 @@ sub main {
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
-					name	=> 'run_calculate_contamination_' . $tumour,
+					name	=> 'run_calculate_contamination_' . $sample,
 					cmd	=> $contest_command,
 					modules	=> [$gatk],
 					dependencies	=> join(':', @pileup_jobs),
-#					max_time	=> $parameters->{qc}->{time},
-#					mem		=> $parameters->{qc}->{mem},
 					hpc_driver	=> $args{hpc_driver}
 					);
 
 				$run_id = submit_job(
-					jobname		=> 'run_calculate_contamination_' . $tumour,
+					jobname		=> 'run_calculate_contamination_' . $sample,
 					shell_command	=> $run_script,
 					hpc_driver	=> $args{hpc_driver},
 					dry_run		=> $args{dry_run},
@@ -641,30 +640,35 @@ sub main {
 		}
 
 	# collate results
-	my $collect_output = join(' ',
-		"Rscript $cwd/collect_sequencing_metrics.R",
-		'-d', $output_directory,
-		'-p', $tool_data->{project_name},
-		);
+	if ($should_run_final) {
 
-	$run_script = write_script(
-		log_dir	=> $log_directory,
-		name	=> 'combine_qc_output',
-		cmd	=> $collect_output,
-		modules	=> [$r_version],
-		dependencies	=> join(':', @all_jobs),
-		mem		=> '4G',
-		max_time	=> '12:00:00',
-		hpc_driver	=> $args{hpc_driver}
-		);
+		my $collect_output = join(' ',
+			"Rscript $cwd/collect_sequencing_metrics.R",
+			'-d', $output_directory,
+			'-p', $tool_data->{project_name},
+			);
 
-	$run_id = submit_job(
-		jobname		=> 'combine_qc_output',
-		shell_command	=> $run_script,
-		hpc_driver	=> $args{hpc_driver},
-		dry_run		=> $args{dry_run},
-		log_file	=> $log
-		);
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'combine_qc_output',
+			cmd	=> $collect_output,
+			modules	=> [$r_version],
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '4G',
+			max_time	=> '12:00:00',
+			hpc_driver	=> $args{hpc_driver}
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'combine_qc_output',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @all_jobs, $run_id;
+		}
 
 	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
 	# collect job metrics (exit status, mem, run time)

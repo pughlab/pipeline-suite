@@ -314,6 +314,7 @@ sub main {
 	# find SV files in each directory
 	my (@manta_files, @delly_files, @starfusion_files, @fusioncatcher_files);
 	my (@novobreak_files, @svict_files, @pindel_files);
+	my $should_run_final;
 
 	if (defined($args{manta_dir})) {
 		@manta_files = _get_files($args{manta_dir}, 'diploidSV.vcf.gz');
@@ -324,10 +325,10 @@ sub main {
 		@delly_files = _get_files($args{delly_dir}, 'Delly_SVs_somatic_hc.bcf');
 		}
 	if (defined($args{novobreak_dir})) {
-		@novobreak_files = _get_files($args{novobreak_dir}, 'novoBreak_filtered.tsv');
+		@novobreak_files = _get_files($args{novobreak_dir}, 'novoBreak_merged_filtered.tsv');
 		}
 	if (defined($args{pindel_dir})) {
-		@pindel_files = _get_files($args{pindel_dir}, '_INV');
+		@pindel_files = _get_files($args{pindel_dir}, '_combined_Pindel_output.txt');
 		}
 	if (defined($args{svict_dir})) {
 		@svict_files = _get_files($args{svict_dir}, 'SViCT.vcf');
@@ -430,11 +431,9 @@ sub main {
 				my @pindel_svs = grep { /$tumour/ } @pindel_files;
 				last if (scalar(@pindel_svs) == 0);
 
-				my $pindel_smp_dir = dirname($pindel_svs[0]);
-
-				$link = join('/', $link_directory, $tumour . '_Pindel');
-				symlink($pindel_smp_dir, $link);
-				push @pindel_svs_patient, $pindel_smp_dir;
+				$link = join('/', $link_directory, $tumour . '_Pindel.txt');
+				symlink($pindel_svs[0], $link);
+				push @pindel_svs_patient, $pindel_svs[0];
 				}
 
 			# organize SViCT input
@@ -609,6 +608,9 @@ sub main {
 			print $log "Skipping MAVIS because this has already been completed!\n";
 			}
 
+		# if there are any samples to run, we will run the final combine job
+		$should_run_final = 1;
+
 		# should intermediate files be removed
 		# run per patient
 		if ($args{del_intermediates}) {
@@ -647,36 +649,39 @@ sub main {
 		}
 
 	# collate results
-	my $collect_output = join(' ',
-		"Rscript $cwd/collect_mavis_output.R",
-		'-d', $output_directory,
-		'-p', $tool_data->{project_name}
-		);
+	if ($should_run_final) {
 
-	if (defined($intervals_bed)) {
-		$collect_output .= " -t $intervals_bed";
+		my $collect_output = join(' ',
+			"Rscript $cwd/collect_mavis_output.R",
+			'-d', $output_directory,
+			'-p', $tool_data->{project_name}
+			);
+
+		if (defined($intervals_bed)) {
+			$collect_output .= " -t $intervals_bed";
+			}
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'combine_variant_calls',
+			cmd	=> $collect_output,
+			modules	=> [$r_version],
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '6G',
+			max_time	=> '24:00:00',
+			hpc_driver	=> $args{hpc_driver}
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'combine_variant_calls',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @all_jobs, $run_id;
 		}
-
-	$run_script = write_script(
-		log_dir	=> $log_directory,
-		name	=> 'combine_variant_calls',
-		cmd	=> $collect_output,
-		modules	=> [$r_version],
-		dependencies	=> join(':', @all_jobs),
-		mem		=> '6G',
-		max_time	=> '24:00:00',
-		hpc_driver	=> $args{hpc_driver}
-		);
-
-	$run_id = submit_job(
-		jobname		=> 'combine_variant_calls',
-		shell_command	=> $run_script,
-		hpc_driver	=> $args{hpc_driver},
-		dry_run		=> $args{dry_run},
-		log_file	=> $log
-		);
-
-	push @all_jobs, $run_id;
 
 	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
 	# collect job metrics (exit status, mem, run time)

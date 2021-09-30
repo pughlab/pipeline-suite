@@ -11,6 +11,7 @@ use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
 use List::Util qw(any none);
+use Data::Dumper;
 
 my $cwd = dirname(__FILE__);
 require "$cwd/scripts/utilities.pl";
@@ -39,6 +40,7 @@ sub main {
 		step2		=> undef,
 		step3		=> undef,
 		step4		=> undef,
+		step5		=> undef,
 		cleanup		=> undef,
 		cluster		=> undef,
 		dry_run		=> undef,
@@ -81,6 +83,8 @@ sub main {
 	if ('wgs' eq $tool_data->{seq_type}) { $max_time = '21-00:00:00'; }
 	if ('targeted' eq $tool_data->{seq_type}) { $max_time = '5-00:00:00'; }
 
+	my $samtools = 'samtools/' . $tool_data->{samtools_version};
+
 	### MAIN ###########################################################################################
 
 	my $run_script;
@@ -89,7 +93,8 @@ sub main {
 	my ($somaticsniper_run_id, $delly_run_id, $vardict_run_id, $gatk_cnv_run_id, $novobreak_run_id);
 	my ($svict_run_id, $ichor_run_id, $mavis_run_id, $report_run_id);
 
-	my @job_ids;
+	my (@step1_job_ids, @step2_job_ids, @step3_job_ids, @step4_job_ids, @job_ids);
+	my $current_dependencies = '';
 
 	# prepare directory structure
 	my $bwa_directory = join('/', $output_directory, 'BWA');
@@ -113,18 +118,42 @@ sub main {
 	my $ichor_directory = join('/', $output_directory, 'IchorCNA');
 	my $mavis_directory = join('/', $output_directory, 'Mavis');
 
+	# check which tools have been requested
+	my %tool_set = (
+		'bwa'	=> defined($tool_data->{bwa}->{run}) ? $tool_data->{bwa}->{run} : 'N',
+		'gatk'	=> defined($tool_data->{gatk}->{run}) ? $tool_data->{gatk}->{run} : 'N',
+		'bamqc'	=> defined($tool_data->{bamqc}->{run}) ? $tool_data->{bamqc}->{run} : 'N',
+		'haplotype_caller' => defined($tool_data->{haplotype_caller}->{run}) ? $tool_data->{haplotype_caller}->{run} : 'N',
+		'mutect'	=> defined($tool_data->{mutect}->{run}) ? $tool_data->{mutect}->{run} : 'N',
+		'mutect2'	=> defined($tool_data->{mutect2}->{run}) ? $tool_data->{mutect2}->{run} : 'N',
+		'somaticsniper'	=> defined($tool_data->{somaticsniper}->{run}) ? $tool_data->{somaticsniper}->{run} : 'N',
+		'strelka'	=> defined($tool_data->{strelka}->{run}) ? $tool_data->{strelka}->{run} : 'N',
+		'varscan'	=> defined($tool_data->{varscan}->{run}) ? $tool_data->{varscan}->{run} : 'N',
+		'vardict'	=> defined($tool_data->{vardict}->{run}) ? $tool_data->{vardict}->{run} : 'N',
+		'pindel'	=> defined($tool_data->{pindel}->{run}) ? $tool_data->{pindel}->{run} : 'N',
+		'gatk_cnv'	=> defined($tool_data->{gatk_cnv}->{run}) ? $tool_data->{gatk_cnv}->{run} : 'N',
+		'novobreak'	=> defined($tool_data->{novobreak}->{run}) ? $tool_data->{novobreak}->{run} : 'N',
+		'delly'	=> defined($tool_data->{delly}->{run}) ? $tool_data->{delly}->{run} : 'N',
+		'svict'	=> defined($tool_data->{svict}->{run}) ? $tool_data->{svict}->{run} : 'N',
+		'ichor_cna'	=> defined($tool_data->{ichor_cna}->{run}) ? $tool_data->{ichor_cna}->{run} : 'N',
+		'mavis'	=> defined($tool_data->{mavis}->{run}) ? $tool_data->{mavis}->{run} : 'N',
+		'msi'	=> defined($tool_data->{other_tools}->{run_msi}) ? $tool_data->{other_tools}->{run_msi} : 'N'
+		);
+
+	print $log Dumper \%tool_set;
+
 	# indicate YAML files for processed BAMs
 	my $bwa_output_yaml = join('/', $bwa_directory, 'bwa_bam_config_' . $timestamp . '.yaml');
 	my $gatk_output_yaml = join('/', $gatk_directory, 'gatk_bam_config_' . $timestamp . '.yaml');
 
-	if ( (!$args{step1}) && ($args{step2}) ) {
+	# are we running step1 (alignments) or are BAMs provided as input?
+	if ( (!$args{step1}) ) {
 		$gatk_output_yaml = $data_config;
-		$gatk_run_id = '';
 		}
 
-	if ( (!$args{step3}) && ($args{step4}) ) {
+	if ( (!$args{step4}) && ($args{step5}) ) {
 		print $log "Can not make final report without summarizing output; setting --summarize to true";
-		$args{step3} = 1;
+		$args{step4} = 1;
 		}
 
 	# Should pre-processing (alignment + GATK indel realignment/recalibration + QC) be performed?
@@ -133,7 +162,7 @@ sub main {
 		## run BWA-alignment pipeline
 		unless(-e $bwa_directory) { make_path($bwa_directory); }
 
-		if ('Y' eq $tool_data->{bwa}->{run}) {
+		if ('Y' eq $tool_set{'bwa'}) {
 
 			my $bwa_command = join(' ',
 				"perl $cwd/scripts/bwa.pl",
@@ -179,6 +208,7 @@ sub main {
 					);
 
 				print $log ">>> BWA job id: $bwa_run_id\n\n";
+				push @step1_job_ids, $bwa_run_id;
 				push @job_ids, $bwa_run_id;
 				}
 			}
@@ -186,7 +216,7 @@ sub main {
 		## run GATK indel realignment/recalibration pipeline
 		unless(-e $gatk_directory) { make_path($gatk_directory); }
 
-		if ('Y' eq $tool_data->{gatk}->{run}) {
+		if ('Y' eq $tool_set{'gatk'}) {
 
 			my $gatk_command = join(' ',
 				"perl $cwd/scripts/gatk.pl",
@@ -233,17 +263,28 @@ sub main {
 					);
 
 				print $log ">>> GATK job id: $gatk_run_id\n\n";
+				push @step1_job_ids, $gatk_run_id;
 				push @job_ids, $gatk_run_id;
 				}
 			}
+		}
 
-		## run GATK's ContEst for contamination estimation (T/N only)
-		## and GATK's DepthOfCoverage and find Callable Bases
+	# make sure the dependency isn't empty
+	if (scalar(@step1_job_ids) > 0) {
+		$current_dependencies = join(':', @step1_job_ids);
+		} else {
+		$current_dependencies = '';
+		}
+
+	## run GATK's CalculateContamination and DepthOfCoverage
+	## also collect alignment metrics, and calculate callable Bases
+	if ($args{step2}) {
+
 		unless(-e $qc_directory) { make_path($qc_directory); }
 		unless(-e $contest_directory) { make_path($contest_directory); }
 		unless(-e $coverage_directory) { make_path($coverage_directory); }
 
-		if ('Y' eq $tool_data->{bamqc}->{run}) {
+		if ('Y' eq $tool_set{'bamqc'}) {
 
 			# ContEst (GATK v3.x) pipeline
 			my $contest_command = join(' ',
@@ -267,7 +308,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_contest',
 				cmd	=> $contest_command,
 				modules	=> ['perl'],
-				dependencies	=> $gatk_run_id,
+				dependencies	=> join(':', @step1_job_ids),
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
@@ -290,6 +331,7 @@ sub main {
 					);
 
 				print $log ">>> ContEst job id: $contest_run_id\n\n";
+				push @step2_job_ids, $contest_run_id;
 				push @job_ids, $contest_run_id;
 				}
 
@@ -315,7 +357,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_qc',
 				cmd	=> $qc_command,
 				modules	=> ['perl'],
-				dependencies	=> $gatk_run_id,
+				dependencies	=> join(':', @step1_job_ids),
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
@@ -338,6 +380,7 @@ sub main {
 					);
 
 				print $log ">>> QC job id: $qc_run_id\n\n";
+				push @step2_job_ids, $qc_run_id;
 				push @job_ids, $qc_run_id;
 				}
 
@@ -363,7 +406,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_coverage',
 				cmd	=> $coverage_command,
 				modules	=> ['perl'],
-				dependencies	=> $gatk_run_id,
+				dependencies	=> join(':', @step1_job_ids),
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
@@ -386,18 +429,24 @@ sub main {
 					);
 
 				print $log ">>> Coverage job id: $coverage_run_id\n\n";
+				push @step2_job_ids, $coverage_run_id;
 				push @job_ids, $coverage_run_id;
 				}
 			}
 		}
 
+	# make sure the dependency isn't empty
+	if (scalar(@step2_job_ids) > 0) {
+		$current_dependencies = join(':', @step2_job_ids);
+		} # else will leave as step1 jobs (or blank)
+
 	########################################################################################
 	# From here on out, it makes more sense to run everything as a single batch.
 	########################################################################################
-	if ($args{step2}) {
+	if ($args{step3}) {
 
 		## run GATK's HaplotypeCaller pipeline
-		if ('Y' eq $tool_data->{haplotype_caller}->{run}) {
+		if ('Y' eq $tool_set{'haplotype_caller'}) {
 	 
 			$hc_run_id = '';
 			my $hc_command = join(' ',
@@ -421,7 +470,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_haplotypecaller',
 				cmd	=> $hc_command,
 				modules	=> ['perl'],
-				dependencies	=> $gatk_run_id,
+				dependencies	=> $current_dependencies,
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
@@ -444,6 +493,7 @@ sub main {
 					);
 
 				print $log ">>> HaplotypeCaller job id: $hc_run_id\n\n";
+				push @step3_job_ids, $hc_run_id;
 				push @job_ids, $hc_run_id;
 				}
 
@@ -469,7 +519,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_genotype_gvcfs',
 				cmd	=> $hc_command,
 				modules	=> ['perl'],
-				dependencies	=> join(':', $gatk_run_id, $hc_run_id),
+				dependencies	=> join(':', $current_dependencies, $hc_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
@@ -518,7 +568,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_annotate_germline',
 				cmd	=> $hc_command,
 				modules	=> ['perl'],
-				dependencies	=> join(':', $gatk_run_id, $hc_run_id),
+				dependencies	=> join(':', $current_dependencies, $hc_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
@@ -541,7 +591,7 @@ sub main {
 			}
 
 		## run STRELKA/MANTA pipeline
-		if ('Y' eq $tool_data->{strelka}->{run}) {
+		if ('Y' eq $tool_set{'strelka'}) {
 
 			unless(-e $strelka_directory) { make_path($strelka_directory); }
 
@@ -577,7 +627,7 @@ sub main {
 					name	=> 'pughlab_dna_pipeline__run_strelka_pon',
 					cmd	=> $strelka_command,
 					modules	=> ['perl'],
-					dependencies	=> $gatk_run_id,
+					dependencies	=> $current_dependencies,
 					mem		=> '256M',
 					max_time	=> $max_time,
 					hpc_driver	=> $args{cluster}
@@ -600,6 +650,7 @@ sub main {
 						);
 
 					print $log ">>> Strelka PoN job id: $strelka_run_id\n\n";
+					push @step3_job_ids, $strelka_run_id;
 					push @job_ids, $strelka_run_id;
 					}
 				}
@@ -627,7 +678,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_strelka',
 				cmd	=> $strelka_command,
 				modules	=> ['perl'],
-				dependencies	=> join(':', $gatk_run_id, $strelka_run_id),
+				dependencies	=> join(':', $current_dependencies, $strelka_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
@@ -650,12 +701,13 @@ sub main {
 					);
 
 				print $log ">>> Strelka job id: $strelka_run_id\n\n";
+				push @step3_job_ids, $strelka_run_id;
 				push @job_ids, $strelka_run_id;
 				}
 			}
 
 		## run GATK's MuTect pipeline
-		if ('Y' eq $tool_data->{mutect}->{run}) {
+		if ('Y' eq $tool_set{'mutect'}) {
 
 			unless(-e $mutect_directory) { make_path($mutect_directory); }
  
@@ -670,7 +722,7 @@ sub main {
 				# first create a panel of normals
 				$mutect_command = join(' ',
 					"perl $cwd/scripts/mutect.pl",
-					"-o", join('/', $mutect_directory, 'PanelOfNormals'),
+					"-o", $mutect_directory,
 					"-t", $tool_config,
 					"-d", $gatk_output_yaml,
 					"-c", $args{cluster},
@@ -690,7 +742,7 @@ sub main {
 					name	=> 'pughlab_dna_pipeline__run_mutect_pon',
 					cmd	=> $mutect_command,
 					modules	=> ['perl'],
-					dependencies	=> $gatk_run_id,
+					dependencies	=> $current_dependencies,
 					mem		=> '256M',
 					max_time	=> $max_time,
 					hpc_driver	=> $args{cluster}
@@ -713,6 +765,7 @@ sub main {
 						);
 				
 					print $log ">>> MuTect PoN job id: $mutect_run_id\n\n";
+					push @step3_job_ids, $mutect_run_id;
 					push @job_ids, $mutect_run_id;
 					}
 				}
@@ -740,7 +793,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_mutect',
 				cmd	=> $mutect_command,
 				modules	=> ['perl'],
-				dependencies	=> join(':', $gatk_run_id, $mutect_run_id),
+				dependencies	=> join(':', $current_dependencies, $mutect_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
@@ -763,12 +816,13 @@ sub main {
 					);
 
 				print $log ">>> MuTect job id: $mutect_run_id\n\n";
+				push @step3_job_ids, $mutect_run_id;
 				push @job_ids, $mutect_run_id;
 				}
 			}
 
 		## also run GATK's newer MuTect2 pipeline
-		if ('Y' eq $tool_data->{mutect2}->{run}) {
+		if ('Y' eq $tool_set{'mutect2'}) {
 
 			unless(-e $mutect2_directory) { make_path($mutect2_directory); }
 
@@ -783,7 +837,7 @@ sub main {
 				# first create a panel of normals
 				$mutect2_command = join(' ',
 					"perl $cwd/scripts/mutect2.pl",
-					"-o", join('/', $mutect2_directory, 'PanelOfNormals'),
+					"-o", $mutect2_directory,
 					"-t", $tool_config,
 					"-d", $gatk_output_yaml,
 					"-c", $args{cluster},
@@ -803,7 +857,7 @@ sub main {
 					name	=> 'pughlab_dna_pipeline__run_mutect2_pon',
 					cmd	=> $mutect2_command,
 					modules	=> ['perl'],
-					dependencies	=> $gatk_run_id,
+					dependencies	=> $current_dependencies,
 					mem		=> '256M',
 					max_time	=> $max_time,
 					hpc_driver	=> $args{cluster}
@@ -826,6 +880,7 @@ sub main {
 						);
 				
 					print $log ">>> MuTect2 PoN job id: $mutect2_run_id\n\n";
+					push @step3_job_ids, $mutect2_run_id;
 					push @job_ids, $mutect2_run_id;
 					}
 				}
@@ -853,7 +908,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_mutect2',
 				cmd	=> $mutect2_command,
 				modules	=> ['perl'],
-				dependencies	=> join(':', $gatk_run_id, $mutect2_run_id),
+				dependencies	=> join(':', $current_dependencies, $mutect2_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
@@ -876,12 +931,13 @@ sub main {
 					);
 
 				print $log ">>> MuTect2 job id: $mutect2_run_id\n\n";
+				push @step3_job_ids, $mutect2_run_id;
 				push @job_ids, $mutect2_run_id;
 				}
 			}
 
 		## run VarScan SNV/CNV pipeline
-		if ('Y' eq $tool_data->{varscan}->{run}) {
+		if ('Y' eq $tool_set{'varscan'}) {
 
 			unless(-e $varscan_directory) { make_path($varscan_directory); }
 
@@ -910,7 +966,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_varscan',
 				cmd	=> $varscan_command,
 				modules	=> ['perl'],
-				dependencies	=> $gatk_run_id,
+				dependencies	=> $current_dependencies,
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
@@ -933,6 +989,7 @@ sub main {
 					);
 
 				print $log ">>> VarScan job id: $varscan_run_id\n\n";
+				push @step3_job_ids, $varscan_run_id;
 				push @job_ids, $varscan_run_id;
 				}
 
@@ -954,7 +1011,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_sequenza',
 				cmd	=> $sequenza_command,
 				modules	=> ['perl'],
-				dependencies	=> $varscan_run_id,
+				dependencies	=> join(':', $current_dependencies, $varscan_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
@@ -977,7 +1034,7 @@ sub main {
 			}
 
 		## SomaticSniper pipeline
-		if ('Y' eq $tool_data->{somaticsniper}->{run}) {
+		if ('Y' eq $tool_set{'somaticsniper'}) {
 
 			unless(-e $somaticsniper_directory) { make_path($somaticsniper_directory); }
 
@@ -1002,7 +1059,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_somaticsniper',
 				cmd	=> $somaticsniper_command,
 				modules	=> ['perl'],
-				dependencies	=> $gatk_run_id,
+				dependencies	=> $current_dependencies,
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
@@ -1025,65 +1082,13 @@ sub main {
 					);
 
 				print $log ">>> SomaticSniper job id: $somaticsniper_run_id\n\n";
+				push @step3_job_ids, $somaticsniper_run_id;
 				push @job_ids, $somaticsniper_run_id;
 				}
 			}
 
-		## Pindel pipeline
-		if ('Y' eq $tool_data->{pindel}->{run}) {
-
-			unless(-e $pindel_directory) { make_path($pindel_directory); }
-
-			my $pindel_command = join(' ',
-				"perl $cwd/scripts/pindel.pl",
-				"-o", $pindel_directory,
-				"-t", $tool_config,
-				"-d", $gatk_output_yaml,
-				"-c", $args{cluster}
-				);
-
-			if ($args{cleanup}) {
-				$pindel_command .= " --remove";
-				}
-
-			# record command (in log directory) and then run job
-			print $log "Submitting job for pindel.pl\n";
-			print $log "  COMMAND: $pindel_command\n\n";
-
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'pughlab_dna_pipeline__run_pindel',
-				cmd	=> $pindel_command,
-				modules	=> ['perl'],
-				dependencies	=> $gatk_run_id,
-				mem		=> '256M',
-				max_time	=> $max_time,
-				hpc_driver	=> $args{cluster}
-				);
-
-			if ($args{dry_run}) {
-
-				$pindel_command .= " --dry-run";
-				`$pindel_command`;
-				$pindel_run_id = 'pughlab_dna_pipeline__run_pindel';
-
-				} else {
-
-				$pindel_run_id = submit_job(
-					jobname		=> $log_directory,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{cluster},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
-					);
-
-				print $log ">>> Pindel job id: $pindel_run_id\n\n";
-				push @job_ids, $pindel_run_id;
-				}
-			}
-
 		## GATK-CNV pipeline
-		if ('Y' eq $tool_data->{gatk_cnv}->{run}) {
+		if ('Y' eq $tool_set{'gatk_cnv'}) {
 
 			unless(-e $gatk_cnv_directory) { make_path($gatk_cnv_directory); }
 
@@ -1108,7 +1113,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_gatk_cnv',
 				cmd	=> $gatk_cnv_command,
 				modules	=> ['perl'],
-				dependencies	=> $gatk_run_id,
+				dependencies	=> $current_dependencies,
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
@@ -1131,12 +1136,18 @@ sub main {
 					);
 
 				print $log ">>> GATK-CNV job id: $gatk_cnv_run_id\n\n";
+				push @step3_job_ids, $gatk_cnv_run_id;
 				push @job_ids, $gatk_cnv_run_id;
 				}
 			}
 
+		# let's let the first bunch finish before starting the next set
+		if (scalar(@step3_job_ids) > 4) {
+			$current_dependencies = join(':', @step3_job_ids);
+			}
+
 		## SViCT pipeline
-		if ('Y' eq $tool_data->{svict}->{run}) {
+		if ('Y' eq $tool_set{'svict'}) {
 
 			unless(-e $svict_directory) { make_path($svict_directory); }
 
@@ -1161,7 +1172,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_svict',
 				cmd	=> $svict_command,
 				modules	=> ['perl'],
-				dependencies	=> $gatk_run_id,
+				dependencies	=> $current_dependencies,
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
@@ -1184,12 +1195,67 @@ sub main {
 					);
 
 				print $log ">>> SViCT job id: $svict_run_id\n\n";
+				push @step4_job_ids, $svict_run_id;
 				push @job_ids, $svict_run_id;
 				}
 			}
 
+		## Pindel pipeline
+		if ('Y' eq $tool_set{'pindel'}) {
+
+			unless(-e $pindel_directory) { make_path($pindel_directory); }
+
+			my $pindel_command = join(' ',
+				"perl $cwd/scripts/pindel.pl",
+				"-o", $pindel_directory,
+				"-t", $tool_config,
+				"-d", $gatk_output_yaml,
+				"-c", $args{cluster}
+				);
+
+			if ($args{cleanup}) {
+				$pindel_command .= " --remove";
+				}
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for pindel.pl\n";
+			print $log "  COMMAND: $pindel_command\n\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_pindel',
+				cmd	=> $pindel_command,
+				modules	=> ['perl',$samtools],
+				dependencies	=> $current_dependencies,
+				mem		=> '256M',
+				max_time	=> $max_time,
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
+
+				$pindel_command .= " --dry-run";
+				`$pindel_command`;
+				$pindel_run_id = 'pughlab_dna_pipeline__run_pindel';
+
+				} else {
+
+				$pindel_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> Pindel job id: $pindel_run_id\n\n";
+				push @step4_job_ids, $pindel_run_id;
+				push @job_ids, $pindel_run_id;
+				}
+			}
+
 		## IchorCNA pipeline
-		if ('Y' eq $tool_data->{ichor_cna}->{run}) {
+		if ('Y' eq $tool_set{'ichor_cna'}) {
 
 			unless(-e $ichor_directory) { make_path($ichor_directory); }
 
@@ -1214,7 +1280,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_ichor_cna',
 				cmd	=> $ichor_command,
 				modules	=> ['perl'],
-				dependencies	=> $gatk_run_id,
+				dependencies	=> $current_dependencies,
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
@@ -1237,12 +1303,13 @@ sub main {
 					);
 
 				print $log ">>> IchorCNA job id: $ichor_run_id\n\n";
+				push @step4_job_ids, $ichor_run_id;
 				push @job_ids, $ichor_run_id;
 				}
 			}
 
 		## run Delly SV pipeline
-		if ('Y' eq $tool_data->{delly}->{run}) {
+		if ('Y' eq $tool_set{'delly'}) {
 
 			unless(-e $delly_directory) { make_path($delly_directory); }
 
@@ -1266,8 +1333,8 @@ sub main {
 				log_dir	=> $log_directory,
 				name	=> 'pughlab_dna_pipeline__run_delly',
 				cmd	=> $delly_command,
-				modules	=> ['perl', 'samtools'],
-				dependencies	=> $gatk_run_id,
+				modules	=> ['perl', $samtools],
+				dependencies	=> $current_dependencies,
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
@@ -1290,12 +1357,13 @@ sub main {
 					);
 
 				print $log ">>> Delly job id: $delly_run_id\n\n";
+				push @step4_job_ids, $delly_run_id;
 				push @job_ids, $delly_run_id;
 				}
 			}
 
 		## MSI-Sensor pipeline
-		if ('Y' eq $tool_data->{other_tools}->{run_msi}) {
+		if ('Y' eq $tool_set{'msi'}) {
 
 			unless(-e $msi_directory) { make_path($msi_directory); }
 
@@ -1320,7 +1388,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_msi',
 				cmd	=> $msi_command,
 				modules	=> ['perl'],
-				dependencies	=> $gatk_run_id,
+				dependencies	=> $current_dependencies,
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
@@ -1347,8 +1415,16 @@ sub main {
 				}
 			}
 
+		# let's let the first bunch finish before starting the next set
+		push @step3_job_ids, @step4_job_ids;
+		if (scalar(@step4_job_ids) > 4) {
+			$current_dependencies = join(':', @step4_job_ids);
+			} elsif (scalar(@step3_job_ids) > 4) {
+			$current_dependencies = join(':', @step3_job_ids);
+			}
+
 		## VarDict pipeline
-		if ('Y' eq $tool_data->{vardict}->{run}) {
+		if ('Y' eq $tool_set{'vardict'}) {
 
 			unless(-e $vardict_directory) { make_path($vardict_directory); }
 
@@ -1370,18 +1446,6 @@ sub main {
 				$vardict_command .= " --remove";
 				}
 
-			# specify dependencies (if WGS, should wait for others to finish to avoid
-			# maxing out the users job limit)
-			my $vardict_dependencies = $gatk_run_id;
-			if ('wgs' eq $seq_type) {
-				$vardict_dependencies = join(':',
-					$gatk_run_id,
-					$strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id,
-					$somaticsniper_run_id, $gatk_cnv_run_id, $msi_run_id,
-					$delly_run_id
-					);
-				}
-
 			# record command (in log directory) and then run job
 			print $log "Submitting job for vardict.pl\n";
 			print $log "  COMMAND: $vardict_command\n\n";
@@ -1391,7 +1455,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_vardict',
 				cmd	=> $vardict_command,
 				modules	=> ['perl'],
-				dependencies	=> $vardict_dependencies,
+				dependencies	=> $current_dependencies,
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
@@ -1414,12 +1478,13 @@ sub main {
 					);
 
 				print $log ">>> VarDict job id: $vardict_run_id\n\n";
+				push @step3_job_ids, $vardict_run_id;
 				push @job_ids, $vardict_run_id;
 				}
 			}
 
 		## NovoBreak pipeline
-		if ('Y' eq $tool_data->{novobreak}->{run}) {
+		if ('Y' eq $tool_set{'novobreak'}) {
 
 			unless(-e $novobreak_directory) { make_path($novobreak_directory); }
 
@@ -1436,18 +1501,6 @@ sub main {
 				$novobreak_command .= " --remove";
 				}
 
-			# specify dependencies (if WGS, should wait for others to finish to avoid
-			# maxing out the users job limit)
-			my $novobreak_dependencies = $gatk_run_id;
-			if ('wgs' eq $seq_type) {
-				$novobreak_dependencies = join(':',
-					$gatk_run_id,
-					$strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id,
-					$somaticsniper_run_id, $gatk_cnv_run_id, $msi_run_id,
-					$delly_run_id, $vardict_run_id
-					);
-				}
-
 			# record command (in log directory) and then run job
 			print $log "Submitting job for novobreak.pl\n";
 			print $log "  COMMAND: $novobreak_command\n\n";
@@ -1457,7 +1510,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_novobreak',
 				cmd	=> $novobreak_command,
 				modules	=> ['perl'],
-				dependencies	=> $novobreak_dependencies,
+				dependencies	=> join(':', $current_dependencies, $vardict_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster}
@@ -1480,12 +1533,13 @@ sub main {
 					);
 
 				print $log ">>> VarDict job id: $novobreak_run_id\n\n";
+				push @step3_job_ids, $novobreak_run_id;
 				push @job_ids, $novobreak_run_id;
 				}
 			}
 
 		## run Mavis SV annotation pipeline
-		if ('Y' eq $tool_data->{mavis}->{run}) {
+		if ('Y' eq $tool_set{'mavis'}) {
 
 			unless(-e $mavis_directory) { make_path($mavis_directory); }
 
@@ -1553,6 +1607,7 @@ sub main {
 					);
 
 				print $log ">>> MAVIS job id: $mavis_run_id\n\n";
+				push @step3_job_ids, $mavis_run_id;
 				push @job_ids, $mavis_run_id;
 				}
 			}
@@ -1561,7 +1616,7 @@ sub main {
 	########################################################################################
 	# Create a final report for the project.
 	########################################################################################
-	if ($args{step3}) {
+	if ($args{step4}) {
 
 		my $report_command = join(' ',
 			"perl $cwd/scripts/pughlab_pipeline_auto_report.pl",
@@ -1570,7 +1625,7 @@ sub main {
 			"-d", $date
 			);
 
-		if ($args{step4}) {
+		if ($args{step5}) {
 			$report_command .= " --create_report";
 			}
 
@@ -1583,7 +1638,7 @@ sub main {
 			name	=> 'pughlab_dna_pipeline__summarize_output',
 			cmd	=> $report_command,
 			modules	=> ['perl'],
-			dependencies	=> join(':', @job_ids),
+			dependencies	=> join(':', @step2_job_ids, @step3_job_ids),
 			mem		=> '256M',
 			max_time	=> '5-00:00:00',
 			hpc_driver	=> $args{cluster}
@@ -1613,7 +1668,7 @@ sub main {
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
 my ($tool_config, $data_config);
-my ($preprocessing, $variant_calling, $summarize, $create_report);
+my ($preprocessing, $qc, $variant_calling, $summarize, $create_report);
 my $hpc_driver = 'slurm';
 my ($remove_junk, $dry_run);
 my $help;
@@ -1624,6 +1679,7 @@ GetOptions(
 	't|tool=s'		=> \$tool_config,
 	'd|data=s'		=> \$data_config,
 	'preprocessing'		=> \$preprocessing,
+	'qc'			=> \$qc,
 	'variant_calling'	=> \$variant_calling,
 	'summarize'		=> \$summarize,
 	'create_report'		=> \$create_report,
@@ -1639,6 +1695,7 @@ if ($help) {
 		"\t--data|-d\t<string> data config (yaml format)",
 		"\t--tool|-t\t<string> tool config (yaml format)",
 		"\t--preprocessing\t<boolean> should data pre-processing be performed? (default: false)",
+		"\t--qc\t<boolean> should QC metrics be generated on the BAMs? (default: false)",
 		"\t--variant_calling\t<boolean> should variant calling be performed? (default: false)",
 		"\t--summarize\t<boolean> should output be summarized? (default: false)",
 		"\t--create_report\t<boolean> should a report be generated? (default: false)",
@@ -1651,11 +1708,15 @@ if ($help) {
 	exit;
 	}
 
-if ( (!$preprocessing) && (!$variant_calling) && (!$create_report) ) {
-	die("Please choose a step to run (either --preprocessing and/or --variant_caling and/or --create_report )");
+if ( (!$preprocessing) && (!$variant_calling) && (!$summarize) && (!$qc) && (!$create_report) ) {
+	die("Please choose a step to run (at least one of --preprocessing, --qc, --variant_calling, --summarize, --create_report )");
 	}
-if (!defined($tool_config)) { die("No tool config file defined; please provide -t | --tool (ie, tool_config.yaml)"); }
-if (!defined($data_config)) { die("No data config file defined; please provide -d | --data (ie, sample_config.yaml)"); }
+if (!defined($tool_config)) {
+	die("No tool config file defined; please provide -t | --tool (ie, tool_config.yaml)");
+	}
+if (!defined($data_config)) {
+	die("No data config file defined; please provide -d | --data (ie, sample_config.yaml)");
+	}
 
 # check for compatible HPC driver; if not found, change dry_run to Y
 my @compatible_drivers = qw(slurm);
@@ -1668,9 +1729,10 @@ main(
 	tool_config	=> $tool_config,
 	data_config	=> $data_config,
 	step1		=> $preprocessing,
-	step2		=> $variant_calling,
-	step3		=> $summarize,
-	step4		=> $create_report,
+	step2		=> $qc,
+	step3		=> $variant_calling,
+	step4		=> $summarize,
+	step5		=> $create_report,
 	cluster		=> $hpc_driver,
 	cleanup		=> $remove_junk,
 	dry_run		=> $dry_run

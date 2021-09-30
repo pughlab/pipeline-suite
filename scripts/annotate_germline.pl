@@ -224,7 +224,7 @@ sub main{
 		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
 		}
 
-	my ($run_script, $cleanup_cmd, $run_id);
+	my ($run_script, $cleanup_cmd, $run_id, $should_run_final);
 	my @all_jobs;
 
 	# set up some directories
@@ -246,6 +246,7 @@ sub main{
 			print $log "\n>> No filtered gvcf found; skipping patient.\n\n";
 			next;
 			}
+	
 		my $patient_vcf = join('/', $input_directory, $patient_vcfs[0]);
 
 		# make some directories
@@ -270,6 +271,9 @@ sub main{
 
 		# loop over each sample
 		foreach my $sample ( @sample_ids ) {
+
+			# if there are any samples to run, we will run the final combine job
+			$should_run_final = 1;
 
 			$run_id = '';
 
@@ -582,30 +586,35 @@ sub main{
 		}
 
 	# collate results
-	my $collect_output = join(' ',
-		"Rscript $cwd/collect_snv_output.R",
-		'-d', $annotate_directory,
-		'-p', $tool_data->{project_name}
-		);
+	if ($should_run_final) {
 
-	$run_script = write_script(
-		log_dir	=> $log_directory,
-		name	=> 'combine_significant_variants',
-		cmd	=> $collect_output,
-		modules	=> [$r_version],
-		dependencies	=> join(':', @all_jobs),
-		mem		=> '1G',
-		max_time	=> '12:00:00',
-		hpc_driver	=> $args{hpc_driver}
-		);
+		my $collect_output = join(' ',
+			"Rscript $cwd/collect_snv_output.R",
+			'-d', $annotate_directory,
+			'-p', $tool_data->{project_name}
+			);
 
-	$run_id = submit_job(
-		jobname		=> 'combine_significant_variants',
-		shell_command	=> $run_script,
-		hpc_driver	=> $args{hpc_driver},
-		dry_run		=> $args{dry_run},
-		log_file	=> $log
-		);
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'combine_significant_variants',
+			cmd	=> $collect_output,
+			modules	=> [$r_version],
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '1G',
+			max_time	=> '12:00:00',
+			hpc_driver	=> $args{hpc_driver}
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'combine_significant_variants',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @all_jobs, $run_id;
+		}
 
 	# should intermediate files be removed?
 	if ($args{del_intermediates}) {

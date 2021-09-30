@@ -376,13 +376,11 @@ sub main {
 		}
 
 	my ($run_script, $cnv_run_id, $varscan_run_id, $run_id, $link, $cleanup_cmd);
+	my ($should_run_pon, $should_run_final);
 	my (@all_jobs, @pon_vcfs, @pon_dependencies);
 
 	my $pon_directory = join('/', $output_directory, 'PanelOfNormals');
-	unless(-e $pon_directory) { make_path($pon_directory); }
-
 	my $pon_intermediates = join('/', $pon_directory, 'intermediate_files');
-	unless(-e $pon_intermediates) { make_path($pon_intermediates); }
 
 	my @tumour_only;
 
@@ -400,6 +398,11 @@ sub main {
 			if (scalar(@tumour_ids) > 0) { push @tumour_only, $patient; }
 			next;
 			}
+
+		# if any normals are present
+		$should_run_pon = 1;
+		unless(-e $pon_directory) { make_path($pon_directory); }
+		unless(-e $pon_intermediates) { make_path($pon_intermediates); }
 
 		# create some directories
 		my $patient_directory = join('/', $output_directory, $patient);
@@ -431,6 +434,9 @@ sub main {
 
 		# for T/N pair
 		foreach my $sample (@tumour_ids) {
+
+			# if there are any samples to run, we will run the final combine job
+			$should_run_final = 1;
 
 			print $log "  SAMPLE: $sample\n\n";
 
@@ -1138,6 +1144,7 @@ sub main {
 
 			# for multiple tumours, collect all variants, then subset the normal
 			my $format_germline_cmd;
+
 			if (scalar(@tumour_ids) > 1) {
 
 				$format_germline_cmd = join(' ',
@@ -1250,7 +1257,7 @@ sub main {
 		}
 
 	my $pon_job_id;
-	unless (defined($args{pon})) {
+	if ( (!defined($args{pon})) && ($should_run_pon) ) {
 
 		# let's create a command and write script to combine variants for a PoN
 		my $pon		= join('/', $pon_directory, $date . "_merged_panelOfNormals_trimmed.vcf");
@@ -1338,6 +1345,9 @@ sub main {
 
 		# for each tumour-only sample 
 		foreach my $sample (@tumour_ids) {
+
+			# if there are any samples to run, we will run the final combine job
+			$should_run_final = 1;
 
 			print $log "  SAMPLE: $sample\n\n";
 
@@ -1698,30 +1708,35 @@ sub main {
 		}
 
 	# collate results
-	my $collect_output = join(' ',
-		"Rscript $cwd/collect_snv_output.R",
-		'-d', $output_directory,
-		'-p', $tool_data->{project_name}
-		);
+	if ($should_run_final) {
 
-	$run_script = write_script(
-		log_dir	=> $log_directory,
-		name	=> 'combine_variant_calls',
-		cmd	=> $collect_output,
-		modules	=> [$r_version],
-		dependencies	=> join(':', @all_jobs),
-		mem		=> '4G',
-		max_time	=> '24:00:00',
-		hpc_driver	=> $args{hpc_driver}
-		);
+		my $collect_output = join(' ',
+			"Rscript $cwd/collect_snv_output.R",
+			'-d', $output_directory,
+			'-p', $tool_data->{project_name}
+			);
 
-	$run_id = submit_job(
-		jobname		=> 'combine_variant_calls',
-		shell_command	=> $run_script,
-		hpc_driver	=> $args{hpc_driver},
-		dry_run		=> $args{dry_run},
-		log_file	=> $log
-		);
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'combine_variant_calls',
+			cmd	=> $collect_output,
+			modules	=> [$r_version],
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '4G',
+			max_time	=> '24:00:00',
+			hpc_driver	=> $args{hpc_driver}
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'combine_variant_calls',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @all_jobs, $run_id;
+		}
 
 	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
 	# collect job metrics (exit status, mem, run time)
