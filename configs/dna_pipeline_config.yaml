@@ -322,18 +322,15 @@ novobreak:
     chromosomes:
     parameters:
         novobreak:
-            mem: 40G # for WGS, use less memory (24G) and more time (5-00:00:00)
+            mem: 40G
             time: '24:00:00'
-        ssake: # wgs only
-            mem: 6G
-            time: '48:00:00'
-            n_cpu: 4
-        process: # used for wxs and for part2 of WGS
+            n_cpu: 10
+        process:
             mem: 16G
             time: '48:00:00'
-            n_cpu: 8
-        merge:
-            mem: 2G
+            n_cpu: 4
+        filter:
+            mem: 4G
             time: '12:00:00'
 svict:
     run: N # only for ctDNA (targeted panel or exome)

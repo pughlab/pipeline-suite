@@ -1,4 +1,4 @@
-# PughLab pipeline-suite (version 0.5.6)
+# PughLab pipeline-suite (version 0.5.7)
 
 ## Introduction
 This is a collection of pipelines to be used for NGS (both DNA and RNA) analyses, from alignment to variant calling.
@@ -6,7 +6,7 @@ This is a collection of pipelines to be used for NGS (both DNA and RNA) analyses
 Start by creating a clone of the repository:
 
 <pre><code>cd /path/to/some/directory
-git clone https://github.com/pughlab/pipeline-suite/
+git clone git@github.com:pughlab/pipeline-suite.git
 </code></pre>
 
 Additionally, the report generation portion of this tool requires installation of the BPG plotting package for R:

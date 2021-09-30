@@ -441,14 +441,11 @@ sub main {
 		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
 		}
 
-	my ($run_script, $run_id, $link, $cleanup_cmd);
+	my ($run_script, $run_id, $link, $cleanup_cmd, $should_run_final, $should_run_pon);
 	my (@all_jobs, @pon_vcfs, @pon_dependencies);
 
 	my $pon_directory = join('/', $output_directory, 'PanelOfNormals');
-	unless(-e $pon_directory) { make_path($pon_directory); }
-
 	my $pon_intermediates = join('/', $pon_directory, 'intermediate_files');
-	unless(-e $pon_intermediates) { make_path($pon_intermediates); }
 
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
@@ -458,6 +455,11 @@ sub main {
 		my @tumour_ids = keys %{$smp_data->{$patient}->{'tumour'}};
 
 		next if (scalar(@normal_ids) == 0);
+
+		# if there are ever any normals
+		$should_run_pon = 1;
+		unless(-e $pon_directory) { make_path($pon_directory); }
+		unless(-e $pon_intermediates) { make_path($pon_intermediates); }
 
 		print $log "\nInitiating process for PATIENT: $patient\n";
 
@@ -554,6 +556,9 @@ sub main {
 			push @split_jobs, $run_id;
 			push @patient_jobs, $run_id;
 			push @all_jobs, $run_id;
+
+			# if there are any samples to run, we will run the final combine job
+			$should_run_final = 1;
 			}
 
 		# indicate this should be removed at the end
@@ -770,8 +775,6 @@ sub main {
 					}
 
 				$vardict_command = get_vardict_command_wgs(
-			#		tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
-			#		normal		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
 					tumour_id	=> $sample,
 					normal_id	=> $normal_ids[0],
 					tmp_dir		=> $tmp_directory,
@@ -1121,7 +1124,7 @@ sub main {
 	# create a panel of normals if not provided
 	my $pon_job_id = '';
 
-	unless (defined($pon)) {
+	if ( (!defined($pon)) && ($should_run_pon) ) {
 
 		# let's create a command and write script to combine variants for a PoN
 		$pon		= join('/', $pon_directory, $date . "_merged_panelOfNormals_trimmed.vcf");
@@ -1256,7 +1259,6 @@ sub main {
 					}
 
 				$vardict_command = get_vardict_command_wgs(
-			#		tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
 					tumour_id	=> $sample,
 					tmp_dir		=> $tmp_directory,
 					output_stem	=> $output_stem,
@@ -1510,30 +1512,35 @@ sub main {
 		}
 
 	# collate results
-	my $collect_output = join(' ',
-		"Rscript $cwd/collect_snv_output.R",
-		'-d', $output_directory,
-		'-p', $tool_data->{project_name}
-		);
+	if ($should_run_final) {
 
-	$run_script = write_script(
-		log_dir	=> $log_directory,
-		name	=> 'combine_variant_calls',
-		cmd	=> $collect_output,
-		modules	=> [$r_version],
-		dependencies	=> join(':', @all_jobs),
-		mem		=> '4G',
-		max_time	=> '12:00:00',
-		hpc_driver	=> $args{hpc_driver}
-		);
+		my $collect_output = join(' ',
+			"Rscript $cwd/collect_snv_output.R",
+			'-d', $output_directory,
+			'-p', $tool_data->{project_name}
+			);
 
-	$run_id = submit_job(
-		jobname		=> 'combine_variant_calls',
-		shell_command	=> $run_script,
-		hpc_driver	=> $args{hpc_driver},
-		dry_run		=> $args{dry_run},
-		log_file	=> $log
-		);
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'combine_variant_calls',
+			cmd	=> $collect_output,
+			modules	=> [$r_version],
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '4G',
+			max_time	=> '12:00:00',
+			hpc_driver	=> $args{hpc_driver}
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'combine_variant_calls',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @all_jobs, $run_id;
+		}
 
 	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
 	# collect job metrics (exit status, mem, run time)

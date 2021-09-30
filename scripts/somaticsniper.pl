@@ -321,6 +321,7 @@ sub main {
 		}
 
 	my ($run_script, $run_id, $link, $cleanup_cmd, $sniper_id, $norm_pile_id, $tum_pile_id);
+	my $should_run_final;
 	my @all_jobs;
 
 	# do an initial check for normals; no normals = don't bother running
@@ -415,13 +416,15 @@ sub main {
 
 			push @patient_jobs, $norm_pile_id;
 			push @all_jobs, $norm_pile_id;
-			}
-		else {
+			} else {
 			print $log "Skipping pileup (normal) because this has already been completed!\n";
 			}
 
 		# for each tumour sample
 		foreach my $sample (@tumour_ids) {
+
+			# if there are any samples to run, we will run the final combine job
+			$should_run_final = 1;
 
 			print $log "  SAMPLE: $sample\n\n";
 
@@ -470,8 +473,7 @@ sub main {
 
 				push @patient_jobs, $sniper_id;
 				push @all_jobs, $sniper_id;
-				}
-			else {
+				} else {
 				print $log "Skipping SomaticSniper because this has already been completed!\n";
 				}
 
@@ -512,8 +514,7 @@ sub main {
 
 				push @patient_jobs, $tum_pile_id;
 				push @all_jobs, $tum_pile_id;
-				}
-			else {
+				} else {
 				print $log "Skipping pileup (tumour) because this has already been completed!\n";
 				}
 
@@ -563,8 +564,7 @@ sub main {
 
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping snpfilter because this has already been completed!\n";
 				}
 
@@ -610,8 +610,7 @@ sub main {
 
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping bam-readcount because this has already been completed!\n";
 				}
 
@@ -683,8 +682,7 @@ sub main {
 
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping final filter because this has already been completed!\n";
 				}
 
@@ -751,8 +749,7 @@ sub main {
 
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping vcf2maf because this has already been completed!\n";
 				}
 
@@ -809,30 +806,35 @@ sub main {
 		}
 
 	# collate results
-	my $collect_output = join(' ',
-		"Rscript $cwd/collect_snv_output.R",
-		'-d', $output_directory,
-		'-p', $tool_data->{project_name}
-		);
+	if ($should_run_final) {
 
-	$run_script = write_script(
-		log_dir	=> $log_directory,
-		name	=> 'combine_variant_calls',
-		cmd	=> $collect_output,
-		modules	=> [$r_version],
-		dependencies	=> join(':', @all_jobs),
-		mem		=> '4G',
-		max_time	=> '24:00:00',
-		hpc_driver	=> $args{hpc_driver}
-		);
+		my $collect_output = join(' ',
+			"Rscript $cwd/collect_snv_output.R",
+			'-d', $output_directory,
+			'-p', $tool_data->{project_name}
+			);
 
-	$run_id = submit_job(
-		jobname		=> 'combine_variant_calls',
-		shell_command	=> $run_script,
-		hpc_driver	=> $args{hpc_driver},
-		dry_run		=> $args{dry_run},
-		log_file	=> $log
-		);
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'combine_variant_calls',
+			cmd	=> $collect_output,
+			modules	=> [$r_version],
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '4G',
+			max_time	=> '24:00:00',
+			hpc_driver	=> $args{hpc_driver}
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'combine_variant_calls',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @all_jobs, $run_id;
+		}
 
 	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
 	# collect job metrics (exit status, mem, run time)

@@ -79,8 +79,39 @@ sub get_mutect_pon_command {
 	return($mutect_command);
 	}
 
+# and a split version for WGS
+sub get_split_mutect_pon_command {
+	my %args = (
+		normal		=> undef,
+		output_stem	=> undef,
+		java_mem	=> undef,
+		tmp_dir		=> undef,
+		intervals	=> undef,
+		@_
+		);
+
+	my $mutect_command = join(' ',
+		'java -Xmx' . $args{java_mem},
+		'-Djava.io.tmpdir=' . $args{tmp_dir},
+		'-jar $gatk_dir/GenomeAnalysisTK.jar -T MuTect2',
+		'-R', $reference,
+		'-I:tumor', $args{normal},
+		'--artifact_detection_mode',
+		'--enable_strand_artifact_filter',
+		'--out', $args{output_stem} . '_$CHROM.vcf',
+		'--intervals', '$CHROM',
+		'--interval_padding 100'
+		);
+
+	if (defined($dbsnp)) {
+		$mutect_command .= ' --dbsnp ' . $dbsnp;
+		}
+
+	return($mutect_command);
+	}
+
 # format command to generate PON
-sub  generate_pon {
+sub generate_pon {
 	my %args = (
 		input		=> undef,
 		output		=> undef,
@@ -277,7 +308,7 @@ sub pon {
 	my $output_directory = $args{output_directory};
 	$output_directory =~ s/\/$//;
 
-	my $log_directory = join('/', $output_directory, '..', 'logs', 'CREATE_PanelOfNormals');
+	my $log_directory = join('/', $output_directory, 'logs', 'CREATE_PanelOfNormals');
 	unless(-e $log_directory) { make_path($log_directory); }
 
 	my $log_file = join('/', $log_directory, 'run_MuTect2_panel_of_normals_pipeline.log');
@@ -325,6 +356,25 @@ sub pon {
 		$cosmic = $tool_data->{cosmic};
 		}
 
+	# over which intervals should this be run?
+	my $string;
+	if ('targeted' eq $tool_data->{seq_type}) {
+		$string = 'panel';
+		} elsif (defined($tool_data->{mutect2}->{chromosomes})) {
+		$string = $tool_data->{mutect2}->{chromosomes}; 
+		} elsif ( ('hg38' eq $tool_data->{ref_type}) || ('hg19' eq $tool_data->{ref_type})) {
+		$string = 'chr' . join(',chr', 1..22) . ',chrX,chrY';
+		} elsif ( ('GRCh37' eq $tool_data->{ref_type}) || ('GRCh38' eq $tool_data->{ref_type})) {
+		$string = join(',', 1..22) . ',X,Y';
+		} else {
+		# if no chromosomes can be determined, run as a whole (very very slow!)
+		print $log "  >> Could not determine chromosomes to run\n";
+		print $log "  >> Will run full genome, however this will be very very slow!\n";
+		$string = 'genome';
+		}
+
+	my @chroms = split(',', $string); 
+
 	if (defined($tool_data->{intervals_bed})) {
 		print $log "\n    Target intervals: $tool_data->{intervals_bed}";
 		}
@@ -351,14 +401,26 @@ sub pon {
 	my ($run_script, $run_id, $link, $cleanup_cmd);
 	my (@all_jobs, @pon_vcfs);
 
+	# if multiple chromosomes are to be run (separately):
+	my $chr_file = join('/', $output_directory, 'chromosome_list.txt');
+	if (scalar(@chroms) > 1) {
+		open (my $chr_list, '>', $chr_file) or die "Could not open $chr_file for writing.";	
+		foreach my $chrom ( @chroms ) {
+			print $chr_list "$chrom\n";
+			}
+		}
+
 	# create some directories
-	my $link_directory = join('/', $output_directory, 'bam_links');
+	my $pon_directory = join('/', $output_directory, 'PanelOfNormals');
+	unless(-e $pon_directory) { make_path($pon_directory); }
+
+	my $link_directory = join('/', $pon_directory, 'bam_links');
 	unless(-e $link_directory) { make_path($link_directory); }
 
-	my $intermediate_directory = join('/', $output_directory, 'intermediate_files');
+	my $intermediate_directory = join('/', $pon_directory, 'intermediate_files');
 	unless(-e $intermediate_directory) { make_path($intermediate_directory); }
 
-	my $tmp_directory = join('/', $output_directory, 'TEMP');
+	my $tmp_directory = join('/', $pon_directory, 'TEMP');
 	unless(-e $tmp_directory) { make_path($tmp_directory); }
 
 	# indicate this should be removed at the end
@@ -393,49 +455,210 @@ sub pon {
 
 			# run MuTect
 			my $mutect_vcf = join('/', $intermediate_directory, $sample . '_MuTect2.vcf');
+			my $chr_stem = join('/', $tmp_directory, $sample. '_MuTect2_');
+
 			$cleanup_cmd .= "\n  rm $mutect_vcf*";
 
-			my $mutect_command = get_mutect_pon_command(
-				normal		=> $smp_data->{$patient}->{normal}->{$sample},
-				output		=> $mutect_vcf,
-				java_mem	=> $parameters->{mutect}->{java_mem},
-				tmp_dir		=> $tmp_directory,
-				intervals	=> $tool_data->{intervals_bed}
-				);
+			my $mutect_command;
+			my @chr_jobs;
 
-			# this is a java-based command, so run a final check
-			$mutect_command .= "\n\n" . check_java_output(
-				extra_cmd => "md5sum $mutect_vcf > $mutect_vcf.md5"
-				);
+			# special case if multiple chromosomes and SLURM HPC driver
+			if ( (scalar(@chroms) > 1) && ('slurm' eq $args{hpc_driver}) ) {
 
-			# check if this should be run
-			if ('Y' eq missing_file("$mutect_vcf.md5")) {
+				$mutect_command = 'CHROM=$(sed -n "$SLURM_ARRAY_TASK_ID"p ' . $chr_file . ')';
+				$mutect_command .= "\necho Running chromosome: " . '$CHROM';
 
-				# record command (in log directory) and then run job
-				print $log "Submitting job for MuTect2 artifact_detection_mode...\n";
-
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> "run_mutect2_artifact_detection_mode_$sample",
-					cmd	=> $mutect_command,
-					modules	=> [$gatk],
-					max_time	=> $parameters->{mutect}->{time},
-					mem		=> $parameters->{mutect}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+				$mutect_command .= "\n\n" . join("\n",
+					'if [ -s ' . $chr_stem . '_$CHROM.vcf.md5 ]; then',
+					'  Output file for $CHROM already exists',
+					'  exit',
+					'fi'
 					);
 
-				$run_id = submit_job(
-					jobname	=> "run_mutect2_artifact_detection_mode_$sample",
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{hpc_driver},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
+				$mutect_command .= "\n" . get_split_mutect_pon_command(
+					normal		=> $smp_data->{$patient}->{normal}->{$sample},
+					output_stem	=> $chr_stem,
+					java_mem	=> $parameters->{mutect}->{java_mem},
+					tmp_dir		=> $tmp_directory
 					);
 
-				push @all_jobs, $run_id;
+				$mutect_command .= "\n\n" . join(' ',
+					'md5sum', $chr_stem . '_$CHROM.vcf',
+					'>', $chr_stem . '_$CHROM.vcf.md5'
+					);
+
+				# check if this should be run
+				if ('Y' eq missing_file("$mutect_vcf.md5")) {
+
+					# record command (in log directory) and then run job
+					print $log "Submitting job for MuTect2 artifact_detection_mode...\n";
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> "run_mutect2_artifact_detection_mode_$sample",
+						cmd	=> $mutect_command,
+						modules	=> [$gatk],
+						max_time	=> $parameters->{mutect}->{time},
+						mem		=> $parameters->{mutect}->{mem},
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> '--array=1-'. scalar(@chroms)
+						);
+
+					$run_id = submit_job(
+						jobname	=> "run_mutect2_artifact_detection_mode_$sample",
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @chr_jobs, $run_id;
+					push @all_jobs, $run_id;
+					} else {
+					print $log "Skipping MuTect2 artifact_detection because this has already been completed!\n";
+					}
+
+				# if not SLURM HPC driver, but multiple chroms
+				} elsif (scalar(@chroms) > 1) {
+
+				$mutect_command = 'for LINE in {1..' . scalar(@chroms) . '}; do';
+				$mutect_command .= "\n" . '  CHROM=$(sed -n "$LINE"p ' . $chr_file . ')';
+				$mutect_command .= "\n  echo Running chromosome: " . '$CHROM';
+
+				$mutect_command .= "\n\n" . join("\n",
+					'  if [ -s ' . $chr_stem . '_$CHROM.vcf.md5 ]; then',
+					'    Output file for $CHROM already exists',
+					'  else'
+					);
+
+				$mutect_command .= "\n    " . get_split_mutect_pon_command(
+					normal		=> $smp_data->{$patient}->{normal}->{$sample},
+					output_stem	=> $chr_stem,
+					java_mem	=> $parameters->{mutect}->{java_mem},
+					tmp_dir		=> $tmp_directory
+					);
+
+				$mutect_command .= "\n\n    " . join(' ',
+					'md5sum', $chr_stem . '_$CHROM.vcf',
+					'>', $chr_stem . '_$CHROM.vcf.md5'
+					);
+
+				$mutect_command .= "\n  fi";
+				$mutect_command .= "\ndone";
+
+				# check if this should be run
+				if ('Y' eq missing_file("$mutect_vcf.md5")) {
+
+					# record command (in log directory) and then run job
+					print $log "Submitting job for MuTect2 artifact_detection_mode...\n";
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> "run_mutect2_artifact_detection_mode_$sample",
+						cmd	=> $mutect_command,
+						modules	=> [$gatk],
+						max_time	=> $parameters->{mutect}->{time},
+						mem		=> $parameters->{mutect}->{mem},
+						hpc_driver	=> $args{hpc_driver}
+						);
+
+					$run_id = submit_job(
+						jobname	=> "run_mutect2_artifact_detection_mode_$sample",
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @chr_jobs, $run_id;
+					push @all_jobs, $run_id;
+					} else {
+					print $log "Skipping MuTect2 artifact_detection because this has already been completed!\n";
+					}
+
+				# otherwise, for a single chrom/panel:
+				} else {
+
+				$mutect_command = get_mutect_pon_command(
+					normal		=> $smp_data->{$patient}->{normal}->{$sample},
+					output		=> $mutect_vcf,
+					java_mem	=> $parameters->{mutect}->{java_mem},
+					tmp_dir		=> $tmp_directory,
+					intervals	=> $tool_data->{intervals_bed}
+					);
+
+				$mutect_command .= "\n\nmd5sum $mutect_vcf > $mutect_vcf.md5";
+
+				# check if this should be run
+				if ('Y' eq missing_file("$mutect_vcf.md5")) {
+
+					# record command (in log directory) and then run job
+					print $log "Submitting job for MuTect2 artifact_detection_mode...\n";
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> "run_mutect2_artifact_detection_mode_$sample",
+						cmd	=> $mutect_command,
+						modules	=> [$gatk],
+						max_time	=> $parameters->{mutect}->{time},
+						mem		=> $parameters->{mutect}->{mem},
+						hpc_driver	=> $args{hpc_driver}
+						);
+
+					$run_id = submit_job(
+						jobname	=> "run_mutect2_artifact_detection_mode_$sample",
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @all_jobs, $run_id;
+					} else {
+					print $log "Skipping MuTect2 artifact_detection because this has already been completed!\n";
+					}
 				}
-			else {
-				print $log "Skipping MuTect2 artifact_detection because this has already been completed!\n";
+
+			# combine all chr output if necessary
+			if (scalar(@chroms) > 1) {
+
+				my $merge_chr_command = join(' ',
+					'vcf-concat',
+					$chr_stem . '*.vcf',
+					'>', $mutect_vcf
+					);
+
+				$merge_chr_command .= "\nmd5sum $mutect_vcf > $mutect_vcf.md5";
+
+				# check if this should be run
+				if ('Y' eq missing_file("$mutect_vcf.md5")) {
+
+					# record command (in log directory) and then run job
+					print $log "Submitting job for Merge step...\n";
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_combine_chromosome_output_' . $sample,
+						cmd	=> $merge_chr_command,
+						modules	=> [$vcftools],
+						dependencies	=> join(':', @chr_jobs),
+						max_time	=> $parameters->{merge}->{time},
+						mem		=> $parameters->{merge}->{mem},
+						hpc_driver	=> $args{hpc_driver}
+						);
+
+					$run_id = submit_job(
+						jobname		=> 'run_combine_chromosome_output_' . $sample,
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @all_jobs, $run_id;
+					} else {
+					print $log "Skipping Merge chromosomes because this has already been completed!\n";
+					}
 				}
 
 			# filter results
@@ -477,8 +700,7 @@ sub pon {
 					);
 
 				push @all_jobs, $run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping VCF-filter because this has already been completed!\n";
 				}
 
@@ -487,8 +709,8 @@ sub pon {
 		} # end patient
 
 	# combine results
-	my $pon_tmp	= join('/', $output_directory, $date . "_merged_panelOfNormals.vcf");
-	my $pon		= join('/', $output_directory, $date . "_merged_panelOfNormals_trimmed.vcf");
+	my $pon_tmp	= join('/', $pon_directory, $date . "_merged_panelOfNormals.vcf");
+	my $pon		= join('/', $pon_directory, $date . "_merged_panelOfNormals_trimmed.vcf");
 
 	# create a trimmed output (minN 2, sites_only) to use as pon
 	my $trimmed_merge_command = generate_pon(
@@ -499,7 +721,7 @@ sub pon {
 		out_type	=> 'trimmed'
 		);
 
-	my $final_link = join('/', $output_directory, '..', 'panel_of_normals.vcf');
+	my $final_link = join('/', $output_directory, 'panel_of_normals.vcf');
 	if (-l $final_link) {
 		unlink $final_link or die "Failed to remove previous symlink: $final_link";
 		}
@@ -536,8 +758,7 @@ sub pon {
 			);
 
 		push @all_jobs, $run_id;
-		}
-	else {
+		} else {
 		print $log "Skipping Generate PanelOfNormals because this has already been completed!\n";
 		}
 
@@ -717,8 +938,8 @@ sub main {
 
 	# over which intervals should this be run?
 	my $string;
-	if (defined($tool_data->{intervals_bed})) {
-		$string = 'exome';
+	if ('targeted' eq $tool_data->{seq_type}) {
+		$string = 'panel';
 		} elsif (defined($tool_data->{mutect2}->{chromosomes})) {
 		$string = $tool_data->{mutect2}->{chromosomes}; 
 		} elsif ( ('hg38' eq $tool_data->{ref_type}) || ('hg19' eq $tool_data->{ref_type})) {
@@ -785,7 +1006,7 @@ sub main {
 		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
 		}
 
-	my ($run_script, $run_id, $link, $java_check, $cleanup_cmd);
+	my ($run_script, $run_id, $link, $java_check, $cleanup_cmd, $should_run_final);
 	my @all_jobs;
 
 	# if multiple chromosomes are to be run (separately):
@@ -837,6 +1058,9 @@ sub main {
 		# for T/N or T only mode
 		foreach my $sample (@tumour_ids) {
 
+			# if there are any samples to run, we will run the final combine job
+			$should_run_final = 1;
+
 			print $log "  SAMPLE: $sample\n\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
@@ -880,7 +1104,7 @@ sub main {
 
 			foreach $chr ( @chroms ) {
 
-				if ( ('genome' eq $chr) || ('exome' eq $chr) ) {
+				if ( ('genome' eq $chr) || ('panel' eq $chr) ) {
 					$mutect_commands{$chr} = get_mutect_command(
 						tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
 						normal		=> $normal_bam,
@@ -914,11 +1138,11 @@ sub main {
 				$mutect_command .= "\necho Running chromosome: " . '$CHROM';
 
 				$mutect_command .= "\n\n" . join("\n",
-						'if [ -s ' . $chr_stem . '_$CHROM.vcf.md5 ]; then',
-						'  Output file for $CHROM already exists',
-						'  exit',
-						'fi'
-						);
+					'if [ -s ' . $chr_stem . '_$CHROM.vcf.md5 ]; then',
+					'  Output file for $CHROM already exists',
+					'  exit',
+					'fi'
+					);
 
 				$mutect_command .= "\n" . get_mutect_split_command( 
 					tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
@@ -977,9 +1201,8 @@ sub main {
 					my @required;
 					# this is a java-based command, so run a final check
 					if ( ('genome' eq $chr) || ('exome' eq $chr) ) {
-						$mutect_command .= "\n\n" . check_java_output(
-							extra_cmd => "md5sum $merged_output > $merged_output.md5"
-							);
+						$mutect_command .= "\n\nmd5sum $merged_output > $merged_output.md5";
+
 						push @required, "$merged_output.md5";
 						} elsif (scalar(@chroms) == 1) {
 						my $add_on_cmd = join("\n",
@@ -987,15 +1210,12 @@ sub main {
 							"md5sum $merged_output > $merged_output.md5"
 							);
 
-						$mutect_command .= "\n\n" . check_java_output(
-							extra_cmd => $add_on_cmd 
-							);
+						$mutect_command .= "\n\n$add_on_cmd";
 						push @required, "$merged_output.md5";
-						
+
 						} else {
-						$mutect_command .= "\n\n" . check_java_output(
-							extra_cmd => "md5sum $chr_stem\_$chr.vcf > $chr_stem\_$chr.vcf.md5"
-							);
+						$mutect_command .= "\n\nmd5sum $chr_stem\_$chr.vcf > $chr_stem\_$chr.vcf.md5";
+
 						push @required, "$chr_stem\_$chr.vcf.md5"; 
 						push @required, "$merged_output.md5";
 						}
@@ -1027,8 +1247,7 @@ sub main {
 						push @chr_jobs, $run_id;
 						push @patient_jobs, $run_id;
 						push @all_jobs, $run_id;
-						}
-					else {
+						} else {
 						print $log "Skipping MuTect2 ($chr) because this has already been completed!\n";
 						}
 					}
@@ -1290,30 +1509,35 @@ sub main {
 		}
 
 	# collate results
-	my $collect_output = join(' ',
-		"Rscript $cwd/collect_snv_output.R",
-		'-d', $output_directory,
-		'-p', $tool_data->{project_name}
-		);
+	if ($should_run_final) {
 
-	$run_script = write_script(
-		log_dir	=> $log_directory,
-		name	=> 'combine_variant_calls',
-		cmd	=> $collect_output,
-		modules	=> [$r_version],
-		dependencies	=> join(':', @all_jobs),
-		mem		=> '4G',
-		max_time	=> '24:00:00',
-		hpc_driver	=> $args{hpc_driver}
-		);
+		my $collect_output = join(' ',
+			"Rscript $cwd/collect_snv_output.R",
+			'-d', $output_directory,
+			'-p', $tool_data->{project_name}
+			);
 
-	$run_id = submit_job(
-		jobname		=> 'combine_variant_calls',
-		shell_command	=> $run_script,
-		hpc_driver	=> $args{hpc_driver},
-		dry_run		=> $args{dry_run},
-		log_file	=> $log
-		);
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'combine_variant_calls',
+			cmd	=> $collect_output,
+			modules	=> [$r_version],
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '4G',
+			max_time	=> '24:00:00',
+			hpc_driver	=> $args{hpc_driver}
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'combine_variant_calls',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @all_jobs, $run_id;
+		}
 
 	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
 	# collect job metrics (exit status, mem, run time)

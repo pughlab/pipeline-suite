@@ -255,7 +255,7 @@ sub pon {
 	my $output_directory = $args{output_directory};
 	$output_directory =~ s/\/$//;
 
-	my $log_directory = join('/', $output_directory, '..', 'logs', 'CREATE_PanelOfNormals');
+	my $log_directory = join('/', $output_directory, 'logs', 'CREATE_PanelOfNormals');
 	unless(-e $log_directory) { make_path($log_directory); }
 
 	my $log_file = join('/', $log_directory, 'run_MuTect_panel_of_normals_pipeline.log');
@@ -331,13 +331,16 @@ sub pon {
 	my (@all_jobs, @pon_vcfs);
 
 	# create some directories
-	my $link_directory = join('/', $output_directory, 'bam_links');
+	my $pon_directory = join('/', $output_directory, 'PanelOfNormals');
+	unless(-e $pon_directory) { make_path($pon_directory); }
+
+	my $link_directory = join('/', $pon_directory, 'bam_links');
 	unless(-e $link_directory) { make_path($link_directory); }
 
-	my $intermediate_directory = join('/', $output_directory, 'intermediate_files');
+	my $intermediate_directory = join('/', $pon_directory, 'intermediate_files');
 	unless(-e $intermediate_directory) { make_path($intermediate_directory); }
 
-	my $tmp_directory = join('/', $output_directory, 'TEMP');
+	my $tmp_directory = join('/', $pon_directory, 'TEMP');
 	unless(-e $tmp_directory) { make_path($tmp_directory); }
 
 	# indicate this should be removed at the end
@@ -468,8 +471,8 @@ sub pon {
 		} # end patient
 
 	# combine results
-	my $pon_tmp	= join('/', $output_directory, $date . "_merged_panelOfNormals.vcf");
-	my $pon		= join('/', $output_directory, $date . "_merged_panelOfNormals_trimmed.vcf");
+	my $pon_tmp	= join('/', $pon_directory, $date . "_merged_panelOfNormals.vcf");
+	my $pon		= join('/', $pon_directory, $date . "_merged_panelOfNormals_trimmed.vcf");
 
 	# create a trimmed output (minN 2, sites_only) to use as pon
 	my $trimmed_merge_command = generate_pon(
@@ -480,7 +483,7 @@ sub pon {
 		out_type	=> 'trimmed'
 		);
 
-	my $final_link = join('/', $output_directory, '..', 'panel_of_normals.vcf');
+	my $final_link = join('/', $output_directory, 'panel_of_normals.vcf');
 	if (-l $final_link) {
 		unlink $final_link or die "Failed to remove previous symlink: $final_link";
 		}
@@ -748,7 +751,7 @@ sub main {
 		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
 		}
 
-	my ($run_script, $run_id, $link, $java_check, $cleanup_cmd);
+	my ($run_script, $run_id, $link, $java_check, $cleanup_cmd, $should_run_final);
 	my (@all_jobs, @pon_vcfs);
 
 	# process each sample in $smp_data
@@ -790,6 +793,9 @@ sub main {
 
 		# for T/N or T only mode
 		foreach my $sample (@tumour_ids) {
+
+			# if there are any samples to run, we will run the final combine job
+			$should_run_final = 1;
 
 			print $log "  SAMPLE: $sample\n\n";
 
@@ -1063,30 +1069,35 @@ sub main {
 		}
 
 	# collate results
-	my $collect_output = join(' ',
-		"Rscript $cwd/collect_snv_output.R",
-		'-d', $output_directory,
-		'-p', $tool_data->{project_name}
-		);
+	if ($should_run_final) {
 
-	$run_script = write_script(
-		log_dir	=> $log_directory,
-		name	=> 'combine_variant_calls',
-		cmd	=> $collect_output,
-		modules	=> [$r_version],
-		dependencies	=> join(':', @all_jobs),
-		mem		=> '4G',
-		max_time	=> '24:00:00',
-		hpc_driver	=> $args{hpc_driver}
-		);
+		my $collect_output = join(' ',
+			"Rscript $cwd/collect_snv_output.R",
+			'-d', $output_directory,
+			'-p', $tool_data->{project_name}
+			);
 
-	$run_id = submit_job(
-		jobname		=> 'combine_variant_calls',
-		shell_command	=> $run_script,
-		hpc_driver	=> $args{hpc_driver},
-		dry_run		=> $args{dry_run},
-		log_file	=> $log
-		);
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'combine_variant_calls',
+			cmd	=> $collect_output,
+			modules	=> [$r_version],
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '4G',
+			max_time	=> '24:00:00',
+			hpc_driver	=> $args{hpc_driver}
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'combine_variant_calls',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @all_jobs, $run_id;
+		}
 
 	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
 	# collect job metrics (exit status, mem, run time)
