@@ -82,9 +82,9 @@ sub get_prep_ssake_command {
 	my $cpu_count = $args{n_cpus} - 1;
 	my $part1_command = join("\n",
 		'  if [ ! -s bp_reads.tsv ] && [ ! -s ssake.sam.md5 ]; then',
-		'    samtools bam2fq -1 read1.fq -2 read2.fq somaticreads.bam;',
+		'    samtools bam2fq -1 read1.fq -2 read2.fq ../somaticreads.bam;',
 		'    group_bp_reads.pl ' . $nb_output . ' read1.fq read2.fq > bp_reads.tsv;',
-		'    rm {somaticreads,germlinereads}.bam;',
+		'    rm ../{somaticreads,germlinereads}.bam;',
 		'    rm read{1,2}.fq;',
 		'  fi',
 		'  if [ -s bp_reads.tsv ] && [ ! -s ssake.sam.md5 ]; then',
