@@ -367,8 +367,9 @@ sub main {
 		unless(-e $link_directory) { make_path($link_directory); }
 
 		# create some symlinks and add samples to sheet
-		my $normal_id = $normal_ids[0];
-		if (defined($normal_id)) {
+		my $normal_id = undef;
+		if (scalar(@normal_ids) > 0) {
+			$normal_id = $normal_ids[0];
 			my @tmp = split /\//, $smp_data->{$patient}->{normal}->{$normal_id};
 			$link = join('/', $link_directory, $tmp[-1]);
 			symlink($smp_data->{$patient}->{normal}->{$normal_id}, $link);
@@ -523,7 +524,7 @@ sub main {
 				normal_id	=> $normal_id,
 				rna_ids		=> \@rna_ids_patient,
 				tumour_bams	=> $smp_data->{$patient}->{tumour},
-				normal_bam	=> $smp_data->{$patient}->{normal}->{$normal_id},
+				normal_bam	=> defined($normal_id) ? $smp_data->{$patient}->{normal}->{$normal_id} : undef,
 				rna_bams	=> $smp_data->{$patient}->{rna},
 				manta		=> join(' ', @manta_svs_formatted),
 				delly		=> join(' ', @delly_svs_patient),
@@ -543,7 +544,7 @@ sub main {
 				tumour_ids	=> \@tumour_ids,
 				normal_id	=> $normal_id,
 				tumour_bams	=> $smp_data->{$patient}->{tumour},
-				normal_bam	=> $smp_data->{$patient}->{normal}->{$normal_id},
+				normal_bam	=> defined($normal_id) ? $smp_data->{$patient}->{normal}->{$normal_id} : undef,
 				manta		=> join(' ', @manta_svs_formatted),
 				delly		=> join(' ', @delly_svs_patient),
 				novobreak	=> $novobreak_input,
