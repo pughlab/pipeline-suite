@@ -107,6 +107,10 @@ bamqc:
             java_mem: 1g
             mem: 2G
             time: '24:00:00'
+        qc:
+            java_mem: 3g
+            mem: 4G
+            time: '48:00:00'
         coverage:
             java_mem: 3g
             mem: 4G
@@ -147,29 +151,6 @@ haplotype_caller:
             time: '24:00:00'
         cpsr:
             known_positions: /cluster/projects/pughlab/references/CPSR/PCA_pathVar_integrated_filtered_adjusted_WITH_FANCI_hg19.tsv 
-            mem: 4G
-            time: '24:00:00'
-gatk_cnv:
-    run: Y
-    chromosomes:
-    parameters:
-        readcounts:
-            mem: 1G
-            time: '12:00:00'
-        create_pon:
-            java_mem: 5g
-            mem: 6G
-            time: '24:00:00'
-        denoise:
-            java_mem: 7g
-            mem: 8G
-            time: '24:00:00'
-        allele_counts:
-            java_mem: 7g
-            mem: 8G
-            time: '24:00:00'
-        model:
-            java_mem: 3g
             mem: 4G
             time: '24:00:00'
 annotate:
@@ -240,9 +221,8 @@ varscan:
             mem: 4G
             time: '24:00:00'
         sequenza:
-            r: 3.3.0
-            path:
             cancer_type_prior: all
+            ploidy_priors: /cluster/projects/pughlab/src/sequenza_wrapper/PANCAN_ASCAT_ploidy_prob.Rdata
             mem: 6G
             time: '24:00:00'
         filter:
@@ -270,11 +250,14 @@ somaticsniper:
             time: '24:00:00'
 vardict:
     run: Y
-    intervals: # only for WGS
+    intervals: /cluster/projects/pughlab/references/intervals/whole_genome_intervals/GRCh37_wgs_intervals_for_vardict_no_centromere.txt # only for WGS
     pon: /cluster/projects/pughlab/references/panel_of_normals/hg19/vardict_v1.7.0_hg38LFThg19_panel_of_normals_20210330.vcf
     parameters:
         vardict:
             mem: 12G
+            time: '24:00:00'
+        test_somatic:
+            mem: 16G
             time: '24:00:00'
         filter:
             mem: 1G
@@ -294,6 +277,29 @@ pindel:
         convert:
             filter_depth: 5
             mem: 2G
+            time: '24:00:00'
+gatk_cnv:
+    run: Y
+    chromosomes:
+    parameters:
+        readcounts:
+            mem: 1G
+            time: '12:00:00'
+        create_pon:
+            java_mem: 5g
+            mem: 6G
+            time: '24:00:00'
+        denoise:
+            java_mem: 7g
+            mem: 8G
+            time: '24:00:00'
+        allele_counts:
+            java_mem: 7g
+            mem: 8G
+            time: '24:00:00'
+        model:
+            java_mem: 3g
+            mem: 4G
             time: '24:00:00'
 delly:
     run: Y

@@ -250,7 +250,7 @@ somaticsniper:
             time: '24:00:00'
 vardict:
     run: Y
-    intervals: # only for WGS
+    intervals: /cluster/projects/pughlab/references/intervals/whole_genome_intervals/hg38_wgs_intervals_for_vardict_no_centromere.txt # only for WGS
     pon: /cluster/projects/pughlab/references/panel_of_normals/hg38/VarDict/v1.7.0/vardict_v1.7.0_hg38_panel_of_normals_20210330.vcf 
     parameters:
         vardict:
