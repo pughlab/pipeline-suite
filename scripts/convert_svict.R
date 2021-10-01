@@ -153,9 +153,10 @@ for (file in input.files) {
 		output.data$break2_chromosome <- gsub('chrchr','chr', output.data$break2_chromosome);
 		}
 
-	if (any(output.data$event_type == 'translocation') & any(output.data$break1_chromosome == output.data$break2_chromosome)) {
-		output.data <- output.data[-which(output.data$event_type == 'translocation' & 
-			(output.data$break1_chromosome == output.data$break2_chromosome)),];
+	if (any(output.data$event_type == 'translocation' & (output.data$break1_chromosome == output.data$break2_chromosome))) {
+		idx.remove <- which(output.data$event_type == 'translocation' & 
+			(output.data$break1_chromosome == output.data$break2_chromosome));
+		output.data <- output.data[-idx.remove,];
 		}
 
 	if (nrow(output.data) > 0) {
