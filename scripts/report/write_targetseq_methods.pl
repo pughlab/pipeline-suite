@@ -35,17 +35,40 @@ sub main {
 	$methods .= "\\subsection{Alignment and Quality Checks}\n";
 
 	my ($gatk, $gatk4);
-	my ($mutect, $mutect2, $strelka, $manta, $varscan, $delly, $mavis, $somaticsniper, $vardict, $novobreak);
+	my ($mutect, $mutect2, $strelka, $pindel, $varscan, $somaticsniper, $vardict);
+	my ($manta, $delly, $mavis, $novobreak, $svict);
 	my ($ref_type, $samtools, $picard, $intervals, $bedtools, $vcftools, $bcftools);
 	my ($k1000g, $mills, $kindels, $dbsnp, $hapmap, $omni, $cosmic, $pon, $gnomad);
 	my ($vep, $vcf2maf);
+
+	# check which tools have been requested
+	my %tool_set = (
+		'bwa'	=> defined($tool_data->{bwa}->{run}) ? $tool_data->{bwa}->{run} : 'N',
+		'gatk'	=> defined($tool_data->{gatk}->{run}) ? $tool_data->{gatk}->{run} : 'N',
+		'bamqc'	=> defined($tool_data->{bamqc}->{run}) ? $tool_data->{bamqc}->{run} : 'N',
+		'haplotype_caller' => defined($tool_data->{haplotype_caller}->{run}) ? $tool_data->{haplotype_caller}->{run} : 'N',
+		'mutect'	=> defined($tool_data->{mutect}->{run}) ? $tool_data->{mutect}->{run} : 'N',
+		'mutect2'	=> defined($tool_data->{mutect2}->{run}) ? $tool_data->{mutect2}->{run} : 'N',
+		'somaticsniper'	=> defined($tool_data->{somaticsniper}->{run}) ? $tool_data->{somaticsniper}->{run} : 'N',
+		'strelka'	=> defined($tool_data->{strelka}->{run}) ? $tool_data->{strelka}->{run} : 'N',
+		'varscan'	=> defined($tool_data->{varscan}->{run}) ? $tool_data->{varscan}->{run} : 'N',
+		'vardict'	=> defined($tool_data->{vardict}->{run}) ? $tool_data->{vardict}->{run} : 'N',
+		'pindel'	=> defined($tool_data->{pindel}->{run}) ? $tool_data->{pindel}->{run} : 'N',
+		'gatk_cnv'	=> defined($tool_data->{gatk_cnv}->{run}) ? $tool_data->{gatk_cnv}->{run} : 'N',
+		'novobreak'	=> defined($tool_data->{novobreak}->{run}) ? $tool_data->{novobreak}->{run} : 'N',
+		'delly'		=> defined($tool_data->{delly}->{run}) ? $tool_data->{delly}->{run} : 'N',
+		'svict'		=> defined($tool_data->{svict}->{run}) ? $tool_data->{svict}->{run} : 'N',
+		'ichor_cna'	=> 'N',
+		'mavis'	=> defined($tool_data->{mavis}->{run}) ? $tool_data->{mavis}->{run} : 'N',
+		'msi'	=> defined($tool_data->{other_tools}->{run_msi}) ? $tool_data->{other_tools}->{run_msi} : 'N'
+		);
 
 	# how was QC run?
 	my $threshold = '3.0';
 	my $t_depth = '20x';
 	my $n_depth = '15x';
 
-	if ('Y' eq $tool_data->{bamqc}->{run}) {
+	if ('Y' eq $tool_set{'bamqc'}) {
 
 		$gatk = $tool_data->{gatk_version};
 		$picard = $tool_data->{picard_version};
@@ -79,7 +102,7 @@ sub main {
 		}
 
 	# how was haplotypecaller run?
-	if ('Y' eq $tool_data->{haplotype_caller}->{run}) {
+	if ('Y' eq $tool_set{'haplotype_caller'}) {
 
 		$methods .= "\\subsection{Germline Variant calling}\n";
 
@@ -136,11 +159,46 @@ sub main {
 	# how were somatic SNVs called?
 	$methods .= "\\subsection{Somatic Variant Calling}\n";
 
-	if ('Y' eq $tool_data->{mutect}->{run}) {
+	$mutect		= defined($tool_data->{mutect_version}) ? $tool_data->{mutect_version} : undef;
+	$pindel		= defined($tool_data->{pindel_version}) ? $tool_data->{pindel_version} : undef;
+	$strelka        = defined($tool_data->{strelka_version}) ? $tool_data->{strelka_version} : undef;
+	$manta          = defined($tool_data->{manta_version}) ? $tool_data->{manta_version} : undef;
+	$vardict        = defined($tool_data->{vardict_version}) ? $tool_data->{vardict_version} : undef;
+	$varscan        = defined($tool_data->{varscan_version}) ? $tool_data->{varscan_version} : undef;
+	$gatk		= defined($tool_data->{gatk_version}) ? $tool_data->{gatk_version} : undef;
+	$vcftools	= defined($tool_data->{vcftools_version}) ? $tool_data->{vcftools_version} : undef;
+	$samtools	= defined($tool_data->{samtools_version}) ? $tool_data->{samtools_version} : undef;
+	$bcftools	= $samtools;
+	
+	$somaticsniper = defined($tool_data->{somaticsniper_version}) ? $tool_data->{somaticsniper_version} : undef;
+	my ($tool, $version) = split('/', $somaticsniper);
+	$somaticsniper = $version;
 
-		$mutect		= $tool_data->{mutect_version};
-		$gatk		= $tool_data->{gatk_version};
-		$vcftools	= $tool_data->{vcftools_version};
+	# annotation
+	if (defined($tool_data->{annotate}->{vep_path})) {
+		my @parts = split('\\/', $tool_data->{annotate}->{vep_path});
+		$vep = $parts[-1];
+		@parts = split('\\/', $tool_data->{annotate}->{vcf2maf_path});
+		$vcf2maf = $parts[-2];
+		}
+
+	my @snv_tools;
+	if ('Y' eq $tool_set{'mutect'}) { push @snv_tools, "MuTect (v$mutect)"; }
+	if ('Y' eq $tool_set{'mutect2'}) { push @snv_tools, "MuTect2 (v$gatk)"; }
+	if ('Y' eq $tool_set{'pindel'}) { push @snv_tools, "Pindel (v$pindel)"; }
+	if ('Y' eq $tool_set{'somaticsniper'}) { push @snv_tools, "SomaticSniper (v$somaticsniper)"; }
+	if ('Y' eq $tool_set{'strelka'}) { push @snv_tools, "Strelka (v$strelka)"; }
+	if ('Y' eq $tool_set{'vardict'}) { push @snv_tools, "VarDict (v$vardict)"; }
+	if ('Y' eq $tool_set{'varscan'}) { push @snv_tools, "VarScan (v$varscan)"; }
+
+	if (scalar(@snv_tools) > 0) {
+		$methods .= "Short somatic variants (SNVs/INDELs) were identified using the following tools: " . join(', ', @snv_tools) . "\\newline\n";
+		} else {
+		$methods .= "No somatic variant calling performed.\\newline\n";
+		}
+
+	# MuTect (v1)
+	if ('Y' eq $tool_set{'mutect'}) {
 
 		if (defined($tool_data->{dbsnp})) {
 			my @parts = split('\\/', $tool_data->{dbsnp});
@@ -160,12 +218,6 @@ sub main {
 			$pon = basename($tool_data->{mutect}->{pon});
 			}
 
-		# annotation
-		my @parts = split('\\/', $tool_data->{annotate}->{vep_path});
-		$vep = $parts[-1];
-		@parts = split('\\/', $tool_data->{annotate}->{vcf2maf_path});
-		$vcf2maf = $parts[-2];
-
 		# fill in methods
 		$methods .= "\\subsubsection{MuTect (v$mutect)}\n";
 
@@ -176,14 +228,10 @@ sub main {
 			}
 
 		$methods .= "For somatic calls, MuTect was run on T/N pairs, or tumour-only samples using identical methods. COSMIC ($cosmic; likely somatic [keep]), dbSNP ($dbsnp; likely germline [remove]) and the panel of normals were provided as known lists, and variant calling restricted to target regions (with interval padding set to 100bp). Lastly, calls were filtered (using vcftools v$vcftools) to again remove any that did not pass MuTect's filter criteria (FILTER did not equal PASS).\\newline\n";
-		} else {
-		$methods .= "MuTect not run.\\newline\n";
 		}
 
-	if ('Y' eq $tool_data->{mutect2}->{run}) {
-
-		$gatk = $tool_data->{gatk_version};
-		$vcftools = $tool_data->{vcftools_version};
+	# MuTect2
+	if ('Y' eq $tool_set{'mutect2'}) {
 
 		if (defined($tool_data->{dbsnp})) {
 			my @parts = split('\\/', $tool_data->{dbsnp});
@@ -203,12 +251,6 @@ sub main {
 			$pon = basename($tool_data->{mutect2}->{pon});
 			}
 
-		# annotation
-		my @parts = split('\\/', $tool_data->{annotate}->{vep_path});
-		$vep = $parts[-1];
-		@parts = split('\\/', $tool_data->{annotate}->{vcf2maf_path});
-		$vcf2maf = $parts[-2];
-
 		# fill in methods
 		$methods .= "\\subsubsection{MuTect2 (GATK v$gatk)}\n";
 
@@ -219,27 +261,22 @@ sub main {
 			}
 
 		$methods .= "For somatic calls, MuTect2 was run on T/N pairs, or tumour-only samples using identical methods. COSMIC ($cosmic; likely somatic [keep]) , dbSNP ($dbsnp; likely germline [remove]) and the panel of normals were provided as known lists, and variant calling restricted to target regions (with interval padding set to 100bp). Lastly, calls were filtered (using vcftools v$vcftools) to again remove any that did not pass MuTect2's filter criteria (FILTER did not equal PASS).\\newline\n";
-		} else {
-		$methods .= "MuTect2 not run.\\newline\n";
 		}
 
-	if ('Y' eq $tool_data->{somaticsniper}->{run}) {
+	# Pindel
+	if ('Y' eq $tool_set{'pindel'}) {
 
-		$somaticsniper = $tool_data->{somaticsniper_version};
-		my ($tool, $somaticsniper_version) = split('/', $somaticsniper);
-		$somaticsniper = $somaticsniper_version;
-		$samtools = $tool_data->{samtools_version};
-		$vcftools = $tool_data->{vcftools_version};
+		# fill in methods
+		$methods .= "\\subsubsection{Pindel (v$pindel)}\n";
+		$methods .= "Pindel was run on each T/N pair or tumour-only sample, limited to targeted regions, using mean insert size (determined using samtools (v$samtools)), with the options report\_interchromosomal\_events and report\_long\_insertions turned on. Raw output were treated separately for short INDELs and longer structural variants. For INDELs, output were converted to VCF using pindel2vcf with the following filters: \-pr 3 \-ir 3 \-il 3 \-pl 3 \-as 100 \-e 5. The final VCF was further filtered using vcftools (v$vcftools) to remove structural variants (long insertions, duplications, inversions). For SVs, unique breakpoints were extracted for use downstream with Mavis.\\newline\n";
+		}
+
+	# SomaticSniper
+	if ('Y' eq $tool_set{'somaticsniper'}) {
 
 		if (defined($tool_data->{somaticsniper}->{pon})) {
 			$pon = $tool_data->{somaticsniper}->{pon};
 			}
-
-		# annotation
-		my @parts = split('\\/', $tool_data->{annotate}->{vep_path});
-		$vep = $parts[-1];
-		@parts = split('\\/', $tool_data->{annotate}->{vcf2maf_path});
-		$vcf2maf = $parts[-2];
 
 		# fill in methods
 		$methods .= "\\subsubsection{SomaticSniper (v$somaticsniper)}\n";
@@ -250,27 +287,34 @@ sub main {
 			} else {
 			$methods .= "Remaining variants were filtered to target regions only (\$\\pm\$ 50bp padding) using bcftools (v$samtools).\\newline\n";
 			}
-
-		} else {
-		$methods .= "SomaticSniper not run.\\newline\n";
 		}
 
-	if ('Y' eq $tool_data->{vardict}->{run}) {
+	# Strelka
+	if ('Y' eq $tool_set{'strelka'}) {
 
-		$vardict	= $tool_data->{vardict_version};
-		$bcftools	= $tool_data->{samtools_version};
-		$vcftools	= $tool_data->{vcftools_version};
-		$gatk		= $tool_data->{gatk_version};
+		if (defined($tool_data->{strelka}->{pon})) {
+			$pon = $tool_data->{strelka}->{pon};
+			}
+
+		# fill in methods
+		$methods .= "\\subsubsection{Strelka (v$strelka)}\n";
+		$methods .= "Strelka and Manta were run using default parameters in exome mode, with callable regions restricted to target regions (\$\\pm\$ 50bp padding).\\newline\n";
+
+		if (defined($tool_data->{strelka}->{pon})) {
+			$methods .= "A pre-made panel of normals ($pon) was used for additional filtering.\\newline\n";
+			} else {
+			$methods .= "A panel of normals was produced using all available normal samples, using Strelka's germline workflow. Resulting variants were merged across samples using GATK's CombineVariants (v$gatk), removing any variant that did not pass quality criteria (FILTER field not equal to PASS), and keeping variants present in at least 2 samples.\\newline\n";
+			}
+
+		$methods .= "For somatic variant detection, Strelka  was run on each sample following the developers recommended protocol. First, Manta (v$manta) was run on each T/N pair or tumour-only sample to identify a set of candidate small indels to be provided to Strelka for use in variant calling. Strelka's somatic workflow was run on T/N pairs, while the germline workflow was used for tumour-only samples. In both cases, resulting variant lists were filtered (using vcftools v$vcftools) to remove likely germline variants (found in the panel of normals) and poor quality calls (FILTER field did not equal PASS).\\newline\n";
+		}
+
+	# VarDict
+	if ('Y' eq $tool_set{'vardict'}) {
 
 		if (defined($tool_data->{vardict}->{pon})) {
 			$pon = $tool_data->{vardict}->{pon};
 			}
-
-		# annotation
-		my @parts = split('\\/', $tool_data->{annotate}->{vep_path});
-		$vep = $parts[-1];
-		@parts = split('\\/', $tool_data->{annotate}->{vcf2maf_path});
-		$vcf2maf = $parts[-2];
 
 		# fill in methods
 		$methods .= "\\subsubsection{VarDict (v$vardict)}\n";
@@ -287,79 +331,32 @@ sub main {
 			} else {
 			$methods .= "For tumour-only samples, somatic variants were extracted (StrongSomatic and LikelySomatic), and filtered further using the PoN to remove probable germline variants (vcftools v$vcftools).\\newline\n";
 			}
-
-		} else {
-		$methods .= "VarDict was not run.\\newline\n";
 		}
 
-	if ('Y' eq $tool_data->{strelka}->{run}) {
-
-		$strelka	= $tool_data->{strelka_version};
-		$manta		= $tool_data->{manta_version};
-		$gatk		= $tool_data->{gatk_version};
-		$vcftools	= $tool_data->{vcftools_version};
-
-		if (defined($tool_data->{strelka}->{pon})) {
-			$pon = $tool_data->{strelka}->{pon};
-			}
-
-		# annotation
-		my @parts = split('\\/', $tool_data->{annotate}->{vep_path});
-		$vep = $parts[-1];
-		@parts = split('\\/', $tool_data->{annotate}->{vcf2maf_path});
-		$vcf2maf = $parts[-2];
-
-		# fill in methods
-		$methods .= "\\subsubsection{Strelka (v$strelka)}\n";
-		$methods .= "Strelka and Manta were run using default parameters in exome mode, with callable regions restricted to target regions (\$\\pm\$ 50bp padding).\\newline\n";
-
-		if (defined($tool_data->{strelka}->{pon})) {
-			$methods .= "A pre-made panel of normals ($pon) was used for additional filtering.\\newline\n";
-			} else {
-			$methods .= "A panel of normals was produced using all available normal samples, using Strelka's germline workflow. Resulting variants were merged across samples using GATK's CombineVariants (v$gatk), removing any variant that did not pass quality criteria (FILTER field not equal to PASS), and keeping variants present in at least 2 samples.\\newline\n";
-			}
-
-		$methods .= "For somatic variant detection, Strelka  was run on each sample following the developers recommended protocol. First, Manta (v$manta) was run on each T/N pair or tumour-only sample to identify a set of candidate small indels to be provided to Strelka for use in variant calling. Strelka's somatic workflow was run on T/N pairs, while the germline workflow was used for tumour-only samples. In both cases, resulting variant lists were filtered (using vcftools v$vcftools) to remove likely germline variants (found in the panel of normals) and poor quality calls (FILTER field did not equal PASS).\\newline\n";
-		} else {
-		$methods .= "Strelka not run.\\newline\n";
-		}
-
-	if ('Y' eq $tool_data->{varscan}->{run}) {
-
-		$varscan	= $tool_data->{varscan_version};
-		$gatk		= $tool_data->{gatk_version};
-		$samtools	= $tool_data->{samtools_version};
-		$vcftools	= $tool_data->{vcftools_version};
+	# VarScan
+	if ('Y' eq $tool_set{'varscan'}) {
 
 		if (defined($tool_data->{varscan}->{pon})) {
 			$pon = $tool_data->{varscan}->{pon};
 			}
 
-		# annotation
-		my @parts = split('\\/', $tool_data->{annotate}->{vep_path});
-		$vep = $parts[-1];
-		@parts = split('\\/', $tool_data->{annotate}->{vcf2maf_path});
-		$vcf2maf = $parts[-2];
-
 		# fill in methods
 		$methods .= "\\subsubsection{VarScan (v$varscan)}\n";
 		$methods .= "For variant calling in T/N pairs, samtools (v$samtools) mpileup was run on each T/N pair, using -B -q1 -d 10000 and restricting call regions to target regions (\$\\pm\$ 50bp padding). Positions with 0 coverage in both the tumour and normal were excluded and the resulting output provided to VarScan. VarScan somatic and processSomatic were used to generate lists of high-confidence germline and somatic variant positions. VarScan somatic was run again, using --output-vcf, and the resulting VCF was filtered (using bcftools v$samtools) to produce a high-confidence germline VCF file and a high-confidence somatic VCF file.\\newline\n";
 
-		if (!defined($tool_data->{vardict}->{pon})) {
+		if (!defined($tool_data->{varscan}->{pon})) {
 			$methods .= "To produce a panel of normals, high-confidence germline variants were merged across samples using GATK's CombineVariants (v$gatk), removing any variant that did not pass quality criteria (FILTER field not equal to PASS), and keeping variants present in at least 2 samples.\\newline\n";
 			}
 
 		$methods .= "For variant calling in tumour-only samples, samtools (v$samtools) mpileup was run, again using -B -q1 -d 10000 and restricting call regions to target regions (\$\\pm\$ 50bp padding). Positions with 0 coverage were excluded and the resulting output provided to VarScan mpileup2cns using --output-vcf and --variants. ";
-		if (!defined($tool_data->{vardict}->{pon})) {
+		if (!defined($tool_data->{varscan}->{pon})) {
 			$methods .= "Resulting variants were filtered (using vcftools v$vcftools) to remove germline variants (using the panel of normals).\\newline\n";
 			} else {
 			$methods .= "Resulting variants were filtered (using a pre-made panel of normals: $pon) to remove germline variants (using the panel of normals).\\newline\n";
 			}
-
-		} else {
-		$methods .= "VarScan not run.\\newline\n";
 		}
 
+	# VEP + vcf2maf
 	if (defined($vep)) {
 		$methods .= "\\subsubsection{Annotation}\n";
 		$methods .= "Somatic short variants (SNVs and INDELs) were annotated using VEP (v$vep) and vcf2maf ($vcf2maf), with population frequencies for known common variants annotated from ExAC (nonTCGA version r1) and gnomAD.\\newline\n";
@@ -390,51 +387,47 @@ sub main {
 	# how were SVs called?
 	$methods .= "\\subsection{Structural Variant Calling}\n";
 
-	$delly = $tool_data->{delly_version};
-	$manta = $tool_data->{manta_version};
-	$novobreak = $tool_data->{novobreak_version};
-	$samtools = $tool_data->{samtools_version};
+	$delly = defined($tool_data->{delly_version}) ? $tool_data->{delly_version} : undef;
+	$manta = defined($tool_data->{manta_version}) ? $tool_data->{manta_version} : undef;
+	$pindel = defined($tool_data->{pindel_version}) ? $tool_data->{pindel_version} : undef;
+	$svict = defined($tool_data->{svict_version}) ? $tool_data->{svict_version} : undef;
+	$novobreak = defined($tool_data->{novobreak_version}) ? $tool_data->{novobreak_version} : undef;
+	$samtools = defined($tool_data->{samtools_version}) ? $tool_data->{samtools_version} : undef;
+
+        my @sv_tools;
+        if ('Y' eq $tool_set{'delly'}) { push @sv_tools, "Delly (v$delly)"; }
+        if ('Y' eq $tool_set{'strelka'}) { push @sv_tools, "Manta (v$manta)"; }
+        if ('Y' eq $tool_set{'novobreak'}) { push @sv_tools, "NovoBreak (v$novobreak)"; }
+        if ('Y' eq $tool_set{'pindel'}) { push @sv_tools, "Pindel (v$pindel)"; }
+        if ('Y' eq $tool_set{'svict'}) { push @sv_tools, "SViCT (v$svict)"; }
 
 	# fill in methods
-	if ( ('Y' eq $tool_data->{delly}->{run}) && 
-		('Y' eq $tool_data->{strelka}->{run}) && ('Y' eq $tool_data->{novobreak}->{run}) ) {
-		$methods .= "Somatic structural variants (SVs) including large insertions/deletions, duplications, inversions and translocations were identified using Delly (v$delly), Manta (v$manta) and NovoBreak (v$novobreak).\\newline\n";
-		} elsif ( ('Y' eq $tool_data->{delly}->{run}) && 
-		('Y' eq $tool_data->{strelka}->{run}) && ('N' eq $tool_data->{novobreak}->{run}) ) {
-		$methods .= "Somatic structural variants (SVs) including large insertions/deletions, duplications, inversions and translocations were identified using Delly (v$delly) and Manta (v$manta).\\newline\n";
-		} elsif ( ('Y' eq $tool_data->{delly}->{run}) && 
-		('N' eq $tool_data->{strelka}->{run}) && ('Y' eq $tool_data->{novobreak}->{run}) ) {
-		$methods .= "Somatic structural variants (SVs) including large insertions/deletions, duplications, inversions and translocations were identified using Delly (v$delly) and NovoBreak (v$novobreak).\\newline\n";
-		} elsif ( ('N' eq $tool_data->{delly}->{run}) && 
-		('Y' eq $tool_data->{strelka}->{run}) && ('Y' eq $tool_data->{novobreak}->{run}) ) {
-		$methods .= "Somatic structural variants (SVs) including large insertions/deletions, duplications, inversions and translocations were identified using Manta (v$manta) and NovoBreak (v$novobreak).\\newline\n";
-		} elsif ( ('Y' eq $tool_data->{delly}->{run}) && 
-		('N' eq $tool_data->{strelka}->{run}) && ('N' eq $tool_data->{novobreak}->{run}) ) {
-		$methods .= "Somatic structural variants (SVs) including large insertions/deletions, duplications, inversions and translocations were identified using Delly (v$delly).\\newline\n";
-		} elsif ( ('N' eq $tool_data->{delly}->{run}) && 
-		('Y' eq $tool_data->{strelka}->{run}) && ('N' eq $tool_data->{novobreak}->{run}) ) {
-		$methods .= "Somatic structural variants (SVs) including large insertions/deletions, duplications, inversions and translocations were identified using Manta (v$manta).\\newline\n";
-		} elsif ( ('N' eq $tool_data->{delly}->{run}) && 
-		('N' eq $tool_data->{strelka}->{run}) && ('Y' eq $tool_data->{novobreak}->{run}) ) {
-		$methods .= "Somatic structural variants (SVs) including large insertions/deletions, duplications, inversions and translocations were identified using NovoBreak (v$novobreak).\\newline\n";
+	if (scalar(@sv_tools) > 0) {
+		$methods .= "Somatic structural variants (SVs) including large insertions/deletions, duplications, inversions and translocations were identified using the following tools: " . join(', ', @sv_tools) . "\\newline\n";
 		} else {
 		$methods .= "No structural variant calling performed or this was performed outside of the present pipeline.\\newline\n";
 		}
+
 	$methods .= "\\newline\n";
 
-	if ('Y' eq $tool_data->{delly}->{run}) {
+	if ('Y' eq $tool_set{'delly'}) {
 		$methods .= "Delly was run on each T/N pair or tumour-only sample, with variants filtered (per patient; -m 0 -a 0.1 -r 0.5 -v 10 -p) and merged (cohort; -m 0 -n 250000000 -b 0 -r 1.0) to identify a joint site list. Sites were genotyped in each sample, merged using bcftools (v$samtools) and finalized (per tumour, filtered against all available normals; -m 0 -a 0.1 -r 0.5 -v 10 -p), according to published best practices.\\newline\n\\newline\n";
 		}
 
-	if ('Y' eq $tool_data->{strelka}->{run}) {
+	if ('Y' eq $tool_set{'strelka'}) {
 		$methods .= "Manta was run on each T/N pair or tumour-only sample, using the --exome setting and --callRegions to restrict calls to target intervals.\\newline\n\\newline\n";
 		}
 
-	if ('Y' eq $tool_data->{novobreak}->{run}) {
+	if ('Y' eq $tool_set{'svict'}) {
+		my $gtf = $tool_data->{gtf};
+		$methods .= "SViCT was run on each tumour sample, using default parameters and the following annotation file: $gtf.\\newline\n\\newline\n";
+		}
+
+	if ('Y' eq $tool_set{'novobreak'}) {
 		$methods .= "NovoBreak was run on each T/N pair (if available) using default parameters and recommended protocol; target intervals were not provided.\\newline\n\\newline\n";
 		}
 
-	if ('Y' eq $tool_data->{mavis}->{run}) {
+	if ('Y' eq $tool_set{'mavis'}) {
 		$ref_type	= $tool_data->{ref_type};
 		$mavis		= $tool_data->{mavis_version};
 
@@ -444,33 +437,34 @@ sub main {
 		}
 
 	# for copy number variants
-	if ('Y' eq $tool_data->{gatk_cnv}->{run}) {
+	my @cna_tools;
+	if ('Y' eq $tool_set{'gatk_cnv'}) {
 		$gatk4 = $tool_data->{gatk_cnv_version};
+		push @cna_tools, "GATK's CNV pipeline (v$gatk4)";
+		}
+
+	if ('Y' eq $tool_set{'varscan'}) {
+		push @cna_tools, "VarScan and Sequenza (v$varscan)";
+		}
+
+	if (scalar(@cna_tools) > 0) {
+		$methods .= "\\newline\n\\noindent Somatic copy-number aberrations (SCNAs) were identified using the following methods: " . join(', ', @cna_tools) . "\\newline\n";
 		} else {
-		$gatk4 = 0;
-		}
-
-	if (defined($varscan) & defined($gatk4)) {
-		$methods .= "\\newline\n\\noindent Somatic copy-number aberrations (SCNAs) were identified using VarScan and Sequenza, as well as GATK's CNV pipeline.\\newline\n";
-		} elsif (defined($varscan)) {
-		$methods .= "\\newline\n\\noindent Somatic copy-number aberrations (SCNAs) were identified using VarScan and Sequenza.\\newline\n";
-		}
-
-	# for varscan/sequenza
-	if (defined($varscan)) {
-		$methods .= "VarScan was run as above on T/N pairs, using the copynumber and copyCaller tools. Input for Sequenza was formatted using VarScan2seqz (Sequenza v2.1, R v3.3.0). Sequenza functions (extract and fit) were run using Sequenza v3.0.0; R v3.6.1, with the modified copynumber package (v1.29.0.9000 - to ensure compatibility with hg38). Tuning of the gamma parameter within sequenza.extract was performed to obtain the optimal value, and sequenza.fit performed utilizing ploidy priors obtained from TGCA. Resulting copy number segments were mapped to gene IDs and ploidy-adjusted.\\newline\n";
-		}
-
-	if (defined($gatk4)) {
-		$methods .= "GATK's CNV pipeline (v$gatk4) was run using best practice guidelines. Pipeline was run with default parameters except model step which was run using number of smoothing iterations = 1.\\newline";
-		}
-
-	if (!defined($varscan) & !defined($gatk4)) {
 		$methods .= "No tools were run to detect copy-number alterations.\\newline\n";
 		}
 
+	# for varscan/sequenza
+	if ('Y' eq $tool_set{'varscan'}) {
+		$methods .= "VarScan was run as above on T/N pairs, using the copynumber and copyCaller tools. Input for Sequenza was formatted using VarScan2seqz (Sequenza v2.1, R v3.3.0). Sequenza functions (extract and fit) were run using Sequenza v3.0.0; R v3.6.1, with the modified copynumber package (v1.29.0.9000 - to ensure compatibility with hg38). Tuning of the gamma parameter within sequenza.extract was performed to obtain the optimal value, and sequenza.fit performed utilizing ploidy priors obtained from TGCA. Resulting copy number segments were mapped to gene IDs and ploidy-adjusted.\\newline\n";
+		}
+
+	# GATK:CNV
+	if ('Y' eq $tool_set{'gatk_cnv'}) {
+		$methods .= "GATK's CNV pipeline (v$gatk4) was run using best practice guidelines. Pipeline was run with default parameters except model step which was run using number of smoothing iterations = 1.\\newline";
+		}
+
 	# for MSI
-	if ('Y' eq $tool_data->{other_tools}->{run_msi}) {
+	if ('Y' eq $tool_set{'msi'}) {
 
 		my $msi	= 'msisensor-pro/1.2.0';
 
