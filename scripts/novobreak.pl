@@ -376,7 +376,7 @@ sub main {
 			$run_id = '';
 
 			# run novoBreak using full BAMs
-			my $nb_output = join('/', $sample_directory, $sample . '_nb.out.md5');
+			my $nb_output = join('/', $sample_directory, $sample . '_nb.out');
 
 			my $full_novo_command = get_novobreak_command(
 				tumour_id	=> $sample,
@@ -385,7 +385,7 @@ sub main {
 				out_dir		=> $sample_directory
 				);
 
-			if ('Y' eq missing_file($nb_output)) {
+			if ('Y' eq missing_file("$nb_output.md5")) {
 
 				# record command (in log directory) and then run job
 				print $log "Submitting job for NovoBreak...\n";
