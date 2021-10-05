@@ -96,6 +96,8 @@ signatures.to.apply <- if (is.null(arguments$signatures)) { signatures.cosmic } 
 	as.data.frame(t(read.delim(arguments$signatures, row.names = 1)));
 	}
 
+setwd(arguments$output);
+
 ### FORMAT DATA ####################################################################################
 # remove INDELs
 input.maf <- input.maf[which(input.maf$Variant_Type == 'SNP'),];

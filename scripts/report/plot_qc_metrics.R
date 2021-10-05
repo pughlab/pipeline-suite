@@ -721,7 +721,9 @@ if (is.dna) {
 
 	# record correlations
 	write("\\subsection{Germline Correlations}", file = 'qc_concerns.tex');
-	if (nrow(suspect.cases) > 0) {
+	if (nrow(suspect.cases) > 20) {
+		write("Many cases of high germline correlations detected - this is likely an artefact of using a targeted panel.", file = 'qc_concerns.tex', append = TRUE);
+		} else if (nrow(suspect.cases) > 0) {
 		suspect.cases <- xtable(
 			suspect.cases,
 			caption = "Samples with high levels of germline genotype concordance ($\\rho >$0.8); may suggest relatedness, cross-sample contamination or label mix-ups.",

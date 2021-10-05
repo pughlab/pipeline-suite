@@ -185,7 +185,8 @@ if (length(which(is.snp & callers.min)) > 0) {
 # reduce n_tools if tumour_only (due to SomaticSniper) [only required if cohort is mixed T/N and T-only]
 if (run.somaticsniper) {
 	callers.min.mod <- combined.data$Count >= ceiling((snp.tool.count-1)*0.55);
-	if (length(which(is.snp & callers.min.mod)) > 0) {
+	t.only.idx <- is.na(combined.data$Matched_Norm_Sample_Barcode);
+	if (length(which(is.snp & callers.min.mod & t.only.idx)) > 0) {
 		combined.data[which(is.snp & callers.min.mod & is.na(combined.data$Matched_Norm_Sample_Barcode)),]$FILTER <- 'PASS';
 		}
 	}

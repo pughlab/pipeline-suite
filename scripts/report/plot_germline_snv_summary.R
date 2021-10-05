@@ -73,6 +73,20 @@ names(variant.colours) <- c('missense','nonsense','nonstop','splicing','frameshi
 # for these plots, we will ignore some variant types
 variant.colours <- variant.colours[c(1:6,9)];
 
+# make the plot legend (mutation type/consequence)
+functional.legend <- legend.grob(
+	legends = list(
+		legend = list(
+			colours = variant.colours,
+			labels = names(variant.colours)
+			)
+		),
+	title.just = 'left',
+	label.cex = 0.7,
+	size = 1
+	);
+
+
 ### READ DATA ######################################################################################
 # if there happens to only be 'T' within any allele field (ie, Reference_Allele, Tumor_Seq_Allele),
 # R will interpret this as 'TRUE' - set the field classes to character to avoid this
@@ -112,7 +126,7 @@ mutation.data <- input.data[,keep.fields];
 
 # calculate tumour vaf
 mutation.data$t_vaf <- 1-(mutation.data$t_ref_count/mutation.data$t_depth);
-mutation.data$n_vaf <- if (all(is.na(mutation.data$n_depth))) { NA; } else {
+mutation.data$n_vaf <- if (all(is.na(mutation.data$n_depth))) { rep(NA, nrow(mutation.data)); } else {
 	1-(mutation.data$n_ref_count/mutation.data$n_depth);
 	}
 
@@ -126,107 +140,98 @@ if (any(mutation.data$Code > 6)) {
 show.germline <- mutation.data[,c('Tumor_Sample_Barcode','Hugo_Symbol','Variant_Classification','t_vaf','n_vaf')];
 colnames(show.germline) <- c('Sample','Symbol','Class','TumourVAF','NormalVAF');
 
-# reduce to 1 mutation per gene per sample [taking the higher priority code]
-mutation.data.trimmed <- aggregate(
-	Code ~ Tumor_Sample_Barcode + Hugo_Symbol + Chromosome,
-	mutation.data,
-	min
-	);
+if (nrow(mutation.data) == 0) {
+	plot.data <- data.frame(matrix(nrow= 0, ncol = 1));
+	} else {
+	# reduce to 1 mutation per gene per sample [taking the higher priority code]
+	mutation.data.trimmed <- aggregate(
+		Code ~ Tumor_Sample_Barcode + Hugo_Symbol + Chromosome,
+		mutation.data,
+		min
+		);
 
-mutation.data.trimmed <- merge(
-	mutation.data.trimmed,
-	mutation.data[,c('Tumor_Sample_Barcode','Hugo_Symbol','Code','t_vaf','n_vaf')],
-	all.x = TRUE
-	);
+	mutation.data.trimmed <- merge(
+		mutation.data.trimmed,
+		mutation.data[,c('Tumor_Sample_Barcode','Hugo_Symbol','Code','t_vaf','n_vaf')],
+		all.x = TRUE
+		);
 
-# reshape data
-plot.data <- reshape(
-	mutation.data.trimmed[,c('Tumor_Sample_Barcode','Chromosome','Hugo_Symbol','Code')],
-	direction = 'wide',
-	timevar = 'Tumor_Sample_Barcode',
-	idvar = c('Chromosome','Hugo_Symbol')
-	);
-colnames(plot.data) <- gsub('Code.','',colnames(plot.data));
-
-vaf.data <- reshape(
-	mutation.data.trimmed[,c('Tumor_Sample_Barcode','Chromosome','Hugo_Symbol','t_vaf')],
-	direction = 'wide',
-	timevar = 'Tumor_Sample_Barcode',
-	idvar = c('Chromosome','Hugo_Symbol')
-	);
-colnames(vaf.data) <- gsub('t_vaf.','',colnames(vaf.data));
-
-# get per-gene sample counts
-plot.data <- plot.data[,c('Hugo_Symbol', 'Chromosome', all.samples)];
-plot.data$Count <- apply(plot.data[,all.samples],1,function(i) { length(i[!is.na(i)]) } );
-plot.data <- plot.data[order(-plot.data$Count),];
-
-# trim down to top recurrently mutated genes
-top.count <- min(nrow(plot.data),20);
-plot.data <- plot.data[seq(1,top.count,1),];
-
-# clean up for plotting
-plot.data$Label <- as.character(plot.data$Hugo_Symbol);
-if (any(duplicated(plot.data$Hugo_Symbol))) {
-	dup.symbols <- unique(plot.data$Hugo_Symbol[duplicated(plot.data$Hugo_Symbol)]);
-	for (gene in dup.symbols) {
-		tmp <- plot.data[which(plot.data$Hugo_Symbol == gene),1:2];
-		new.symbols <- paste0(plot.data$Hugo_Symbol, '_', plot.data$Chromosome);
-		plot.data[which(plot.data$Hugo_Symbol == gene),]$Label <- new.symbols;
-		}
+	# reshape data
+	plot.data <- reshape(
+		mutation.data.trimmed[,c('Tumor_Sample_Barcode','Chromosome','Hugo_Symbol','Code')],
+		direction = 'wide',
+		timevar = 'Tumor_Sample_Barcode',
+		idvar = c('Chromosome','Hugo_Symbol')
+		);
+	colnames(plot.data) <- gsub('Code.','',colnames(plot.data));
 	}
-
-# make the plot legend (mutation type/consequence)
-functional.legend <- legend.grob(
-	legends = list(
-		legend = list(
-			colours = variant.colours,
-			labels = names(variant.colours)
-			)
-		),
-	title.just = 'left',
-	label.cex = 0.7,
-	size = 1
-	);
-
-# grab some parameters
-axis.cex <- if (length(all.samples) <= 30) { 1
-	} else if (length(all.samples) <= 50) { 0.75
-	} else if (length(all.samples) <= 80) { 0.5
-	} else if (length(all.samples) <= 100) { 0.4
-	} else { 0 };
-
-# create heatmap for recurrent genes (ordered by recurrence)
-heatmap.data <- t(plot.data[,all.samples]);
-heatmap.data[!is.na(heatmap.data)] <- 1;
-heatmap.data <- heatmap.data[do.call(order, transform(heatmap.data)),];
-
-vaf.data <- vaf.data[colnames(heatmap.data),rownames(heatmap.data)];
-vaf.data[is.na(vaf.data)] <- 0;
-
-# create function to determine spot size
-modifier <- if (length(all.samples) < 12) { 1.5 } else { 1 }
-spot.size.vaf <- function(x) { abs(x)* modifier; }
-spot.colour.vaf <- function(x) {
-	sapply(x, function(i) { if (i >= 0.5) { 'black' } else { 'grey70' } } )
-	}
-
-dot.key <- list(
-	points = list(
-		col = c('black','black','black','grey70','grey70','grey70'),
-		cex = spot.size.vaf(c(1,0.8,0.5,0.2,0.1,0)),
-		pch = 19
-		),
-	text = list(
-		lab = c('1.0','0.8','0.5','0.2','0.1','0'),
-		cex = 0.7
-		),
-	padding.text = 1.05,
-	title = 'Tumour VAF',
-	cex.title = 0.8
-	);
 
 if (nrow(plot.data) > 1) {
+
+	vaf.data <- reshape(
+		mutation.data.trimmed[,c('Tumor_Sample_Barcode','Chromosome','Hugo_Symbol','t_vaf')],
+		direction = 'wide',
+		timevar = 'Tumor_Sample_Barcode',
+		idvar = c('Chromosome','Hugo_Symbol')
+		);
+	colnames(vaf.data) <- gsub('t_vaf.','',colnames(vaf.data));
+
+	# get per-gene sample counts
+	plot.data <- plot.data[,c('Hugo_Symbol', 'Chromosome', all.samples)];
+	plot.data$Count <- apply(plot.data[,all.samples],1,function(i) { length(i[!is.na(i)]) } );
+	plot.data <- plot.data[order(-plot.data$Count),];
+
+	# trim down to top recurrently mutated genes
+	top.count <- min(nrow(plot.data),20);
+	plot.data <- plot.data[seq(1,top.count,1),];
+
+	# clean up for plotting
+	plot.data$Label <- as.character(plot.data$Hugo_Symbol);
+	if (any(duplicated(plot.data$Hugo_Symbol))) {
+		dup.symbols <- unique(plot.data$Hugo_Symbol[duplicated(plot.data$Hugo_Symbol)]);
+		for (gene in dup.symbols) {
+			tmp <- plot.data[which(plot.data$Hugo_Symbol == gene),1:2];
+			new.symbols <- paste0(plot.data$Hugo_Symbol, '_', plot.data$Chromosome);
+			plot.data[which(plot.data$Hugo_Symbol == gene),]$Label <- new.symbols;
+			}
+		}
+
+	# grab some parameters
+	axis.cex <- if (length(all.samples) <= 30) { 1
+		} else if (length(all.samples) <= 50) { 0.75
+		} else if (length(all.samples) <= 80) { 0.5
+		} else if (length(all.samples) <= 100) { 0.4
+		} else { 0 };
+
+	# create heatmap for recurrent genes (ordered by recurrence)
+	heatmap.data <- t(plot.data[,all.samples]);
+	heatmap.data[!is.na(heatmap.data)] <- 1;
+	heatmap.data <- heatmap.data[do.call(order, transform(heatmap.data)),];
+
+	vaf.data <- vaf.data[colnames(heatmap.data),rownames(heatmap.data)];
+	vaf.data[is.na(vaf.data)] <- 0;
+
+	# create function to determine spot size
+	modifier <- if (length(all.samples) < 12) { 1.5 } else { 1 }
+	spot.size.vaf <- function(x) { abs(x)* modifier; }
+	spot.colour.vaf <- function(x) {
+		sapply(x, function(i) { if (i >= 0.5) { 'black' } else { 'grey70' } } )
+		}
+
+	dot.key <- list(
+		points = list(
+			col = c('black','black','black','grey70','grey70','grey70'),
+			cex = spot.size.vaf(c(1,0.8,0.5,0.2,0.1,0)),
+			pch = 19
+			),
+		text = list(
+			lab = c('1.0','0.8','0.5','0.2','0.1','0'),
+			cex = 0.7
+			),
+		padding.text = 1.05,
+		title = 'Tumour VAF',
+		cex.title = 0.8
+		);
 
 	create.dotmap(
 		x = vaf.data,
@@ -280,7 +285,9 @@ recurrence.caption <- "Summary of pathogenic germline variants (SNVs and INDELs)
 write("\\section{Germline SNV Summary}", file = 'germline_snv_summary.tex');
 
 # first, check for mutation_overlap plot
-if (nrow(plot.data) == 0) {
+if (nrow(mutation.data) == 0) {
+	write("No potentially pathogenic germline mutations were detected in the cohort.", file = 'germline_snv_summary.tex', append = TRUE);
+	} else if (nrow(plot.data) == 0) {
 	write("No genes were recurrently mutated across the cohort.", file = 'germline_snv_summary.tex', append = TRUE);
 	} else if (nrow(input.data) < 5) {
 
