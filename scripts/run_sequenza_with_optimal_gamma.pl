@@ -333,7 +333,7 @@ sub main {
 				);
 
 			my $final_calls = join('/', $optimized_directory, basename($seqz_file));
-			$final_calls =~ s/.seqz/_Total_CN.seg/;
+			$final_calls =~ s/.seqz/_segments.txt/;
 
 			# check if this should be run
 			if ('Y' eq missing_file($final_calls)) {
