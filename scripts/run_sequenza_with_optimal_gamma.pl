@@ -181,6 +181,9 @@ sub main {
 	my $is_wgs = 0;
 	if ('wgs' eq $tool_data->{seq_type}) { $is_wgs = 1; }
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### RUN ###########################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
@@ -258,7 +261,8 @@ sub main {
 					modules	=> ['R/3.3.0'],
 					max_time	=> $parameters->{sequenza}->{time},
 					mem		=> $parameters->{sequenza}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -308,7 +312,8 @@ sub main {
 					dependencies	=> $run_id,
 					max_time	=> $time_req,
 					mem		=> $mem_req,
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -333,7 +338,7 @@ sub main {
 				);
 
 			my $final_calls = join('/', $optimized_directory, basename($seqz_file));
-			$final_calls =~ s/.seqz/_Total_CN.seg/;
+			$final_calls =~ s/.seqz/_segments.txt/;
 
 			# check if this should be run
 			if ('Y' eq missing_file($final_calls)) {
@@ -349,7 +354,8 @@ sub main {
 					dependencies	=> $run_id,
 					max_time	=> $parameters->{sequenza}->{time},
 					mem		=> $parameters->{sequenza}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -390,7 +396,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '6G',
 			max_time	=> '24:00:00',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -420,7 +427,8 @@ sub main {
 			cmd	=> $collect_metrics,
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(

@@ -251,7 +251,10 @@ alt.functional$Code <- factor(alt.functional$Code, levels = rev(c(1:6,9)));
 rm(tmp);
 
 mutation.data$Basechange <- paste0(mutation.data$Reference_Allele, '>', mutation.data$Tumor_Seq_Allele2);
-mutation.data[which(input.data$Variant_Type %in% c('DEL', 'INS')),]$Basechange <- 'indel';
+
+if (any(input.data$Variant_Type %in% c('DEL', 'INS'))) {
+	mutation.data[which(input.data$Variant_Type %in% c('DEL', 'INS')),]$Basechange <- 'indel';
+	}
 mutation.data[which(mutation.data$Basechange == 'T>G'),]$Basechange <- 'A>C';
 mutation.data[which(mutation.data$Basechange == 'T>C'),]$Basechange <- 'A>G';
 mutation.data[which(mutation.data$Basechange == 'T>A'),]$Basechange <- 'A>T';
@@ -487,6 +490,10 @@ if (!is.null(msi)) {
 	}
 
 # create plot for functional summary
+if (any(is.na(functional.summary$Proportion))) {
+	functional.summary[is.na(functional.summary$Proportion),]$Proportion <- 0;
+	}
+
 mutation.type.plot <- create.barplot(
 	Proportion ~ Tumor_Sample_Barcode,
 	functional.summary,
@@ -509,6 +516,10 @@ mutation.type.plot <- create.barplot(
 	axes.lwd = 1,
 	top.padding = 0
 	);
+
+if (any(is.na(alt.functional$Proportion))) {
+	alt.functional[is.na(alt.functional$Proportion),]$Proportion <- 0;
+	}
 
 functional.plot <- create.barplot(
 	Proportion ~ Tumor_Sample_Barcode,
@@ -534,6 +545,10 @@ functional.plot <- create.barplot(
 	);
 
 # create plot for basechange summary
+if (any(is.na(basechange.summary$Proportion))) {
+	basechange.summary[is.na(basechange.summary$Proportion),]$Proportion <- 0;
+	}
+
 basechange.plot <- create.barplot(
 	Proportion ~ Tumor_Sample_Barcode,
 	basechange.summary,

@@ -195,7 +195,9 @@ if (nrow(alt.functional) > 0) {
 	}
 
 mutation.data$Basechange <- paste0(mutation.data$Reference_Allele, '>', mutation.data$Tumor_Seq_Allele2);
-mutation.data[which(input.data$Variant_Type %in% c('DEL', 'INS')),]$Basechange <- 'indel';
+if (any(input.data$Variant_Type %in% c('INS','DEL'))) {
+	mutation.data[which(input.data$Variant_Type %in% c('DEL', 'INS')),]$Basechange <- 'indel';
+	}
 mutation.data[which(mutation.data$Basechange == 'T>G'),]$Basechange <- 'A>C';
 mutation.data[which(mutation.data$Basechange == 'T>C'),]$Basechange <- 'A>G';
 mutation.data[which(mutation.data$Basechange == 'T>A'),]$Basechange <- 'A>T';
@@ -463,6 +465,11 @@ mutation.type.plot <- create.barplot(
 	);
 
 if (!is.null(alt.functional)) {
+
+	if (any(is.na(alt.functional$Proportion))) {
+		alt.functional[is.na(alt.functional$Proportion),]$Proportion <- 0;
+		}
+
 	functional.plot <- create.barplot(
 		Proportion ~ Tumor_Sample_Barcode,
 		alt.functional,

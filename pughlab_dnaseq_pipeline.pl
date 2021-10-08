@@ -85,6 +85,9 @@ sub main {
 
 	my $samtools = 'samtools/' . $tool_data->{samtools_version};
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### MAIN ###########################################################################################
 
 	my $run_script;
@@ -188,7 +191,8 @@ sub main {
 				modules	=> ['perl'],
 				mem		=> '256M',
 				max_time	=> $max_time,
-				hpc_driver	=> $args{cluster}
+				hpc_driver	=> $args{cluster},
+				extra_args	=> [$hpc_group]
 				);
 
 			if ($args{dry_run}) {
@@ -243,6 +247,7 @@ sub main {
 				dependencies	=> $bwa_run_id,
 				mem		=> '256M',
 				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -311,6 +316,7 @@ sub main {
 				dependencies	=> join(':', @step1_job_ids),
 				mem		=> '256M',
 				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -360,6 +366,7 @@ sub main {
 				dependencies	=> join(':', @step1_job_ids),
 				mem		=> '256M',
 				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -409,6 +416,7 @@ sub main {
 				dependencies	=> join(':', @step1_job_ids),
 				mem		=> '256M',
 				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -473,6 +481,7 @@ sub main {
 				dependencies	=> $current_dependencies,
 				mem		=> '256M',
 				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -522,6 +531,7 @@ sub main {
 				dependencies	=> join(':', $current_dependencies, $hc_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
 				hpc_driver	=> $args{cluster}
 				);
 		
@@ -571,6 +581,7 @@ sub main {
 				dependencies	=> join(':', $current_dependencies, $hc_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
 				hpc_driver	=> $args{cluster}
 				);
 		
@@ -630,6 +641,7 @@ sub main {
 					dependencies	=> $current_dependencies,
 					mem		=> '256M',
 					max_time	=> $max_time,
+					extra_args	=> [$hpc_group],
 					hpc_driver	=> $args{cluster}
 					);
 
@@ -681,6 +693,7 @@ sub main {
 				dependencies	=> join(':', $current_dependencies, $strelka_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -745,6 +758,7 @@ sub main {
 					dependencies	=> $current_dependencies,
 					mem		=> '256M',
 					max_time	=> $max_time,
+					extra_args	=> [$hpc_group],
 					hpc_driver	=> $args{cluster}
 					);
 
@@ -796,6 +810,7 @@ sub main {
 				dependencies	=> join(':', $current_dependencies, $mutect_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -860,6 +875,7 @@ sub main {
 					dependencies	=> $current_dependencies,
 					mem		=> '256M',
 					max_time	=> $max_time,
+					extra_args	=> [$hpc_group],
 					hpc_driver	=> $args{cluster}
 					);
 
@@ -911,6 +927,7 @@ sub main {
 				dependencies	=> join(':', $current_dependencies, $mutect2_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -969,6 +986,7 @@ sub main {
 				dependencies	=> $current_dependencies,
 				mem		=> '256M',
 				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -1014,6 +1032,7 @@ sub main {
 				dependencies	=> join(':', $current_dependencies, $varscan_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -1062,6 +1081,7 @@ sub main {
 				dependencies	=> $current_dependencies,
 				mem		=> '256M',
 				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -1116,6 +1136,7 @@ sub main {
 				dependencies	=> $current_dependencies,
 				mem		=> '256M',
 				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -1175,6 +1196,7 @@ sub main {
 				dependencies	=> $current_dependencies,
 				mem		=> '256M',
 				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -1229,6 +1251,7 @@ sub main {
 				dependencies	=> $current_dependencies,
 				mem		=> '256M',
 				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -1283,6 +1306,7 @@ sub main {
 				dependencies	=> $current_dependencies,
 				mem		=> '256M',
 				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -1337,6 +1361,7 @@ sub main {
 				dependencies	=> $current_dependencies,
 				mem		=> '256M',
 				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -1391,6 +1416,7 @@ sub main {
 				dependencies	=> $current_dependencies,
 				mem		=> '256M',
 				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -1458,6 +1484,7 @@ sub main {
 				dependencies	=> $current_dependencies,
 				mem		=> '256M',
 				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -1513,6 +1540,7 @@ sub main {
 				dependencies	=> join(':', $current_dependencies, $vardict_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -1592,6 +1620,7 @@ sub main {
 				dependencies	=> join(':', @depends, $vardict_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
 				hpc_driver	=> $args{cluster}
 				);
 
@@ -1641,6 +1670,7 @@ sub main {
 			dependencies	=> join(':', @step2_job_ids, @step3_job_ids),
 			mem		=> '256M',
 			max_time	=> '5-00:00:00',
+			extra_args	=> [$hpc_group],
 			hpc_driver	=> $args{cluster}
 			);
 

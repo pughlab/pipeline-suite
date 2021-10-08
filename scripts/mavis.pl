@@ -289,6 +289,9 @@ sub main {
 		"export MAVIS_SCHEDULER=" . uc($args{hpc_driver})
 		);
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### RUN ###########################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
@@ -367,8 +370,9 @@ sub main {
 		unless(-e $link_directory) { make_path($link_directory); }
 
 		# create some symlinks and add samples to sheet
-		my $normal_id = $normal_ids[0];
-		if (defined($normal_id)) {
+		my $normal_id = undef;
+		if (scalar(@normal_ids) > 0) {
+			$normal_id = $normal_ids[0];
 			my @tmp = split /\//, $smp_data->{$patient}->{normal}->{$normal_id};
 			$link = join('/', $link_directory, $tmp[-1]);
 			symlink($smp_data->{$patient}->{normal}->{$normal_id}, $link);
@@ -478,7 +482,8 @@ sub main {
 				name	=> 'run_format_manta_svs_for_mavis_' . $patient,
 				cmd	=> $format_command,
 				modules	=> ['python/2.7'],
-				hpc_driver	=> $args{hpc_driver}
+				hpc_driver	=> $args{hpc_driver},
+				extra_args	=> [$hpc_group]
 				);
 
 			$run_id = submit_job(
@@ -491,8 +496,7 @@ sub main {
 
 			push @format_jobs, $run_id;
 			push @all_jobs, $run_id;
-			}
-		else {
+			} else {
 			print $log "Skipping format manta step because this has already been completed!\n";
 			}
 
@@ -523,7 +527,7 @@ sub main {
 				normal_id	=> $normal_id,
 				rna_ids		=> \@rna_ids_patient,
 				tumour_bams	=> $smp_data->{$patient}->{tumour},
-				normal_bam	=> $smp_data->{$patient}->{normal}->{$normal_id},
+				normal_bam	=> defined($normal_id) ? $smp_data->{$patient}->{normal}->{$normal_id} : undef,
 				rna_bams	=> $smp_data->{$patient}->{rna},
 				manta		=> join(' ', @manta_svs_formatted),
 				delly		=> join(' ', @delly_svs_patient),
@@ -543,7 +547,7 @@ sub main {
 				tumour_ids	=> \@tumour_ids,
 				normal_id	=> $normal_id,
 				tumour_bams	=> $smp_data->{$patient}->{tumour},
-				normal_bam	=> $smp_data->{$patient}->{normal}->{$normal_id},
+				normal_bam	=> defined($normal_id) ? $smp_data->{$patient}->{normal}->{$normal_id} : undef,
 				manta		=> join(' ', @manta_svs_formatted),
 				delly		=> join(' ', @delly_svs_patient),
 				novobreak	=> $novobreak_input,
@@ -591,7 +595,8 @@ sub main {
 				max_time	=> '12:00:00',
 				mem		=> $memory,
 				hpc_driver	=> $args{hpc_driver},
-				kill_on_error	=> 0
+				kill_on_error	=> 0,
+				extra_args	=> [$hpc_group]
 				);
 
 			$run_id = submit_job(
@@ -603,8 +608,7 @@ sub main {
 				);
 
 			push @all_jobs, $run_id;
-			}
-		else {
+			} else {
 			print $log "Skipping MAVIS because this has already been completed!\n";
 			}
 
@@ -635,7 +639,8 @@ sub main {
 				dependencies	=> $run_id,
 				mem		=> '256M',
 				hpc_driver	=> $args{hpc_driver},
-				kill_on_error	=> 0
+				kill_on_error	=> 0,
+				extra_args	=> [$hpc_group]
 				);
 
 			$run_id = submit_job(
@@ -669,7 +674,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '6G',
 			max_time	=> '24:00:00',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -699,7 +705,8 @@ sub main {
 			cmd	=> $collect_metrics,
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(

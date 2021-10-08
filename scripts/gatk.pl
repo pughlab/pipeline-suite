@@ -360,6 +360,9 @@ sub main {
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{gatk}->{parameters};
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### HANDLING FILES #################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
@@ -432,7 +435,7 @@ sub main {
 			}
 
 		## for DNA, indel realigner target creation and indel realigner use all patient input files
-		my ($input_string, $target_intervals, $stage1_cmd, $stage2_cmd, $java_check);
+		my ($input_string, $target_intervals, $stage1_cmd, $stage2_cmd);
 		my @realign_bams_dna;
 
 		if ('dna' eq $data_type) {
@@ -459,9 +462,7 @@ sub main {
 				tmp_dir		=> $tmp_directory
 				);
 
-			$stage1_cmd .= "\n" . check_java_output(
-				extra_cmd => "md5sum $target_intervals > $target_intervals.md5"
-				);
+			$stage1_cmd .= "\nmd5sum $target_intervals > $target_intervals.md5";
 
 			# check if this should be run
 			if ('Y' eq missing_file($target_intervals . '.md5')) {
@@ -477,7 +478,8 @@ sub main {
 					max_time	=> $parameters->{target_creator}->{time},
 					mem		=> $parameters->{target_creator}->{mem},
 					cpus_per_task	=> scalar(@input_bams),
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id_patient = submit_job(
@@ -490,8 +492,7 @@ sub main {
 
 				push @patient_jobs, $run_id_patient;
 				push @all_jobs, $run_id_patient;
-				}
-			else {
+				} else {
 				print $log "Skipping RealignerTargetCreator because this has already been completed!\n";
 				}
 
@@ -509,7 +510,7 @@ sub main {
 			foreach my $inbam (@input_bams) {
 				$outbam = $inbam; 
 				$outbam =~ s/.bam/_realigned.bam/; 
-				$md5_cmd .= "\n  md5sum $outbam > $outbam.md5;";
+				$md5_cmd .= "\nmd5sum $outbam > $outbam.md5;";
 				push @realign_bams_dna, join('/', $intermediate_directory, $outbam);
 
 				$outbam = join('/', $intermediate_directory, $outbam);
@@ -519,13 +520,7 @@ sub main {
 				$cleanup_cmd .= ";\nrm " . $outbai;
 				}
 
-			# this is a java-based command, so run a final check
-			$java_check = "samtools quickcheck $realign_bams_dna[0]";
-			$java_check .= "\n" . check_java_output(
-				extra_cmd => $md5_cmd
-				);
-
-			$stage2_cmd .= "\n$java_check";
+			$stage2_cmd .= "\n\n" . $md5_cmd;
 
 			# check if this should be run
 			if ('Y' eq missing_file($realign_bams_dna[-1] . '.md5')) {
@@ -541,7 +536,8 @@ sub main {
 					dependencies	=> $run_id_patient,
 					max_time	=> $parameters->{realign}->{time},
 					mem		=> $parameters->{realign}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id_patient = submit_job(
@@ -554,8 +550,7 @@ sub main {
 
 				push @patient_jobs, $run_id_patient;
 				push @all_jobs, $run_id_patient;
-				}
-			else {
+				} else {
 				print $log "Skipping IndelRealigner because this has already been completed!\n";
 				}
 			}
@@ -568,12 +563,8 @@ sub main {
 			$run_id_sample = '';
 
 			# determine sample type
-			my $type;
-			if ( (any { $_ =~ m/$sample/ } @normal_ids) ) {
-				$type = 'normal';
-				} else {
-				$type = 'tumour';
-				}
+			my $type = 'tumour';
+			if ( (any { $_ =~ m/$sample/ } @normal_ids) ) { $type = 'normal'; }
 
 			# initiate some variables
 			my ($realigned_bam, $realigned_bai);
@@ -595,12 +586,6 @@ sub main {
 					tmp_dir		=> $tmp_directory
 					);
 
-				# this is a java-based command, so run a final check
-				$java_check = "samtools quickcheck $split_bam";
-				$java_check .= "\n" . check_java_output();
-
-				$split_cmd .= "\n$java_check";
-
 				$cleanup_cmd .= ";\nrm " . $split_bam;
 				$cleanup_cmd .= ";\nrm " . $split_bai;
 
@@ -617,7 +602,8 @@ sub main {
 						modules	=> [$gatk, $samtools],
 						max_time	=> $parameters->{split_cigar}->{time},
 						mem		=> $parameters->{split_cigar}->{mem},
-						hpc_driver	=> $args{hpc_driver}
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group]
 						);
 
 					$run_id_sample = submit_job(
@@ -630,8 +616,7 @@ sub main {
 
 					push @patient_jobs, $run_id_sample;
 					push @all_jobs, $run_id_sample;
-					}
-				else {
+					} else {
 					print $log "Skipping SplitNCigarReads because this has already been completed!\n";
 					}
 
@@ -661,7 +646,8 @@ sub main {
 						dependencies	=> $run_id_sample,
 						max_time	=> $parameters->{target_creator}->{time},
 						mem		=> $parameters->{target_creator}->{mem},
-						hpc_driver	=> $args{hpc_driver}
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group]
 						);
 
 					$run_id_sample = submit_job(
@@ -674,8 +660,7 @@ sub main {
 
 					push @patient_jobs, $run_id_sample;
 					push @all_jobs, $run_id_sample;
-					}
-				else {
+					} else {
 					print $log "Skipping RealignerTargetCreator because this has already been completed!\n";
 					}
 
@@ -690,12 +675,6 @@ sub main {
 					java_mem	=> $parameters->{realign}->{java_mem},
 					tmp_dir		=> $tmp_directory
 					);
-
-				# this is a java-based command, so run a final check
-				$java_check = "samtools quickcheck $realigned_bam";
-				$java_check .= "\n" . check_java_output();
-
-				$stage2_cmd .= "\n$java_check";
 
 				$cleanup_cmd .= ";\nrm " . $realigned_bam;
 				$cleanup_cmd .= ";\nrm " . $realigned_bai;
@@ -714,7 +693,8 @@ sub main {
 						dependencies	=> $run_id_sample,
 						max_time	=> $parameters->{realign}->{time},
 						mem		=> $parameters->{realign}->{mem},
-						hpc_driver	=> $args{hpc_driver}
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group]
 						);
 
 					$run_id_sample = submit_job(
@@ -727,8 +707,7 @@ sub main {
 
 					push @patient_jobs, $run_id_sample;
 					push @all_jobs, $run_id_sample;
-					}
-				else {
+					} else {
 					print $log "Skipping IndelRealigner because this has already been completed!\n";
 					}
 				}
@@ -751,43 +730,30 @@ sub main {
 				tmp_dir		=> $tmp_directory
 				);
 
-			$stage3_cmd .= "\n" . check_java_output();
-
 			# check if this should be run
 			if ('Y' eq missing_file($bqsr_file)) {
 
 				# record command (in log directory) and then run job
 				print $log "\nSubmitting job for BaseRecalibrator...";
 
-				if ('dna' eq $data_type) {
+				my $n_cpu = 1;
+				if ('dna' eq $data_type) { $n_cpu = 8; }
 
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> 'run_base_quality_score_recalibrator_' . $sample,
-						cmd	=> $stage3_cmd,
-						modules	=> [$gatk],
-						dependencies	=> $run_id_patient,
-						max_time	=> $parameters->{bqsr}->{time}->{$type},
-						mem		=> $parameters->{bqsr}->{mem},
-						cpus_per_task	=> 8,
-						hpc_driver	=> $args{hpc_driver}
-						);
-					}
+				my $depends = $run_id_patient;
+				if ('rna' eq $data_type) { $depends = $run_id_sample; }
 
-				elsif ('rna' eq $data_type) {
-
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> 'run_base_quality_score_recalibrator_' . $sample,
-						cmd	=> $stage3_cmd,
-						modules	=> [$gatk],
-						dependencies	=> $run_id_sample,
-						max_time	=> $parameters->{bqsr}->{time}->{$type},
-						mem		=> $parameters->{bqsr}->{mem},
-						cpus_per_task	=> 1,
-						hpc_driver	=> $args{hpc_driver}
-						);
-					}
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_base_quality_score_recalibrator_' . $sample,
+					cmd	=> $stage3_cmd,
+					modules	=> [$gatk],
+					dependencies	=> $depends,
+					max_time	=> $parameters->{bqsr}->{time}->{$type},
+					mem		=> $parameters->{bqsr}->{mem},
+					cpus_per_task	=> $n_cpu,
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
+					);
 
 				$run_id_sample = submit_job(
 					jobname		=> 'run_base_quality_score_recalibrator_' . $sample,
@@ -799,8 +765,7 @@ sub main {
 
 				push @patient_jobs, $run_id_sample;
 				push @all_jobs, $run_id_sample;
-				}
-			else {
+				} else {
 				print $log "Skipping BaseRecalibrator because this has already been completed!\n";
 				}
 
@@ -821,21 +786,12 @@ sub main {
 			# check if this should be run
 			if ('Y' eq missing_file($recal_bam . '.md5')) {
 
-				# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
-				$java_check = "samtools quickcheck $recal_bam";
-
-				$stage4_cmd .= "\n" . $java_check;
-
 				# record command (in log directory) and then run job
 				print $log "Submitting job for PrintReads (applying base recalibration)...\n";
 
 				# determine number of cpus to request
-				my $n_cpus;
-				if ('dna' eq $data_type) {
-					$n_cpus = 8;
-					} elsif ('rna' eq $data_type) {
-					$n_cpus = 1;
-					}
+				my $n_cpu = 1;
+				if ('dna' eq $data_type) { $n_cpu = 8; }
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -845,8 +801,9 @@ sub main {
 					dependencies	=> $run_id_sample,
 					max_time	=> $parameters->{recalibrate}->{time}->{$type},
 					mem		=> $parameters->{recalibrate}->{mem},
-					cpus_per_task	=> $n_cpus,
-					hpc_driver	=> $args{hpc_driver}
+					cpus_per_task	=> $n_cpu,
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id_sample = submit_job(
@@ -859,8 +816,7 @@ sub main {
 
 				push @patient_jobs, $run_id_sample;
 				push @all_jobs, $run_id_sample;
-				}
-			else {
+				} else {
 				print $log "Skipping PrintReads (apply base recalibration) because this has already been completed!\n";
 				}
 
@@ -903,7 +859,8 @@ sub main {
 					dependencies	=> join(':', @patient_jobs),
 					mem		=> '256M',
 					hpc_driver	=> $args{hpc_driver},
-					kill_on_error	=> 0
+					kill_on_error	=> 0,
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id_patient = submit_job(
@@ -937,7 +894,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id_extra = submit_job(
@@ -948,7 +906,7 @@ sub main {
 			log_file	=> $log
 			);
 
-		push @all_jobs, $run_id;
+		push @all_jobs, $run_id_extra;
 
 		# do some logging
 		print "Number of jobs submitted: " . scalar(@all_jobs) . "\n";

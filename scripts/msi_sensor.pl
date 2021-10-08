@@ -192,6 +192,9 @@ sub main {
 	my $msi_pro	= 'msisensor-pro/1.2.0';
 	my $r_version	= 'R/' . $tool_data->{r_version};
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### RUN ###########################################################################################
 	my ($run_script, $run_id, $link, $intervals_run_id, $baseline_run_id, $should_run_final);
 	my @all_jobs;
@@ -232,9 +235,8 @@ sub main {
 			name	=> 'run_msi_scan_reference',
 			cmd	=> $format_intervals_cmd,
 			modules	=> [$msi_pro],
-			max_time	=> '01:00:00',
-			mem		=> '1G',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$intervals_run_id = submit_job(
@@ -322,7 +324,8 @@ sub main {
 				dependencies	=> $intervals_run_id,
 				max_time	=> '5-00:00:00',
 				mem		=> '4G',
-				hpc_driver	=> $args{hpc_driver}
+				hpc_driver	=> $args{hpc_driver},
+				extra_args	=> [$hpc_group]
 				);
 
 			$baseline_run_id = submit_job(
@@ -398,7 +401,8 @@ sub main {
 					dependencies	=> $depends,
 					max_time	=> '24:00:00',
 					mem		=> '4G',
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -445,7 +449,8 @@ sub main {
 					dependencies	=> join(':', @patient_jobs),
 					mem		=> '256M',
 					hpc_driver	=> $args{hpc_driver},
-					kill_on_error	=> 0
+					kill_on_error	=> 0,
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -477,9 +482,9 @@ sub main {
 			cmd	=> $collect_output,
 			modules	=> [$r_version],
 			dependencies	=> join(':', @all_jobs),
-			mem		=> '1G',
 			max_time	=> '12:00:00',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -510,7 +515,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(

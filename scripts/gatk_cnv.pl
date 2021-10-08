@@ -458,6 +458,9 @@ sub main {
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{gatk_cnv}->{parameters};
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	######################
 	### CHECK REGIONS ####
 	# read in sequence dictionary to identify smallest contig of interest
@@ -574,7 +577,8 @@ sub main {
 			modules	=> [$gatk, $picard],
 			max_time	=> '02:00:00',
 			mem		=> $memory,
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$intervals_run_id = submit_job(
@@ -623,7 +627,8 @@ sub main {
 			dependencies	=> $intervals_run_id,
 			max_time	=> '12:00:00',
 			mem		=> $memory,
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$intervals_run_id2 = submit_job(
@@ -719,7 +724,8 @@ sub main {
 					dependencies	=> $intervals_run_id,
 					max_time	=> $parameters->{readcounts}->{time},
 					mem		=> $parameters->{readcounts}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -767,7 +773,8 @@ sub main {
 			dependencies	=> join(':', @normal_jobs),
 			max_time	=> $parameters->{create_pon}->{time},
 			mem		=> $parameters->{create_pon}->{mem},
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$pon_run_id = submit_job(
@@ -835,7 +842,8 @@ sub main {
 					dependencies	=> $intervals_run_id2,
 					max_time	=> $parameters->{allele_counts}->{time},
 					mem		=> $parameters->{allele_counts}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$norm_run_id = submit_job(
@@ -891,7 +899,8 @@ sub main {
 					dependencies	=> $intervals_run_id,
 					max_time	=> $parameters->{readcounts}->{time},
 					mem		=> $parameters->{readcounts}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -932,7 +941,8 @@ sub main {
 					dependencies	=> join(':', $pon_run_id, @sample_jobs),
 					max_time	=> $parameters->{denoise}->{time},
 					mem		=> $parameters->{denoise}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -971,7 +981,8 @@ sub main {
 					dependencies	=> join(':', @sample_jobs),
 					max_time	=> '01:00:00',
 					mem		=> $memory,
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$tmp_run_id = submit_job(
@@ -1013,7 +1024,8 @@ sub main {
 					dependencies	=> $intervals_run_id2,
 					max_time	=> $parameters->{allele_counts}->{time},
 					mem		=> $parameters->{allele_counts}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -1056,7 +1068,8 @@ sub main {
 					dependencies	=> join(':', @sample_jobs, $norm_run_id),
 					max_time	=> $parameters->{model}->{time},
 					mem		=> $parameters->{model}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -1097,7 +1110,8 @@ sub main {
 					dependencies	=> join(':', @sample_jobs),
 					max_time	=> '01:00:00',
 					mem		=> $memory,
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$tmp_run_id = submit_job(
@@ -1121,8 +1135,6 @@ sub main {
 		if ($args{del_intermediates}) {
 
 			unless (scalar(@{$patient_jobs{$patient}}) == 0) {
-#				`rm -rf $tmp_directory`;
-#				} else {
 
 				print $log "Submitting job to clean up temporary/intermediate files...\n";
 
@@ -1147,7 +1159,8 @@ sub main {
 					dependencies	=> join(':', @{$patient_jobs{$patient}}),
 					mem		=> '256M',
 					hpc_driver	=> $args{hpc_driver},
-					kill_on_error	=> 0
+					kill_on_error	=> 0,
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -1185,7 +1198,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '4G',
 			max_time	=> '12:00:00',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -1216,7 +1230,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(

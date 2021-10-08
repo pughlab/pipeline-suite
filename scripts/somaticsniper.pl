@@ -312,6 +312,9 @@ sub main {
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{somaticsniper}->{parameters};
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### RUN ###########################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
@@ -403,7 +406,8 @@ sub main {
 				modules	=> [$samtools],
 				max_time	=> $parameters->{pileup}->{time},
 				mem		=> $parameters->{pileup}->{mem},
-				hpc_driver	=> $args{hpc_driver}
+				hpc_driver	=> $args{hpc_driver},
+				extra_args	=> [$hpc_group]
 				);
 
 			$norm_pile_id = submit_job(
@@ -460,7 +464,8 @@ sub main {
 					modules	=> [$somaticsniper],
 					max_time	=> $parameters->{somaticsniper}->{time},
 					mem		=> $parameters->{somaticsniper}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$sniper_id = submit_job(
@@ -501,7 +506,8 @@ sub main {
 					modules	=> [$samtools],
 					max_time	=> $parameters->{pileup}->{time},
 					mem		=> $parameters->{pileup}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$tum_pile_id = submit_job(
@@ -550,8 +556,8 @@ sub main {
 					modules	=> ['perl', $somaticsniper],
 					dependencies	=> join(':', $sniper_id, $norm_pile_id, $tum_pile_id),
 					max_time	=> '04:00:00', 
-					mem		=> '1G',
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -597,7 +603,8 @@ sub main {
 					dependencies	=> $run_id,
 					max_time	=> $parameters->{readcount}->{time},
 					mem		=> $parameters->{readcount}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -669,7 +676,8 @@ sub main {
 					dependencies	=> $run_id,
 					max_time	=> $parameters->{filter}->{time},
 					mem		=> $parameters->{filter}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -736,7 +744,8 @@ sub main {
 					cpus_per_task	=> 4,
 					max_time        => $tool_data->{annotate}->{time},
 					mem             => $tool_data->{annotate}->{mem},
-					hpc_driver      => $args{hpc_driver}
+					hpc_driver      => $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -788,7 +797,8 @@ sub main {
 					dependencies	=> join(':', @patient_jobs),
 					mem		=> '256M',
 					hpc_driver	=> $args{hpc_driver},
-					kill_on_error	=> 0
+					kill_on_error	=> 0,
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -822,7 +832,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '4G',
 			max_time	=> '24:00:00',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -853,7 +864,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(

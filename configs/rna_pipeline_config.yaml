@@ -5,6 +5,7 @@ output_dir: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/
 seq_type: rna # must be one of exome, targeted, rna or wgs
 seq_center: PMGC
 platform: Illumina
+hpc_group:
 # reference files
 ref_type: hg38
 star_reference_dir: /cluster/projects/pughlab/references/STAR/STAR_2.7.2b_GRCh38_gencode_v31/

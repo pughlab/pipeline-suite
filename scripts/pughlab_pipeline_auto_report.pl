@@ -86,8 +86,37 @@ sub main {
 	# get tool versions
 	my $r_version = 'R/' . $tool_data->{r_version};
 
-	### RUN ####################################################################################
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
 
+	### RUN ####################################################################################
+	# check which tools have been requested
+	my %tool_set = (
+		'bwa'	=> defined($tool_data->{bwa}->{run}) ? $tool_data->{bwa}->{run} : 'N',
+		'gatk'	=> defined($tool_data->{gatk}->{run}) ? $tool_data->{gatk}->{run} : 'N',
+		'bamqc'	=> defined($tool_data->{bamqc}->{run}) ? $tool_data->{bamqc}->{run} : 'N',
+		'haplotype_caller' => defined($tool_data->{haplotype_caller}->{run}) ? $tool_data->{haplotype_caller}->{run} : 'N',
+		'mutect'	=> defined($tool_data->{mutect}->{run}) ? $tool_data->{mutect}->{run} : 'N',
+		'mutect2'	=> defined($tool_data->{mutect2}->{run}) ? $tool_data->{mutect2}->{run} : 'N',
+		'somaticsniper'	=> defined($tool_data->{somaticsniper}->{run}) ? $tool_data->{somaticsniper}->{run} : 'N',
+		'strelka'	=> defined($tool_data->{strelka}->{run}) ? $tool_data->{strelka}->{run} : 'N',
+		'varscan'	=> defined($tool_data->{varscan}->{run}) ? $tool_data->{varscan}->{run} : 'N',
+		'vardict'	=> defined($tool_data->{vardict}->{run}) ? $tool_data->{vardict}->{run} : 'N',
+		'pindel'	=> defined($tool_data->{pindel}->{run}) ? $tool_data->{pindel}->{run} : 'N',
+		'gatk_cnv'	=> defined($tool_data->{gatk_cnv}->{run}) ? $tool_data->{gatk_cnv}->{run} : 'N',
+		'novobreak'	=> defined($tool_data->{novobreak}->{run}) ? $tool_data->{novobreak}->{run} : 'N',
+		'delly'	=> defined($tool_data->{delly}->{run}) ? $tool_data->{delly}->{run} : 'N',
+		'svict'	=> defined($tool_data->{svict}->{run}) ? $tool_data->{svict}->{run} : 'N',
+		'ichor_cna'	=> defined($tool_data->{ichor_cna}->{run}) ? $tool_data->{ichor_cna}->{run} : 'N',
+		'mavis'	=> defined($tool_data->{mavis}->{run}) ? $tool_data->{mavis}->{run} : 'N',
+		'msi'	=> defined($tool_data->{other_tools}->{run_msi}) ? $tool_data->{other_tools}->{run_msi} : 'N',
+		'star'	=> defined($tool_data->{star}->{run}) ? $tool_data->{star}->{run} : 'N',
+		'rsem'	=> defined($tool_data->{rsem}->{run}) ? $tool_data->{rsem}->{run} : 'N',
+		'star_fusion'	=> defined($tool_data->{star_fusion}->{run}) ? $tool_data->{star_fusion}->{run} : 'N',
+		'fusioncatcher'	=> defined($tool_data->{fusioncatcher}->{run}) ? $tool_data->{fusioncatcher}->{run} : 'N'
+		);
+
+	# initiate objects
 	my @job_ids;
 	my ($qc_dir, $germ_dir, $cpsr_dir);
 	my ($correlations, $qc_data, $cb_data, $seqqc_data, $contest_data, $cpsr_calls) = undef;
@@ -137,9 +166,9 @@ sub main {
 			name		=> 'create_qc_plots',
 			cmd		=> $qc_command,
 			modules		=> [$r_version],
-			max_time	=> '01:00:00',
 			mem		=> '2G',
-			hpc_driver	=> $args{cluster}
+			hpc_driver	=> $args{cluster},
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -153,7 +182,7 @@ sub main {
 		push @job_ids, $run_id;
 
 		# rna expression values
-		if ('Y' eq $tool_data->{rsem}->{run}) {
+		if ('Y' eq $tool_set{'rsem'}) {
 			my $rsem_dir = join('/', $output_directory, 'RSEM');
 			opendir(RSEM, $rsem_dir) or die "Cannot open '$rsem_dir' !";
 			my @rsem_calls = grep { /expression_TPM_for_cbioportal.tsv/ } readdir(RSEM);
@@ -185,7 +214,8 @@ sub main {
 				modules		=> [$r_version],
 				max_time	=> '04:00:00',
 				mem		=> '2G',
-				hpc_driver	=> $args{cluster}
+				hpc_driver	=> $args{cluster},
+				extra_args	=> [$hpc_group]
 				);
 
 			$run_id = submit_job(
@@ -200,7 +230,7 @@ sub main {
 			}
 
 		# if variant calling was performed
-		if ('Y' eq $tool_data->{haplotype_caller}->{run}) {
+		if ('Y' eq $tool_set{'haplotype_caller'}) {
 			my $snv_dir = join('/', $output_directory, 'HaplotypeCaller');
 			opendir(VARIANTS, $snv_dir) or die "Cannot open '$snv_dir' !";
 			my @snv_calls = grep { /_mutations_for_cbioportal.tsv/ } readdir(VARIANTS);
@@ -232,7 +262,8 @@ sub main {
 				modules		=> [$r_version],
 				max_time	=> '04:00:00',
 				mem		=> '2G',
-				hpc_driver	=> $args{cluster}
+				hpc_driver	=> $args{cluster},
+				extra_args	=> [$hpc_group]
 				);
 
 			$run_id = submit_job(
@@ -255,7 +286,7 @@ sub main {
 			);
 
 		my $tool_count = 0;
-		if ('Y' eq $tool_data->{star_fusion}->{run}) {
+		if ('Y' eq $tool_set{'star_fusion'}) {
 			my $starfus_dir = join('/', $output_directory, 'STAR-Fusion');
 			opendir(FUSION, $starfus_dir) or die "Cannot open '$starfus_dir' !";
 			my @starfus_calls = grep { /_for_cbioportal.tsv/ } readdir(FUSION);
@@ -274,7 +305,7 @@ sub main {
 			$tool_count++;
 			}
 
-		if ('Y' eq $tool_data->{fusioncatcher}->{run}) {
+		if ('Y' eq $tool_set{'fusioncatcher'}) {
 			my $fuscatch_dir = join('/', $output_directory, 'FusionCatcher');
 			opendir(FUSION, $fuscatch_dir) or die "Cannot open '$fuscatch_dir' !";
 			my @fuscatch_files = readdir(FUSION);
@@ -321,7 +352,8 @@ sub main {
 				modules		=> [$r_version],
 				max_time	=> '04:00:00',
 				mem		=> '2G',
-				hpc_driver	=> $args{cluster}
+				hpc_driver	=> $args{cluster},
+				extra_args	=> [$hpc_group]
 				);
 
 			$run_id = submit_job(
@@ -347,7 +379,8 @@ sub main {
 				modules		=> [$r_version],
 				max_time	=> '04:00:00',
 				mem		=> '2G',
-				hpc_driver	=> $args{cluster}
+				hpc_driver	=> $args{cluster},
+				extra_args	=> [$hpc_group]
 				);
 
 			$run_id = submit_job(
@@ -458,7 +491,7 @@ sub main {
 		if (defined($seqqc_data)) { $qc_command .= " -m $seqqc_data"; }
 
 		my $qc_run_id;
-		if ('Y' eq $tool_data->{bamqc}->{run}) {
+		if ('Y' eq $tool_set{'bamqc'}) {
 
 			# run command
 			print $log "Submitting job to create QC plots...\n";
@@ -467,9 +500,9 @@ sub main {
 				name		=> 'create_qc_plots',
 				cmd		=> $qc_command,
 				modules		=> [$r_version],
-				max_time	=> '01:00:00',
 				mem		=> '2G',
-				hpc_driver	=> $args{cluster}
+				hpc_driver	=> $args{cluster},
+				extra_args	=> [$hpc_group]
 				);
 
 			$qc_run_id = submit_job(
@@ -514,9 +547,9 @@ sub main {
 				name		=> 'plot_germline_snv_summary',
 				cmd		=> $plot_command,
 				modules		=> [$r_version],
-				max_time	=> '01:00:00',
 				mem		=> '2G',
-				hpc_driver	=> $args{cluster}
+				hpc_driver	=> $args{cluster},
+				extra_args	=> [$hpc_group]
 				);
 
 			$run_id = submit_job(
@@ -532,8 +565,7 @@ sub main {
 
 		# somatic variants
 		my ($mutect_data, $mutect2_data, $strelka_data, $varscan_data, $sniper_data, $vardict_data);
-		my ($sequenza_data, $ploidy_data, $gatk_cnv, $gatk_pga, $msi_data);
-		my $n_tools = 0;
+		my ($pindel_data, $sequenza_data, $ploidy_data, $gatk_cnv, $gatk_pga, $msi_data);
 
 		# find ENSEMBLE mutations
 		my $ensemble_command .= join(' ',
@@ -543,7 +575,7 @@ sub main {
 			);
 
 		# get mutation calls from MuTect
-		if ('Y' eq $tool_data->{mutect}->{run}) {
+		if ('Y' eq $tool_set{'mutect'}) {
 			my $mutect_dir = join('/', $output_directory, 'MuTect');
 			opendir(MUTECT, $mutect_dir) or die "Cannot open '$mutect_dir' !";
 			my @mutect_calls = grep { /mutations_for_cbioportal.tsv/ } readdir(MUTECT);
@@ -559,11 +591,10 @@ sub main {
 			symlink($mutect_data, join('/', $data_directory, 'mutect_somatic_variants.tsv'));
 
 			$ensemble_command .= " --mutect $mutect_data";
-			$n_tools++;
 			}
 
 		# get mutation calls from MuTect2
-		if ('Y' eq $tool_data->{mutect2}->{run}) {
+		if ('Y' eq $tool_set{'mutect2'}) {
 			my $mutect2_dir = join('/', $output_directory, 'MuTect2');
 			opendir(MUTECT2, $mutect2_dir) or die "Cannot open '$mutect2_dir' !";
 			my @mutect2_calls = grep { /mutations_for_cbioportal.tsv/ } readdir(MUTECT2);
@@ -579,11 +610,29 @@ sub main {
 			symlink($mutect2_data, join('/', $data_directory, 'mutect2_somatic_variants.tsv'));
 
 			$ensemble_command .= " --mutect2 $mutect2_data";
-			$n_tools++;
+			}
+
+		# get mutation calls from Pindel
+		if ('Y' eq $tool_set{'pindel'}) {
+			my $pindel_dir = join('/', $output_directory, 'Pindel');
+			opendir(PINDEL, $pindel_dir) or die "Cannot open '$pindel_dir' !";
+			my @pindel_calls = grep { /mutations_for_cbioportal.tsv/ } readdir(PINDEL);
+			@pindel_calls = sort @pindel_calls;
+			closedir(PINDEL);
+
+			$pindel_data = join('/', $pindel_dir, $pindel_calls[-1]);
+
+			if ( -l join('/', $data_directory, 'pindel_somatic_variants.tsv')) {
+				unlink join('/', $data_directory, 'pindel_somatic_variants.tsv');
+				}
+
+			symlink($pindel_data, join('/', $data_directory, 'pindel_somatic_variants.tsv'));
+
+			$ensemble_command .= " --pindel $pindel_data";
 			}
 
 		# get mutation calls from Strelka
-		if ('Y' eq $tool_data->{strelka}->{run}) {
+		if ('Y' eq $tool_set{'strelka'}) {
 			my $strelka_dir = join('/', $output_directory, 'Strelka');
 			opendir(STRELKA, $strelka_dir) or die "Cannot open '$strelka_dir' !";
 			my @strelka_calls = grep { /mutations_for_cbioportal.tsv/ } readdir(STRELKA);
@@ -599,11 +648,10 @@ sub main {
 			symlink($strelka_data, join('/', $data_directory, 'strelka_somatic_variants.tsv'));
 
 			$ensemble_command .= " --strelka $strelka_data";
-			$n_tools++;
 			}
 
 		# get mutation calls from SomaticSniper
-		if ('Y' eq $tool_data->{somaticsniper}->{run}) {
+		if ('Y' eq $tool_set{'somaticsniper'}) {
 			my $sniper_dir = join('/', $output_directory, 'SomaticSniper');
 			opendir(SNIPER, $sniper_dir) or die "Cannot open '$sniper_dir' !";
 			my @sniper_calls = grep { /mutations_for_cbioportal.tsv/ } readdir(SNIPER);
@@ -619,11 +667,10 @@ sub main {
 			symlink($sniper_data, join('/', $data_directory, 'somaticsniper_somatic_variants.tsv'));
 
 			$ensemble_command .= " --somaticsniper $sniper_data";
-			$n_tools++;
 			}
 
 		# get mutation calls from VarDict
-		if ('Y' eq $tool_data->{vardict}->{run}) {
+		if ('Y' eq $tool_set{'vardict'}) {
 			my $vardict_dir = join('/', $output_directory, 'VarDict');
 			opendir(VARDICT, $vardict_dir) or die "Cannot open '$vardict_dir' !";
 			my @vardict_calls = grep { /mutations_for_cbioportal.tsv/ } readdir(VARDICT);
@@ -639,13 +686,12 @@ sub main {
 			symlink($vardict_data, join('/', $data_directory, 'vardict_somatic_variants.tsv'));
 
 			$ensemble_command .= " --vardict $vardict_data";
-			$n_tools++;
 			}
 
 
 		# get mutation calls from VarScan
 		my (@cna_calls, @ploidy);
-		if ('Y' eq $tool_data->{varscan}->{run}) {
+		if ('Y' eq $tool_set{'varscan'}) {
 			my $varscan_dir = join('/', $output_directory, 'VarScan');
 
 			opendir(VARSCAN, $varscan_dir) or die "Cannot open '$varscan_dir' !";
@@ -671,7 +717,6 @@ sub main {
 			symlink($varscan_data, join('/', $data_directory, 'varscan_somatic_variants.tsv'));
 
 			$ensemble_command .= " --varscan $varscan_data";
-			$n_tools++;
 
 			# get cna calls from sequenza
 			unless (scalar(@cna_calls) == 0) {
@@ -708,7 +753,8 @@ sub main {
 					modules		=> [$r_version],
 					max_time	=> '04:00:00',
 					mem		=> '2G',
-					hpc_driver	=> $args{cluster}
+					hpc_driver	=> $args{cluster},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -724,7 +770,7 @@ sub main {
 			}
 
 		# get CNAs calls from GATK:CNV
-		if ('Y' eq $tool_data->{gatk_cnv}->{run}) {
+		if ('Y' eq $tool_set{'gatk_cnv'}) {
 			my $gatk_cnv_dir = join('/', $output_directory, 'GATK_CNV');
 
 			opendir(GATKCNV, $gatk_cnv_dir) or die "Cannot open '$gatk_cnv_dir' !";
@@ -768,11 +814,72 @@ sub main {
 				modules		=> [$r_version],
 				max_time	=> '04:00:00',
 				mem		=> '2G',
-				hpc_driver	=> $args{cluster}
+				hpc_driver	=> $args{cluster},
+				extra_args	=> [$hpc_group]
 				);
 
 			$run_id = submit_job(
-				jobname		=> 'plot_sv_summary',
+				jobname		=> 'plot_gatk_cnv_summary',
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @job_ids, $run_id;
+			}
+
+		# get CNAs calls from ichorCNA
+		if ('Y' eq $tool_set{'ichor_cna'}) {
+			my $ichor_cna_dir = join('/', $output_directory, 'IchorCNA');
+
+			opendir(ICHOR, $ichor_cna_dir) or die "Cannot open '$ichor_cna_dir' !";
+			my @ichor_cna_files = readdir(ICHOR);
+			my @cnv_files = grep { /perbin_cna_status.tsv/ } @ichor_cna_files;
+			@cnv_files = sort @cnv_files;
+			my @metric_files = grep { /ichorCNA_estimates.tsv/ } @ichor_cna_files;
+			@metric_files = sort @metric_files;
+			closedir(ICHOR);
+
+			my $cnv_data = join('/', $ichor_cna_dir, $cnv_files[-1]);
+			my $metric_data = join('/', $ichor_cna_dir, $metric_files[-1]);
+
+			if ( -l join('/', $data_directory, 'ichor_cna_ratio_matrix.tsv')) {
+				unlink join('/', $data_directory, 'ichor_cna_ratio_matrix.tsv');
+				}
+
+			if ( -l join('/', $data_directory, 'ichor_cna_estimates.tsv')) {
+				unlink join('/', $data_directory, 'ichor_cna_estimates.tsv');
+				}
+
+			symlink($cnv_data, join('/', $data_directory, 'ichor_cna_ratio_matrix.tsv'));
+			symlink($pga_data, join('/', $data_directory, 'ichor_cna_estimates.tsv'));
+
+			# plot SV summary
+			my $cnv_plot_command = join(' ',
+				"Rscript $cwd/report/plot_ichor_cna_summary.R",
+				'-p', $tool_data->{project_name},
+				'-o', $plot_directory,
+				'-c', $cnv_data,
+				'-m', $metric_data,
+				'-s', 'ratio'
+				);
+
+			# run command
+			print $log "Submitting job to plot Ichor CNAs...\n";
+			$run_script = write_script(
+				log_dir		=> $log_directory,
+				name		=> 'plot_ichor_cna_summary',
+				cmd		=> $cnv_plot_command,
+				modules		=> [$r_version],
+				max_time	=> '04:00:00',
+				mem		=> '2G',
+				hpc_driver	=> $args{cluster},
+				extra_args	=> [$hpc_group]
+				);
+
+			$run_id = submit_job(
+				jobname		=> 'plot_ichor_cna_summary',
 				shell_command	=> $run_script,
 				hpc_driver	=> $args{cluster},
 				dry_run		=> $args{dry_run},
@@ -783,7 +890,7 @@ sub main {
 			}
 
 		# get SVs calls from MAVIS
-		if ('Y' eq $tool_data->{mavis}->{run}) {
+		if ('Y' eq $tool_set{'mavis'}) {
 			my $mavis_dir = join('/', $output_directory, 'Mavis');
 
 			opendir(MAVIS, $mavis_dir) or die "Cannot open '$mavis_dir' !";
@@ -816,7 +923,8 @@ sub main {
 				modules		=> [$r_version],
 				max_time	=> '04:00:00',
 				mem		=> '2G',
-				hpc_driver	=> $args{cluster}
+				hpc_driver	=> $args{cluster},
+				extra_args	=> [$hpc_group]
 				);
 
 			$run_id = submit_job(
@@ -831,7 +939,7 @@ sub main {
 			}
 
 		# get MSI estimates
-		if ('Y' eq $tool_data->{other_tools}->{run_msi}) {
+		if ('Y' eq $tool_set{'msi'}) {
 			my $msi_dir = join('/', $output_directory, 'MSI');
 			opendir(MSI, $msi_dir) or die "Cannot open '$msi_dir' !";
 			my @msi_estimates = grep { /msi_estimates.tsv/ } readdir(MSI);
@@ -857,7 +965,8 @@ sub main {
 			modules		=> [$r_version],
 			max_time	=> '48:00:00',
 			mem		=> '4G',
-			hpc_driver	=> $args{cluster}
+			hpc_driver	=> $args{cluster},
+			extra_args	=> [$hpc_group]
 			);
 
 		my $ensemble_run_id = submit_job(
@@ -888,7 +997,8 @@ sub main {
 			dependencies	=> $ensemble_run_id,
 			max_time	=> '04:00:00',
 			mem		=> '2G',
-			hpc_driver	=> $args{cluster}
+			hpc_driver	=> $args{cluster},
+			extra_args	=> [$hpc_group]
 			);
 
 		my $plot1_run_id = submit_job(
@@ -925,7 +1035,8 @@ sub main {
 			dependencies	=> $ensemble_run_id,
 			max_time	=> '04:00:00',
 			mem		=> '2G',
-			hpc_driver	=> $args{cluster}
+			hpc_driver	=> $args{cluster},
+			extra_args	=> [$hpc_group]
 			);
 
 		my $plot2_run_id = submit_job(
@@ -962,7 +1073,8 @@ sub main {
 			dependencies	=> join(':', $plot1_run_id, $plot2_run_id),
 			max_time	=> '04:00:00',
 			mem		=> '2G',
-			hpc_driver	=> $args{cluster}
+			hpc_driver	=> $args{cluster},
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -995,9 +1107,9 @@ sub main {
 		name		=> 'write_pipeline_methods',
 		cmd		=> $methods_command,
 		modules		=> ['perl'],
-		max_time	=> '00:30:00',
 		mem		=> '256M',
-		hpc_driver	=> $args{cluster}
+		hpc_driver	=> $args{cluster},
+		extra_args	=> [$hpc_group]
 		);
 
 	$run_id = submit_job(
@@ -1042,9 +1154,9 @@ sub main {
 		cmd		=> $report_command,
 		dependencies	=> join(':', @job_ids),
 		modules		=> ['perl','texlive'],
-		max_time	=> '0:30:00',
 		mem		=> '256M',
-		hpc_driver	=> $args{cluster}
+		hpc_driver	=> $args{cluster},
+		extra_args	=> [$hpc_group]
 		);
 
 	if ($args{report}) {
@@ -1074,7 +1186,8 @@ sub main {
 			dependencies	=> join(':', @job_ids),
 			mem		=> '256M',
 			hpc_driver	=> $args{cluster},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(

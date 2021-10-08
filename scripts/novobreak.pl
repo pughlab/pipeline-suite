@@ -82,9 +82,9 @@ sub get_prep_ssake_command {
 	my $cpu_count = $args{n_cpus} - 1;
 	my $part1_command = join("\n",
 		'  if [ ! -s bp_reads.tsv ] && [ ! -s ssake.sam.md5 ]; then',
-		'    samtools bam2fq -1 read1.fq -2 read2.fq somaticreads.bam;',
+		'    samtools bam2fq -1 read1.fq -2 read2.fq ../somaticreads.bam;',
 		'    group_bp_reads.pl ' . $nb_output . ' read1.fq read2.fq > bp_reads.tsv;',
-		'    rm {somaticreads,germlinereads}.bam;',
+		'    rm ../{somaticreads,germlinereads}.bam;',
 		'    rm read{1,2}.fq;',
 		'  fi',
 		'  if [ -s bp_reads.tsv ] && [ ! -s ssake.sam.md5 ]; then',
@@ -312,6 +312,9 @@ sub main {
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{novobreak}->{parameters};
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### RUN ###########################################################################################
 	my ($run_script, $run_id, $link, $chr_file, $cleanup_run_id, $ref_dir);
 	my (@all_jobs);
@@ -376,7 +379,7 @@ sub main {
 			$run_id = '';
 
 			# run novoBreak using full BAMs
-			my $nb_output = join('/', $sample_directory, $sample . '_nb.out.md5');
+			my $nb_output = join('/', $sample_directory, $sample . '_nb.out');
 
 			my $full_novo_command = get_novobreak_command(
 				tumour_id	=> $sample,
@@ -385,7 +388,7 @@ sub main {
 				out_dir		=> $sample_directory
 				);
 
-			if ('Y' eq missing_file($nb_output)) {
+			if ('Y' eq missing_file("$nb_output.md5")) {
 
 				# record command (in log directory) and then run job
 				print $log "Submitting job for NovoBreak...\n";
@@ -398,7 +401,8 @@ sub main {
 					max_time	=> $parameters->{novobreak}->{time},
 					mem		=> $parameters->{novobreak}->{mem},
 					cpus_per_task	=> $parameters->{novobreak}->{n_cpu},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -441,7 +445,8 @@ sub main {
 					max_time	=> $parameters->{process}->{time},
 					mem		=> $parameters->{process}->{mem},
 					cpus_per_task	=> $parameters->{process}->{n_cpu},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -481,7 +486,8 @@ sub main {
 					dependencies	=> $run_id,
 					max_time	=> $parameters->{filter}->{time},
 					mem		=> $parameters->{filter}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -532,7 +538,8 @@ sub main {
 						dependencies	=> join(':', @patient_jobs),
 						mem		=> '256M',
 						hpc_driver	=> $args{hpc_driver},
-						kill_on_error	=> 0
+						kill_on_error	=> 0,
+						extra_args	=> [$hpc_group]
 						);
 
 					$cleanup_run_id = submit_job(
@@ -569,7 +576,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(

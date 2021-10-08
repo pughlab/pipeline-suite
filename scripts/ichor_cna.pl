@@ -176,7 +176,7 @@ sub main {
 	# set tools and versions
 	$ichor_path = "$cwd/runIchorCNA.R";
 	my $ichor_r;
-	my $given = version->declare($tool_data->{ichor_cna_version})->numify;
+	my $given = $tool_data->{ichor_cna_version}; # version->declare($tool_data->{ichor_cna_version})->numify;
 	if ('0.3.2' eq $given) {
 		$ichor_r = 'R/4.1.0'; # will run 0.3.2
 		} elsif ('0.3.0' eq $given) {
@@ -191,6 +191,9 @@ sub main {
 
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{ichor_cna}->{parameters};
+
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
 
 	### RUN ###########################################################################################
 	my ($run_script, $run_id, $link, $cleanup_cmd, $should_run_final);
@@ -256,7 +259,7 @@ sub main {
 			# because readCounter needs an index with the suffix .bam.bai (rather
 			# than the .bai I have generated, we need to use the renamed symlinks
 			# for this step)
-			my $normal = @normal_ids[0];
+			my $normal = $normal_ids[0];
 			my $normal_bam = basename($smp_data->{$patient}->{normal}->{$normal});
 			$normal_wig = join('/', $tmp_directory, $normal . '.wig');
 
@@ -279,7 +282,8 @@ sub main {
 					modules	=> [$hmmcopy],
 					max_time	=> $parameters->{readcounter}->{time},
 					mem		=> $parameters->{readcounter}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$normal_wig_jobid = submit_job(
@@ -301,7 +305,7 @@ sub main {
 		foreach my $sample (@tumour_ids) {
 
 			# if there are any samples to run, we will run the final combine job
-			$should_run_final = 1
+			$should_run_final = 1;
 
 			print $log "  SAMPLE: $sample\n\n";
 
@@ -339,7 +343,8 @@ sub main {
 					modules	=> [$hmmcopy],
 					max_time	=> $parameters->{readcounter}->{time},
 					mem		=> $parameters->{readcounter}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -378,9 +383,10 @@ sub main {
 					name	=> 'run_ichor_cna_' . $sample,
 					cmd	=> $ichor_command,
 					dependencies	=> join(':', $run_id, $normal_wig_jobid),
-					max_time	=> $parameters->{ichor}->{time},
-					mem		=> $parameters->{ichor}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					max_time	=> $parameters->{ichor_cna}->{time},
+					mem		=> $parameters->{ichor_cna}->{mem},
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -426,7 +432,8 @@ sub main {
 					dependencies	=> join(':', @patient_jobs),
 					mem		=> '256M',
 					hpc_driver	=> $args{hpc_driver},
-					kill_on_error	=> 0
+					kill_on_error	=> 0,
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -460,7 +467,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '4G',
 			max_time	=> '12:00:00',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -491,7 +499,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(

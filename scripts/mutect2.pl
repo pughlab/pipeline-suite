@@ -390,6 +390,9 @@ sub pon {
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{mutect2}->{parameters};
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### RUN ###########################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
@@ -501,7 +504,7 @@ sub pon {
 						max_time	=> $parameters->{mutect}->{time},
 						mem		=> $parameters->{mutect}->{mem},
 						hpc_driver	=> $args{hpc_driver},
-						extra_args	=> '--array=1-'. scalar(@chroms)
+						extra_args	=> [$hpc_group, '--array=1-'. scalar(@chroms)]
 						);
 
 					$run_id = submit_job(
@@ -559,7 +562,8 @@ sub pon {
 						modules	=> [$gatk],
 						max_time	=> $parameters->{mutect}->{time},
 						mem		=> $parameters->{mutect}->{mem},
-						hpc_driver	=> $args{hpc_driver}
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group] 
 						);
 
 					$run_id = submit_job(
@@ -602,7 +606,8 @@ sub pon {
 						modules	=> [$gatk],
 						max_time	=> $parameters->{mutect}->{time},
 						mem		=> $parameters->{mutect}->{mem},
-						hpc_driver	=> $args{hpc_driver}
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group] 
 						);
 
 					$run_id = submit_job(
@@ -644,7 +649,8 @@ sub pon {
 						dependencies	=> join(':', @chr_jobs),
 						max_time	=> $parameters->{merge}->{time},
 						mem		=> $parameters->{merge}->{mem},
-						hpc_driver	=> $args{hpc_driver}
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group] 
 						);
 
 					$run_id = submit_job(
@@ -688,7 +694,8 @@ sub pon {
 					dependencies	=> $run_id,
 					max_time	=> $parameters->{filter}->{time},
 					mem		=> $parameters->{filter}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group] 
 					);
 
 				$run_id = submit_job(
@@ -746,7 +753,8 @@ sub pon {
 			dependencies	=> join(':', @all_jobs),
 			max_time	=> $parameters->{create_pon}->{time},
 			mem		=> $parameters->{create_pon}->{mem},
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group] 
 			);
 
 		$run_id = submit_job(
@@ -783,7 +791,8 @@ sub pon {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group] 
 			);
 
 		$run_id = submit_job(
@@ -813,9 +822,10 @@ sub pon {
 			name	=> 'output_job_metrics_' . $run_count,
 			cmd	=> $collect_metrics,
 			dependencies	=> join(':', @all_jobs),
-			mem		=> '1G',
+			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group] 
 			);
 
 		$run_id = submit_job(
@@ -998,6 +1008,9 @@ sub main {
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{mutect2}->{parameters};
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### RUN ###########################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
@@ -1104,7 +1117,7 @@ sub main {
 
 			foreach $chr ( @chroms ) {
 
-				if ( ('genome' eq $chr) || ('panel' eq $chr) ) {
+				if (scalar(@chroms) == 1) {
 					$mutect_commands{$chr} = get_mutect_command(
 						tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
 						normal		=> $normal_bam,
@@ -1174,7 +1187,7 @@ sub main {
 						max_time	=> $parameters->{mutect}->{time},
 						mem		=> $parameters->{mutect}->{mem},
 						hpc_driver	=> $args{hpc_driver},
-						extra_args	=> '--array=1-'. scalar(@chroms)
+						extra_args	=> [$hpc_group, '--array=1-'. scalar(@chroms)]
 						);
 
 					$run_id = submit_job(
@@ -1200,21 +1213,14 @@ sub main {
 					$mutect_command = $mutect_commands{$chr};
 					my @required;
 					# this is a java-based command, so run a final check
-					if ( ('genome' eq $chr) || ('exome' eq $chr) ) {
+					if (scalar(@chroms) == 1) {
 						$mutect_command .= "\n\nmd5sum $merged_output > $merged_output.md5";
-
 						push @required, "$merged_output.md5";
-						} elsif (scalar(@chroms) == 1) {
-						my $add_on_cmd = join("\n",
-							"mv $chr_stem\_$chr.vcf > $merged_output",
-							"md5sum $merged_output > $merged_output.md5"
-							);
-
-						$mutect_command .= "\n\n$add_on_cmd";
-						push @required, "$merged_output.md5";
-
 						} else {
-						$mutect_command .= "\n\nmd5sum $chr_stem\_$chr.vcf > $chr_stem\_$chr.vcf.md5";
+						$mutect_command .= "\n\n" . join(' ',
+							"md5sum $chr_stem\_$chr.vcf",
+							"> $chr_stem\_$chr.vcf.md5"
+							);
 
 						push @required, "$chr_stem\_$chr.vcf.md5"; 
 						push @required, "$merged_output.md5";
@@ -1233,7 +1239,8 @@ sub main {
 							modules	=> [$gatk],
 							max_time	=> $parameters->{mutect}->{time},
 							mem		=> $parameters->{mutect}->{mem},
-							hpc_driver	=> $args{hpc_driver}
+							hpc_driver	=> $args{hpc_driver},
+							extra_args	=> [$hpc_group]
 							);
 
 						$run_id = submit_job(
@@ -1281,7 +1288,8 @@ sub main {
 						dependencies	=> join(':', @chr_jobs),
 						max_time	=> $parameters->{merge}->{time},
 						mem		=> $parameters->{merge}->{mem},
-						hpc_driver	=> $args{hpc_driver}
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group]
 						);
 
 					$run_id = submit_job(
@@ -1333,7 +1341,8 @@ sub main {
 					dependencies	=> $run_id,
 					max_time	=> $parameters->{filter}->{time},
 					mem		=> $parameters->{filter}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -1346,8 +1355,7 @@ sub main {
 
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping VCF-filter because this has already been completed!\n";
 				}
 
@@ -1439,7 +1447,8 @@ sub main {
 					cpus_per_task	=> 4,
 					max_time        => $tool_data->{annotate}->{time},
 					mem             => $tool_data->{annotate}->{mem},
-					hpc_driver      => $args{hpc_driver}
+					hpc_driver      => $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$maf_run_id = submit_job(
@@ -1452,8 +1461,7 @@ sub main {
 
 				push @patient_jobs, $maf_run_id;
 				push @all_jobs, $maf_run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping vcf2maf because this has already been completed!\n";
 				}
 
@@ -1491,7 +1499,8 @@ sub main {
 					dependencies	=> join(':', @patient_jobs),
 					mem		=> '256M',
 					hpc_driver	=> $args{hpc_driver},
-					kill_on_error	=> 0
+					kill_on_error	=> 0,
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -1525,7 +1534,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '4G',
 			max_time	=> '24:00:00',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -1556,7 +1566,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
