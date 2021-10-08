@@ -790,7 +790,7 @@ sub main {
 				print $log "Submitting job for PrintReads (applying base recalibration)...\n";
 
 				# determine number of cpus to request
-				$n_cpu = 1;
+				my $n_cpu = 1;
 				if ('dna' eq $data_type) { $n_cpu = 8; }
 
 				$run_script = write_script(
@@ -906,7 +906,7 @@ sub main {
 			log_file	=> $log
 			);
 
-		push @all_jobs, $run_id;
+		push @all_jobs, $run_id_extra;
 
 		# do some logging
 		print "Number of jobs submitted: " . scalar(@all_jobs) . "\n";

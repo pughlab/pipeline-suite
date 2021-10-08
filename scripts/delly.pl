@@ -778,6 +778,9 @@ sub main {
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{delly}->{parameters};
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### RUN ###########################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
