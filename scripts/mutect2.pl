@@ -1104,7 +1104,7 @@ sub main {
 
 			foreach $chr ( @chroms ) {
 
-				if ( ('genome' eq $chr) || ('panel' eq $chr) ) {
+				if (scalar(@chroms) == 1) {
 					$mutect_commands{$chr} = get_mutect_command(
 						tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
 						normal		=> $normal_bam,
@@ -1200,21 +1200,14 @@ sub main {
 					$mutect_command = $mutect_commands{$chr};
 					my @required;
 					# this is a java-based command, so run a final check
-					if ( ('genome' eq $chr) || ('exome' eq $chr) ) {
+					if (scalar(@chroms) == 1) {
 						$mutect_command .= "\n\nmd5sum $merged_output > $merged_output.md5";
-
 						push @required, "$merged_output.md5";
-						} elsif (scalar(@chroms) == 1) {
-						my $add_on_cmd = join("\n",
-							"mv $chr_stem\_$chr.vcf > $merged_output",
-							"md5sum $merged_output > $merged_output.md5"
-							);
-
-						$mutect_command .= "\n\n$add_on_cmd";
-						push @required, "$merged_output.md5";
-
 						} else {
-						$mutect_command .= "\n\nmd5sum $chr_stem\_$chr.vcf > $chr_stem\_$chr.vcf.md5";
+						$mutect_command .= "\n\n" . join(' ',
+							"md5sum $chr_stem\_$chr.vcf",
+							"> $chr_stem\_$chr.vcf.md5"
+							);
 
 						push @required, "$chr_stem\_$chr.vcf.md5"; 
 						push @required, "$merged_output.md5";
