@@ -71,6 +71,9 @@ sub main {
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n---\n\n";
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### MAIN ###########################################################################################
 
 	my ($fc_run_id, $star_run_id, $gatk_run_id, $vc_run_id, $rsem_run_id, $starfus_run_id);
@@ -118,6 +121,7 @@ sub main {
 			modules	=> ['perl'],
 			mem		=> '256M',
 			max_time	=> '7-00:00:00',
+			extra_args	=> [$hpc_group],
 			hpc_driver	=> $args{cluster}
 			);
 
@@ -170,6 +174,7 @@ sub main {
 			modules	=> ['perl'],
 			mem		=> '256M',
 			max_time	=> '7-00:00:00',
+			extra_args	=> [$hpc_group],
 			hpc_driver	=> $args{cluster}
 			);
 
@@ -222,6 +227,7 @@ sub main {
 			dependencies	=> $star_run_id,
 			mem		=> '256M',
 			max_time	=> '7-00:00:00',
+			extra_args	=> [$hpc_group],
 			hpc_driver	=> $args{cluster}
 			);
 
@@ -274,6 +280,7 @@ sub main {
 			dependencies	=> $star_run_id,
 			mem		=> '256M',
 			max_time	=> '7-00:00:00',
+			extra_args	=> [$hpc_group],
 			hpc_driver	=> $args{cluster}
 			);
 
@@ -328,6 +335,7 @@ sub main {
 			dependencies	=> $star_run_id,
 			mem		=> '256M',
 			max_time	=> '7-00:00:00',
+			extra_args	=> [$hpc_group],
 			hpc_driver	=> $args{cluster}
 			);
 
@@ -381,6 +389,7 @@ sub main {
 			dependencies	=> $gatk_run_id,
 			mem		=> '256M',
 			max_time	=> '7-00:00:00',
+			extra_args	=> [$hpc_group],
 			hpc_driver	=> $args{cluster}
 			);
 
@@ -428,6 +437,7 @@ sub main {
 			dependencies	=> join(':', @job_ids),
 			mem		=> '256M',
 			max_time	=> '24:00:00',
+			extra_args	=> [$hpc_group],
 			hpc_driver	=> $args{cluster}
 			);
 
