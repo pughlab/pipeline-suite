@@ -1,3 +1,10 @@
+2021-10-08: PughLab pipeline-suite (version 0.5.8)
+- fixed bug in convert_svict that removed ALL rows
+- removed unnecessary warnings in mavis for tumour-only samples
+- fixed issue in novobreak for finding required files
+- updates to summarize and report functions
+- update: added 'group' option for job submissions
+
 2021-09-30: PughLab pipeline-suite (version 0.5.7)
 - turned all tools off by default
 - added extra layer of dependencies for pughlab_dnaseq_pipeline.pl --variant_calling to reduce failure due to job overload
