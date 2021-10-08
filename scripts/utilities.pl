@@ -266,7 +266,7 @@ sub write_script {
 		mem		=> '1G',
 		cpus_per_task	=> 1,
 		hpc_driver	=> 'slurm',
-		extra_args	=> undef,
+		extra_args	=> [],
 		kill_on_error	=> 1,
 		@_
 		);
@@ -323,9 +323,11 @@ sub write_script {
 			}
 		}
 
-		if (defined($args{extra_args})) {
-			$sbatch_params .= "\n#SBATCH " . $args{extra_args};
+		for (my $i=0; $i < scalar (@{$args{extra_args}}); $i++) {
+			if (defined($args{extra_args}->[$i])) {
+				$sbatch_params .= "\n#SBATCH " . $args{extra_args}->[$i];
 			}
+		}
 
 		if (defined($args{dependencies})) {
 

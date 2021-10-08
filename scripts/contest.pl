@@ -151,6 +151,9 @@ sub main {
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{bamqc}->{parameters};
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### RUN ###########################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
@@ -251,7 +254,8 @@ sub main {
 						modules	=> [$gatk],
 						max_time	=> $parameters->{contest}->{time},
 						mem		=> $parameters->{contest}->{mem},
-						hpc_driver	=> $args{hpc_driver}
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group]
 						);
 
 					$run_id = submit_job(
@@ -304,7 +308,8 @@ sub main {
 					dependencies	=> join(':', @patient_jobs),
 					mem		=> '256M',
 					hpc_driver	=> $args{hpc_driver},
-					kill_on_error	=> 0
+					kill_on_error	=> 0,
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -338,7 +343,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '4G',
 			max_time	=> '12:00:00',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -369,7 +375,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(

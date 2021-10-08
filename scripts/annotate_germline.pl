@@ -210,11 +210,13 @@ sub main{
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
 	my $r_version	= 'R/' . $tool_data->{r_version};
-
 	my $pcgr	= 'pcgr/' . $tool_data->{pcgr_version};
 
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{haplotype_caller}->{parameters};
+
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
 
 	### RUN ###########################################################################################
 	# get sample data
@@ -307,7 +309,8 @@ sub main{
 					name	=> 'run_select_variants_' . $sample,
 					cmd	=> $prepare_vcf_cmd,
 					modules	=> [$gatk],
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -352,7 +355,8 @@ sub main{
 					dependencies	=> $run_id,
 					max_time	=> $parameters->{cpsr}->{time},
 					mem		=> $parameters->{cpsr}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -395,7 +399,8 @@ sub main{
 				cmd	=> $filter_cmd,
 				modules => [$vcftools],
 				dependencies	=> join(':', @patient_jobs),
-				hpc_driver	=> $args{hpc_driver}
+				hpc_driver	=> $args{hpc_driver},
+				extra_args	=> [$hpc_group]
 				);
 
 			$run_id = submit_job(
@@ -476,7 +481,8 @@ sub main{
 					cmd     => $vcf2maf_cmd,
 					modules => ['perl', $samtools, 'tabix'],
 					dependencies    => $previous_job_id,
-					hpc_driver      => $args{hpc_driver}
+					hpc_driver      => $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -560,7 +566,8 @@ sub main{
 					cmd     => $vcf2maf_cmd,
 					modules => ['perl', $samtools, 'tabix'],
 					dependencies    => $run_id,
-					hpc_driver      => $args{hpc_driver}
+					hpc_driver      => $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -602,7 +609,8 @@ sub main{
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '1G',
 			max_time	=> '12:00:00',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -628,7 +636,8 @@ sub main{
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -657,7 +666,8 @@ sub main{
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(

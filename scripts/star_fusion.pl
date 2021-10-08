@@ -158,6 +158,9 @@ sub main {
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{star_fusion}->{parameters};
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### RUN ############################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
@@ -288,8 +291,8 @@ sub main {
 							name	=> 'run_prepare_fastq_for_FusionInspector_' . $sample,
 							cmd	=> $cat_fq_cmd . "\n" . $gzip_fq_cmd,
 							max_time	=> '08:00:00',
-							mem		=> '1G',
-							hpc_driver	=> $args{hpc_driver}
+							hpc_driver	=> $args{hpc_driver},
+							extra_args	=> [$hpc_group]
 							);
 
 						$run_id = submit_job(
@@ -339,6 +342,7 @@ sub main {
 					max_time	=> $parameters->{star_fusion}->{time},
 					mem		=> $parameters->{star_fusion}->{mem},
 					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group],
 					cpus_per_task	=> 4
 					);
 
@@ -360,8 +364,7 @@ sub main {
 				$cleanup_cmd .= "\n  rm $sample_directory/*.ok";
 
 				push @patient_jobs, $run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping STAR-Fusion because output already exists...\n";
 				}
 
@@ -403,7 +406,8 @@ sub main {
 					dependencies	=> join(':', @patient_jobs),
 					mem		=> '256M',
 					hpc_driver	=> $args{hpc_driver},
-					kill_on_error	=> 0
+					kill_on_error	=> 0,
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -437,7 +441,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			max_time	=> $parameters->{combine_results}->{time},
 			mem		=> $parameters->{combine_results}->{mem},
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -468,7 +473,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(

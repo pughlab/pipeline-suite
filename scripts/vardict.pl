@@ -288,6 +288,9 @@ sub main {
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{vardict}->{parameters};
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### RUN ###########################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
@@ -382,7 +385,8 @@ sub main {
 					modules	=> ['perl', $vardict, $r_version],
 					max_time	=> $parameters->{vardict}->{time},
 					mem		=> $parameters->{vardict}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -442,7 +446,8 @@ sub main {
 					dependencies	=> $run_id,
 					max_time	=> $parameters->{filter}->{time},
 					mem		=> $parameters->{filter}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -505,7 +510,8 @@ sub main {
 					modules	=> ['perl', $vardict, $r_version],
 					max_time	=> $parameters->{vardict}->{time},
 					mem		=> $parameters->{vardict}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -573,7 +579,8 @@ sub main {
 					dependencies	=> $run_id,
 					max_time	=> $parameters->{filter}->{time},
 					mem		=> $parameters->{filter}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -641,7 +648,8 @@ sub main {
 					cpus_per_task	=> 4,
 					max_time	=> $tool_data->{annotate}->{time},
 					mem		=> $tool_data->{annotate}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -707,8 +715,8 @@ sub main {
 						modules	=> ['perl', $vcftools, 'tabix'],
 						dependencies	=> join(':', @germline_jobs),
 						max_time	=> '06:00:00',
-						mem		=> '1G',
-						hpc_driver	=> $args{hpc_driver}
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group]
 						);
 
 					$run_id = submit_job(
@@ -757,7 +765,8 @@ sub main {
 					dependencies	=> join(':', @patient_jobs),
 					mem		=> '256M',
 					hpc_driver	=> $args{hpc_driver},
-					kill_on_error	=> 0
+					kill_on_error	=> 0,
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -798,9 +807,7 @@ sub main {
 
 		symlink($pon, $final_pon_link);
 
-		$pon_command .= "\n" . check_java_output(
-			extra_cmd => "  md5sum $pon > $pon.md5"
-			);
+		$pon_command .= "\nmd5sum $pon > $pon.md5";
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
@@ -810,7 +817,8 @@ sub main {
 			dependencies	=> join(':', @pon_dependencies),
 			max_time	=> $parameters->{create_pon}->{time},
 			mem		=> $parameters->{create_pon}->{mem},
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$pon_job_id = submit_job(
@@ -898,7 +906,8 @@ sub main {
 					modules	=> ['perl', $vardict, $r_version],
 					max_time	=> $parameters->{vardict}->{time},
 					mem		=> $parameters->{vardict}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -911,8 +920,7 @@ sub main {
 
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping VarDict because this has already been completed!\n";
 				}
 
@@ -946,7 +954,8 @@ sub main {
 					dependencies	=> join(':', $run_id, $pon_job_id),
 					max_time	=> $parameters->{filter}->{time},
 					mem		=> $parameters->{filter}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -1009,7 +1018,8 @@ sub main {
 					cpus_per_task	=> 4,
 					max_time	=> $tool_data->{annotate}->{time},
 					mem		=> $tool_data->{annotate}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -1060,7 +1070,8 @@ sub main {
 					dependencies	=> join(':', @patient_jobs),
 					mem		=> '256M',
 					hpc_driver	=> $args{hpc_driver},
-					kill_on_error	=> 0
+					kill_on_error	=> 0,
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -1094,7 +1105,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '4G',
 			max_time	=> '12:00:00',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -1125,7 +1137,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(

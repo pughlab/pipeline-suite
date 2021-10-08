@@ -242,6 +242,9 @@ sub main {
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{bwa}->{parameters};
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### HANDLING FILES #################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
@@ -381,7 +384,8 @@ sub main {
 							max_time	=> $parameters->{bwa}->{time}->{$type},
 							mem		=> $parameters->{bwa}->{mem}->{$type},
 							cpus_per_task	=> 4,
-							hpc_driver	=> $args{hpc_driver}
+							hpc_driver	=> $args{hpc_driver},
+							extra_args	=> [$hpc_group]
 							);
 
 						$run_id = submit_job(
@@ -423,7 +427,8 @@ sub main {
 							dependencies	=> $run_id,
 							max_time	=> $parameters->{sort}->{time}->{$type},
 							mem		=> $parameters->{sort}->{mem}->{$type},
-							hpc_driver	=> $args{hpc_driver}
+							hpc_driver	=> $args{hpc_driver},
+							extra_args	=> [$hpc_group]
 							);
 
 						$run_id = submit_job(
@@ -464,7 +469,8 @@ sub main {
 							dependencies	=> $run_id,
 							max_time	=> $parameters->{index}->{time}->{$type},
 							mem		=> $parameters->{index}->{mem}->{$type},
-							hpc_driver	=> $args{hpc_driver}
+							hpc_driver	=> $args{hpc_driver},
+							extra_args	=> [$hpc_group]
 							);
 
 						$run_id = submit_job(
@@ -537,7 +543,8 @@ sub main {
 					dependencies	=> join(':', @lane_holds),
 					mem 		=> $parameters->{merge}->{mem}->{$type},
 					max_time 	=> $parameters->{merge}->{time}->{$type},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -582,7 +589,8 @@ sub main {
 						dependencies	=> join(':', @smp_jobs),
 						mem		=> '256M',
 						hpc_driver	=> $args{hpc_driver},
-						kill_on_error	=> 0
+						kill_on_error	=> 0,
+						extra_args	=> [$hpc_group]
 						);
 
 					$run_id_extra = submit_job(
@@ -630,7 +638,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(

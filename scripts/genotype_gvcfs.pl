@@ -269,6 +269,9 @@ sub main{
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{haplotype_caller}->{parameters};
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### RUN ###########################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
@@ -328,7 +331,8 @@ sub main{
 			modules	=> [$gatk, 'tabix'],
 			max_time	=> $parameters->{genotype_gvcfs}->{time},
 			mem		=> $parameters->{genotype_gvcfs}->{mem},
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$genotype_run_id = submit_job(
@@ -368,7 +372,8 @@ sub main{
 			dependencies	=> $genotype_run_id,
 			max_time	=> $parameters->{vqsr}->{time},
 			mem		=> $parameters->{vqsr}->{mem},
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$vqsr_indel_run_id = submit_job(
@@ -413,7 +418,8 @@ sub main{
 			dependencies	=> $vqsr_indel_run_id,
 			max_time	=> $parameters->{apply_vqsr}->{time},
 			mem		=> $parameters->{apply_vqsr}->{mem},
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$apply_indel_recal_run_id = submit_job(
@@ -453,7 +459,8 @@ sub main{
 			dependencies	=> $genotype_run_id,
 			max_time	=> $parameters->{vqsr}->{time},
 			mem		=> $parameters->{vqsr}->{mem},
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$vqsr_snp_run_id = submit_job(
@@ -498,7 +505,8 @@ sub main{
 			dependencies	=> join(':', $apply_indel_recal_run_id, $vqsr_snp_run_id),
 			max_time	=> $parameters->{apply_vqsr}->{time},
 			mem		=> $parameters->{apply_vqsr}->{mem},
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$apply_snp_recal_run_id = submit_job(
@@ -545,7 +553,8 @@ sub main{
 				dependencies	=> $apply_snp_recal_run_id,
 				max_time	=> $parameters->{filter_recalibrated}->{time},
 				mem		=> $parameters->{filter_recalibrated}->{mem},
-				hpc_driver	=> $args{hpc_driver}
+				hpc_driver	=> $args{hpc_driver},
+				extra_args	=> [$hpc_group]
 				);
 
 			my $filter_run_id = submit_job(
@@ -578,7 +587,8 @@ sub main{
 		dependencies	=> join(':', @all_jobs),
 		mem		=> '8G',
 		max_time	=> '12:00:00',
-		hpc_driver	=> $args{hpc_driver}
+		hpc_driver	=> $args{hpc_driver},
+		extra_args	=> [$hpc_group]
 		);
 
 	$run_id = submit_job(
@@ -601,7 +611,8 @@ sub main{
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -630,7 +641,8 @@ sub main{
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(

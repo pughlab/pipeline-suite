@@ -192,6 +192,9 @@ sub main {
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{ichor_cna}->{parameters};
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### RUN ###########################################################################################
 	my ($run_script, $run_id, $link, $cleanup_cmd, $should_run_final);
 	my @all_jobs;
@@ -279,7 +282,8 @@ sub main {
 					modules	=> [$hmmcopy],
 					max_time	=> $parameters->{readcounter}->{time},
 					mem		=> $parameters->{readcounter}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$normal_wig_jobid = submit_job(
@@ -339,7 +343,8 @@ sub main {
 					modules	=> [$hmmcopy],
 					max_time	=> $parameters->{readcounter}->{time},
 					mem		=> $parameters->{readcounter}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -380,7 +385,8 @@ sub main {
 					dependencies	=> join(':', $run_id, $normal_wig_jobid),
 					max_time	=> $parameters->{ichor_cna}->{time},
 					mem		=> $parameters->{ichor_cna}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -426,7 +432,8 @@ sub main {
 					dependencies	=> join(':', @patient_jobs),
 					mem		=> '256M',
 					hpc_driver	=> $args{hpc_driver},
-					kill_on_error	=> 0
+					kill_on_error	=> 0,
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -460,7 +467,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '4G',
 			max_time	=> '12:00:00',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -491,7 +499,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(

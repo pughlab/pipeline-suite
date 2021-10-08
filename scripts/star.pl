@@ -277,6 +277,9 @@ sub main {
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{star}->{parameters};
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### MAIN ###########################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
@@ -389,11 +392,11 @@ sub main {
 				tmp_dir		=> $temp_star
 				);
 
+			my $required = join('/', $sample_directory, 'Aligned.sortedByCoord.out.bam');
+
 			# check if this should be run
-			if (
-				('Y' eq missing_file(join('/', $sample_directory, 'Aligned.sortedByCoord.out.bam'))) || 
-			 	('Y' eq missing_file(join('/', $sample_directory, 'Aligned.toTranscriptome.out.bam')))
-				) {
+			if ('Y' eq missing_file($required)) {
+
 				# record command (in log directory) and then run job
 				print $log "Submitting job to run STAR...\n";
 				$run_script = write_script(
@@ -404,7 +407,8 @@ sub main {
 					dependencies	=> $run_id,
 					max_time	=> $parameters->{star}->{time},
 					mem		=> $parameters->{star}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				# initial test took 15 hours with 22G and 1 node
@@ -418,8 +422,7 @@ sub main {
 
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping alignment step because output already exists...\n";
 				}
 		
@@ -464,7 +467,8 @@ sub main {
 						dependencies	=> $run_id,
 						max_time	=> $parameters->{markdup}->{time},
 						mem		=> $parameters->{markdup}->{mem},
-						hpc_driver	=> $args{hpc_driver}
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group]
 						);
 
 					$run_id = submit_job(
@@ -477,8 +481,7 @@ sub main {
 
 					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
-					}
-				else {
+					} else {
 					print $log "Skipping mark duplicate step because output already exists...\n";
 					}
 
@@ -519,7 +522,8 @@ sub main {
 				dependencies	=> join(':', @patient_jobs),
 				mem		=> '256M',
 				hpc_driver	=> $args{hpc_driver},
-				kill_on_error	=> 0
+				kill_on_error	=> 0,
+				extra_args	=> [$hpc_group]
 				);
 
 			$run_id = submit_job(
@@ -566,7 +570,8 @@ sub main {
 		dependencies	=> join(':', @all_jobs),
 		max_time	=> $parameters->{rna_seqc}->{time},
 		mem		=> $parameters->{rna_seqc}->{mem},
-		hpc_driver	=> $args{hpc_driver}
+		hpc_driver	=> $args{hpc_driver},
+		extra_args	=> [$hpc_group]
 		);
 
 	$run_id = submit_job(
@@ -594,7 +599,8 @@ sub main {
 		dependencies	=> $run_id,
 		max_time	=> $parameters->{combine_results}->{time},
 		mem		=> $parameters->{combine_results}->{mem},
-		hpc_driver	=> $args{hpc_driver}
+		hpc_driver	=> $args{hpc_driver},
+		extra_args	=> [$hpc_group]
 		);
 
 	$run_id = submit_job(
@@ -622,7 +628,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(

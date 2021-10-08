@@ -5,6 +5,7 @@ seq_type: exome # must be one of exome, targeted, rna or wgs
 is_ctdna: false # must be one of true or false
 seq_center: PMGC
 platform: Illumina
+hpc_group:
 # reference files
 ref_type: hg19
 reference: /cluster/tools/data/genomes/human/hg19/iGenomes/Sequence/WholeGenomeFasta/genome.fa

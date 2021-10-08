@@ -319,6 +319,9 @@ sub pon {
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{mutect}->{parameters};
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### RUN ###########################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
@@ -406,7 +409,8 @@ sub pon {
 					modules	=> [$mutect],
 					max_time	=> $parameters->{mutect}->{time},
 					mem		=> $parameters->{mutect}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -418,8 +422,7 @@ sub pon {
 					);
 
 				push @all_jobs, $run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping MuTect (artifact_detection) because this has already been completed!\n";
 				}
 
@@ -449,7 +452,8 @@ sub pon {
 					dependencies	=> $run_id,
 					max_time	=> $parameters->{filter}->{time},
 					mem		=> $parameters->{filter}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -461,8 +465,7 @@ sub pon {
 					);
 
 				push @all_jobs, $run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping VCF-filter because this has already been completed!\n";
 				}
 
@@ -513,7 +516,8 @@ sub pon {
 			dependencies	=> join(':', @all_jobs),
 			max_time	=> $parameters->{create_pon}->{time},
 			mem		=> $parameters->{create_pon}->{mem},
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -525,8 +529,7 @@ sub pon {
 			);
 
 		push @all_jobs, $run_id;
-		}
-	else {
+		} else {
 		print $log "Skipping Generate PanelOfNormals because this has already been completed!\n";
 		}
 
@@ -551,7 +554,8 @@ sub pon {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -583,7 +587,8 @@ sub pon {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -743,6 +748,9 @@ sub main {
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{mutect}->{parameters};
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### RUN ###########################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
@@ -842,12 +850,7 @@ sub main {
 				next;
 				}
 
-			# this is a java-based command, so run a final check
-			$java_check = "\n" . check_java_output(
-				extra_cmd => "md5sum $output_stem.vcf > $output_stem.vcf.md5"
-				);
-
-			$mutect_command .= "\n$java_check";
+			$mutect_command .= "\num $output_stem.vcf > $output_stem.vcf.md5";
 
 			# check if this should be run
 			if ('Y' eq missing_file($output_stem . '.vcf.md5')) {
@@ -862,7 +865,8 @@ sub main {
 					modules	=> [$mutect],
 					max_time	=> $parameters->{mutect}->{time},
 					mem		=> $parameters->{mutect}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -875,8 +879,7 @@ sub main {
 
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping MuTect because this has already been completed!\n";
 				}
 
@@ -908,7 +911,8 @@ sub main {
 					dependencies	=> $run_id,
 					max_time	=> $parameters->{filter}->{time},
 					mem		=> $parameters->{filter}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -921,8 +925,7 @@ sub main {
 
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping VCF-filter because this has already been completed!\n";
 				}
 
@@ -998,7 +1001,8 @@ sub main {
 					cpus_per_task	=> 4,
 					max_time        => $tool_data->{annotate}->{time},
 					mem             => $tool_data->{annotate}->{mem},
-					hpc_driver      => $args{hpc_driver}
+					hpc_driver      => $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -1011,8 +1015,7 @@ sub main {
 
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping vcf2maf because this has already been completed!\n";
 				}
 
@@ -1051,7 +1054,8 @@ sub main {
 					dependencies	=> join(':', @patient_jobs),
 					mem		=> '256M',
 					hpc_driver	=> $args{hpc_driver},
-					kill_on_error	=> 0
+					kill_on_error	=> 0,
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -1085,7 +1089,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '4G',
 			max_time	=> '24:00:00',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -1116,7 +1121,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(

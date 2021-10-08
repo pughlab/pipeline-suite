@@ -320,6 +320,9 @@ sub pon {
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{strelka}->{parameters};
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### RUN ###########################################################################################
 	my ($run_script, $run_id, $link);
 	my (@all_pon_jobs, @pon_vcfs);
@@ -432,7 +435,8 @@ sub pon {
 					modules	=> [$strelka],
 					max_time	=> $parameters->{strelka}->{time},
 					mem		=> $parameters->{strelka}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -445,8 +449,7 @@ sub pon {
 
 				push @{$patient_jobs{$patient}}, $run_id;
 				push @all_pon_jobs, $run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping Strelka (germline) because this has already been completed!\n";
 				}
 
@@ -480,7 +483,8 @@ sub pon {
 					dependencies	=> $run_id,
 					max_time	=> $parameters->{filter}->{time},
 					mem		=> $parameters->{filter}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -494,8 +498,7 @@ sub pon {
 				push @{$patient_jobs{$patient}}, $run_id;
 				push @all_pon_jobs, $run_id;
 
-				}
-			else {
+				} else {
 				print $log "Skipping VCF-Filter (germline) because this has already been completed!\n";
 				}
 
@@ -534,7 +537,8 @@ sub pon {
 					dependencies	=> join(':', @{$patient_jobs{$patient}}),
 					mem		=> '256M',
 					hpc_driver	=> $args{hpc_driver},
-					kill_on_error	=> 0
+					kill_on_error	=> 0,
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -573,9 +577,7 @@ sub pon {
 
 	symlink($pon, $final_pon_link);
 
-	$pon_command .= "\n" . check_java_output(
-		extra_cmd => "  md5sum $pon > $pon.md5"
-		);
+	$pon_command .= "\nmd5sum $pon > $pon.md5";
 
 	$run_script = write_script(
 		log_dir	=> $log_directory,
@@ -618,7 +620,8 @@ sub pon {
 			dependencies	=> join(':', @all_pon_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -766,6 +769,9 @@ sub main {
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{strelka}->{parameters};
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### RUN ###########################################################################################
 	my ($run_script, $run_id, $link, $should_run_final);
 	my (@all_jobs);
@@ -884,7 +890,8 @@ sub main {
 					modules	=> [$manta],
 					max_time	=> $parameters->{manta}->{time},
 					mem		=> $parameters->{manta}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$manta_run_id = submit_job(
@@ -896,8 +903,7 @@ sub main {
 					);
 
 				push @{$patient_jobs{$patient}}, $manta_run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping MANTA because this has already been completed!\n";
 				}
 
@@ -1013,7 +1019,8 @@ sub main {
 					dependencies	=> $depends,
 					max_time	=> $parameters->{strelka}->{time},
 					mem		=> $parameters->{strelka}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$strelka_run_id = submit_job(
@@ -1025,8 +1032,7 @@ sub main {
 					);
 
 				push @{$patient_jobs{$patient}}, $strelka_run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping Strelka (somatic) because this has already been completed!\n";
 				}
 
@@ -1046,7 +1052,8 @@ sub main {
 					dependencies	=> join(':', $depends, $strelka_run_id),
 					max_time	=> $parameters->{filter}->{time},
 					mem		=> $parameters->{filter}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$filter_run_id = submit_job(
@@ -1058,8 +1065,7 @@ sub main {
 					);
 
 				push @{$patient_jobs{$patient}}, $filter_run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping VCF-Filter (somatic) because this has already been completed!\n";
 				}
 
@@ -1131,7 +1137,8 @@ sub main {
 					cpus_per_task	=> 4,
 					max_time	=> $tool_data->{annotate}->{time},
 					mem		=> $tool_data->{annotate}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$annotate_run_id = submit_job(
@@ -1143,8 +1150,7 @@ sub main {
 					);
 
 				push @{$patient_jobs{$patient}}, $annotate_run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping vcf2maf because this has already been completed!\n";
 				}
 
@@ -1180,7 +1186,8 @@ sub main {
 					dependencies	=> join(':', @{$patient_jobs{$patient}}),
 					mem		=> '256M',
 					hpc_driver	=> $args{hpc_driver},
-					kill_on_error	=> 0
+					kill_on_error	=> 0,
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -1214,7 +1221,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '4G',
 			max_time	=> '24:00:00',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -1245,7 +1253,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(

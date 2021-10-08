@@ -289,6 +289,9 @@ sub main {
 		"export MAVIS_SCHEDULER=" . uc($args{hpc_driver})
 		);
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### RUN ###########################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
@@ -479,7 +482,8 @@ sub main {
 				name	=> 'run_format_manta_svs_for_mavis_' . $patient,
 				cmd	=> $format_command,
 				modules	=> ['python/2.7'],
-				hpc_driver	=> $args{hpc_driver}
+				hpc_driver	=> $args{hpc_driver},
+				extra_args	=> [$hpc_group]
 				);
 
 			$run_id = submit_job(
@@ -492,8 +496,7 @@ sub main {
 
 			push @format_jobs, $run_id;
 			push @all_jobs, $run_id;
-			}
-		else {
+			} else {
 			print $log "Skipping format manta step because this has already been completed!\n";
 			}
 
@@ -592,7 +595,8 @@ sub main {
 				max_time	=> '12:00:00',
 				mem		=> $memory,
 				hpc_driver	=> $args{hpc_driver},
-				kill_on_error	=> 0
+				kill_on_error	=> 0,
+				extra_args	=> [$hpc_group]
 				);
 
 			$run_id = submit_job(
@@ -604,8 +608,7 @@ sub main {
 				);
 
 			push @all_jobs, $run_id;
-			}
-		else {
+			} else {
 			print $log "Skipping MAVIS because this has already been completed!\n";
 			}
 
@@ -636,7 +639,8 @@ sub main {
 				dependencies	=> $run_id,
 				mem		=> '256M',
 				hpc_driver	=> $args{hpc_driver},
-				kill_on_error	=> 0
+				kill_on_error	=> 0,
+				extra_args	=> [$hpc_group]
 				);
 
 			$run_id = submit_job(
@@ -670,7 +674,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '6G',
 			max_time	=> '24:00:00',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -700,7 +705,8 @@ sub main {
 			cmd	=> $collect_metrics,
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(

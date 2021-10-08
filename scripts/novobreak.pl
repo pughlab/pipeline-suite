@@ -312,6 +312,9 @@ sub main {
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{novobreak}->{parameters};
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### RUN ###########################################################################################
 	my ($run_script, $run_id, $link, $chr_file, $cleanup_run_id, $ref_dir);
 	my (@all_jobs);
@@ -398,7 +401,8 @@ sub main {
 					max_time	=> $parameters->{novobreak}->{time},
 					mem		=> $parameters->{novobreak}->{mem},
 					cpus_per_task	=> $parameters->{novobreak}->{n_cpu},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -441,7 +445,8 @@ sub main {
 					max_time	=> $parameters->{process}->{time},
 					mem		=> $parameters->{process}->{mem},
 					cpus_per_task	=> $parameters->{process}->{n_cpu},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -481,7 +486,8 @@ sub main {
 					dependencies	=> $run_id,
 					max_time	=> $parameters->{filter}->{time},
 					mem		=> $parameters->{filter}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -532,7 +538,8 @@ sub main {
 						dependencies	=> join(':', @patient_jobs),
 						mem		=> '256M',
 						hpc_driver	=> $args{hpc_driver},
-						kill_on_error	=> 0
+						kill_on_error	=> 0,
+						extra_args	=> [$hpc_group]
 						);
 
 					$cleanup_run_id = submit_job(
@@ -569,7 +576,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(

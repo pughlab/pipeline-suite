@@ -354,6 +354,9 @@ sub pon {
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{delly}->{parameters};
 
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### RUN ###########################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
@@ -420,7 +423,8 @@ sub pon {
 					modules	=> [$delly],
 					max_time	=> $parameters->{call}->{time},
 					mem		=> $parameters->{call}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -432,8 +436,7 @@ sub pon {
 					);
 
 				push @part1_jobs, $run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping Delly (germline) because this has already been completed!\n";
 				}
 
@@ -477,7 +480,8 @@ sub pon {
 			dependencies	=> join(':', @part1_jobs),
 			max_time	=> $parameters->{merge}->{time},
 			mem		=> $parameters->{merge}->{mem},
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$pon_run_id = submit_job(
@@ -530,7 +534,8 @@ sub pon {
 					dependencies	=> $pon_run_id,
 					max_time	=> $parameters->{genotype}->{time},
 					mem		=> $parameters->{genotype}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -542,8 +547,7 @@ sub pon {
 					);
 
 				push @part2_jobs, $run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping Delly Genotype (germline) because this has already been completed!\n";
 				}
 
@@ -573,7 +577,8 @@ sub pon {
 			modules		=> [$delly, $samtools],
 			max_time	=> $parameters->{filter}->{time},
 			mem		=> $parameters->{filter}->{mem},
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -609,7 +614,8 @@ sub pon {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -641,7 +647,8 @@ sub pon {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
@@ -895,7 +902,8 @@ sub main {
 				modules	=> [$delly],
 				max_time	=> $parameters->{call}->{time},
 				mem		=> $parameters->{call}->{mem},
-				hpc_driver	=> $args{hpc_driver}
+				hpc_driver	=> $args{hpc_driver},
+				extra_args	=> [$hpc_group]
 				);
 
 			$run_id = submit_job(
@@ -908,8 +916,7 @@ sub main {
 
 			push @part1_jobs, $run_id;
 			push @{$patient_jobs{$patient}}, $run_id;
-			}
-		else {
+			} else {
 			print $log "Skipping Delly (somatic) because this has already been completed!\n";
 			}
 
@@ -943,7 +950,8 @@ sub main {
 					dependencies	=> $run_id,
 					max_time	=> $parameters->{filter}->{time},
 					mem		=> $parameters->{filter}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -956,8 +964,7 @@ sub main {
 
 				push @part1_jobs, $run_id;
 				push @{$patient_jobs{$patient}}, $run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping Delly filter (somatic) because this has already been completed!\n";
 				}
 
@@ -996,7 +1003,8 @@ sub main {
 			dependencies	=> join(':', @part1_jobs),
 			max_time	=> $parameters->{merge}->{time},
 			mem		=> $parameters->{merge}->{mem},
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$merge_run_id = submit_job(
@@ -1008,8 +1016,7 @@ sub main {
 			);
 
 		push @all_jobs, $merge_run_id;
-		}
-	else {
+		} else {
 		print $log "Skipping Delly merge (somatic) because this has already been completed!\n";
 		}
 
@@ -1084,7 +1091,8 @@ sub main {
 					dependencies	=> $merge_run_id,
 					max_time	=> $parameters->{genotype}->{time},
 					mem		=> $parameters->{genotype}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -1097,8 +1105,7 @@ sub main {
 
 				push @part2_jobs, $run_id;
 				push @{$patient_jobs{$patient}}, $run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping Delly Genotype (somatic) because this has already been completed!\n";
 				}
 
@@ -1130,7 +1137,8 @@ sub main {
 			modules		=> [$delly, $samtools],
 			max_time	=> $parameters->{merge}->{time},
 			mem		=> $parameters->{merge}->{mem},
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$merge_run_id = submit_job(
@@ -1142,8 +1150,7 @@ sub main {
 			);
 
 		push @all_jobs, $merge_run_id;
-		}
-	else {
+		} else {
 		print $log "Skipping final merge because this has already been completed!\n";
 		}
 
@@ -1210,7 +1217,8 @@ sub main {
 					modules		=> [$delly, $samtools],
 					max_time	=> $parameters->{filter}->{time},
 					mem		=> $parameters->{filter}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -1249,7 +1257,8 @@ sub main {
 				dependencies	=> join(':', @{$patient_jobs{$patient}}),
 				mem		=> '256M',
 				hpc_driver	=> $args{hpc_driver},
-				kill_on_error	=> 0
+				kill_on_error	=> 0,
+				extra_args	=> [$hpc_group]
 				);
 
 			$run_id = submit_job(
@@ -1282,7 +1291,8 @@ sub main {
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '256M',
 			hpc_driver	=> $args{hpc_driver},
-			kill_on_error	=> 0
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
