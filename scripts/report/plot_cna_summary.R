@@ -40,6 +40,10 @@ save.session.profile <- function(file.name) {
 # function to trim sample IDs
 simplify.ids <- function(x) {
 	match <- TRUE;
+	if (length(x) == 1) {
+		match <- FALSE;
+		new.ids <- x;
+		}
 	index <- 1;
 	while (match) {
 		if (length(unique(sapply(x,function(i) { unlist(strsplit(i,''))[index] } ))) == 1) {
@@ -107,6 +111,11 @@ if (!any(all.samples %in% colnames(input.data))) {
 	cna.data <- input.data[,all.samples];
 	}
 
+if (length(all.samples) == 1) {
+	cna.data <- data.frame(cbind(cna.data, cna.data));
+	colnames(cna.data) <- rep(all.samples,2);
+	}
+
 ### PLOT DATA ######################################################################################
 # grab some parameters
 axis.cex <- if (ncol(cna.data) <= 30) { 1
@@ -144,7 +153,9 @@ create.heatmap(
 	covariates.top.grid.col = list(col = 'black', lwd = 1),
 	covariates.top.col.lines = chr.breaks,
 	inside.legend = list(fun = covariate.legends, x = 1.02, y = 1),
-	yaxis.lab = gsub('\\.','-', simplify.ids(colnames(cna.data))),
+	yaxis.lab = if (length(all.samples) == 1) { all.samples } else {
+		gsub('\\.','-', simplify.ids(colnames(cna.data))) },
+	yat = if (length(all.samples) == 1) { 1.5 } else { TRUE },
 	xaxis.lab = rep('',nrow(cna.data)),
 	yaxis.cex = axis.cex,
 	xaxis.tck = 0,

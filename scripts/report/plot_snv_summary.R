@@ -244,26 +244,35 @@ if (length(absent.smps) > 0) { plot.data[,absent.smps] <- NA; }
 
 # get per-gene sample counts
 plot.data <- plot.data[,c('Hugo_Symbol', 'Chromosome', all.samples)];
-plot.data$Count <- apply(plot.data[,all.samples],1,function(i) { length(i[which(i < 9)]) } );
-plot.data$Priority <- apply(plot.data[,all.samples],1,function(i) { sum(i[which(i < 9)]) } )/plot.data$Count;
-plot.data <- plot.data[order(-plot.data$Count, plot.data$Priority),];
-
-if (all(is.na(plot.data$Priority))) {
-	plot.data$Count <- apply(plot.data[,all.samples],1,function(i) { length(i[!is.na(i)]) } );
-	plot.data$Priority <- apply(plot.data[,all.samples],1,function(i) { sum(i[!is.na(i)]) } )/plot.data$Count;
+if (length(all.samples) > 1) {
+	plot.data$Count <- apply(plot.data[,all.samples],1,function(i) { length(i[which(i < 9)]) } );
+	plot.data$Priority <- apply(
+		plot.data[,all.samples],1,function(i) { sum(i[which(i < 9)]) } )/plot.data$Count;
 	plot.data <- plot.data[order(-plot.data$Count, plot.data$Priority),];
+
+	if (all(is.na(plot.data$Priority))) {
+		plot.data$Count <- apply(plot.data[,all.samples],1,function(i) { length(i[!is.na(i)]) } );
+		plot.data$Priority <- 
+			apply(plot.data[,all.samples],1,function(i) { sum(i[!is.na(i)]) } )/plot.data$Count;
+		plot.data <- plot.data[order(-plot.data$Count, plot.data$Priority),];
+		}
+
+	# order samples by recurrence for prettier heatmap
+	heatmap.data <- t(plot.data[,all.samples]);
+	heatmap.data[!is.na(heatmap.data)] <- 1;
+	heatmap.data <- heatmap.data[do.call(order, transform(heatmap.data)),];
+
+	sample.order <- rownames(heatmap.data);
+
+	# remove non-recurrently mutated genes
+	plot.data <- plot.data[which(plot.data$Count > 1),];
+
+	recurrence.summary <- as.data.frame(table(plot.data[which(plot.data$Count > 1),]$Count));
+	colnames(recurrence.summary) <- c('N.samples','N.genes');
+	} else {
+	plot.data$Count <- 1;
+	sample.order <- all.samples;
 	}
-
-# order samples by recurrence for prettier heatmap
-heatmap.data <- t(plot.data[,all.samples]);
-heatmap.data[!is.na(heatmap.data)] <- 1;
-heatmap.data <- heatmap.data[do.call(order, transform(heatmap.data)),];
-
-# remove non-recurrently mutated genes
-plot.data <- plot.data[which(plot.data$Count > 1),];
-
-recurrence.summary <- as.data.frame(table(plot.data[which(plot.data$Count > 1),]$Count));
-colnames(recurrence.summary) <- c('N.samples','N.genes');
 
 # remove known problem (passenger) genes
 genes.to.exclude <- c('TTN','MUC17','OBSCN','MUC16','SYNE2','NEB','SYNE1');
@@ -350,11 +359,17 @@ axis.cex <- if (length(all.samples) <= 30) { 1
 	} else { 0 };
 
 # create heatmap for recurrent genes (ordered by recurrence)
+if (length(sample.order) == 1) {
+	plot.data$Sample2 <- plot.data[,sample.order];
+	sample.order <- c(sample.order, 'Sample2');
+	}
+
 create.heatmap(
-	plot.data[,rownames(heatmap.data)],
+	plot.data[,sample.order],
 	cluster.dimensions = 'none',
 	same.as.matrix = TRUE,
-	xaxis.lab = rownames(heatmap.data),
+	xaxis.lab = if (length(all.samples) == 1) { all.samples } else { sample.order },
+	xat = if (length(all.samples) == 1) { 1.5 } else { TRUE },
 	yaxis.lab = plot.data$Label,
 	xaxis.cex = axis.cex,
 	yaxis.cex = 1,
@@ -369,8 +384,8 @@ create.heatmap(
 	col.colour = 'grey80',
 	row.lwd = if (length(all.samples) < 30) { 3 } else { 1 },
 	col.lwd = if (length(all.samples) < 30) { 3 } else { 1 },
-	grid.col = TRUE,
-	force.grid.col = TRUE,
+	grid.col = (length(all.samples) > 1),
+	force.grid.col = (length(all.samples) > 1),
 	print.colour.key = FALSE,
 	fill.colour = 'white',
 	at = seq(0,length(variant.colours),1),
@@ -387,7 +402,8 @@ create.heatmap(
 	);
 
 # create plot for mutation rates
-tmb <- if (!is.null(callable.bases)) { 'SNVsPerMb' } else { 'Total'; }
+tmb <- if ( (!is.null(callable.bases)) & (all(sample.counts$Callable > 0)) ) { 'SNVsPerMb'
+	} else { 'Total'; }
 	
 ylim <- c(floor(min(log10(sample.counts[,tmb]))), ceiling(max(log10(sample.counts[,tmb]))));
 yat <- seq(ylim[1], ylim[2], 1);
@@ -396,7 +412,7 @@ sample.counts$Rate <- log10(sample.counts[,tmb]);
 
 if (ylim[2] == 1) {
 	ylim <- c(0, ceiling(max(sample.counts[,tmb])));
-	yat <- if (ylim[2] > 5) { seq(0,ylim[2],2); } else { seq(0,ylim[2],1); }
+	yat <- if (ylim[2] > 5) { seq(0,ylim[2]+1,2); } else { seq(0,ylim[2]+1,1); }
 	yaxis.labels <- yat;
 	sample.counts$Rate <- sample.counts[,tmb];
 	}
@@ -410,13 +426,14 @@ rate.plot <- create.scatterplot(
 	yaxis.tck = c(0.5,0),
 	yaxis.fontface = 'plain',
 	axes.lwd = 1,
-	ylab.label = if (!is.null(callable.bases)) { 'SNVs/Mbp' } else { 'Total SNVs' },
+	ylab.label = if ('SNVsPerMb' == tmb) { 'SNVs/Mbp' } else { 'Total SNVs' },
 	ylab.cex = 1.2,
 	ylimits = ylim,
 	yat = yat,
 	yaxis.lab = yaxis.labels,
 	xlab.label = NULL,
-	xlimits = c(0.5,nrow(sample.counts)+0.5)
+	xlimits = c(0.5,nrow(sample.counts)+0.5),
+	xat = seq(0,nrow(sample.counts),1)
 	);
 
 # create plot for MSI (if available)
@@ -502,7 +519,7 @@ basechange.plot <- create.barplot(
 	stack = TRUE,
 	col = rev(basechange.colours),
 	xaxis.lab = levels(basechange.summary$Tumor_Sample_Barcode),
-	xaxis.rot = 90,
+	xaxis.rot = if (length(all.samples) == 1) { 0 } else { 90 },
 	xlimits = c(0.5, length(all.samples)+0.5),
 	xat = seq(1,length(all.samples)),
 	yaxis.tck = c(0.5,0),
@@ -679,15 +696,18 @@ if (nrow(plot.data) == 0) {
 
 	write("\\pagebreak\n", file = 'somatic_snv_summary.tex', append = TRUE);
 
-	print(
-		xtable(
-			rev(recurrence.summary)[1:(min(nrow(recurrence.summary),10)),],
-			caption = 'Summary of recurrently-mutated genes across the cohort. Table shows number of genes with functionally relevant mutations in N samples.'
-			),
-		file = 'somatic_snv_summary.tex',
-		include.rownames = FALSE,
-		append = TRUE
-		);
+	if (exists('recurrence.summary')) {
+		caption <- 'Summary of recurrently-mutated genes across the cohort. Table shows number of genes with functionally relevant mutations in N samples.';
+		print(
+			xtable(
+				rev(recurrence.summary)[1:(min(nrow(recurrence.summary),10)),],
+				caption = caption 
+				),
+			file = 'somatic_snv_summary.tex',
+			include.rownames = FALSE,
+			append = TRUE
+			);
+		}
 
 	write("\n\\begin{figure}[h!]", file = 'somatic_snv_summary.tex', append = TRUE);
 	write("\\begin{center}", file = 'somatic_snv_summary.tex', append = TRUE);

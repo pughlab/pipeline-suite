@@ -38,6 +38,10 @@ save.session.profile <- function(file.name) {
 # function to trim sample IDs
 simplify.ids <- function(x) {
 	match <- TRUE;
+	if (length(x) == 1) {
+		match <- FALSE;
+		new.ids <- x;
+		}
 	index <- 1;
 	while (match) {
 		if (length(unique(sapply(x,function(i) { unlist(strsplit(i,''))[index] } ))) == 1) {
@@ -155,10 +159,11 @@ for (tool in tool.list) {
 	}
 
 # create a legend (up to max tools used)
+overlap.colour.scheme <- c(default.colours(6,'seq.greenblue'),'black');
 overlap.legend <- legend.grob(
 	legends = list(
 		legend = list(
-			colours = rev(default.colours(tool.count,'seq.greenblue')),
+			colours = rev(overlap.colour.scheme[1:tool.count]),
 			labels = rev(as.character(seq(1:tool.count))),
 			title = 'Tool Count'
 			)
@@ -173,7 +178,7 @@ plot.objects[['overlap']] <- create.barplot(
 	plot.data$overlap,
 	groups = plot.data$overlap$Overlap,
 	stack = TRUE,
-	col = default.colours(tool.count,'seq.greenblue'),
+	col = overlap.colour.scheme[1:tool.count], 
 	ylab.label = '% of Total',
 	xlab.label = NULL,
 	ylimits = c(0,100),
