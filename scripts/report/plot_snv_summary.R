@@ -198,12 +198,24 @@ mutation.data$Basechange <- paste0(mutation.data$Reference_Allele, '>', mutation
 if (any(input.data$Variant_Type %in% c('INS','DEL'))) {
 	mutation.data[which(input.data$Variant_Type %in% c('DEL', 'INS')),]$Basechange <- 'indel';
 	}
-mutation.data[which(mutation.data$Basechange == 'T>G'),]$Basechange <- 'A>C';
-mutation.data[which(mutation.data$Basechange == 'T>C'),]$Basechange <- 'A>G';
-mutation.data[which(mutation.data$Basechange == 'T>A'),]$Basechange <- 'A>T';
-mutation.data[which(mutation.data$Basechange == 'C>T'),]$Basechange <- 'G>A';
-mutation.data[which(mutation.data$Basechange == 'C>G'),]$Basechange <- 'G>C';
-mutation.data[which(mutation.data$Basechange == 'C>A'),]$Basechange <- 'G>T';
+if (any(mutation.data$Basechange == 'T>G')) {
+	mutation.data[which(mutation.data$Basechange == 'T>G'),]$Basechange <- 'A>C';
+	}
+if (any(mutation.data$Basechange == 'T>C')) {
+	mutation.data[which(mutation.data$Basechange == 'T>C'),]$Basechange <- 'A>G';
+	}
+if (any(mutation.data$Basechange == 'T>A')) {
+	mutation.data[which(mutation.data$Basechange == 'T>A'),]$Basechange <- 'A>T';
+	}
+if (any(mutation.data$Basechange == 'C>T')) {
+	mutation.data[which(mutation.data$Basechange == 'C>T'),]$Basechange <- 'G>A';
+	}
+if (any(mutation.data$Basechange == 'C>G')) {
+	mutation.data[which(mutation.data$Basechange == 'C>G'),]$Basechange <- 'G>C';
+	}
+if (any(mutation.data$Basechange == 'C>A')) {
+	mutation.data[which(mutation.data$Basechange == 'C>A'),]$Basechange <- 'G>T';
+	}
 mutation.data$Basechange <- factor(
 	mutation.data$Basechange,
 	levels = rev(c('A>C','A>G','A>T','G>A','G>C','G>T','indel'))

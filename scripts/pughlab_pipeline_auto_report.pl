@@ -853,7 +853,7 @@ sub main {
 				}
 
 			symlink($cnv_data, join('/', $data_directory, 'ichor_cna_ratio_matrix.tsv'));
-			symlink($pga_data, join('/', $data_directory, 'ichor_cna_estimates.tsv'));
+			symlink($metric_data, join('/', $data_directory, 'ichor_cna_estimates.tsv'));
 
 			# plot SV summary
 			my $cnv_plot_command = join(' ',
