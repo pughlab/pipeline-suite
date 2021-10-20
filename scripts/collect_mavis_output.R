@@ -47,6 +47,7 @@ parser <- ArgumentParser();
 parser$add_argument('-d', '--directory', type = 'character', help = 'path to data directory');
 parser$add_argument('-p', '--project', type = 'character', help = 'project name');
 parser$add_argument('-t', '--targets', type = 'character', help = 'path to target regions', default = NULL);
+parser$add_argument('-f', '--find_drawings', type = 'boolean', help = 'find and extract key drawings?', default = FALSE);
 
 arguments <- parser$parse_args();
 
@@ -55,267 +56,302 @@ date <- Sys.Date();
 
 setwd(arguments$directory);
 
-### MAIN ###########################################################################################
-# find results files
-mavis.files <- list.files(pattern = 'mavis_summary_all', recursive = TRUE);
+### COLLECT KEY DRAWINGS ###########################################################################
+if (arguments$find_drawings) {
 
-# read them in
-sv.list <- list();
+	# move to input directory (should be patient directory)
+	input.dir <- getwd();
+	output.dir <- paste0(input.dir, '/key_drawings');
 
-for (file in mavis.files) {
-	# extract sample ID
-	smp <- unlist(strsplit(file, '\\/'))[1];
-	# read in and store data in list
-	sv.list[[smp]] <- read.delim(file, as.is = TRUE);
-	}
+	# create new folder
+	dir.create(output.dir);
 
-# reshape/format data
-sv.data.full <- join_all(
-	sv.list,
-	type = 'full',
-	match = 'first'
-	);
-colnames(sv.data.full)[which(colnames(sv.data.full) == 'X.tracking_id')] <- 'tracking_id';
+	# find all svg files
+	all.drawings <- list.files(path = input.dir, pattern = '.svg$', recursive = TRUE, full.names = TRUE);
 
-key.fields <- c('event_type','gene1_aliases','gene2_aliases','fusion_splicing_pattern','break1_chromosome','break1_position_start','break1_position_end','break2_chromosome','break2_position_start','break2_position_end','break1_split_reads','break2_split_reads','spanning_reads','flanking_pairs','linking_split_reads','library','tracking_id','tools');
+	print(paste('Found', length(all.drawings), 'svg files.'));
 
-smp.fields <- sort(colnames(sv.data.full)[grep('_genome|_transcriptome',colnames(sv.data.full))]);
-smp.fields.names <- sapply(smp.fields, function(i) { unlist(strsplit(i,'_'))[1] } );
+	# filter drawings (remove any intergenic ones)
+	key.drawings <- all.drawings[!grepl('-NA_|_NA.svg', all.drawings)];
 
-sv.data <- sv.data.full[,c(key.fields, smp.fields)];
+	print(paste('  Copying', length(key.drawings), 'gene-gene .svg files to', output.dir, '...'));
 
-# fill in missing tools (custom conversion scripts)
-new.tools <- apply(
-	sv.data[,c('tracking_id','tools')],
-	1,
-	function(i) {
+	setwd(output.dir);
 
-		ids <- unlist(strsplit(as.character(i[1]),';'));
-		tools <- setdiff(unlist(strsplit(as.character(i[2]),';')),'');
-
-		if (any(grepl('pindel', ids))) { tools <- c(tools,'pindel'); }
-		if (any(grepl('svict', ids))) { tools <- c(tools,'svict'); }
-		if (any(grepl('novobreak', ids))) { tools <- c(tools,'novobreak'); }
-		if (any(grepl('fusioncatcher', ids))) { tools <- c(tools,'fusioncatcher'); }
-
-		toolset <- paste(tools, collapse = ';');
-		if (length(tools) > 0) { 
-			return(toolset);
-			} else {
-			return('');
-			}
+	for (i in key.drawings) {
+		cp.cmd <- paste0('cp ', i, ' .');
+		system(cp.cmd);
 		}
-	);
 
-sv.data$tools <- new.tools;
+	} else {
 
-# save combined/formatted data to file
-write.table(
-	sv.data,
-	file = generate.filename(arguments$project, 'mavis_output','tsv'),
-	row.names = FALSE,
-	col.names = TRUE,
-	sep = '\t'
-	);
+### MAIN ###########################################################################################
+	# find results files
+	mavis.files <- list.files(pattern = 'mavis_summary_all', recursive = TRUE);
 
-# if target regions were provided
-if (!is.null(arguments$targets)) {
+	# read them in
+	sv.list <- list();
 
-	# get target regions
-	target_bed <- read.delim(arguments$targets, header = FALSE, comment.char = '#');
-	colnames(target_bed)[1:3] <- c('Chromosome','Start','End');
+	for (file in mavis.files) {
+		# extract sample ID
+		smp <- unlist(strsplit(file, '\\/'))[1];
+		# read in and store data in list
+		sv.list[[smp]] <- read.delim(file, as.is = TRUE);
+		}
 
-	# create genomic ranges object for target regions
-	target.gr <- makeGRangesFromDataFrame(target_bed, starts.in.df.are.0based = TRUE);
+	# reshape/format data
+	sv.data.full <- join_all(
+		sv.list,
+		type = 'full',
+		match = 'first'
+		);
+	colnames(sv.data.full)[which(colnames(sv.data.full) == 'X.tracking_id')] <- 'tracking_id';
 
-	# create genomic ranges object for each breakpoint
-	first_bp <- data.frame(
-		Chromosome = paste0('chr',sv.data$break1_chromosome),
-		Start = sv.data$break1_position_start,
-		End = sv.data$break1_position_end
+	key.fields <- c('event_type','gene1_aliases','gene2_aliases','fusion_splicing_pattern','break1_chromosome','break1_position_start','break1_position_end','break2_chromosome','break2_position_start','break2_position_end','break1_split_reads','break2_split_reads','spanning_reads','flanking_pairs','linking_split_reads','library','tracking_id','tools');
+
+	smp.fields <- sort(colnames(sv.data.full)[grep('_genome|_transcriptome',colnames(sv.data.full))]);
+	smp.fields.names <- sapply(smp.fields, function(i) { unlist(strsplit(i,'_'))[1] } );
+
+	sv.data <- sv.data.full[,c(key.fields, smp.fields)];
+
+	# fill in missing tools (custom conversion scripts)
+	new.tools <- apply(
+		sv.data[,c('tracking_id','tools')],
+		1,
+		function(i) {
+
+			ids <- unlist(strsplit(as.character(i[1]),';'));
+			tools <- setdiff(unlist(strsplit(as.character(i[2]),';')),'');
+
+			if (any(grepl('pindel', ids))) { tools <- c(tools,'pindel'); }
+			if (any(grepl('svict', ids))) { tools <- c(tools,'svict'); }
+			if (any(grepl('novobreak', ids))) { tools <- c(tools,'novobreak'); }
+			if (any(grepl('fusioncatcher', ids))) { tools <- c(tools,'fusioncatcher'); }
+
+			toolset <- paste(tools, collapse = ';');
+			if (length(tools) > 0) { 
+				return(toolset);
+				} else {
+				return('');
+				}
+			}
 		);
 
-	second_bp <- data.frame(
-		Chromosome = paste0('chr',sv.data$break2_chromosome),
-		Start = sv.data$break2_position_start,
-		End = sv.data$break2_position_end
-		);
+	sv.data$tools <- new.tools;
 
-	bp1.gr <- makeGRangesFromDataFrame(first_bp, starts.in.df.are.0based = FALSE);
-	bp2.gr <- makeGRangesFromDataFrame(second_bp, starts.in.df.are.0based = FALSE);
-
-	# find overlaps
-	overlaps.p1 <- as.data.frame(findOverlaps(bp1.gr, target.gr));
-	overlaps.p2 <- as.data.frame(findOverlaps(bp2.gr, target.gr));
-
-	overlap.data <- merge(
-		overlaps.p1,
-		overlaps.p2,
-		by = 'queryHits',
-		suffixes = c('.1','.2'),
-		all = TRUE
-		);
-
-	# only keep entries for which both breakpoints are within target regions
-	to.remove <- which(is.na(overlap.data$subjectHits.1) | is.na(overlap.data$subjectHits.2));
-	keep.idx <- unique(overlap.data[-to.remove,]$queryHits);
-
-	# filter initial input
-	sv.data.filtered <- sv.data[keep.idx,];
-
-	# save filtered data
+	# save combined/formatted data to file
 	write.table(
-		sv.data.filtered,
-		file = generate.filename(arguments$project, 'mavis_output_filtered','tsv'),
+		sv.data,
+		file = generate.filename(arguments$project, 'mavis_output','tsv'),
 		row.names = FALSE,
 		col.names = TRUE,
 		sep = '\t'
 		);
 
-	} else { 
-	sv.data.filtered <- sv.data;
-	}
+	# if target regions were provided
+	if (!is.null(arguments$targets)) {
 
-# format for cbioportal (not complete!)
-tmp <- sv.data.filtered[,key.fields];
-tmp$Fusion <- paste0(tmp$gene1_aliases, '--', tmp$gene2_aliases);
-tmp <- tmp[!grepl('None',tmp$Fusion),];
+		# get target regions
+		target_bed <- read.delim(arguments$targets, header = FALSE, comment.char = '#');
+		colnames(target_bed)[1:3] <- c('Chromosome','Start','End');
 
-# add in a length filter for pindel (to remove short indels)
-#tmp$Length <- apply(
-#	tmp[,grepl('position',colnames(tmp))],
-#	1,
-#	function(i) { max(i) - min(i) }
-#	);
-#tmp[which(tmp$break1_chromosome != tmp$break2_chromosome),]$Length <- NA;
+		# create genomic ranges object for target regions
+		target.gr <- makeGRangesFromDataFrame(target_bed, starts.in.df.are.0based = TRUE);
 
-#short.idx <- which(sv.lengths < 30 & (tmp$break1_chromosome == tmp$break2_chromosome));
+		# create genomic ranges object for each breakpoint
+		first_bp <- data.frame(
+			Chromosome = paste0('chr',sv.data$break1_chromosome),
+			Start = sv.data$break1_position_start,
+			End = sv.data$break1_position_end
+			);
 
-tmp$Status <- 'unknown';
-for (i in 1:nrow(tmp)) {
-	smp <- gsub('-','\\.',tmp[i,]$library);
-	titles <- smp.fields[grepl(smp, smp.fields.names)];
-	id <- tmp[i,]$tracking_id;
-	raw.calls <- sv.data[which(sv.data$tracking_id == tmp[i,]$tracking_id),];
-	tmp[i,]$Status <- if (any(grepl('germline', raw.calls[,titles]))) { 'germline'; } else { 'somatic'; }
-	}
+		second_bp <- data.frame(
+			Chromosome = paste0('chr',sv.data$break2_chromosome),
+			Start = sv.data$break2_position_start,
+			End = sv.data$break2_position_end
+			);
 
-tmp$Frame <- 'unknown';
-tmp[which(tmp$fusion_splicing_pattern == 'normal'),]$Frame <- 'inframe';
-tmp[which(!tmp$fusion_splicing_pattern %in% c('normal','None')),]$Frame <- 'frameshift';
+		bp1.gr <- makeGRangesFromDataFrame(first_bp, starts.in.df.are.0based = FALSE);
+		bp2.gr <- makeGRangesFromDataFrame(second_bp, starts.in.df.are.0based = FALSE);
 
-tmp$Support <- NA;
-for (i in 1:nrow(tmp)) {
-	type <- if (grepl('rna', tmp[i,]$library)) { 'rna' } else { 'dna' }
-	tmp[i,]$Support <- type;
-	}
+		# find overlaps
+		overlaps.p1 <- as.data.frame(findOverlaps(bp1.gr, target.gr));
+		overlaps.p2 <- as.data.frame(findOverlaps(bp2.gr, target.gr));
 
-# aggregate to get unique entries
-unique.calls <- aggregate(
-	tmp$tools,
-	by = list(
-		gene1_aliases = tmp$gene1_aliases,
-		gene2_aliases = tmp$gene2_aliases,
-		library = tmp$library,
-		event_type = tmp$event_type,
-		Status = tmp$Status,
-		Fusion = tmp$Fusion,
-		Frame = tmp$Frame,
-		Support = tmp$Support
-		),
-	FUN = function(i) {
-		paste(c(unique(unlist(strsplit(as.character(i),';'))),'mavis'), collapse = ',')
+		overlap.data <- merge(
+			overlaps.p1,
+			overlaps.p2,
+			by = 'queryHits',
+			suffixes = c('.1','.2'),
+			all = TRUE
+			);
+
+		# only keep entries for which both breakpoints are within target regions
+		to.remove <- which(is.na(overlap.data$subjectHits.1) | is.na(overlap.data$subjectHits.2));
+		keep.idx <- unique(overlap.data[-to.remove,]$queryHits);
+
+		# filter initial input
+		sv.data.filtered <- sv.data[keep.idx,];
+
+		# save filtered data
+		write.table(
+			sv.data.filtered,
+			file = generate.filename(arguments$project, 'mavis_output_filtered','tsv'),
+			row.names = FALSE,
+			col.names = TRUE,
+			sep = '\t'
+			);
+
+		} else { 
+		sv.data.filtered <- sv.data;
 		}
-	);
 
-colnames(unique.calls)[which(colnames(unique.calls) == 'x')] <- 'Tool';
-unique.calls$Sample <- gsub('-wgs|-wxs|-rna','',unique.calls$library);
+	# format for cbioportal (not complete!)
+	tmp <- sv.data.filtered[,key.fields];
+	tmp$Fusion <- paste0(tmp$gene1_aliases, '--', tmp$gene2_aliases);
+	tmp <- tmp[!grepl('None',tmp$Fusion),];
 
-# format for cbioportal
-cbio.data <- NULL;
-dna.fusions <- NULL;
-if (nrow(unique.calls[which(unique.calls$Support == 'dna'),]) > 0) {
-	dna.fusions <- unique.calls[which(unique.calls$Support == 'dna'),];
+	# add in a length filter for pindel (to remove short indels)
+	#tmp$Length <- apply(
+	#	tmp[,grepl('position',colnames(tmp))],
+	#	1,
+	#	function(i) { max(i) - min(i) }
+	#	);
+	#tmp[which(tmp$break1_chromosome != tmp$break2_chromosome),]$Length <- NA;
 
-	cbio.data <- data.frame(
-		Hugo_Symbol = c(
-			dna.fusions$gene1_aliases,
-			dna.fusions$gene2_aliases
+	#short.idx <- which(sv.lengths < 30 & (tmp$break1_chromosome == tmp$break2_chromosome));
+
+	tmp$Status <- 'unknown';
+	for (i in 1:nrow(tmp)) {
+		smp <- gsub('-','\\.',tmp[i,]$library);
+		titles <- smp.fields[grepl(smp, smp.fields.names)];
+		id <- tmp[i,]$tracking_id;
+		raw.calls <- sv.data[which(sv.data$tracking_id == tmp[i,]$tracking_id),];
+		tmp[i,]$Status <- if (any(grepl('germline', raw.calls[,titles]))) { 'germline';
+			} else { 'somatic'; }
+		}
+
+	tmp$Frame <- 'unknown';
+	tmp[which(tmp$fusion_splicing_pattern == 'normal'),]$Frame <- 'inframe';
+	tmp[which(!tmp$fusion_splicing_pattern %in% c('normal','None')),]$Frame <- 'frameshift';
+
+	tmp$Support <- NA;
+	for (i in 1:nrow(tmp)) {
+		type <- if (grepl('rna', tmp[i,]$library)) { 'rna' } else { 'dna' }
+		tmp[i,]$Support <- type;
+		}
+
+	# aggregate to get unique entries
+	unique.calls <- aggregate(
+		tmp$tools,
+		by = list(
+			gene1_aliases = tmp$gene1_aliases,
+			gene2_aliases = tmp$gene2_aliases,
+			library = tmp$library,
+			event_type = tmp$event_type,
+			Status = tmp$Status,
+			Fusion = tmp$Fusion,
+			Frame = tmp$Frame,
+			Support = tmp$Support
 			),
-		Entrez_Gene_Id = NA,
-		Center = NA,
-		Tumor_Sample_Barcode = rep(dna.fusions$Sample, times = 2),
-		Fusion = rep(dna.fusions$Fusion, times = 2),
-		DNA_support = 'yes',
-		RNA_support = 'no',
-		Method = rep(dna.fusions$Tool, times = 2),
-		Frame = rep(dna.fusions$Frame, times = 2),
-		Fusion_Status = rep(dna.fusions$Status, times = 2),
-#		SV_Type = rep(dna.fusions$event_type, times = 2),
-#		Seq_Type = rep(dna.fusions$Seq_Type, times = 2),
-		stringsAsFactors = FALSE
-		);
-	}
-
-rna.fusions <- NULL;
-if (nrow(unique.calls[which(unique.calls$Support == 'rna'),]) > 0) {
-	rna.fusions <- unique.calls[which(unique.calls$Support == 'rna'),];
-
-	rna.cbio <- data.frame(
-		Hugo_Symbol = c(
-			rna.fusions$gene1_aliases,
-			rna.fusions$gene2_aliases
-			),
-		Entrez_Gene_Id = NA,
-		Center = NA,
-		Tumor_Sample_Barcode = gsub('.rna','',rep(rna.fusions$Sample, times = 2)),
-		Fusion = rep(rna.fusions$Fusion, times = 2),
-		DNA_support = 'no',
-		RNA_support = 'yes',
-		Method = rep(rna.fusions$Tool, times = 2),
-		Frame = rep(rna.fusions$Frame, times = 2),
-		Fusion_Status = rep(rna.fusions$Status, times = 2),
-#		SV_Type = rep(rna.fusions$event_type, times = 2),
-#		Seq_Type = rep(rna.fusions$Seq_Type, times = 2),
-		stringsAsFactors = FALSE
+		FUN = function(i) {
+			paste(c(unique(unlist(strsplit(as.character(i),';'))),'mavis'), collapse = ',')
+			}
 		);
 
-	if (is.null(cbio.data)) { cbio.data <- rna.cbio; }
-	else {
-		unique.rna <- unique(rna.fusions[,c('Sample','Fusion','Tool','Status','Frame','Support')]);
-		for (i in 1:nrow(unique.rna)) {
-			fusion <- unique.rna[i,]$Fusion;
-			smp <- unique.rna[i,]$Sample
-			dna.idx <- which(cbio.data$Fusion == fusion & cbio.data$Tumor_Sample_Barcode == smp);
-			rna.idx <- which(rna.cbio$Fusion == fusion & rna.cbio$Tumor_Sample_Barcode == smp);
-			if (length(dna.idx) > 0) {
-	#			stop();
-				cbio.data[dna.idx,]$RNA_support <- 'yes';
-				cbio.data[dna.idx,]$Method <- paste0(
-					unique(c(
-						unlist(strsplit(cbio.data[dna.idx,]$Method,',')),
-						unlist(strsplit(rna.cbio[rna.idx,]$Method,','))
-						)),
-					collapse = ','
-					);
-				}
-			else {
-				cbio.data <- rbind(cbio.data, rna.cbio[rna.idx,]);
+	colnames(unique.calls)[which(colnames(unique.calls) == 'x')] <- 'Tool';
+	unique.calls$Sample <- gsub('-wgs|-wxs|-rna','',unique.calls$library);
+
+	# format for cbioportal
+	cbio.data <- NULL;
+	dna.fusions <- NULL;
+	if (nrow(unique.calls[which(unique.calls$Support == 'dna'),]) > 0) {
+		dna.fusions <- unique.calls[which(unique.calls$Support == 'dna'),];
+
+		cbio.data <- data.frame(
+			Hugo_Symbol = c(
+				dna.fusions$gene1_aliases,
+				dna.fusions$gene2_aliases
+				),
+			Entrez_Gene_Id = NA,
+			Center = NA,
+			Tumor_Sample_Barcode = rep(dna.fusions$Sample, times = 2),
+			Fusion = rep(dna.fusions$Fusion, times = 2),
+			DNA_support = 'yes',
+			RNA_support = 'no',
+			Method = rep(dna.fusions$Tool, times = 2),
+			Frame = rep(dna.fusions$Frame, times = 2),
+			Fusion_Status = rep(dna.fusions$Status, times = 2),
+	#		SV_Type = rep(dna.fusions$event_type, times = 2),
+	#		Seq_Type = rep(dna.fusions$Seq_Type, times = 2),
+			stringsAsFactors = FALSE
+			);
+		}
+
+	rna.fusions <- NULL;
+	if (nrow(unique.calls[which(unique.calls$Support == 'rna'),]) > 0) {
+		rna.fusions <- unique.calls[which(unique.calls$Support == 'rna'),];
+
+		rna.cbio <- data.frame(
+			Hugo_Symbol = c(
+				rna.fusions$gene1_aliases,
+				rna.fusions$gene2_aliases
+				),
+			Entrez_Gene_Id = NA,
+			Center = NA,
+			Tumor_Sample_Barcode = gsub('.rna','',rep(rna.fusions$Sample, times = 2)),
+			Fusion = rep(rna.fusions$Fusion, times = 2),
+			DNA_support = 'no',
+			RNA_support = 'yes',
+			Method = rep(rna.fusions$Tool, times = 2),
+			Frame = rep(rna.fusions$Frame, times = 2),
+			Fusion_Status = rep(rna.fusions$Status, times = 2),
+	#		SV_Type = rep(rna.fusions$event_type, times = 2),
+	#		Seq_Type = rep(rna.fusions$Seq_Type, times = 2),
+			stringsAsFactors = FALSE
+			);
+
+		if (is.null(cbio.data)) { cbio.data <- rna.cbio; }
+		else {
+			rna.fields <- c('Sample','Fusion','Tool','Status','Frame','Support');
+			unique.rna <- unique(rna.fusions[,rna.fields]);
+
+			for (i in 1:nrow(unique.rna)) {
+				fusion <- unique.rna[i,]$Fusion;
+				smp <- unique.rna[i,]$Sample
+				dna.idx <- which(cbio.data$Fusion == fusion &
+					cbio.data$Tumor_Sample_Barcode == smp);
+				rna.idx <- which(rna.cbio$Fusion == fusion &
+					rna.cbio$Tumor_Sample_Barcode == smp);
+
+				if (length(dna.idx) > 0) {
+					cbio.data[dna.idx,]$RNA_support <- 'yes';
+					cbio.data[dna.idx,]$Method <- paste0(
+						unique(c(
+							unlist(strsplit(cbio.data[dna.idx,]$Method,',')),
+							unlist(strsplit(rna.cbio[rna.idx,]$Method,','))
+							)),
+						collapse = ','
+						);
+					}
+				else {
+					cbio.data <- rbind(cbio.data, rna.cbio[rna.idx,]);
+					}
 				}
 			}
 		}
+
+	to.write <- unique(cbio.data[order(cbio.data$Fusion, cbio.data$Tumor_Sample_Barcode),]);
+	to.write[which(to.write$Frame == 'unknown'),]$Frame <- NA;
+
+	write.table(
+		to.write,
+		file = generate.filename(arguments$project, 'svs_for_cbioportal','tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+
+	### SAVE SESSION INFO ##############################################################################
+	save.session.profile(generate.filename('CollectMAVIS','SessionProfile','txt'));
 	}
-
-to.write <- unique(cbio.data[order(cbio.data$Fusion, cbio.data$Tumor_Sample_Barcode),]);
-to.write[which(to.write$Frame == 'unknown'),]$Frame <- NA;
-
-write.table(
-	to.write,
-	file = generate.filename(arguments$project, 'svs_for_cbioportal','tsv'),
-	row.names = FALSE,
-	col.names = TRUE,
-	sep = '\t'
-	);
-
-### SAVE SESSION INFO ##############################################################################
-save.session.profile(generate.filename('CollectMAVIS','SessionProfile','txt'));

@@ -328,7 +328,7 @@ sub main {
 		@delly_files = _get_files($args{delly_dir}, 'Delly_SVs_somatic_hc.bcf');
 		}
 	if (defined($args{novobreak_dir})) {
-		@novobreak_files = _get_files($args{novobreak_dir}, 'novoBreak_merged_filtered.tsv');
+		@novobreak_files = _get_files($args{novobreak_dir}, 'novoBreak_filtered.tsv');
 		}
 	if (defined($args{pindel_dir})) {
 		@pindel_files = _get_files($args{pindel_dir}, '_combined_Pindel_output.txt');
@@ -615,18 +615,53 @@ sub main {
 		# if there are any samples to run, we will run the final combine job
 		$should_run_final = 1;
 
+		# collect key drawings
+		my $get_drawings = join(' ',
+			"Rscript $cwd/collect_mavis_output.R",
+			'-d', $patient_directory,
+			'--find_drawings'
+			);
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'extract_key_drawings_' . $patient,
+			cmd	=> $get_drawings,
+			modules	=> [$r_version],
+			dependencies	=> join(':', @all_jobs),
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'extract_key_drawings_' . $patient,
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @all_jobs, $run_id;
+
 		# should intermediate files be removed
 		# run per patient
 		if ($args{del_intermediates}) {
+
+
+			my $tar = 'tar -czvf intermediate_files.tar.gz pairing/ *_genome/';
+			if (scalar(@rna_ids_patient) > 0) {
+				$tar .= ' *_transcriptome/';
+				}
+			$tar .= ' --remove-files;';
 
 			print $log "Submitting job to clean up temporary/intermediate files...\n";
 
 			# make sure final output exists before removing intermediate files!
 			$cleanup_cmd = join("\n",
 				"if [ -s $mavis_output ]; then",
-				"  cd $patient_directory\n\n",
-				"  find . -name '*.sam' -type f -exec rm {} " . '\;' . "\n",
-				"  find . -name '*.bam' -type f -exec rm {} " . '\;' . "\n",
+				"  cd $patient_directory\n",
+				"  find . -name '*.sam' -type f -exec rm {} " . '\;',
+				"  find . -name '*.bam' -type f -exec rm {} " . '\;',
+				"  " . $tar,
 				"else",
 				'  echo "FINAL OUTPUT FILE is missing; not removing intermediates"',
 				"fi"
