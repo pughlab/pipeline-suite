@@ -84,35 +84,6 @@ sub get_mutect_pon_command {
 	return($mutect_command);
 	}
 
-# format command to generate PON
-sub  generate_pon {
-	my %args = (
-		input		=> undef,
-		output		=> undef,
-		java_mem	=> undef,
-		tmp_dir		=> undef,
-		out_type	=> 'full',
-		@_
-		);
-
-	my $pon_command = join(' ',
-		'java -Xmx' . $args{java_mem},
-		'-Djava.io.tmpdir=' . $args{tmp_dir},
-		'-jar $gatk_dir/GenomeAnalysisTK.jar -T CombineVariants',
-		'-R', $reference,
-		$args{input},
-		'-o', $args{output},
-		'--filteredrecordsmergetype KEEP_IF_ANY_UNFILTERED',
-		'--genotypemergeoption UNSORTED --filteredAreUncalled'
-		);
-
-	if ('trimmed' eq $args{out_type}) {
-		$pon_command .= ' -minN 2 -minimalVCF -suppressCommandLineHeader --excludeNonVariants --sites_only';
-		}
-
-	return($pon_command);
-	}
-
 # format command to run MuTect on T/N pairs
 sub get_mutect_tn_command {
 	my %args = (
@@ -319,6 +290,10 @@ sub pon {
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{mutect}->{parameters};
 
+	if (!defined($parameters->{create_pon}->{minN})) {
+		$parameters->{create_pon}->{minN} = 2;
+		}
+
 	# get optional HPC group
 	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
 
@@ -483,6 +458,7 @@ sub pon {
 		output		=> $pon,
 		java_mem	=> $parameters->{create_pon}->{java_mem}, 
 		tmp_dir		=> $tmp_directory,
+		minN		=> $parameters->{create_pon}->{minN},
 		out_type	=> 'trimmed'
 		);
 

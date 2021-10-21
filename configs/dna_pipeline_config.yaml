@@ -173,6 +173,7 @@ mutect:
             mem: 4G
             time: '12:00:00'
         create_pon:
+            minN: 2
             java_mem: 3g
             mem: 4G
             time: '24:00:00'
@@ -192,6 +193,7 @@ mutect2:
             mem: 1G
             time: '12:00:00'
         create_pon:
+            minN: 2
             java_mem: 3g
             mem: 4G
             time: '24:00:00'
@@ -209,6 +211,7 @@ strelka:
             mem: 2G
             time: '12:00:00'
         create_pon:
+            minN: 2
             java_mem: 3g
             mem: 4G
             time: '96:00:00'
@@ -230,6 +233,7 @@ varscan:
             mem: 1G
             time: '12:00:00'
         create_pon:
+            minN: 2
             java_mem: 3g
             mem: 4G
             time: '24:00:00'
@@ -265,6 +269,7 @@ vardict:
             mem: 1G
             time: '12:00:00'
         create_pon:
+            minN: 2
             java_mem: 3g
             mem: 4G
             time: '24:00:00'
