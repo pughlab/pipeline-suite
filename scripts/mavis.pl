@@ -619,7 +619,7 @@ sub main {
 		my $get_drawings = join(' ',
 			"Rscript $cwd/collect_mavis_output.R",
 			'-d', $patient_directory,
-			'--find_drawings'
+			'--find_drawings TRUE'
 			);
 
 		$run_script = write_script(
