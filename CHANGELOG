@@ -1,3 +1,12 @@
+2021-10-22: PughLab pipeline-suite (version 0.5.9)
+- mavis output: cleaned up output and added new cbio sv format
+- added optional vcf2maf step to genotype_gvcfs
+- added option to customize recurrence threshold (number of samples) for PoN creation
+- mavis: added step to extract key drawings and compress all intermediate files
+- added read quality filter to pindel for high-confidence calls
+- minor bug fixes to report scripts
+- updated report to work with single sample data
+
 2021-10-08: PughLab pipeline-suite (version 0.5.8)
 - fixed bug in convert_svict that removed ALL rows
 - removed unnecessary warnings in mavis for tumour-only samples
