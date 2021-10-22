@@ -150,6 +150,7 @@ haplotype_caller:
         filter_recalibrated:
             mem: 2G
             time: '24:00:00'
+        run_vcf2maf: Y
         cpsr:
             known_positions: /cluster/projects/pughlab/references/CPSR/PCA_pathVar_integrated_filtered_adjusted_WITH_FANCI_hg38.tsv
             mem: 4G
