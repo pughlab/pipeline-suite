@@ -56,7 +56,7 @@ sub main {
 	# if both plot_snv_summary.R and filter_ensemble_mutations.R (OncoKB) were run:
 	my @snv_tex = grep { /^somatic_snv_summary/ } @tex_files;
 	if (scalar(@snv_tex) == 2) {
-		@tex_files = grep { $_ != 'somatic_snv_summary.tex' } @tex_files;
+		@tex_files = grep { $_ ne 'somatic_snv_summary.tex' } @tex_files;
 		}
 
 	# find QC input

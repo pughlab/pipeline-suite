@@ -266,35 +266,6 @@ sub get_filter_command {
 	return($filter_command);
 	}
 
-# format command to generate PON
-sub generate_pon {
-	my %args = (
-		input		=> undef,
-		output		=> undef,
-		java_mem	=> undef,
-		tmp_dir		=> undef,
-		out_type	=> 'full',
-		@_
-		);
-
-	my $pon_command = join(' ',
-		'java -Xmx' . $args{java_mem},
-		'-Djava.io.tmpdir=' . $args{tmp_dir},
-		'-jar $gatk_dir/GenomeAnalysisTK.jar -T CombineVariants',
-		'-R', $reference,
-		$args{input},
-		'-o', $args{output},
-		'--filteredrecordsmergetype KEEP_IF_ANY_UNFILTERED',
-		'--genotypemergeoption UNSORTED --filteredAreUncalled'
-		);
-
-	if ('trimmed' eq $args{out_type}) {
-		$pon_command .= ' -minN 2 -minimalVCF -suppressCommandLineHeader --excludeNonVariants --sites_only';
-		}
-
-	return($pon_command);
-	}
-
 ### MAIN ###########################################################################################
 sub main {
 	my %args = (
@@ -390,6 +361,10 @@ sub main {
 
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{vardict}->{parameters};
+
+	if (!defined($parameters->{create_pon}->{minN})) {
+		$parameters->{create_pon}->{minN} = 2;
+		}
 
 	# get optional HPC group
 	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
@@ -1139,7 +1114,9 @@ sub main {
 		my $pon_command = generate_pon(
 			input		=> join(' ', @pon_vcfs),
 			output		=> $pon,
+			reference	=> $reference,
 			java_mem	=> $parameters->{create_pon}->{java_mem},
+			minN		=> $parameters->{create_pon}->{minN},
 			tmp_dir		=> $output_directory,
 			out_type	=> 'trimmed'
 			);

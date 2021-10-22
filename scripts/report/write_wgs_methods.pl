@@ -37,7 +37,7 @@ sub main {
 	my ($bwa, $gatk, $gatk4);
 	my ($mutect, $mutect2, $strelka, $pindel, $varscan, $vardict, $somaticsniper);
 	my ($delly, $manta, $mavis, $novobreak, $msi, $ichor_cna);
-	my ($ref_type, $samtools, $picard, $bedtools, $vcftools);
+	my ($ref_type, $samtools, $picard, $bedtools, $vcftools, $bcftools);
 	my ($k1000g, $mills, $kindels, $dbsnp, $hapmap, $omni, $cosmic, $pon, $gnomad);
 	my ($vep, $vcf2maf);
 

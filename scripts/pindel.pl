@@ -78,7 +78,8 @@ sub get_pindel_command {
 		'-f', $reference,
 		'-i', $args{input},
 		'-o', $args{output_stem} . '_' . $args{chrom},
-		'-T', $args{n_cpus}
+		'-T', $args{n_cpus},
+		'-w 1 -A 20'
 		);
 
 	if (defined($args{normal_id})) {
@@ -139,6 +140,7 @@ sub get_split_pindel_command {
 		'-o', $args{output_stem} . '_$CHROM',
 		'-T', $args{n_cpus},
 		'-J', $exclude_regions,
+		'-w 1 -A 20',
 		'--report_long_insertions',
 		'-c $CHROM'
 		);

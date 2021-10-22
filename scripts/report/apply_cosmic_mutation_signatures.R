@@ -38,6 +38,10 @@ save.session.profile <- function(file.name) {
 # function to trim sample IDs
 simplify.ids <- function(x) {
 	match <- TRUE;
+	if (length(x) == 1) {
+		match <- FALSE;
+		new.ids <- x;
+		}
 	index <- 1;
 	while (match) {
 		if (length(unique(sapply(x,function(i) { unlist(strsplit(i,''))[index] } ))) == 1) {
@@ -140,81 +144,91 @@ for (smp in all.samples) {
 		);
 	}
 
-save(
-	signatures.to.apply,
-	assigned.sigs,
-	file = generate.filename(arguments$project, 'assignedSignatures', 'RData')
-	);
-
 # extract weights
 sig.weights.list <- list();
 for (smp in all.samples) {
-#	if (is.na(sig.weights.list[[smp]])) { next; }
 	sig.weights.list[[smp]] <- assigned.sigs[[smp]]$weights;
 	}
 
 sig.weights <- do.call(rbind, sig.weights.list);
 
-write.table(
-	sig.weights,
-	file = generate.filename(arguments$project, 'mutation_signature_weights', 'tsv'),
-	row.names = TRUE,
-	col.names = NA,
-	sep = '\t'
-	);
+# do some error checking
+if (all(is.na(sig.weights))) {
+	warning('All signature weights are NA - sample(s) probably have too few mutations.');
+	should.plot <- FALSE;
+	} else {
+	save(
+		signatures.to.apply,
+		assigned.sigs,
+		file = generate.filename(arguments$project, 'assignedSignatures', 'RData')
+		);
 
-# order samples by recurrence for prettier heatmap
-heatmap.data <- t(sig.weights);
-heatmap.data[which(heatmap.data == 0)] <- NA;
-heatmap.data[!is.na(heatmap.data)] <- 1;
+	write.table(
+		sig.weights,
+		file = generate.filename(arguments$project, 'mutation_signature_weights', 'tsv'),
+		row.names = TRUE,
+		col.names = NA,
+		sep = '\t'
+		);
 
-heatmap.data <- heatmap.data[names(sort(apply(heatmap.data,1,sum,na.rm = T), decreasing = T)),];
+	# order samples by recurrence for prettier heatmap
+	heatmap.data <- t(sig.weights);
+	heatmap.data[which(heatmap.data == 0)] <- NA;
+	heatmap.data[!is.na(heatmap.data)] <- 1;
 
-heatmap.data <- t(heatmap.data);
-heatmap.data <- heatmap.data[do.call(order, transform(heatmap.data)),];
+	heatmap.data <- heatmap.data[names(sort(apply(heatmap.data,1,sum,na.rm = T), decreasing = T)),];
 
-sample.order <- rownames(heatmap.data);
-sig.order <- colnames(heatmap.data);
+	heatmap.data <- t(heatmap.data);
+	heatmap.data <- heatmap.data[do.call(order, transform(heatmap.data)),];
+
+	sample.order <- rownames(heatmap.data);
+	sig.order <- colnames(heatmap.data);
+
+	should.plot <- TRUE;
+	}
 
 ### PLOTTING #######################################################################################
-# grab some parameters
-axis.cex <- if (length(all.samples) <= 30) { 1
-	} else if (length(all.samples) <= 50) { 0.75
-	} else if (length(all.samples) <= 80) { 0.5
-	} else { 0 };
+if (should.plot) {
 
-# make the heatmap
-create.heatmap(
-	sig.weights[sample.order,sig.order],
-	same.as.matrix = TRUE,
-	cluster.dimensions = 'none',
-	colour.scheme = c('white','red'),
-	xaxis.cex = 0.5,
-	xaxis.lab.top = colnames(heatmap.data),
-	x.alternating = 2,
-	yaxis.cex = axis.cex,
-	yaxis.lab = simplify.ids(rownames(heatmap.data)),
-	axes.lwd = 1,
-	yaxis.fontface = 'plain',
-	xaxis.fontface = 'plain',
-	yaxis.tck = c(0.2,0),
-	right.padding = 1,
-        grid.row = TRUE,
-        force.grid.row = TRUE,
-        row.colour = 'grey80',
-        col.colour = 'grey80',
-        row.lwd = if (length(all.samples) < 30) { 3 } else { 1 },
-        col.lwd = if (length(all.samples) < 30) { 3 } else { 1 },
-        grid.col = TRUE,
-        force.grid.col = TRUE,
-        fill.colour = 'white',
-	colourkey.cex = 1,
-	at = seq(0,1,0.001),
-	height = if (length(all.samples) < 10) { 6 } else { 8 },
-	width = 12,
-	resolution = 600,
-	filename = generate.filename(arguments$project, 'mutation_signatures', 'png')
-	);
+	# grab some parameters
+	axis.cex <- if (length(all.samples) <= 30) { 1
+		} else if (length(all.samples) <= 50) { 0.75
+		} else if (length(all.samples) <= 80) { 0.5
+		} else { 0 };
+
+	# make the heatmap
+	create.heatmap(
+		sig.weights[sample.order,sig.order],
+		same.as.matrix = TRUE,
+		cluster.dimensions = 'none',
+		colour.scheme = c('white','red'),
+		xaxis.cex = 0.5,
+		xaxis.lab.top = colnames(heatmap.data),
+		x.alternating = 2,
+		yaxis.cex = axis.cex,
+		yaxis.lab = simplify.ids(rownames(heatmap.data)),
+		axes.lwd = 1,
+		yaxis.fontface = 'plain',
+		xaxis.fontface = 'plain',
+		yaxis.tck = c(0.2,0),
+		right.padding = 1,
+		grid.row = TRUE,
+		force.grid.row = TRUE,
+		row.colour = 'grey80',
+		col.colour = 'grey80',
+		row.lwd = if (length(all.samples) < 30) { 3 } else { 1 },
+		col.lwd = if (length(all.samples) < 30) { 3 } else { 1 },
+		grid.col = TRUE,
+		force.grid.col = TRUE,
+		fill.colour = 'white',
+		colourkey.cex = 1,
+		at = seq(0,1,0.001),
+		height = if (length(all.samples) < 10) { 6 } else { 8 },
+		width = 12,
+		resolution = 600,
+		filename = generate.filename(arguments$project, 'mutation_signatures', 'png')
+		);
+	}
 
 ### SAVE SESSION INFO ##############################################################################
 save.session.profile(generate.filename('ApplyMutSigs','SessionProfile','txt'));
