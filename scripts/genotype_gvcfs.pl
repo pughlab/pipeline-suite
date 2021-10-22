@@ -712,7 +712,7 @@ sub main{
 				tmp_dir		=> $tmp_directory
 				);
 
-			$filter_cmd .= "\n\nmd5sum $tmp_output > $tmp_output.md5";
+			$trim_variants_cmd .= "\n\nmd5sum $tmp_output > $tmp_output.md5";
 
 			# check if this should be run
 			if ($should_run_vcf2maf &
