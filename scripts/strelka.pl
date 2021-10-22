@@ -544,6 +544,7 @@ sub pon {
 	my $pon_command = generate_pon(
 		input		=> join(' ', @pon_vcfs),
 		output		=> $pon,
+		reference	=> $reference,
 		java_mem	=> $parameters->{create_pon}->{java_mem},
 		tmp_dir		=> $pon_directory,
 		minN		=> $parameters->{create_pon}->{minN},

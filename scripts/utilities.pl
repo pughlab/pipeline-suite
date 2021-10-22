@@ -476,6 +476,7 @@ sub generate_pon {
 	my %args = (
 		input		=> undef,
 		output		=> undef,
+		reference	=> undef,
 		java_mem	=> undef,
 		tmp_dir		=> undef,
 		minN		=> 2,
@@ -487,7 +488,7 @@ sub generate_pon {
 		'java -Xmx' . $args{java_mem},
 		'-Djava.io.tmpdir=' . $args{tmp_dir},
 		'-jar $gatk_dir/GenomeAnalysisTK.jar -T CombineVariants',
-		'-R', $reference,
+		'-R', $args{reference},
 		$args{input},
 		'-o', $args{output},
 		'--filteredrecordsmergetype KEEP_IF_ANY_UNFILTERED',
