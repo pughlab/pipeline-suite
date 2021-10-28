@@ -357,8 +357,12 @@ sub main {
 		my @tumour_ids = sort keys %{$smp_data->{$patient}->{'tumour'}};
 		my @rna_ids_patient = sort keys %{$smp_data->{$patient}->{'rna'}};
 
-		if (scalar(@tumour_ids) == 0) {
-			print $log "\n>> No tumour BAM provided, skipping patient.\n";
+		print $log "> Found " . scalar(@normal_ids) . " normal BAMs.\n";
+		print $log "> Found " . scalar(@tumour_ids) . " tumour BAMs.\n";
+		print $log "> Found " . scalar(@rna_ids_patient) . " RNA-Seq BAMs.\n";
+
+		if ( (scalar(@tumour_ids) == 0) & (scalar(@rna_ids_patient) == 0) ) {
+			print $log "\n>> No tumour BAMs provided, skipping patient.\n";
 			next;
 			}
 
@@ -386,44 +390,54 @@ sub main {
 
 		foreach my $tumour (@tumour_ids) {
 
+			print $log ">> Initiating process for TUMOUR: $tumour\n";
+
 			my @tmp = split /\//, $smp_data->{$patient}->{tumour}->{$tumour};
 			$link = join('/', $link_directory, $tmp[-1]);
 			symlink($smp_data->{$patient}->{tumour}->{$tumour}, $link);
 
 			# organize Delly input
-			my @delly_svs = grep { /$tumour/ } @delly_files;
-			$link = join('/', $link_directory, $tumour . '_Delly_SVs.bcf');
-			symlink($delly_svs[0], $link);
+			if (scalar(@delly_files) > 0) {
+				my @delly_svs = grep { /$tumour/ } @delly_files;
+				$link = join('/', $link_directory, $tumour . '_Delly_SVs.bcf');
+				symlink($delly_svs[0], $link);
 
-			push @delly_svs_patient, $delly_svs[0];
+				push @delly_svs_patient, $delly_svs[0];
+				}
 
 			# organize Manta input
-			my @manta_svs = grep { /$tumour/ } @manta_files;
-			foreach my $file ( @manta_svs ) {
-				my @tmp = split /\//, $file;
-				$link = join('/', $link_directory, $tumour . '_Manta_' . $tmp[-1]);
-				symlink($file, $link);
+			if (scalar(@manta_files)) {
+				my @manta_svs = grep { /$tumour/ } @manta_files;
+				foreach my $file ( @manta_svs ) {
+					my @tmp = split /\//, $file;
+					$link = join('/', $link_directory, $tumour . '_Manta_' . $tmp[-1]);
+					symlink($file, $link);
 
-				my $stem = $tmp[-1];
-				$stem =~ s/.gz//;
-				my $formatted_vcf = join('/', $patient_directory, $tumour . '_Manta_formatted_' . $stem);
+					my $stem = $tmp[-1];
+					$stem =~ s/.gz//;
+					my $formatted_vcf = join('/',
+						$patient_directory,
+						$tumour . '_Manta_formatted_' . $stem
+						);
 
-				# write command to format manta SVs (older version of Manta required for mavis)
-				$format_command .= "\n\n" . join(' ',
-					'python /cluster/tools/software/centos7/manta/1.6.0/libexec/convertInversion.py',
-					'/cluster/tools/software/centos7/samtools/1.9/bin/samtools',
-					$tool_data->{reference},
-					$file,
-					'>', $formatted_vcf
-					);
+					# write command to format manta SVs
+					# (older version of Manta required for mavis)
+					$format_command .= "\n\n" . join(' ',
+						'python /cluster/tools/software/centos7/manta/1.6.0/libexec/convertInversion.py',
+						'/cluster/tools/software/centos7/samtools/1.9/bin/samtools',
+						$tool_data->{reference},
+						$file,
+						'>', $formatted_vcf
+						);
 
-				push @manta_svs_formatted, $formatted_vcf;
+					push @manta_svs_formatted, $formatted_vcf;
+					}
 				}
 
 			# organize NovoBreak input
 			if (scalar(@novobreak_files) > 0) {
 				my @novobreak_svs = grep { /$tumour/ } @novobreak_files;
-				last if (scalar(@novobreak_svs) == 0);
+				next if (scalar(@novobreak_svs) == 0);
 
 				$link = join('/', $link_directory, $tumour . '_NovoBreak.tsv');
 				symlink($novobreak_svs[0], $link);
@@ -433,7 +447,7 @@ sub main {
 			# organize Pindel input
 			if (scalar(@pindel_files) > 0) {
 				my @pindel_svs = grep { /$tumour/ } @pindel_files;
-				last if (scalar(@pindel_svs) == 0);
+				next if (scalar(@pindel_svs) == 0);
 
 				$link = join('/', $link_directory, $tumour . '_Pindel.txt');
 				symlink($pindel_svs[0], $link);
@@ -443,7 +457,7 @@ sub main {
 			# organize SViCT input
 			if (scalar(@svict_files) > 0) {
 				my @svict_svs = grep { /$tumour/ } @svict_files;
-				last if (scalar(@svict_svs) == 0);
+				next if (scalar(@svict_svs) == 0);
 
 				$link = join('/', $link_directory, $tumour . '_SViCT.vcf');
 				symlink($svict_svs[0], $link);
@@ -451,7 +465,17 @@ sub main {
 				}
 			}
 
+		if (scalar(@tumour_ids) > 0) {
+			print $log "> Found " . scalar(@manta_svs_formatted) . " manta files for $patient.\n";
+			print $log "> Found " . scalar(@delly_svs_patient) . " delly files for $patient.\n";
+			print $log "> Found " . scalar(@novobreak_svs_patient) . " novobreak files for $patient.\n";
+			print $log "> Found " . scalar(@pindel_svs_patient) . " pindel files for $patient.\n";
+			print $log "> Found " . scalar(@svict_svs_patient) . " svict files for $patient.\n";
+			}
+
 		foreach my $smp (@rna_ids_patient) {
+
+			print $log ">> Initiating process for RNA: $smp\n";
 
 			my @tmp = split /\//, $smp_data->{$patient}->{rna}->{$smp};
 			$link = join('/', $link_directory, 'rna_' . $tmp[-1]);
@@ -471,11 +495,16 @@ sub main {
 			push @fuscatch_svs_patient, $fuscatch_svs[0];
 			}
 
+		if (scalar(@rna_ids_patient) > 0) {
+			print $log "> Found " . scalar(@starfus_svs_patient) . " starfusion files for $patient.\n";
+			print $log "> Found " . scalar(@fuscatch_svs_patient) . " fusioncatcher files for $patient.\n";
+			}
+
 		# check if this should be run
 		if ('Y' eq missing_file(@manta_svs_formatted)) {
 
 			# record command (in log directory) and then run job
-			print $log "Submitting job to format Manta SVs...\n";
+			print $log "\nSubmitting job to format Manta SVs...\n";
 
 			$run_script = write_script(
 				log_dir	=> $log_directory,
@@ -497,11 +526,11 @@ sub main {
 			push @format_jobs, $run_id;
 			push @all_jobs, $run_id;
 			} else {
-			print $log "Skipping format manta step because this has already been completed!\n";
+			print $log "\nSkipping format manta step because this has already been completed!\n";
 			}
 
 		# now, run mavis (config, setup, schedule)
-		my $mavis_cmd = "\n" . $mavis_export;
+		my $mavis_cmd = $mavis_export;
 		my $mavis_cfg = join('/', $patient_directory, 'mavis.cfg');
 		my $mavis_output = join('/',
 			$patient_directory,
@@ -522,7 +551,7 @@ sub main {
 
 		if (scalar(@rna_ids_patient) > 0) {
 
-			$mavis_cmd .= "\n\necho 'Running mavis config.';\n\n" . get_mavis_command(
+			$mavis_cmd .= "\n\necho 'Running MAVIS config.';\n\n" . get_mavis_command(
 				tumour_ids	=> \@tumour_ids,
 				normal_id	=> $normal_id,
 				rna_ids		=> \@rna_ids_patient,
@@ -543,7 +572,7 @@ sub main {
 
 			} else {
 
-			$mavis_cmd .= "\n\necho 'Running mavis config.';\n\n" . get_mavis_command(
+			$mavis_cmd .= "\n\necho 'Running MAVIS config.';\n\n" . get_mavis_command(
 				tumour_ids	=> \@tumour_ids,
 				normal_id	=> $normal_id,
 				tumour_bams	=> $smp_data->{$patient}->{tumour},
@@ -557,15 +586,18 @@ sub main {
 				);
 			}
 
-		$mavis_cmd .= "\n\necho 'Running mavis setup.';\n\nmavis setup $mavis_cfg -o $patient_directory";
+		$mavis_cmd .= "\n\necho 'Running MAVIS setup.';\n\n";
+		$mavis_cmd .= "mavis setup $mavis_cfg -o $patient_directory";
 
 		# if build.cfg already exists, then try resubmitting
 		if ('Y' eq missing_file("$patient_directory/build.cfg")) {
-			$mavis_cmd .= "\n\necho 'Running mavis schedule.';\n\nmavis schedule -o $patient_directory --submit";
+			$mavis_cmd .= "\n\necho 'Running MAVIS schedule.';\n\n";
+			$mavis_cmd .= "mavis schedule -o $patient_directory --submit";
 			} else {
 			$mavis_cmd =~ s/mavis config/#mavis config/;
 			$mavis_cmd =~ s/mavis setup/#mavis setup/;
-			$mavis_cmd .= "\n\necho 'Running mavis schedule with resubmit.';\n\nmavis schedule -o $patient_directory --resubmit";
+			$mavis_cmd .= "\n\necho 'Running MAVIS schedule with resubmit.';\n\n";
+			$mavis_cmd .= "mavis schedule -o $patient_directory --resubmit";
 			}
 
 		$mavis_cmd .= "\n\necho 'MAVIS schedule complete, extracting job ids.';\n\n" . join(' ',
