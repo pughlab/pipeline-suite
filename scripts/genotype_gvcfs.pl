@@ -240,6 +240,49 @@ sub create_select_variants_command {
 	return($gatk_command);
 	}
 
+# format command to run hard-filtering
+sub get_hard_filter_command {
+	my %args = (
+		input		=> undef,
+		output		=> undef,
+		java_mem	=> undef,
+		tmp_dir		=> undef,
+		@_
+		);
+
+	my $gatk_command;
+
+	if ($use_new_gatk) {
+		$gatk_command = join(' ',
+			'gatk VariantFiltration',
+			'-R', $reference,
+			'-V', $args{input},
+			'-O', $args{output}
+			);
+		} else {
+		$gatk_command = join(' ',
+			'java -Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-jar $gatk_dir/GenomeAnalysisTK.jar -T VariantFiltration',
+			'-R', $reference,
+			'-V', $args{input},
+			'-o', $args{output}
+			);
+		}
+
+	$gatk_command .= ' ' . join(' ',
+		'-filterName ReadPosRankSum-8 -filter "ReadPosRankSum < -8.0"',
+		'-filterName MQRankSum-12.5 -filter "MQRankSum < -12.5"',
+		'-filterName MQ40 -filter "MQ < 40.0"',
+		'-filterName SOR3 -filter "SOR > 3.0"',
+		'-filterName FS60 -filter "FS > 60.0"',
+		'-filterName QD2 -filter "QD < 2.0"',
+		'-filterName QUAL30 -filter "QUAL < 30.0"'
+		);
+
+	return($gatk_command);
+	}
+
 ### MAIN ###########################################################################################
 sub main{
 	my %args = (
@@ -356,6 +399,9 @@ sub main{
 
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{haplotype_caller}->{parameters};
+	if (!defined($parameters->{hard_filtering}->{run})) {
+		$parameters->{hard_filtering}->{run} = 'N';
+		}
 
 	# get optional HPC group
 	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
@@ -393,24 +439,26 @@ sub main{
 	closedir(HC_OUTPUT);
 
 	my $genotype_run_id = '';
+	my $output_stem = join('/', $cohort_directory, 'haplotype_caller_combined_genotypes');
+	my $combined_gvcf = $output_stem . ".g.vcf";
+
 	my $genotype_cmd = "cd $output_directory\n";
 	$genotype_cmd .= create_genotype_gvcfs_command(
 		input		=> join(' -V ', @combined_gvcfs),
-		output		=> join('/', $cohort_directory, 'haplotype_caller_combined_genotypes.g.vcf'),
+		output		=> $combined_gvcf,
 		tmp_dir		=> $tmp_directory,
 		java_mem	=> $parameters->{genotype_gvcfs}->{java_mem}
 		);
 
-	$genotype_cmd .= join(' ',
-		"\n\nmd5sum", join('/', $cohort_directory, 'haplotype_caller_combined_genotypes.g.vcf'),
-		">", join('/', $cohort_directory, 'haplotype_caller_combined_genotypes.g.vcf.md5'),
-		"\n\nbgzip", join('/', $cohort_directory, 'haplotype_caller_combined_genotypes.g.vcf'),
-		"\ntabix -p vcf", join('/', $cohort_directory, 'haplotype_caller_combined_genotypes.g.vcf.gz')
+	$genotype_cmd .= "\n\n" . join(' ',
+		"md5sum $combined_gvcf > $combined_gvcf.md5", 
+		"\nbgzip $combined_gvcf",
+		"\ntabix -p vcf $combined_gvcf.gz"
 		);
 
-	$cleanup_cmd .= "\nrm " . join('/', $cohort_directory, 'haplotype_caller_combined_genotypes.g.vcf.gz');
+	$cleanup_cmd .= "\nrm $combined_gvcf.gz";
 
-	if ('Y' eq missing_file(join('/', $cohort_directory, 'haplotype_caller_combined_genotypes.g.vcf.md5'))) {
+	if ('Y' eq missing_file("$combined_gvcf.md5")) {
 
 		# record command (in log directory) and then run job
 		print $log "Submitting job for GenotypeGVCFs...\n";
@@ -435,182 +483,267 @@ sub main{
 			);
 
 		push @all_jobs, $genotype_run_id;
+		} else {
+		print $log "Skipping GenotypeGVCFs because this has already been completed!\n";
 		}
 
-	# Now run VQSR on INDELs
-	my $vqsr_indel_run_id = '';
-	my $vqsr_cmd_indel = create_vqsr_command(
-		var_type	=> 'INDEL',
-		input		=> join('/', $cohort_directory, 'haplotype_caller_combined_genotypes.g.vcf.gz'),
-		output_stem	=> join('/', $cohort_directory, 'haplotype_caller_combined_genotypes_indel'),
-		tmp_dir		=> $tmp_directory,
-		java_mem	=> $parameters->{vqsr}->{java_mem}
-		);
+	my $processed_vcf;
+	# should we perform hard filtering or VQSR?
+	if ('Y' eq $parameters->{hard_filtering}->{run}) {
 
-	$cleanup_cmd .= "\nrm " . join('/', $cohort_directory, 'haplotype_caller_combined_genotypes_indel.recal');
-	$cleanup_cmd .= "\nrm " . join('/', $cohort_directory, 'haplotype_caller_combined_genotypes_indel.tranches');
+		print $log "Running with hard threshold filtering...\n";
 
-	if ('Y' eq missing_file(join('/', $cohort_directory, 'haplotype_caller_combined_genotypes_indel.recal'))) {
-
-		# record command (in log directory) and then run job
-		print $log "Submitting job for VQSR (INDELs)...\n";
-
-		$run_script = write_script(
-			log_dir	=> $log_directory,
-			name	=> 'run_vqsr_indels_cohort',
-			cmd	=> $vqsr_cmd_indel,
-			modules	=> [$gatk],
-			dependencies	=> $genotype_run_id,
-			max_time	=> $parameters->{vqsr}->{time},
-			mem		=> $parameters->{vqsr}->{mem},
-			hpc_driver	=> $args{hpc_driver},
-			extra_args	=> [$hpc_group]
+		my $hard_filter_run_id = '';
+		my $hard_filter_vcf = join('/',
+			$cohort_directory,
+			'haplotype_caller_genotypes_filtered.vcf'
 			);
 
-		$vqsr_indel_run_id = submit_job(
-			jobname		=> 'run_vqsr_indels_cohort',
-			shell_command	=> $run_script,
-			hpc_driver	=> $args{hpc_driver},
-			dry_run		=> $args{dry_run},
-			log_file	=> $log
+		my $hard_filter_cmd = get_hard_filter_command(
+			input		=> "$combined_gvcf.gz",
+			output		=> $hard_filter_vcf,
+			java_mem	=> $parameters->{hard_filtering}->{java_mem},
+			tmp_dir		=> $tmp_directory
 			);
 
-		push @all_jobs, $vqsr_indel_run_id;
-		}
+		$hard_filter_cmd .= "\n\n" . join("\n",
+			"md5sum $hard_filter_vcf > $hard_filter_vcf.md5",
+			"bgzip $hard_filter_vcf",
+			"tabix -p vcf $hard_filter_vcf.gz"
+			);
+	 
+		if ('Y' eq missing_file("$hard_filter_vcf.md5")) {
 
-	# And finally, apply these recalibrations
-	my $apply_indel_recal_run_id = '';
-	my $apply_vqsr_indel = create_apply_vqsr_command(
-		var_type	=> 'INDEL',
-		input		=> join('/', $cohort_directory, 'haplotype_caller_combined_genotypes.g.vcf.gz'),
-		vqsr_stem	=> join('/', $cohort_directory, 'haplotype_caller_combined_genotypes_indel'),
-		output		=> join('/', $cohort_directory, 'haplotype_caller_indel_recalibrated.vcf'),
-		tmp_dir		=> $tmp_directory,
-		java_mem	=> $parameters->{apply_vqsr}->{java_mem}
-		);
+			# record command (in log directory) and then run job
+			print $log "Submitting job for hard threshold filtering...\n";
 
-	$apply_vqsr_indel .= join(' ',
-		"\n\nmd5sum", join('/', $cohort_directory, 'haplotype_caller_indel_recalibrated.vcf'),
-		">", join('/', $cohort_directory, 'haplotype_caller_indel_recalibrated.vcf.md5')
-		);
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'run_hard_threshold_filters_cohort',
+				cmd	=> $hard_filter_cmd,
+				modules	=> [$gatk, 'tabix'],
+				dependencies	=> $genotype_run_id,
+				max_time	=> $parameters->{hard_filtering}->{time},
+				mem		=> $parameters->{hard_filtering}->{mem},
+				hpc_driver	=> $args{hpc_driver},
+				extra_args	=> [$hpc_group]
+				);
 
-	$cleanup_cmd .= "\nrm " . join('/', $cohort_directory, 'haplotype_caller_indel_recalibrated.vcf');
+			$hard_filter_run_id = submit_job(
+				jobname		=> 'run_hard_threshold_filters_cohort',
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
 
-	if ('Y' eq missing_file(join('/', $cohort_directory, 'haplotype_caller_indel_recalibrated.vcf.md5'))) {
+			push @all_jobs, $hard_filter_run_id
+			} else {
+			print $log "Skipping hard filtering because this has already been completed!\n";
+			}
 
-		# record command (in log directory) and then run job
-		print $log "Submitting job for INDEL recalibration...\n";
+		# indicate final filtered/recalibrated vcf and final job ID
+		$run_id = $hard_filter_run_id;
+		$processed_vcf = $hard_filter_vcf . '.gz';
 
-		$run_script = write_script(
-			log_dir	=> $log_directory,
-			name	=> 'run_apply_indel_recalibration_cohort',
-			cmd	=> $apply_vqsr_indel,
-			modules	=> [$gatk],
-			dependencies	=> $vqsr_indel_run_id,
-			max_time	=> $parameters->{apply_vqsr}->{time},
-			mem		=> $parameters->{apply_vqsr}->{mem},
-			hpc_driver	=> $args{hpc_driver},
-			extra_args	=> [$hpc_group]
+		} else {
+
+		print $log "Running VQSR...\n";
+
+		# Now run VQSR on INDELs
+		my $indel_vqsr_vcf = join('/', $cohort_directory, 'haplotype_caller_indel_recalibrated.vcf');
+		my $final_vqsr_vcf = join('/',
+			$cohort_directory,
+			'haplotype_caller_genotypes_recalibrated.vcf'
 			);
 
-		$apply_indel_recal_run_id = submit_job(
-			jobname		=> 'run_apply_indel_recalibration_cohort',
-			shell_command	=> $run_script,
-			hpc_driver	=> $args{hpc_driver},
-			dry_run		=> $args{dry_run},
-			log_file	=> $log
+		my $vqsr_indel_run_id = '';
+		my $vqsr_cmd_indel = create_vqsr_command(
+			var_type	=> 'INDEL',
+			input		=> "$combined_gvcf.gz",
+			output_stem	=> $output_stem . '_indel',
+			tmp_dir		=> $tmp_directory,
+			java_mem	=> $parameters->{vqsr}->{java_mem}
 			);
 
-		push @all_jobs, $apply_indel_recal_run_id;
-		}
+		$cleanup_cmd .= "\nrm $output_stem" . "_indel.recal";
+		$cleanup_cmd .= "\nrm $output_stem" . "_indel.tranches";
 
-	# Now run VQSR on SNPs
-	my $vqsr_snp_run_id = '';
-	my $vqsr_cmd_snp = create_vqsr_command(
-		var_type	=> 'SNP',
-		input		=> join('/', $cohort_directory, 'haplotype_caller_combined_genotypes.g.vcf.gz'),
-		output_stem	=> join('/', $cohort_directory, 'haplotype_caller_combined_genotypes_snp'),
-		tmp_dir		=> $tmp_directory,
-		java_mem	=> $parameters->{vqsr}->{java_mem}
-		);
+		if ( ('Y' eq missing_file("$final_vqsr_vcf.md5")) &
+			('Y' eq missing_file("$indel_vqsr_vcf.md5")) &
+			('Y' eq missing_file($output_stem . "_indel.recal"))
+			) {
 
-	$cleanup_cmd .= "\nrm " . join('/', $cohort_directory, 'haplotype_caller_combined_genotypes_snp.recal');
-	$cleanup_cmd .= "\nrm " . join('/', $cohort_directory, 'haplotype_caller_combined_genotypes_snp.tranches');
+			# record command (in log directory) and then run job
+			print $log "Submitting job for VQSR (INDELs)...\n";
 
-	if ('Y' eq missing_file(join('/', $cohort_directory, 'haplotype_caller_combined_genotypes_snp.recal'))) {
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'run_vqsr_indels_cohort',
+				cmd	=> $vqsr_cmd_indel,
+				modules	=> [$gatk],
+				dependencies	=> $genotype_run_id,
+				max_time	=> $parameters->{vqsr}->{time},
+				mem		=> $parameters->{vqsr}->{mem},
+				hpc_driver	=> $args{hpc_driver},
+				extra_args	=> [$hpc_group]
+				);
 
-		# record command (in log directory) and then run job
-		print $log "Submitting job for VQSR (SNPs)...\n";
+			$vqsr_indel_run_id = submit_job(
+				jobname		=> 'run_vqsr_indels_cohort',
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
 
-		$run_script = write_script(
-			log_dir	=> $log_directory,
-			name	=> 'run_vqsr_snps_cohort',
-			cmd	=> $vqsr_cmd_snp,
-			modules	=> [$gatk],
-			dependencies	=> $genotype_run_id,
-			max_time	=> $parameters->{vqsr}->{time},
-			mem		=> $parameters->{vqsr}->{mem},
-			hpc_driver	=> $args{hpc_driver},
-			extra_args	=> [$hpc_group]
+			push @all_jobs, $vqsr_indel_run_id;
+			} else {
+			print $log "Skipping VQSR (INDELs) because this has already been completed!\n";
+			}
+
+		# And finally, apply these recalibrations
+		my $apply_indel_recal_run_id = '';
+
+		my $apply_vqsr_indel = create_apply_vqsr_command(
+			var_type	=> 'INDEL',
+			input		=> "$output_stem.gz",
+			vqsr_stem	=> $output_stem . '_indel',
+			output		=> $indel_vqsr_vcf,
+			tmp_dir		=> $tmp_directory,
+			java_mem	=> $parameters->{apply_vqsr}->{java_mem}
 			);
 
-		$vqsr_snp_run_id = submit_job(
-			jobname		=> 'run_vqsr_snps_cohort',
-			shell_command	=> $run_script,
-			hpc_driver	=> $args{hpc_driver},
-			dry_run		=> $args{dry_run},
-			log_file	=> $log
+		$apply_vqsr_indel .= "\n\n" . "md5sum $indel_vqsr_vcf > $indel_vqsr_vcf.md5";
+
+		$cleanup_cmd .= "\nrm $indel_vqsr_vcf";
+
+		if ( ('Y' eq missing_file("$final_vqsr_vcf.md5")) &
+			('Y' eq missing_file("$indel_vqsr_vcf.md5"))) {
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for INDEL recalibration...\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'run_apply_indel_recalibration_cohort',
+				cmd	=> $apply_vqsr_indel,
+				modules	=> [$gatk],
+				dependencies	=> $vqsr_indel_run_id,
+				max_time	=> $parameters->{apply_vqsr}->{time},
+				mem		=> $parameters->{apply_vqsr}->{mem},
+				hpc_driver	=> $args{hpc_driver},
+				extra_args	=> [$hpc_group]
+				);
+
+			$apply_indel_recal_run_id = submit_job(
+				jobname		=> 'run_apply_indel_recalibration_cohort',
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @all_jobs, $apply_indel_recal_run_id;
+			} else {
+			print $log "Skipping apply VQSR (INDELs) because this has already been completed!\n";
+			}
+
+		# Now run VQSR on SNPs
+		my $vqsr_snp_run_id = '';
+		my $vqsr_cmd_snp = create_vqsr_command(
+			var_type	=> 'SNP',
+			input		=> "$combined_gvcf.gz",
+			output_stem	=> $output_stem . '_snp',
+			tmp_dir		=> $tmp_directory,
+			java_mem	=> $parameters->{vqsr}->{java_mem}
 			);
 
-		push @all_jobs, $vqsr_snp_run_id;
-		}
+		$cleanup_cmd .= "\nrm $output_stem" . '_snp.recal';
+		$cleanup_cmd .= "\nrm $output_stem" . '_snp.tranches';
 
-	# And finally, apply these recalibrations
-	my $apply_snp_recal_run_id = '';
-	my $apply_vqsr_snp = create_apply_vqsr_command(
-		var_type	=> 'SNP',
-		input		=> join('/', $cohort_directory, 'haplotype_caller_indel_recalibrated.vcf'),
-		vqsr_stem	=> join('/', $cohort_directory, 'haplotype_caller_combined_genotypes_snp'),
-		output		=> join('/', $cohort_directory, 'haplotype_caller_genotypes_recalibrated.vcf'),
-		tmp_dir		=> $tmp_directory,
-		java_mem	=> $parameters->{apply_vqsr}->{java_mem}
-		);
+		if ( ('Y' eq missing_file("$final_vqsr_vcf.md5")) &
+			('Y' eq missing_file($output_stem . "_snp.recal")) ) {
 
-	$apply_vqsr_snp .= join(' ',
-		"\n\nmd5sum", join('/', $cohort_directory, 'haplotype_caller_genotypes_recalibrated.vcf'),
-		">", join('/', $cohort_directory, 'haplotype_caller_genotypes_recalibrated.vcf.md5'),
-		"\n\nbgzip", join('/', $cohort_directory, 'haplotype_caller_genotypes_recalibrated.vcf'),
-		"\ntabix -p vcf", join('/', $cohort_directory, 'haplotype_caller_genotypes_recalibrated.vcf.gz')
-		);
- 
-	my $recalibrated_vcf = join('/', $cohort_directory, 'haplotype_caller_genotypes_recalibrated.vcf.gz');
+			# record command (in log directory) and then run job
+			print $log "Submitting job for VQSR (SNPs)...\n";
 
-	if ('Y' eq missing_file(join('/', $cohort_directory, 'haplotype_caller_genotypes_recalibrated.vcf.md5'))) {
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'run_vqsr_snps_cohort',
+				cmd	=> $vqsr_cmd_snp,
+				modules	=> [$gatk],
+				dependencies	=> $genotype_run_id,
+				max_time	=> $parameters->{vqsr}->{time},
+				mem		=> $parameters->{vqsr}->{mem},
+				hpc_driver	=> $args{hpc_driver},
+				extra_args	=> [$hpc_group]
+				);
 
-		# record command (in log directory) and then run job
-		print $log "Submitting job for SNP recalibration...\n";
+			$vqsr_snp_run_id = submit_job(
+				jobname		=> 'run_vqsr_snps_cohort',
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
 
-		$run_script = write_script(
-			log_dir	=> $log_directory,
-			name	=> 'run_apply_snp_recalibration_cohort',
-			cmd	=> $apply_vqsr_snp,
-			modules	=> [$gatk, 'tabix'],
-			dependencies	=> join(':', $apply_indel_recal_run_id, $vqsr_snp_run_id),
-			max_time	=> $parameters->{apply_vqsr}->{time},
-			mem		=> $parameters->{apply_vqsr}->{mem},
-			hpc_driver	=> $args{hpc_driver},
-			extra_args	=> [$hpc_group]
+			push @all_jobs, $vqsr_snp_run_id;
+			} else {
+			print $log "Skipping VQSR (SNPs) because this has already been completed!\n";
+			}
+
+		# And finally, apply these recalibrations
+		my $apply_snp_recal_run_id = '';
+
+		my $apply_vqsr_snp = create_apply_vqsr_command(
+			var_type	=> 'SNP',
+			input		=> $indel_vqsr_vcf,
+			vqsr_stem	=> $output_stem . '_snp',
+			output		=> $final_vqsr_vcf,
+			tmp_dir		=> $tmp_directory,
+			java_mem	=> $parameters->{apply_vqsr}->{java_mem}
 			);
 
-		$apply_snp_recal_run_id = submit_job(
-			jobname		=> 'run_apply_snp_recalibration_cohort',
-			shell_command	=> $run_script,
-			hpc_driver	=> $args{hpc_driver},
-			dry_run		=> $args{dry_run},
-			log_file	=> $log
+		$apply_vqsr_snp .= "\n\n" . join("\n",
+			"md5sum $final_vqsr_vcf > $final_vqsr_vcf.md5",
+			"bgzip $final_vqsr_vcf",
+			"tabix -p vcf $final_vqsr_vcf.gz"
 			);
+	 
+		if ('Y' eq missing_file("$final_vqsr_vcf.md5")) {
 
-		push @all_jobs, $apply_snp_recal_run_id;
+			# record command (in log directory) and then run job
+			print $log "Submitting job for SNP recalibration...\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'run_apply_snp_recalibration_cohort',
+				cmd	=> $apply_vqsr_snp,
+				modules	=> [$gatk, 'tabix'],
+				dependencies	=> join(':', $apply_indel_recal_run_id, $vqsr_snp_run_id),
+				max_time	=> $parameters->{apply_vqsr}->{time},
+				mem		=> $parameters->{apply_vqsr}->{mem},
+				hpc_driver	=> $args{hpc_driver},
+				extra_args	=> [$hpc_group]
+				);
+
+			$apply_snp_recal_run_id = submit_job(
+				jobname		=> 'run_apply_snp_recalibration_cohort',
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @all_jobs, $apply_snp_recal_run_id;
+			} else {
+			print $log "Skipping apply VQSR (SNPs) because this has already been completed!\n";
+			}
+
+		# indicate final filtered/recalibrated vcf and final job ID
+		$run_id = $apply_snp_recal_run_id;
+		$processed_vcf = $final_vqsr_vcf . '.gz';
 		}
 
 	# check if we should annotate these variants
@@ -632,13 +765,20 @@ sub main{
 		my @samples = @tumour_ids;
 		push @samples, @normal_ids;
 
-		my $filtered_output = join('/', $germline_directory, $patient . '_filtered_germline_variants.vcf');
+		my $filtered_output = join('/',
+			$germline_directory,
+			$patient . '_filtered_germline_variants.vcf'
+			);
+
 		if (scalar(@normal_ids) == 0) {
-			$filtered_output = join('/', $germline_directory, $patient . '_filtered_hc_variants.vcf');
+			$filtered_output = join('/',
+				$germline_directory,
+				$patient . '_filtered_hc_variants.vcf'
+				);
 			}
 
 		my $filter_cmd = create_filter_command(
-			input		=> $recalibrated_vcf,
+			input		=> $processed_vcf,
 			tumour_ids	=> \@tumour_ids,
 			normal_ids	=> \@normal_ids,
 			output		=> $filtered_output
@@ -647,14 +787,14 @@ sub main{
 		if ('Y' eq missing_file("$filtered_output.md5")) {
 
 			# record command (in log directory) and then run job
-			print $log "Submitting job for FILTER VARIANTS...\n";
+			print $log "Submitting job for FILTER HC VARIANTS...\n";
 
 			$run_script = write_script(
 				log_dir	=> $log_directory,
 				name	=> 'run_filter_vcf_' . $patient,
 				cmd	=> $filter_cmd,
 				modules	=> ['perl', 'tabix'],
-				dependencies	=> $apply_snp_recal_run_id,
+				dependencies	=> $run_id,
 				max_time	=> $parameters->{filter_recalibrated}->{time},
 				mem		=> $parameters->{filter_recalibrated}->{mem},
 				hpc_driver	=> $args{hpc_driver},
@@ -671,14 +811,18 @@ sub main{
 
 			push @germline_jobs, $filter_run_id;
 			push @all_jobs, $filter_run_id;
+			} else {
+			print $log "Skipping extract-germline because this has already been completed!\n";
 			}
 
 		push @final_outputs, $filtered_output . '.gz';
 
+		unless ($should_run_vcf2maf) { next; }
+
 		# for each sample, extract and annotate variants
 		foreach my $sample ( @samples ) {
 
-			print $log "\n  Running SAMPLE: $sample\n";
+			print $log "\n>> Running SAMPLE: $sample\n";
 
 			$run_id = '';
 			my ($list, $normal) = undef;
@@ -706,7 +850,7 @@ sub main{
 
 			# format command to pull out required samples
 			my $trim_variants_cmd = create_select_variants_command(
-				input		=> $recalibrated_vcf,
+				input		=> $processed_vcf,
 				output		=> $tmp_output,
 				samples		=> $list,
 				tmp_dir		=> $tmp_directory
@@ -715,25 +859,26 @@ sub main{
 			$trim_variants_cmd .= "\n\nmd5sum $tmp_output > $tmp_output.md5";
 
 			# check if this should be run
-			if ($should_run_vcf2maf &
-				(('Y' eq missing_file($tmp_output . '.md5')) &
-				('Y' eq missing_file($final_maf . '.md5')))
+			my $subset_run_id = '';
+
+			if ( ('Y' eq missing_file($tmp_output . '.md5')) &
+				('Y' eq missing_file($final_maf . '.md5'))
 				) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for filter...\n";
+				print $log "Submitting job for subset step...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
 					name	=> 'run_subset_vcf_' . $sample,
 					cmd	=> $trim_variants_cmd,
 					modules	=> [$gatk],
-					dependencies	=> $apply_snp_recal_run_id,
+					dependencies	=> $run_id,
 					hpc_driver	=> $args{hpc_driver},
 					extra_args	=> [$hpc_group]
 					);
 
-				$run_id = submit_job(
+				$subset_run_id = submit_job(
 					jobname		=> 'run_subset_vcf_' . $sample, 
 					shell_command	=> $run_script,
 					hpc_driver	=> $args{hpc_driver},
@@ -741,9 +886,9 @@ sub main{
 					log_file	=> $log
 					);
 
-				push @all_jobs, $run_id;
+				push @all_jobs, $subset_run_id;
 				} else {
-				print $log "Skipping filter because this has already been completed!\n";
+				print $log "Skipping subset step because this has already been completed!\n";
 				}
 
 			### Run variant annotation (VEP + vcf2maf)
@@ -762,7 +907,9 @@ sub main{
 				);
 
 			# check if this should be run
-			if ($should_run_vcf2maf & ('Y' eq missing_file($final_maf . '.md5'))) {
+			my $annotate_run_id = '';
+
+			if ('Y' eq missing_file($final_maf . '.md5')) {
 
 				# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
 				$vcf2maf_cmd .= "\n\n" . join("\n",
@@ -785,15 +932,15 @@ sub main{
 					name	=> 'run_vcf2maf_and_VEP_' . $sample,
 					cmd	=> $vcf2maf_cmd,
 					modules	=> ['perl', $samtools, 'tabix'],
-					dependencies	=> $run_id,
+					dependencies	=> $subset_run_id,
 					cpus_per_task	=> 4,
-					max_time	=> '3-00:00:00',
+					max_time	=> '5-00:00:00',
 					mem		=> '16G',
 					hpc_driver	=> $args{hpc_driver},
 					extra_args	=> [$hpc_group]
 					);
 
-				$run_id = submit_job(
+				$annotate_run_id = submit_job(
 					jobname		=> 'run_vcf2maf_and_VEP_' . $sample,
 					shell_command	=> $run_script,
 					hpc_driver	=> $args{hpc_driver},
@@ -801,13 +948,13 @@ sub main{
 					log_file	=> $log
 					);
 
-				push @annotate_jobs, $run_id;
-				push @all_jobs, $run_id;
+				push @annotate_jobs, $annotate_run_id;
+				push @all_jobs, $annotate_run_id;
 				} else {
 				print $log "Skipping vcf2maf because this has already been completed!\n";
 				}
 
-			if ($should_run_vcf2maf) { push @final_outputs, $final_maf; }
+			push @final_outputs, $final_maf;
 			}
 
 		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
@@ -856,7 +1003,7 @@ sub main{
 			cmd	=> $collect_output,
 			modules	=> [$r_version],
 			dependencies	=> join(':', @annotate_jobs),
-			mem		=> '16G',
+			mem		=> '28G',
 			max_time	=> '24:00:00',
 			hpc_driver	=> $args{hpc_driver},
 			extra_args	=> [$hpc_group]
