@@ -82,7 +82,7 @@ sub get_ichor_cna_command {
 		$ichor_command .= " --genomeStyle NCBI";
 		if ('GRCh37' eq $ref_type) {
 			$ichor_command .= " --genomeBuild hg19";
-			} elsif ('GRCh37' eq $ref_type) {
+			} elsif ('GRCh38' eq $ref_type) {
 			$ichor_command .= " --genomeBuild hg38";
 			}
 		}
@@ -382,6 +382,7 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> 'run_ichor_cna_' . $sample,
 					cmd	=> $ichor_command,
+					modules	=> [$ichor_r],
 					dependencies	=> join(':', $run_id, $normal_wig_jobid),
 					max_time	=> $parameters->{ichor_cna}->{time},
 					mem		=> $parameters->{ichor_cna}->{mem},

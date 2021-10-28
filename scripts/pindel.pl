@@ -177,7 +177,7 @@ sub get_merge_pindel_command {
 	# for deletions, inversions, tandem duplications, short insertions
 	# 	idx, type, bp1_chr, bp1_start, bp1_end, bp2_chr, bp2_start, bp2_end, support_1, support_2, qual
 	$pindel_command .= join(' ',
-		"cat $args{input}_chr*_{D,INV,TD}",
+		"cat $args{input}*_{D,INV,TD}",
 		"| grep -v '#'",
 		"| awk -v FS=' ' -v OFS='\\t'", 
 		"'{ if ((\$1 ~ /^[0-9]+\$/) && (\$27 >= 30))",
@@ -188,7 +188,7 @@ sub get_merge_pindel_command {
 	# for long insertions:
 	# 	idx, type, bp1_chr, bp1_start, bp1_end, bp2_chr, bp2_start, bp2_end, support_1, support_2, qual
 	$pindel_command .= "\n\n" . join(' ',
-		"cat $args{input}_chr*_LI",
+		"cat $args{input}*_LI",
 		"| grep -v '#'",
 		"| awk -v FS=' ' -v OFS='\\t'",
 		"'{ if (\$1 ~ /^[0-9]+\$/)",
@@ -199,7 +199,7 @@ sub get_merge_pindel_command {
 	# for translocations:
 	# 	idx, type, bp1_chr, bp1_start, bp1_end, bp2_chr, bp2_start, bp2_end, support_1, support_2, qual
 	$pindel_command .= "\n\n" . join(' ',
-		"cat $args{input}_chr*_INT_final",
+		"cat $args{input}*_INT_final",
 		"| awk -v FS=' ' -v OFS='\\t'",
 		"-v type='INT'",
 		"'{ print NR, type, \$2, \$16, \$25, \$6, \$19, \$28, \$12, NA, NA }'",
