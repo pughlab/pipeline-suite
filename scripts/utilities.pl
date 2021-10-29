@@ -123,6 +123,17 @@ sub error_checking {
 		}
 	}
 
+	# panelCN.mops
+	if ('mops' eq $pipeline) {
+		unless ('targeted' eq $tool_data->{seq_type}) {
+			die("Should only be run on targeted-panel data.");
+		}
+
+		if (!defined($tool_data->{intervals_bed})) {
+			die("Must provide path to target regions bed file.");
+		}
+	}
+
 	# Strelka, VarScan, SomaticSniper and Delly
 	my @pipeline_list = qw(strelka varscan delly somaticsniper vardict pindel);
 	if ( any { /$pipeline/ } @pipeline_list ) {

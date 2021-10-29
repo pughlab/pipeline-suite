@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-### ichor_cna.pl ###################################################################################
+### panelcn_mops.pl ################################################################################
 use AutoLoader 'AUTOLOAD';
 use strict;
 use warnings;
@@ -17,14 +17,14 @@ use IO::Handle;
 my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
-our ($reference, $ref_type, $ichor_path);
+our ($reference, $ref_type, $cnmops_path);
 
 ####################################################################################################
 # version	author		comment
-# 1.0		sprokopec	script to run ichorCNA
+# 1.0		sprokopec	script to run panelCN.mops
 
 ### USAGE ##########################################################################################
-# ichor_cna.pl -t tool.yaml -d data.yaml -o /path/to/output/dir -c slurm --remove --dry_run
+# panelcn_mops.pl -t tool.yaml -d data.yaml -o /path/to/output/dir -c slurm --remove --dry_run
 #
 # where:
 # 	-t (tool.yaml) contains tool versions and parameters, reference information, etc.
@@ -36,62 +36,71 @@ our ($reference, $ref_type, $ichor_path);
 # 	--dry_run indicates that this is a dry run
 
 ### DEFINE SUBROUTINES #############################################################################
-# format command to get read counts
-sub get_readcount_command {
+# format command to find read length
+sub get_read_lengths_command {
 	my %args = (
-		bam	=> undef,
-		chroms	=> undef,
-		wig	=> undef,
+		input	=> undef,
 		@_
 		);
 
-	my $rc_command = join(' ',
-		'readCounter',
-		'--window 1000000',
-		'--quality 20',
-		'--chromosome "' . $args{chroms} . '"',
-		$args{bam},
-		'>', $args{wig}
-		);
+	my @read_lengths;
 
-	return($rc_command);
+	# extract first 1000000 lines from BAM that pass flag 66
+	open (my $bam_fh, "samtools view -f66 $args{input} | awk '{print length(\$10)}' | head -n 1000000 |") or die "Could not run samtools view; did you forget to module load samtools?";
+
+	while (<$bam_fh>) {
+		my $line = $_;
+		chomp($line);
+		$line = abs($line);
+		next if ($line > 10000);
+		push @read_lengths, $line;
+		}
+
+	close($bam_fh);
+
+	return(int(sum(@read_lengths) / scalar(@read_lengths)));
 	}
 
-# format command to run ichorCNA
-sub get_ichor_cna_command {
+# format command to run panelcn.mops
+sub get_panelcn_mops_command {
 	my %args = (
-		tumour_id	=> undef,
-		tumour_wig	=> undef,
-		normal_wig	=> undef,
-		chroms		=> undef,
-		out_dir		=> undef,
+		sample_list	=> undef,
+		read_length	=> 100,
+		intervals_bed	=> undef,
+		output_dir	=> undef,
+		make_pon	=> 0,
+		pon		=> undef,
 		@_
 		);
 
-	my $ichor_command = join(' ',
-		'Rscript', $ichor_path,
-		'--WIG', $args{tumour_wig},
-		'--id', $args{tumour_id},
-		"--chrs c('" . $args{chroms} . "')"
+	my $mops_command = join(' ',
+		'Rscript', $cnmops_path,
+		'--sample_list', $args{sample_list},
+		'--read_length', $args{read_length},
+		'--output_directory', $args{output_dir}
 		);
 
 	if ( ('hg38' eq $ref_type) || ('hg19' eq $ref_type) ) {
-		$ichor_command .= " --genomeStyle UCSC";
-		$ichor_command .= " --genomeBuild $ref_type";
+		$mops_command .= " --genome_build $ref_type";
 		} else {
-		$ichor_command .= " --genomeStyle NCBI";
 		if ('GRCh37' eq $ref_type) {
-			$ichor_command .= " --genomeBuild hg19";
+			$mops_command .= " --genome_build hg19";
 			} elsif ('GRCh38' eq $ref_type) {
-			$ichor_command .= " --genomeBuild hg38";
+			$mops_command .= " --genome_build hg38";
 			}
 		}
 
-	if (defined($args{normal_wig})) {
-		$ichor_command .= " --NORMWIG $args{normal_wig}";
+	if (defined($args{intervals_bed})) {
+		$mops_command .= " --bed_file $args{intervals_bed}";
 		}
 
-	return($ichor_command);
+	if ($args{make_pon}) {
+		$mops_command .= " --make_pon TRUE";
+		} elsif (defined($args{pon})) {
+		$mops_command .= " --pon $args{pon}";
+		}
+
+	return($mops_command);
 	}
 
 ### MAIN ###########################################################################################
@@ -112,12 +121,12 @@ sub main {
 
 	### PREAMBLE ######################################################################################
 	unless($args{dry_run}) {
-		print "Initiating ichorCNA pipeline...\n";
+		print "Initiating panelCN.mops pipeline...\n";
 		}
 
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
-	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'ichor');
+	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'mops');
 
 	# organize output and log directories
 	my $output_directory = $args{output_directory};
@@ -126,7 +135,7 @@ sub main {
 	my $log_directory = join('/', $output_directory, 'logs');
 	unless(-e $log_directory) { make_path($log_directory); }
 
-	my $log_file = join('/', $log_directory, 'run_ICHORCNA_pipeline.log');
+	my $log_file = join('/', $log_directory, 'run_PanelCN_mops_pipeline.log');
 
 	# create a file to hold job metrics
 	my (@files, $run_count, $outfile, $touch_exit_status);
@@ -141,7 +150,7 @@ sub main {
 		$touch_exit_status = system("touch $outfile");
 		if (0 != $touch_exit_status) { Carp::croak("Cannot touch file $outfile"); }
 
-		$log_file = join('/', $log_directory, 'run_ICHORCNA_pipeline_' . $run_count . '.log');
+		$log_file = join('/', $log_directory, 'run_PanelCN_mops_pipeline_' . $run_count . '.log');
 		}
 
 	# start logging
@@ -149,48 +158,25 @@ sub main {
 	$log->autoflush;
 
 	print $log "---\n";
-	print $log "Running ichorCNA pipeline.\n";
+	print $log "Running panelCN.mops pipeline.\n";
 	print $log "\n  Tool config used: $tool_config";
 	print $log "\n    Reference used: $tool_data->{reference}";
 
 	$reference = $tool_data->{reference};
 	$ref_type  = $tool_data->{ref_type};
 
+	print $log "\n    Target intervals: $tool_data->{intervals_bed}";
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
-	print $log "\n---\n";
-
-	my $string;
-	if (defined($tool_data->{ichor_cna}->{chromosomes})) {
-		$string = $tool_data->{ichor_cna}->{chromosomes};
-		} elsif ( ('hg38' eq $tool_data->{ref_type}) || ('hg19' eq $tool_data->{ref_type})) {
-		$string = 'chr' . join(',chr', 1..22) . ',chrX,chrY';
-		} elsif ( ('GRCh37' eq $tool_data->{ref_type}) || ('GRCh37' eq $tool_data->{ref_type})) {
-		$string = join(',', 1..22) . ',X,Y';
-		} else {
-		$string = 'ALL';
-		}
-
-	my @chroms = split(',', $string);
+	print $log "\n---\n\n";
 
 	# set tools and versions
-	$ichor_path = "$cwd/runIchorCNA.R";
-	my $ichor_r;
-	my $given = $tool_data->{ichor_cna_version}; # version->declare($tool_data->{ichor_cna_version})->numify;
-	if ('0.3.2' eq $given) {
-		$ichor_r = 'R/4.1.0'; # will run 0.3.2
-		} elsif ('0.3.0' eq $given) {
-		$ichor_r = 'R/3.6.1'; # will run version 0.3.0
-		} else {
-		print $log "Unknown verions of ichorCNA requested - using v3.2.0 in R/4.1.0";
-		$ichor_r = 'R/4.1.0'; # will run 0.3.2
-		}
-
-	my $hmmcopy	= 'hmmcopy_utils/170718';
+	$cnmops_path = "$cwd/run_panelCN_mops.R";
+	my $cnmops_r = 'R/4.1.0'; # . $tool_data->{mops_r_version};
 	my $r_version	= 'R/'. $tool_data->{r_version};
 
 	# get user-specified tool parameters
-	my $parameters = $tool_data->{ichor_cna}->{parameters};
+	my $parameters = $tool_data->{panelcn_mops}->{parameters};
 
 	# get optional HPC group
 	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
@@ -206,10 +192,19 @@ sub main {
 		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
 		}
 
-	# process each sample in $smp_data
-	foreach my $patient (sort keys %{$smp_data}) {
+	# create empty lists
+	my @sample_sheet_normal;
+	my @control_read_lengths;
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+	# begin by creating panel of normals
+	my $pon_directory = join('/', $output_directory, 'PanelOfNormals');
+	unless(-e $pon_directory) { make_path($pon_directory); }
+
+	my $pon_link_directory = join('/', $pon_directory, 'bam_links');
+	unless(-e $pon_link_directory) { make_path($pon_link_directory); }
+
+	# find all samples in $smp_data
+	foreach my $patient (sort keys %{$smp_data}) {
 
 		# find bams
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
@@ -219,87 +214,107 @@ sub main {
 		my $patient_directory = join('/', $output_directory, $patient);
 		unless(-e $patient_directory) { make_path($patient_directory); }
 
-		my $tmp_directory = join('/', $patient_directory, 'TEMP');
-		unless(-e $tmp_directory) { make_path($tmp_directory); }
-
-		# indicate this should be removed at the end
-		$cleanup_cmd = "rm -rf $tmp_directory";
-
 		my $link_directory = join('/', $patient_directory, 'bam_links');
 		unless(-e $link_directory) { make_path($link_directory); }
 
-		# create some symlinks
+		# create some symlinks and add samples to sheet
 		foreach my $normal (@normal_ids) {
 			my $bam = $smp_data->{$patient}->{normal}->{$normal};
-			my $index = $bam;
-			$index =~ s/bam$/bai/;
-
-			$link = join('/', $link_directory, basename($bam));
+			$link = join('/', $pon_link_directory, basename($bam));
 			symlink($bam, $link);
-			symlink($index, $link . '.bai');
+
+			push @sample_sheet_normal, "$normal\tcontrol\t$bam\n";
+
+			# find average read length
+			my $read_length = 151;
+			unless($args{dry_run}) {
+				$read_length = get_read_lengths_command(input => $bam);
+				}
+			push @control_read_lengths, $read_length;
 			}
+
 		foreach my $tumour (@tumour_ids) {
 			my $bam = $smp_data->{$patient}->{tumour}->{$tumour};
-			my $index = $bam;
-			$index =~ s/bam$/bai/;
-
 			$link = join('/', $link_directory, basename($bam));
 			symlink($bam, $link);
-			symlink($index, $link . '.bai');
 			}
+		}
+
+	# if no normals were provided, don't bother running further
+	if (scalar(@sample_sheet_normal) == 0) {
+		die("No normal BAMs provided; can not make PoN so exiting now.");
+		}
+
+	# prepare panel of normals
+	my $pon_run_id = '';
+
+	my $sample_sheet = join('/', $pon_directory, 'sample_sheet.tsv');
+	open(my $fh, '>', $sample_sheet) or die "Cannot open '$sample_sheet' !";
+
+	foreach my $i ( @sample_sheet_normal ) {
+		print $fh $i;
+		}
+
+	close $fh;
+
+	my $avg_read_length = int(sum(@control_read_lengths) / scalar(@control_read_lengths));
+	my $pon_file = join('/', $pon_directory, 'merged_GRanges_count_obj_for_panelcn.Rdata');
+	my $new_targets_bed = join('/', $pon_directory, 'formatted_countWindows.bed');
+
+	my $mops_pon_command = get_panelcn_mops_command(
+		sample_list	=> $sample_sheet,
+		read_length	=> $avg_read_length,
+		intervals_bed	=> $tool_data->{intervals_bed},
+		output_dir	=> $pon_directory,
+		make_pon	=> 1
+		);
+
+	# check if this should be run
+	if ('Y' eq missing_file($pon_file)) {
+
+		# record command (in log directory) and then run job
+		print $log "Submitting job for panelCN.mops PanelOfNormals...\n";
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'run_panelCN_mops_create_PoN',
+			cmd	=> $mops_pon_command,
+			modules	=> [$cnmops_r],
+			max_time	=> $parameters->{cn_mops}->{time},
+			mem		=> $parameters->{cn_mops}->{mem},
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
+			);
+
+		$pon_run_id = submit_job(
+			jobname		=> 'run_panelCN_mops_create_PoN',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @all_jobs, $pon_run_id;
+		} else {
+		print $log "Skipping panelCN.mops PoN because this has already been completed!\n";
+		}
+
+	# process each tumour sample
+	my @sample_sheet_tumour;
+	my @tumour_read_lengths;
+
+	# process each sample in $smp_data
+	foreach my $patient (sort keys %{$smp_data}) {
+
+		print $log "\nInitiating process for PATIENT: $patient\n";
 
 		# create an array to hold final outputs and all patient job ids
 		my (@final_outputs, @patient_jobs);
 
-		# if a normal is provided, create a WIG
-		my ($normal_wig, $normal_wig_jobid);
-		if (scalar(@normal_ids) > 0) {
+		my $patient_directory = join('/', $output_directory, $patient);
 
-			# find input bam
-			# because readCounter needs an index with the suffix .bam.bai (rather
-			# than the .bai I have generated, we need to use the renamed symlinks
-			# for this step)
-			my $normal = $normal_ids[0];
-			my $normal_bam = basename($smp_data->{$patient}->{normal}->{$normal});
-			$normal_wig = join('/', $tmp_directory, $normal . '.wig');
-
-			my $make_wig_command = get_readcount_command(
-				chroms	=> join(',', @chroms),
-				bam	=> join('/', $link_directory, $normal_bam),
-				wig	=> $normal_wig
-				);
-
-			# check if this should be run
-			if ('Y' eq missing_file($normal_wig)) {
-
-				# record command (in log directory) and then run job
-				print $log "Submitting job for readCounter...\n";
-
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_readCounter_' . $normal,
-					cmd	=> $make_wig_command,
-					modules	=> [$hmmcopy],
-					max_time	=> $parameters->{readcounter}->{time},
-					mem		=> $parameters->{readcounter}->{mem},
-					hpc_driver	=> $args{hpc_driver},
-					extra_args	=> [$hpc_group]
-					);
-
-				$normal_wig_jobid = submit_job(
-					jobname		=> 'run_readCounter_' . $normal,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{hpc_driver},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
-					);
-
-				push @patient_jobs, $normal_wig_jobid;
-				push @all_jobs, $normal_wig_jobid;
-				} else {
-				print $log "Skipping readCounter because this has already been completed!\n";
-				}
-			}
+		# find bams
+		my @tumour_ids = keys %{$smp_data->{$patient}->{'tumour'}};
 
 		# now, for each tumour sample
 		foreach my $sample (@tumour_ids) {
@@ -312,43 +327,59 @@ sub main {
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
 
-			# find input bam
-			# because readCounter needs an index with the suffix .bam.bai (rather
-			# than the .bai I have generated, we need to use the renamed symlinks
-			# for this step)
-			my $input_bam = basename($smp_data->{$patient}->{tumour}->{$sample});
+			# find tumour bam
+			my $input_bam = $smp_data->{$patient}->{tumour}->{$sample};
 
-			# indicate output stem
-			my $tumour_wig = join('/', $tmp_directory, $sample . '.wig');
+			# generate necessary samples.tsv
+			my $sample_sheet = join('/', $sample_directory, 'sample_sheet.tsv');
+			open(my $fh, '>', $sample_sheet) or die "Cannot open '$sample_sheet' !";
+			print $fh "$sample\ttumour\t$input_bam\n";
+			push @sample_sheet_tumour, "$sample\ttumour\t$input_bam\n";
+			close $fh;
 
-			# create readCounter command
-			$run_id = '';
+			# find average read length
+			my $read_length = 151;
+			unless($args{dry_run}) {
+				$read_length = get_read_lengths_command(input => $input_bam);
+				}
+			push @tumour_read_lengths, $read_length;
 
-			my $make_wig_command = get_readcount_command(
-				chroms	=> join(',', @chroms),
-				bam	=> join('/', $link_directory, $input_bam),
-				wig	=> $tumour_wig
+			# format panelCN.mops command
+			my $output_file = join('/',
+				$sample_directory, 
+				$sample . '_panelcn.mops_results.tsv'
 				);
 
+			my $mops_command = get_panelcn_mops_command(
+				sample_list	=> $sample_sheet,
+				read_length	=> $read_length,
+				intervals_bed	=> $new_targets_bed,
+				output_dir	=> $sample_directory,
+				pon		=> $pon_file
+				);
+
+			$mops_command .= "\n\n" . "md5sum $output_file > $output_file.md5";
+
 			# check if this should be run
-			if ('Y' eq missing_file($tumour_wig)) {
+			if ('Y' eq missing_file($output_file . '.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for readCounter...\n";
+				print $log "Submitting job for panelCN.mops...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
-					name	=> 'run_readCounter_' . $sample,
-					cmd	=> $make_wig_command,
-					modules	=> [$hmmcopy],
-					max_time	=> $parameters->{readcounter}->{time},
-					mem		=> $parameters->{readcounter}->{mem},
+					name	=> 'run_panelCN_mops_' . $sample,
+					cmd	=> $mops_command,
+					modules	=> [$cnmops_r],
+					dependencies	=> $pon_run_id,
+					max_time	=> $parameters->{cn_mops}->{time},
+					mem		=> $parameters->{cn_mops}->{mem},
 					hpc_driver	=> $args{hpc_driver},
 					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
-					jobname		=> 'run_readCounter_' . $sample,
+					jobname		=> 'run_panelCN_mops_' . $sample,
 					shell_command	=> $run_script,
 					hpc_driver	=> $args{hpc_driver},
 					dry_run		=> $args{dry_run},
@@ -358,62 +389,17 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping readCounter because this has already been completed!\n";
+				print $log "Skipping panelCN.mops because this has already been completed!\n";
 				}
 
-			# run IchorCNA on provided WIG files
-			my $final_file = join('/', $sample_directory, $sample . '_final_metrics.txt');
-
-			my $ichor_command = get_ichor_cna_command(
-				tumour_id	=> $sample,
-				tumour_wig	=> $tumour_wig,
-				normal_wig	=> $normal_wig,
-				chroms		=> join("','", @chroms),
-				out_dir		=> $sample_directory
-				);
-
-			# check if this should be run
-			if ('Y' eq missing_file($final_file)) {
-
-				# record command (in log directory) and then run job
-				print $log "Submitting job for ichorCNA...\n";
-
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_ichor_cna_' . $sample,
-					cmd	=> $ichor_command,
-					modules	=> [$ichor_r],
-					dependencies	=> join(':', $run_id, $normal_wig_jobid),
-					max_time	=> $parameters->{ichor_cna}->{time},
-					mem		=> $parameters->{ichor_cna}->{mem},
-					hpc_driver	=> $args{hpc_driver},
-					extra_args	=> [$hpc_group]
-					);
-
-				$run_id = submit_job(
-					jobname		=> 'run_ichor_cna_' . $sample,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{hpc_driver},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
-					);
-
-				push @patient_jobs, $run_id;
-				push @all_jobs, $run_id;
-				} else {
-				print $log "Skipping ichorCNA step because this has already been completed!\n";
-				}
-
-			push @final_outputs, $final_file;
+			push @final_outputs, $output_file;
 			}
 
 		# should intermediate files be removed
 		# run per patient
 		if ($args{del_intermediates}) {
 
-			if (scalar(@patient_jobs) == 0) {
-				`rm -rf $tmp_directory`;
-				} else {
+			if (scalar(@patient_jobs) > 0) {
 
 				print $log "Submitting job to clean up temporary/intermediate files...\n";
 
@@ -451,18 +437,87 @@ sub main {
 		print $log "---\n";
 		}
 
+	# run full cohort as well
+	if ('Y' eq $parameters->{run_cohort}) {
+
+		# create directory
+		my $cohort_directory = join('/', $output_directory, 'cohort');
+		unless(-e $cohort_directory) { make_path($cohort_directory); }
+
+		# write all tumour samples to list
+		my $sample_sheet = join('/', $cohort_directory, 'sample_sheet.tsv');
+		open(my $fh, '>', $sample_sheet) or die "Cannot open '$sample_sheet' !";
+
+		foreach my $i ( @sample_sheet_tumour ) {
+			print $fh $i;
+			}
+
+		close $fh;
+
+		# find average read length
+		my $avg_read_length = int(sum(@tumour_read_lengths) / scalar(@tumour_read_lengths));
+
+		# format panelCN.mops command
+		my $output_file = join('/',
+			$cohort_directory, 
+			'cohort_panelcn.mops_results.tsv'
+			);
+
+		# write command
+		my $mops_command = get_panelcn_mops_command(
+			sample_list	=> $sample_sheet,
+			read_length	=> $avg_read_length,
+			intervals_bed	=> $new_targets_bed,
+			output_dir	=> $cohort_directory,
+			pon		=> $pon_file
+			);
+
+		$mops_command .= "\n\n" . "md5sum $output_file > $output_file.md5";
+
+		# check if this should be run
+		if ('Y' eq missing_file($output_file . '.md5')) {
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for panelCN.mops...\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'run_panelCN_mops_cohort',
+				cmd	=> $mops_command,
+				modules	=> [$cnmops_r],
+				dependencies	=> $pon_run_id,
+				max_time	=> $parameters->{cn_mops}->{time},
+				mem		=> $parameters->{cn_mops}->{mem},
+				hpc_driver	=> $args{hpc_driver},
+				extra_args	=> [$hpc_group]
+				);
+
+			$run_id = submit_job(
+				jobname		=> 'run_panelCN_mops_cohort',
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @all_jobs, $run_id;
+			} else {
+			print $log "Skipping panelCN.mops because this has already been completed!\n";
+			}
+		}
+
 	# collate results
 	if ($should_run_final) {
 
 		my $collect_output = join(' ',
-			"Rscript $cwd/collect_ichorCNA_output.R",
+			"Rscript $cwd/collect_panelCN_mops_output.R",
 			'-d', $output_directory,
 			'-p', $tool_data->{project_name}
 			);
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
-			name	=> 'combine_ichorCNA_output',
+			name	=> 'combine_panelCN_mops_output',
 			cmd	=> $collect_output,
 			modules	=> [$r_version],
 			dependencies	=> join(':', @all_jobs),
@@ -473,7 +528,7 @@ sub main {
 			);
 
 		$run_id = submit_job(
-			jobname		=> 'combine_ichorCNA_output',
+			jobname		=> 'combine_panelCN_mops_output',
 			shell_command	=> $run_script,
 			hpc_driver	=> $args{hpc_driver},
 			dry_run		=> $args{dry_run},
@@ -600,7 +655,7 @@ main(
 	data_config		=> $data_config,
 	output_directory	=> $output_directory,
 	hpc_driver		=> $hpc_driver,
-	del_intermediates	=> $remove_junk,
+	del_intermediates	=> 0, # $remove_junk,
 	dry_run			=> $dry_run,
 	no_wait			=> $no_wait
 	);

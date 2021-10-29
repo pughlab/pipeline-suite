@@ -34,6 +34,7 @@ delly_version: 0.8.1
 novobreak_version: 1.1
 svict_version: 1.0.1
 ichor_cna_version: 0.3.2
+panelcnmops_version: 1.14.0
 pindel_version: 0.2.5b8
 mavis_version: 2.2.5
 cpsr_version: 0.6.1
@@ -147,6 +148,11 @@ haplotype_caller:
             java_mem: 1g
             mem: 2G
             time: '24:00:00'
+        hard_filtering:
+            run: N
+            java_mem: 1g
+            mem: 2G
+            time: '24:00:00' 
         filter_recalibrated:
             mem: 2G
             time: '24:00:00'
@@ -340,10 +346,17 @@ novobreak:
             mem: 4G
             time: '12:00:00'
 svict:
-    run: N # only for ctDNA (targeted panel or exome)
+    run: N # only for ctDNA (targeted panel)
     parameters:
         svict:
             mem: 16G
+            time: '24:00:00'
+panelcn_mops:
+    run: Y # only for targeted panel
+    parameters:
+        run_cohort: Y
+        cn_mops:
+            mem: 4G
             time: '24:00:00'
 ichor_cna:
     run: N # only for ctDNA (WGS)

@@ -294,11 +294,42 @@ if (arguments$find_drawings) {
 			}
 		}
 
+	somatic.svs$library <- gsub('-rna|-wgs|-wxs','',somatic.svs$library);
 	somatic.svs <- somatic.svs[!duplicated(somatic.svs[,c('library','tracking_id')]),];
+
+	# add quick recurrence filter (likely false positives/artefacts)
+	recurrence.data <- aggregate(
+		library ~ break1_chromosome + break1_position_start + break1_position_end + break2_chromosome + break2_position_start + break2_position_end + event_type,
+		somatic.svs,
+		length
+		);
+	colnames(recurrence.data)[ncol(recurrence.data)] <- 'RecurrenceCount';
+
+	recurrence.threshold <- length(unique(somatic.svs$library))*0.9;
+	tmp <- merge(somatic.svs, recurrence.data, all.x = TRUE);
+	tmp <- tmp[which(tmp$RecurrenceCount < recurrence.threshold),];
+	somatic.svs <- tmp[,colnames(somatic.svs)];
+
+	# remove short INDELs (< 100bp)
+	somatic.svs$Length <- abs(somatic.svs$break2_position_start - somatic.svs$break1_position_start);
+	inter.chrom <- which(somatic.svs$break1_chromosome != somatic.svs$break2_chromosome);
+	if (length(inter.chrom) > 0) { somatic.svs[inter.chrom,]$Length <- NA; }
+
+	indel.idx <- which(
+		somatic.svs$event_type %in% c('deletion','insertion') &
+		somatic.svs$Length < 100
+		);
+	dup.idx <- which(
+		somatic.svs$event_type == 'duplication' &
+		somatic.svs$Length < 50 &
+		somatic.svs$tools == 'pindel'
+		);
+
+	somatic.svs <- somatic.svs[-c(indel.idx,dup.idx),];
 
 	# format for cBioportal
 	cbio.svs <- data.frame(
-		Sample_ID = gsub('-rna|-wgs|-wxs','',somatic.svs$library),
+		Sample_ID = somatic.svs$library,
 		Site1_Hugo_Symbol = somatic.svs$gene1_aliases,
 		Site1_Entrez_Gene_Id = annotate.by.symbol(somatic.svs$gene1_aliases),
 		Site1_Ensembl_Transcript_Id = somatic.svs$transcript1,
@@ -330,7 +361,7 @@ if (arguments$find_drawings) {
 		Connection_Type = paste0(somatic.svs$gene1_direction,'to',somatic.svs$gene2_direction),
 		Event_Info = NA, 
 		Class = toupper(somatic.svs$event_type),
-		Length = NA,
+		Length = somatic.svs$Length,
 		Comments = somatic.svs$Status,
 		Fusion = paste0(somatic.svs$gene1_aliases, '--', somatic.svs$gene2_aliases)
 		);
@@ -340,8 +371,8 @@ if (arguments$find_drawings) {
 	cbio.svs$RNA_Support <- as.character(cbio.svs$RNA_Support);
 	dna.support <- grepl('manta|delly|pindel|novobreak|svict', somatic.svs$tools);
 	rna.support <- grepl('starfusion|fusioncatcher', somatic.svs$tools);
-	cbio.svs[dna.support,]$DNA_Support <- 'yes';
-	cbio.svs[rna.support,]$RNA_Support <- 'yes';
+	if (any(dna.support)) { cbio.svs[dna.support,]$DNA_Support <- 'yes'; }
+	if (any(rna.support)) { cbio.svs[rna.support,]$RNA_Support <- 'yes'; }
 
 	# extract breakpoint type (precise/imprecise)
 #	cbio.svs$Breakpoint_Type <- 'IMPRECISE';
@@ -353,14 +384,6 @@ if (arguments$find_drawings) {
 	cbio.svs$Site2_Effect_On_Frame <- factor(cbio.svs$Site2_Effect_On_Frame,
 		levels = c('INFRAME','FRAMESHIFT')
 		);
-
-	# calculate intrachromosomal SV lengths
-	cbio.svs$Site1_Chromosome <- as.character(cbio.svs$Site1_Chromosome);
-	cbio.svs$Site2_Chromosome <- as.character(cbio.svs$Site2_Chromosome);
-	
-	intra.chrom <- which(cbio.svs$Site1_Chromosome == cbio.svs$Site2_Chromosome);
-	cbio.svs[intra.chrom,]$Length <- abs(
-		cbio.svs[intra.chrom,]$Site1_Position - cbio.svs[intra.chrom,]$Site2_Position);
 
 	# save to file
 	write.table(
@@ -394,7 +417,7 @@ if (arguments$find_drawings) {
 
 	# save to file
 	write.table(
-		fusion.data,
+		unique(fusion.data),
 		file = generate.filename(arguments$project, 'fusion_data_for_cbioportal','tsv'),
 		row.names = FALSE,
 		col.names = TRUE,
