@@ -94,7 +94,7 @@ sub main {
 	my ($bwa_run_id, $gatk_run_id, $contest_run_id, $qc_run_id, $coverage_run_id, $hc_run_id);
 	my ($strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id, $msi_run_id, $pindel_run_id);
 	my ($somaticsniper_run_id, $delly_run_id, $vardict_run_id, $gatk_cnv_run_id, $novobreak_run_id);
-	my ($svict_run_id, $ichor_run_id, $mavis_run_id, $report_run_id);
+	my ($mops_run_id, $svict_run_id, $ichor_run_id, $mavis_run_id, $report_run_id);
 
 	my (@step1_job_ids, @step2_job_ids, @step3_job_ids, @step4_job_ids, @job_ids);
 	my $current_dependencies = '';
@@ -117,6 +117,7 @@ sub main {
 	my $somaticsniper_directory = join('/', $output_directory, 'SomaticSniper');
 	my $delly_directory = join('/', $output_directory, 'Delly');
 	my $novobreak_directory = join('/', $output_directory, 'NovoBreak');
+	my $mops_directory = join('/', $output_directory, 'panelCNmops');
 	my $svict_directory = join('/', $output_directory, 'SViCT');
 	my $ichor_directory = join('/', $output_directory, 'IchorCNA');
 	my $mavis_directory = join('/', $output_directory, 'Mavis');
@@ -136,9 +137,10 @@ sub main {
 		'pindel'	=> defined($tool_data->{pindel}->{run}) ? $tool_data->{pindel}->{run} : 'N',
 		'gatk_cnv'	=> defined($tool_data->{gatk_cnv}->{run}) ? $tool_data->{gatk_cnv}->{run} : 'N',
 		'novobreak'	=> defined($tool_data->{novobreak}->{run}) ? $tool_data->{novobreak}->{run} : 'N',
+		'ichor_cna'	=> defined($tool_data->{ichor_cna}->{run}) ? $tool_data->{ichor_cna}->{run} : 'N',
 		'delly'	=> defined($tool_data->{delly}->{run}) ? $tool_data->{delly}->{run} : 'N',
 		'svict'	=> defined($tool_data->{svict}->{run}) ? $tool_data->{svict}->{run} : 'N',
-		'ichor_cna'	=> defined($tool_data->{ichor_cna}->{run}) ? $tool_data->{ichor_cna}->{run} : 'N',
+		'mops'	=> defined($tool_data->{panelcn_mops}->{run}) ? $tool_data->{panelcn_mops}->{run} : 'N',
 		'mavis'	=> defined($tool_data->{mavis}->{run}) ? $tool_data->{mavis}->{run} : 'N',
 		'msi'	=> defined($tool_data->{other_tools}->{run_msi}) ? $tool_data->{other_tools}->{run_msi} : 'N'
 		);
@@ -1274,6 +1276,63 @@ sub main {
 				print $log ">>> Pindel job id: $pindel_run_id\n\n";
 				push @step4_job_ids, $pindel_run_id;
 				push @job_ids, $pindel_run_id;
+				}
+			}
+
+		## panelCN.mops pipeline
+		if ('Y' eq $tool_set{'mops'}) {
+
+			unless(-e $mops_directory) { make_path($mops_directory); }
+
+			my $mops_command = join(' ',
+				"perl $cwd/scripts/panelcn_mops.pl",
+				"-o", $mops_directory,
+				"-t", $tool_config,
+				"-d", $gatk_output_yaml,
+				"-c", $args{cluster}
+				);
+
+			if ($args{cleanup}) {
+				$mops_command .= " --remove";
+				}
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for panelcn_mops.pl\n";
+			print $log "  COMMAND: $mops_command\n\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_panelcn_mops',
+				cmd	=> $mops_command,
+				modules	=> ['perl'],
+				dependencies	=> $current_dependencies,
+				mem		=> '256M',
+				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
+
+				$mops_command .= " --dry-run";
+				`$mops_command`;
+				$mops_run_id = 'pughlab_dna_pipeline__run_panelcn_mops';
+
+				} else {
+
+				$mops_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> panelCN_mops job id: $mops_run_id\n\n";
+				push @step4_job_ids, $mops_run_id;
+				push @job_ids, $mops_run_id;
 				}
 			}
 

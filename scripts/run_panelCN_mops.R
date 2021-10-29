@@ -1,0 +1,254 @@
+## Copy-Number calling of targeted panel DNA-seq data using panelcn.mops
+# Jeff Bruce - jeffpbruce@gmail.com
+# Script to take in a set of test bams and reference ('normal') bams along
+# with a target bed file and output figures and copy-number calls
+
+### PREAMBLE #######################################################################################
+# load required libraries
+library(optparse);
+library(panelcn.mops);
+
+####################################
+### Get inputs from command line argumets
+####################################
+option_list <- list(
+	make_option(c("-s", "--sample_list"), default = NULL,
+		help = "Required; path to tab seperated file with 3 columns (no header): 
+		1) Sample ID 
+		2) Sample Type (values must be either 'control' or 'tumour')
+		3) Path to bam file
+		"),
+	make_option(c("-b", "--bed_file"), default = NULL,
+		help = "Required; standard format bed file (chromsome<tab>start<tab>end) with 
+		no header row and probe/gene name in 4th. In order to correctly 
+		parse gene and exon names from probe ID, must be in this format: 
+		'GeneName.ExonName'"
+		),
+	make_option(c("-l", "--read_length"), type = "integer", default = 100,
+		help = "Read length of input data. [default %default]"
+		),
+	make_option(c("-o", "--output_directory"), type = "character", default = ".",
+		help = "Path to output directory; defaults to current working directory."
+		),
+	make_option(c("-g", "--genome_build"), type = "character", default = "hg38",
+		help = "Genome build; one of hg19 or hg38."
+		),
+	make_option(c("-p", "--pon"), type = "character", default = NULL,
+		help = "Path to panel of normals file."
+		),
+	make_option(c("-m", "--make_pon"), type = "logical", default = FALSE,
+		help = "Does the provided sample_list ONLY contain control samples? [default %default]"
+		)
+	);
+
+# set arguments
+opt <- parse_args(OptionParser(option_list=option_list));
+
+####################################
+### Set variables with test data for development
+#opt$sample_list <- '/cluster/projects/pughlab/projects/M4/Pipeline_suite/Backbone/PanelCNmops/CA-01-01/M4_CA-01-01_BM_cells/sample_sheet.tsv';
+#opt$bed_file <- '/cluster/projects/pughlab/projects/M4/Pipeline_suite/Backbone/PanelCNmops/PanelOfNormals/formatted_countWindows.bed';
+#opt$output_directory <- '/cluster/projects/pughlab/projects/M4/Pipeline_suite/Backbone/PanelCNmops/CA-01-01/M4_CA-01-01_BM_cells/';
+#opt$pon	<- '/cluster/projects/pughlab/projects/M4/Pipeline_suite/Backbone/PanelCNmops/PanelOfNormals/merged_GRanges_count_obj_for_panelcn.Rdata';
+#opt$read_length		<- 151;
+####################################
+
+sample_file		<- opt$sample_list;
+bed_file		<- opt$bed_file;
+output_directory	<- opt$output_directory;
+read_length		<- opt$read_length;
+ref_type		<- opt$genome_build;
+pon			<- opt$pon;
+make_pon		<- opt$make_pon;
+
+# move to output directory
+setwd(output_directory);
+
+### MAIN ###########################################################################################
+## FORMAT REGIONS ##
+# check if chromosome have chr prefix and load windows
+tmp_bed <- read.delim(bed_file, header = FALSE, nrows = 1)[,1:3];
+has_chr <- grepl('chr', tmp_bed[1,1]);
+
+# format target regions into count windows
+if (make_pon) {
+
+	# add annotations
+	library(GenomicRanges);
+	tmp_bed <- read.delim(bed_file, header = FALSE);
+        colnames(tmp_bed)[1:3] <- c('Chromosome','Start','End');
+        target.gr <- GRanges(tmp_bed);
+
+	if ('hg19' == ref_type) {
+		library('TxDb.Hsapiens.UCSC.hg19.knownGene');
+		txdb <- TxDb.Hsapiens.UCSC.hg19.knownGene;
+
+		} else if ('hg38' == ref_type) {
+		library('TxDb.Hsapiens.UCSC.hg38.knownGene');
+		txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene;
+
+		} else {
+		stop('Unknown reference provided; must be one of hg19 or hg38.');
+		}
+
+	gene.gr <- transcriptsBy(txdb, by = 'gene');
+
+	gene.ids <- names(gene.gr);
+	gene.info <- select(txdb,
+		keys = gene.ids,
+		keytype = 'GENEID',
+		columns = c('TXNAME','TXCHROM','TXSTART','TXEND','EXONRANK','EXONSTART','EXONEND')
+		);
+
+	library(org.Hs.eg.db);
+	gene.info$Symbol <- mapIds(org.Hs.eg.db,
+		keys = gene.info$GENEID,
+		keytype = "ENTREZID",
+		column = "SYMBOL",
+		multiVals = "first"
+		);
+
+	# add gene annotations
+	gene.gr <- makeGRangesFromDataFrame(gene.info,
+		seqnames.field = 'TXCHROM',
+		start.field = 'TXSTART',
+		end.field = 'TXEND'
+		);
+	exon.gr <- makeGRangesFromDataFrame(gene.info,
+		seqnames.field = 'TXCHROM',
+		start.field = 'EXONSTART',
+		end.field = 'EXONEND'
+		);
+
+	gene.overlaps <- as.data.frame(findOverlaps(gene.gr, target.gr));
+	exon.overlaps <- as.data.frame(findOverlaps(exon.gr, target.gr));
+
+	# panelcn.mops expects gene 'names' to be in the format
+	# SYMBOL.exon.chr.start.end
+	# so fill in as much as possible
+	tmp_bed$V4 <- NA;
+	for (i in 1:nrow(tmp_bed)) {
+		if (i %in% gene.overlaps$subjectHits) {
+			gene.idx <- gene.overlaps[which(gene.overlaps$subjectHits == i),]$queryHits;
+			gene <- sort(unique(gene.info[gene.idx,]$Symbol))[1];
+			} else { gene <- 'GENE';
+			}
+		if (i %in% exon.overlaps$subjectHits) {
+			exon.idx <- exon.overlaps[which(exon.overlaps$subjectHits == i),]$queryHits;
+			exon <- paste0('E',unique(gene.info[exon.idx,]$EXONRANK)[1]);
+			} else { exon <- 'EXON';
+			}
+
+		tmp_bed[i,]$V4 <- paste(c(gene, exon, tmp_bed[i,1:3]), collapse = '.');
+		}
+
+	bed_file <- sub('.bed','_annotated.bed',basename(bed_file));
+	write.table(
+		tmp_bed,
+		file = bed_file,
+		row.names = FALSE,
+		col.names = FALSE,
+		quote = FALSE,
+		sep = '\t'
+		);
+
+	countWindows <- getWindows(bed_file, chr = has_chr);
+	countWindows[which(countWindows$gene == 'GENE'),]$gene <- NA;
+	countWindows[which(countWindows$exon == 'EXON'),]$exon <- NA;
+	countWindows$name <- make.unique(countWindows$gene);
+
+	write.table(
+		countWindows,
+		file = 'formatted_countWindows.bed',
+		row.names = FALSE,
+		col.names = TRUE,
+		quote = FALSE,
+		sep = '\t'
+		);
+	
+	} else {
+
+	countWindows <- read.delim(bed_file);
+
+	}
+
+## PROCESS SAMPLES ##
+# get sample list (ID, type, path)
+sample_list <- read.delim(sample_file, header = FALSE);
+
+sampleBams <- sample_list[which(sample_list$V2 == 'tumour'),]$V3;
+sampleNames <- sample_list[which(sample_list$V2 == 'tumour'),]$V1;
+refBams <- sample_list[which(sample_list$V2 == 'control'),]$V3;
+
+# IF processing control samples ONLY
+if (make_pon) {
+
+	# Load control files
+	control <- countBamListInGRanges(
+		countWindows = countWindows,
+		bam.files = refBams,
+		read.width = read_length
+		);
+ 
+	# save reference for future use
+	save(control, file = 'merged_GRanges_count_obj_for_panelcn.Rdata');
+
+	# ELSE if processing tumour samples ONLY
+	} else {
+
+	# load control files
+	if (file.exists(pon)) {
+		message(paste0("Loading previously processed reference count-set: ", pon));
+  		load(pon);
+		} else {
+		stop('Panel of normals file does not exist; please confirm and try again.');
+		}
+
+	# process sample Bam
+	if (length(sampleBams) == 1) {
+		print(paste("Sample:",sampleNames));
+		output.file <- paste0(sampleNames, "_panelcn.mops_results.tsv");
+		} else {
+		print(paste("Processing cohort:", length(sampleBams), "samples."));
+		output.file <- "cohort_panelcn.mops_results.tsv";
+		}
+
+	# get sample read counts
+	XandCB <- countBamListInGRanges(
+		countWindows = countWindows,
+		bam.files = sampleBams,
+		read.width = read_length
+		);
+
+	colnames(elementMetadata(XandCB)) <- sampleNames;
+	elementMetadata(XandCB) <- cbind(
+		elementMetadata(XandCB),
+		elementMetadata(control)
+		);
+
+	# run panelCN.mops
+	resultlist <- runPanelcnMops(
+		XandCB,
+		testiv = 1:ncol(elementMetadata(test)),
+		countWindows = countWindows,
+		selectedGenes = NULL
+		);
+
+	# extract/format results table
+	results.table <- createResultTable(
+		resultlist = resultlist,
+		XandCB = XandCB,
+		countWindows = countWindows,
+		sampleNames = sampleNames
+		);
+
+	# write results to file
+	write.table(
+		results.table,
+		file = output.file,
+		row.names = FALSE,
+		col.names = TRUE,
+		quote = FALSE,
+		sep = '\t'
+		);
+	}

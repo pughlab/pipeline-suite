@@ -1,3 +1,10 @@
+2021-10-29: PughLab pipeline-suite (version 0.6.0)
+- initial add of panelCN.mops for targeted-seq data
+- major update to genotype_gvcfs; added hard filtering and annotation options
+- added more information to output log for mavis
+- added simple filters (recurrence; short INDELs) to mavis output for cbioportal
+- minor updates and bug fixes
+
 2021-10-22: PughLab pipeline-suite (version 0.5.9)
 - mavis output: cleaned up output and added new cbio sv format
 - added optional vcf2maf step to genotype_gvcfs
