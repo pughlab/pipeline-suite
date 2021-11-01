@@ -258,7 +258,7 @@ sub main {
 	close $fh;
 
 	my $avg_read_length = int(sum(@control_read_lengths) / scalar(@control_read_lengths));
-	my $pon_file = join('/', $pon_directory, 'merged_GRanges_count_obj_for_panelcn.Rdata');
+	my $pon_file = join('/', $pon_directory, 'merged_GRanges_count_obj_for_panelcn.RData');
 	my $new_targets_bed = join('/', $pon_directory, 'formatted_countWindows.bed');
 
 	my $mops_pon_command = get_panelcn_mops_command(

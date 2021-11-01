@@ -108,6 +108,7 @@ sub main {
 		'delly'	=> defined($tool_data->{delly}->{run}) ? $tool_data->{delly}->{run} : 'N',
 		'svict'	=> defined($tool_data->{svict}->{run}) ? $tool_data->{svict}->{run} : 'N',
 		'ichor_cna'	=> defined($tool_data->{ichor_cna}->{run}) ? $tool_data->{ichor_cna}->{run} : 'N',
+		'mops'  => defined($tool_data->{panelcn_mops}->{run}) ? $tool_data->{panelcn_mops}->{run} : 'N',
 		'mavis'	=> defined($tool_data->{mavis}->{run}) ? $tool_data->{mavis}->{run} : 'N',
 		'msi'	=> defined($tool_data->{other_tools}->{run_msi}) ? $tool_data->{other_tools}->{run_msi} : 'N',
 		'star'	=> defined($tool_data->{star}->{run}) ? $tool_data->{star}->{run} : 'N',
@@ -565,7 +566,7 @@ sub main {
 
 		# somatic variants
 		my ($mutect_data, $mutect2_data, $strelka_data, $varscan_data, $sniper_data, $vardict_data);
-		my ($pindel_data, $sequenza_data, $ploidy_data, $gatk_cnv, $gatk_pga, $msi_data);
+		my ($pindel_data, $sequenza_data, $ploidy_data, $gatk_cnv, $gatk_pga, $mops_cnv, $msi_data);
 
 		# find ENSEMBLE mutations
 		my $ensemble_command .= join(' ',
@@ -795,7 +796,7 @@ sub main {
 			symlink($cnv_data, join('/', $data_directory, 'gatk_cnv_ratio_matrix.tsv'));
 			symlink($pga_data, join('/', $data_directory, 'gatk_cnv_pga_estimates.tsv'));
 
-			# plot SV summary
+			# plot CNV summary
 			my $cnv_plot_command = join(' ',
 				"Rscript $cwd/report/plot_gatk_cna_summary.R",
 				'-p', $tool_data->{project_name},
@@ -855,7 +856,7 @@ sub main {
 			symlink($cnv_data, join('/', $data_directory, 'ichor_cna_ratio_matrix.tsv'));
 			symlink($metric_data, join('/', $data_directory, 'ichor_cna_estimates.tsv'));
 
-			# plot SV summary
+			# plot CNV summary
 			my $cnv_plot_command = join(' ',
 				"Rscript $cwd/report/plot_ichor_cna_summary.R",
 				'-p', $tool_data->{project_name},
@@ -880,6 +881,57 @@ sub main {
 
 			$run_id = submit_job(
 				jobname		=> 'plot_ichor_cna_summary',
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @job_ids, $run_id;
+			}
+
+		# get CNAs calls from PanelCN.mops
+		if ('Y' eq $tool_set{'mops'}) {
+			my $mops_cnv_dir = join('/', $output_directory, 'PanelCNmops');
+
+			opendir(MOPSCNV, $mops_cnv_dir) or die "Cannot open '$mops_cnv_dir' !";
+			my @mops_cnv_files = readdir(MOPSCNV);
+			my @cnv_files = grep { /panelCN.mops_output.tsv/ } @mops_cnv_files;
+			@cnv_files = sort @cnv_files;
+			closedir(MOPSCNV);
+
+			my $cnv_data = join('/', $mops_cnv_dir, $cnv_files[-1]);
+
+			if ( -l join('/', $data_directory, 'mops_combined_output.tsv')) {
+				unlink join('/', $data_directory, 'mops_combined_output.tsv');
+				}
+
+			symlink($cnv_data, join('/', $data_directory, 'mops_combined_output.tsv'));
+
+			# plot SV summary
+			my $cnv_plot_command = join(' ',
+				"Rscript $cwd/report/plot_cn_mops_summary.R",
+				'-p', $tool_data->{project_name},
+				'-o', $plot_directory,
+				'-c', $cnv_data,
+				'-s', 'ratio'
+				);
+
+			# run command
+			print $log "Submitting job to plot PanelCN.mops CNVs...\n";
+			$run_script = write_script(
+				log_dir		=> $log_directory,
+				name		=> 'plot_mops_cnv_summary',
+				cmd		=> $cnv_plot_command,
+				modules		=> [$r_version],
+				max_time	=> '04:00:00',
+				mem		=> '2G',
+				hpc_driver	=> $args{cluster},
+				extra_args	=> [$hpc_group]
+				);
+
+			$run_id = submit_job(
+				jobname		=> 'plot_mops_cnv_summary',
 				shell_command	=> $run_script,
 				hpc_driver	=> $args{cluster},
 				dry_run		=> $args{dry_run},

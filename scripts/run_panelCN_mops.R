@@ -65,18 +65,15 @@ make_pon		<- opt$make_pon;
 setwd(output_directory);
 
 ### MAIN ###########################################################################################
-## FORMAT REGIONS ##
-# check if chromosome have chr prefix and load windows
-tmp_bed <- read.delim(bed_file, header = FALSE, nrows = 1)[,1:3];
-has_chr <- grepl('chr', tmp_bed[1,1]);
-
 # format target regions into count windows
 if (make_pon) {
 
 	# add annotations
 	library(GenomicRanges);
+
 	tmp_bed <- read.delim(bed_file, header = FALSE);
         colnames(tmp_bed)[1:3] <- c('Chromosome','Start','End');
+	has_chr <- grepl('chr', tmp_bed[1,1]);
         target.gr <- GRanges(tmp_bed);
 
 	if ('hg19' == ref_type) {
@@ -191,7 +188,7 @@ if (make_pon) {
 		);
  
 	# save reference for future use
-	save(control, file = 'merged_GRanges_count_obj_for_panelcn.Rdata');
+	save(control, file = 'merged_GRanges_count_obj_for_panelcn.RData');
 
 	# ELSE if processing tumour samples ONLY
 	} else {
@@ -229,10 +226,13 @@ if (make_pon) {
 	# run panelCN.mops
 	resultlist <- runPanelcnMops(
 		XandCB,
-		testiv = 1:ncol(elementMetadata(test)),
+		testiv = 1:length(sampleNames),
 		countWindows = countWindows,
 		selectedGenes = NULL
 		);
+
+	# save raw results object
+	save(resultlist, file = 'panelcn_mops_resultlist_object.RData');
 
 	# extract/format results table
 	results.table <- createResultTable(
@@ -242,13 +242,114 @@ if (make_pon) {
 		sampleNames = sampleNames
 		);
 
+	output.results <- do.call(rbind, results.table);
+
 	# write results to file
 	write.table(
-		results.table,
+		output.results,
 		file = output.file,
 		row.names = FALSE,
 		col.names = TRUE,
 		quote = FALSE,
 		sep = '\t'
 		);
+
+	# output some plots
+	library(CopyNumberPlots);
+	plot.params <- getDefaultPlotParams(plot.type = 3);		  
+	plot.params$leftmargin <- 0.1;
+	plot.params$ideogramheight <- 30;
+	plot.params$data2height <- 100;
+
+	for (i in 1:length(sampleBams)) {
+
+		gr_ob <- resultlist[[i]]@gr;
+
+		gr_ob$Chromosome <- seqnames(gr_ob);
+		gr_ob$baf <- 1;
+		gr_ob$lrr <- log2(results.table[[i]]$RC.norm / results.table[[i]]$medRC.norm);
+		gr_ob$cn <- as.numeric(gsub("CN","",resultlist[[i]]@integerCopyNumber[,1]));
+		gr_ob$loh <- NA;
+		gr_ob$segment.value <- gr_ob$cn;
+		gr_ob$CopyNumberInteger <- gr_ob$cn;
+
+		cnplot_dat <- loadSNPData(gr_ob);
+
+		# output plots for whole genome and per-chromosome
+		chrs <- c('all', as.character(unique(gr_ob$Chromosome)));
+
+		output.file <- paste0(sampleNames[i], "_panelcn.mops_per-chrom_plots.pdf");
+
+		# initiate pdf file
+		pdf(output.file, height = 6, width = 12);
+
+		for (chr in chrs) {
+
+			kp <- plotKaryotype(
+				ref_type,
+				chromosomes = if (chr == 'all') { 'auto' } else { chr },
+				plot.type = 3,
+				labels.plotter = NULL, 
+				main = if (chr == 'all') { '' } else { chr },
+				cex = 1,
+				plot.params = plot.params
+				);
+
+			if (chr == 'all') {
+				kpAddChromosomeNames(kp, srt = 90, cex = 1);
+				kpAddChromosomeSeparators(kp, lwd = 2, col = "#666666");
+				}
+
+			plotLRR(
+				kp,
+				cnplot_dat,
+				ymin = -1.5,
+				ymax = 1.5,
+				labels = NA,
+				line.at.0 = TRUE,
+				line.at.0.col = "black",
+				points.col = "dodgerblue2",
+				points.cex = 0.8,
+				add.axis = FALSE,
+				data.panel = 1
+				);
+
+			kpAxis(kp, ymin = -1.5, ymax = 1.5, col = "gray50", cex = 1, numticks = 5);
+			kpAddLabels(
+				kp,
+				labels = expression('log'['2']*'(Depth Ratio)'),
+				srt = 90, 
+				cex = 1,
+				pos = 3,
+				label.margin = 0.07
+				);
+
+			plotCopyNumberCallsAsLines(
+				kp,
+				cn.calls = cnplot_dat,
+				col = "red",
+				lwd = if (chr == 'all') { 3 } else { 1 },
+				data.panel = 2,
+				style = if (chr == 'all') { 'segments' } else { 'line' },
+				labels = NA,
+				ymin = 0,
+				ymax = 4,
+				add.axis = FALSE,
+				);
+
+			kpAxis(kp, ymin = 0, ymax = 4, col = "gray50", cex = 1, numticks = 5, data.panel = 2);
+			kpAddLabels(
+				kp,
+				labels = "Copy-Number Estimate",
+				srt = 90, 
+				cex = 1,
+				pos = 3,
+				label.margin = 0.07,
+				data.panel = 2
+				);
+			}
+
+		dev.off();
+
+		}
 	}
