@@ -35,45 +35,6 @@ save.session.profile <- function(file.name) {
 
 	}
 
-# function to determine amplification status of gene
-summarizeCNmops <- function(cn_mops_results, gain_threshold = 2.1) {
-
-	if (any(cn_mops_results$Gene == "") | any(is.na(cn_mops_results$Gene))) {
-		warning(paste0("Some targets had no associated gene name in the provided bed", 
-			"file and where therefore removed from gene-level amplification",
-			"calling analysis."));
-		}
-
-	cn_mops_results <- cn_mops_results[!is.na(cn_mops_results$Gene),];
-	cn_mops_results <- subset(cn_mops_results, Gene != "" & lowQual != "lowQual");
-
-	genes <- unique(cn_mops_results$Gene);
-	samples <- unique(cn_mops_results$Sample);
-
-	summ <- matrix(
-		data = "NOT_AMP",
-		nrow = length(genes), 
-		ncol = length(samples), 
-		dimnames = list(genes,samples)
-		);
-
-	for (gene in genes) {
-		for (samp in samples) {
-
-			tmp <- subset(cn_mops_results, Sample == samp & Gene == gene);
-			cn.data <- as.data.frame(table(tmp$CN));
-			cn.data$Val <- as.numeric(gsub("CN","",cn.data$Var1));
-			Weighted_Average_CN <- sum(cn.data$Val*cn.data$Freq) / sum(cn.data$Freq);
-
-			if (Weighted_Average_CN > gain_threshold) {
-				summ[gene, samp] <- "AMP";
-				}
-			}
-		}
-
-	return(summ);
-	}
-
 ### PREPARE SESSION ################################################################################
 # import libraries
 library(argparse);
@@ -119,6 +80,51 @@ write.table(
 	sep = '\t'
 	);
 
+# compare individual runs with cohort run if present
+if (!is.null(cohort.data)) {
+
+	key.fields <- c('Sample','Chr','Start','End','Gene','CN');
+	tmp <- merge(
+		cn.data[,key.fields],
+		cohort.data[,key.fields],
+		by = c('Sample','Chr','Start','End','Gene'),
+		suffixes = c('.split','.cohort')
+		);
+	tmp$CN.split <- as.numeric(gsub('CN','',as.character(tmp$CN.split)));
+	tmp$CN.cohort <- as.numeric(gsub('CN','',as.character(tmp$CN.cohort)));
+
+	print(paste0(
+		"Spearman's correlation between individual runs and cohort run (CN values) is: ",
+		cor(tmp$CN.split,tmp$CN.cohort, use = 'pairwise', method = 'spearman')
+		));
+
+	cor.results <- data.frame(Sample = unique(tmp$Sample), Correlation = NA);
+	for (i in 1:nrow(cor.results)) {
+		smp <- cor.results[i,]$Sample;
+		cor.results[i,]$Correlation <- cor(
+			tmp[which(tmp$Sample == smp),]$CN.split,
+			tmp[which(tmp$Sample == smp),]$CN.cohort,
+			use = 'pairwise',
+			method = 'spearman'
+			);
+		}
+
+	print(paste0(
+		"Per-sample Spearman's correlations between CN values range from ",
+		min(cor.results$Correlation), " to ", max(cor.results$Correlation)
+		));
+
+	# save raw data to file
+	write.table(
+		cor.results
+		file = generate.filename(arguments$project, 
+			'split_vs_combined_per-sample_correlations','tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+	}
+
 # format data
 cn.data$CN <- as.numeric(gsub('CN','',as.character(cn.data$CN)));
 cn.data[which(cn.data$lowQual == 'lowQual'),]$CN <- NA;
@@ -133,25 +139,19 @@ cn.calls <- reshape(
 	);
 colnames(cn.calls) <- gsub('CN.','',colnames(cn.calls));
 
-# reshape normalized read counts
-read.counts <- reshape(
-	cn.data[,c('Chromosome','Gene','Exon','Start','End','Sample','RC.norm')],
+# calculate log2ratios
+cn.data$Ratio <- log2(cn.data$RC.norm / cn.data$medRC.norm);
+
+# set minimum ratio to -2 (to deal with -Inf)
+cn.data[which(cn.data$CN == 0),]$Ratio <- -2;
+
+ratio.data <- reshape(
+	cn.data[,c('Chromosome','Gene','Exon','Start','End','Sample','Ratio')],
 	direction = 'wide',
 	idvar = c('Chromosome','Gene','Exon','Start','End'),
 	timevar = 'Sample'
 	);
-colnames(read.counts) <- gsub('RC.norm.','',colnames(read.counts));
-
-# calculate log2ratios
-#cn.data$Ratio <- log2(cn.data$RC.norm / cn.data$medRC.norm);
-
-#ratio.data <- reshape(
-#	cn.data[,c('Chromosome','Gene','Exon','Start','End','Sample','Ratio')],
-#	direction = 'wide',
-#	idvar = c('Chromosome','Gene','Exon','Start','End'),
-#	timevar = 'Sample'
-#	);
-#colnames(ratio.data) <- gsub('Ratio.','',colnames(ratio.data));
+colnames(ratio.data) <- gsub('Ratio.','',colnames(ratio.data));
 
 # save combined/formatted data to file
 write.table(
@@ -163,8 +163,8 @@ write.table(
 	);
 
 write.table(
-	read.counts,
-	file = generate.filename(arguments$project, 'panelCN.mops_normalized_readcounts','tsv'),
+	ratio.data,
+	file = generate.filename(arguments$project, 'panelCN.mops_ratio_matrix','tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
 	sep = '\t'
