@@ -388,6 +388,21 @@ sub main {
 		my (@starfus_svs_patient, @fuscatch_svs_patient);
 		my $format_command;
 
+		foreach my $normal (@normal_ids) {
+
+			print $log ">> Initiating process for NORMAL: $normal\n";
+
+			# organize SViCT input
+			if (scalar(@svict_files) > 0) {
+				my @svict_svs = grep { /$normal/ } @svict_files;
+				next if (scalar(@svict_svs) == 0);
+
+				$link = join('/', $link_directory, $normal . '_SViCT.vcf');
+				symlink($svict_svs[0], $link);
+				push @svict_svs_patient, $svict_svs[0];
+				}
+			}
+
 		foreach my $tumour (@tumour_ids) {
 
 			print $log ">> Initiating process for TUMOUR: $tumour\n";
