@@ -38,6 +38,10 @@ if (is.null(sv.data)) {
 	# supply header
 	colnames(sv.data) <- c('IDX','event_type','break1_chromosome','break1_position_start','break1_position_end','break2_chromosome','break2_position_start','break2_position_end','support_1','support_2','quality');
 
+	# drop incomplete cases
+	sv.data <- sv.data[!is.na(sv.data$break1_position_end),];
+	sv.data <- sv.data[!is.na(sv.data$break2_position_end),];
+
 	# initiate object for output
 	total.variants <- nrow(sv.data);
 
