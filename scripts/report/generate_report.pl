@@ -50,40 +50,48 @@ sub main {
 
 	# if multiple cna callers were run
 	my @cnv_tex;
-	if (any { 'cna_summary.tex' } @tex_files) {
-		push @cnv_tex, join('/', $args{input_dir}, 'cna_summary.tex');
+	if (any { /cna_summary.tex/ } @tex_files) {
+		push @cnv_tex, 'cna_summary.tex';
+		@tex_files = grep { $_ ne 'cna_summary.tex' } @tex_files;
 		}
-	if (any { 'cna_summary_gatk.tex' } @tex_files) {
-		push @cnv_tex, join('/', $args{input_dir}, 'cna_summary_gatk.tex');
+	if (any { /cna_summary_gatk.tex/ } @tex_files) {
+		push @cnv_tex, 'cna_summary_gatk.tex';
+		@tex_files = grep { $_ ne 'cna_summary_gatk.tex' } @tex_files;
 		}
-	if (any { 'cna_summary_mops.tex' } @tex_files) {
-		push @cnv_tex, join('/', $args{input_dir}, 'cna_summary_mops.tex');
+	if (any { /cna_summary_mops.tex/ } @tex_files) {
+		push @cnv_tex, 'cna_summary_mops.tex';
+		@tex_files = grep { $_ ne 'cna_summary_mops.tex' } @tex_files;
 		}
-	if (any { 'cna_summary_ichor.tex' } @tex_files) {
-		push @cnv_tex, join('/', $args{input_dir}, 'cna_summary_ichor.tex');
+	if (any { /cna_summary_ichor.tex/ } @tex_files) {
+		push @cnv_tex, 'cna_summary_ichor.tex';
+		@tex_files = grep { $_ ne 'cna_summary_ichor.tex' } @tex_files;
 		}
 
 	foreach my $i ( @cnv_tex) {
-		next if ($i eq $cnv_tex[1]);
-		`sed -i 's/section{SCNA Summary}/pagebreak/' $i`;
+		next if ($i eq $cnv_tex[0]);
+		my $filepath = join('/', $args{input_dir}, $i);
+		`sed -i 's/section{SCNA Summary}/pagebreak/' $filepath`;
 		}
 
 	push @output_tex_files, @cnv_tex;
-	@tex_files = grep { $_ ne 'cna_summary.tex' } @tex_files;
-	@tex_files = grep { $_ ne 'cna_summary_gatk.tex' } @tex_files;
-	@tex_files = grep { $_ ne 'cna_summary_mops.tex' } @tex_files;
-	@tex_files = grep { $_ ne 'cna_summary_ichor.tex' } @tex_files;
 
-	# if both plot_snv_summary.R and filter_ensemble_mutations.R (OncoKB) were run:
-	my @snv_tex = grep { /^somatic_snv_summary/ } @tex_files;
-	if (scalar(@snv_tex) == 2) {
-		push @output_tex_files, join('/', $args{input_dir}, 'somatic_snv_summary_filtered.tex');
-		} else {
-		push @output_tex_files, join('/', $args{input_dir}, 'somatic_snv_summary.tex';
+	# add in germline SNV summary
+	if (any { /germline_snv_summary/ } @tex_files) {
+		push @output_tex_files, 'germline_snv_summary.tex';
+		@tex_files = grep { $_ ne 'germline_snv_summary.tex' } @tex_files;
 		}
 
-	@tex_files = grep { $_ ne 'somatic_snv_summary.tex' } @tex_files;
-	@tex_files = grep { $_ ne 'somatic_snv_summary_filtered.tex' } @tex_files;
+	# add in somatic SNV summary
+	if (any { /somatic_snv_summary/ } @tex_files) {
+		push @output_tex_files, 'somatic_snv_summary.tex';
+		@tex_files = grep { $_ ne 'somatic_snv_summary.tex' } @tex_files;
+		}
+
+	# add in OncoKB summary
+	if (any { /oncokb_summary/ } @tex_files) {
+		push @output_tex_files, 'oncokb_summary.tex';
+		@tex_files = grep { $_ ne 'oncokb_summary.tex' } @tex_files;
+		}
 
 	# put the remaining tex files into output array
 	push @output_tex_files, @tex_files;
