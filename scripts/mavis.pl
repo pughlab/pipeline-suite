@@ -292,6 +292,9 @@ sub main {
 	# get optional HPC group
 	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
 
+	# indicate memory to give for mavis
+	my $mavis_memory = defined($tool_data->{mavis}->{mem}) ? $tool_data->{mavis}->{mem} : '4G';
+
 	### RUN ###########################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
@@ -395,11 +398,12 @@ sub main {
 			# organize SViCT input
 			if (scalar(@svict_files) > 0) {
 				my @svict_svs = grep { /$normal/ } @svict_files;
-				next if (scalar(@svict_svs) == 0);
 
-				$link = join('/', $link_directory, $normal . '_SViCT.vcf');
-				symlink($svict_svs[0], $link);
-				push @svict_svs_patient, $svict_svs[0];
+				unless (scalar(@svict_svs) == 0) {
+					$link = join('/', $link_directory, $normal . '_SViCT.vcf');
+					symlink($svict_svs[0], $link);
+					push @svict_svs_patient, $svict_svs[0];
+					}
 				}
 			}
 
@@ -414,10 +418,12 @@ sub main {
 			# organize Delly input
 			if (scalar(@delly_files) > 0) {
 				my @delly_svs = grep { /$tumour/ } @delly_files;
-				$link = join('/', $link_directory, $tumour . '_Delly_SVs.bcf');
-				symlink($delly_svs[0], $link);
 
-				push @delly_svs_patient, $delly_svs[0];
+				unless (scalar(@delly_svs) == 0) {
+					$link = join('/', $link_directory, $tumour . '_Delly_SVs.bcf');
+					symlink($delly_svs[0], $link);
+					push @delly_svs_patient, $delly_svs[0];
+					}
 				}
 
 			# organize Manta input
@@ -452,31 +458,34 @@ sub main {
 			# organize NovoBreak input
 			if (scalar(@novobreak_files) > 0) {
 				my @novobreak_svs = grep { /$tumour/ } @novobreak_files;
-				next if (scalar(@novobreak_svs) == 0);
 
-				$link = join('/', $link_directory, $tumour . '_NovoBreak.tsv');
-				symlink($novobreak_svs[0], $link);
-				push @novobreak_svs_patient, $novobreak_svs[0];
+				unless (scalar(@novobreak_svs) == 0) {
+					$link = join('/', $link_directory, $tumour . '_NovoBreak.tsv');
+					symlink($novobreak_svs[0], $link);
+					push @novobreak_svs_patient, $novobreak_svs[0];
+					}
 				}
 
 			# organize Pindel input
 			if (scalar(@pindel_files) > 0) {
 				my @pindel_svs = grep { /$tumour/ } @pindel_files;
-				next if (scalar(@pindel_svs) == 0);
 
-				$link = join('/', $link_directory, $tumour . '_Pindel.txt');
-				symlink($pindel_svs[0], $link);
-				push @pindel_svs_patient, $pindel_svs[0];
+				unless (scalar(@pindel_svs) == 0) {
+					$link = join('/', $link_directory, $tumour . '_Pindel.txt');
+					symlink($pindel_svs[0], $link);
+					push @pindel_svs_patient, $pindel_svs[0];
+					}
 				}
 
 			# organize SViCT input
 			if (scalar(@svict_files) > 0) {
 				my @svict_svs = grep { /$tumour/ } @svict_files;
-				next if (scalar(@svict_svs) == 0);
 
-				$link = join('/', $link_directory, $tumour . '_SViCT.vcf');
-				symlink($svict_svs[0], $link);
-				push @svict_svs_patient, $svict_svs[0];
+				unless (scalar(@svict_svs) == 0) {
+					$link = join('/', $link_directory, $tumour . '_SViCT.vcf');
+					symlink($svict_svs[0], $link);
+					push @svict_svs_patient, $svict_svs[0];
+					}
 				}
 			}
 
@@ -553,16 +562,24 @@ sub main {
 			'MAVIS*.COMPLETE'
 			);
 
-		my $memory = '4G';
-	
 		my ($novobreak_input, $pindel_input, $svict_input) = undef;
 		my ($starfus_input, $fuscatch_input) = undef;
 
-		if (scalar(@novobreak_svs_patient) > 0) { $novobreak_input = join(' ', @novobreak_svs_patient); }
-		if (scalar(@pindel_svs_patient) > 0)    { $pindel_input	   = join(' ', @pindel_svs_patient); }
-		if (scalar(@svict_svs_patient) > 0)     { $svict_input	   = join(' ', @svict_svs_patient); }
-		if (scalar(@starfus_svs_patient) > 0)	{ $starfus_input   = join(' ', @starfus_svs_patient); }
-		if (scalar(@fuscatch_svs_patient) > 0)	{ $fuscatch_input  = join(' ', @fuscatch_svs_patient); }
+		if (scalar(@novobreak_svs_patient) > 0) {
+			$novobreak_input = join(' ', @novobreak_svs_patient);
+			}
+		if (scalar(@pindel_svs_patient) > 0) {
+			$pindel_input = join(' ', @pindel_svs_patient);
+			}
+		if (scalar(@svict_svs_patient) > 0) {
+			$svict_input = join(' ', @svict_svs_patient);
+			}
+		if (scalar(@starfus_svs_patient) > 0) {
+			$starfus_input = join(' ', @starfus_svs_patient);
+			}
+		if (scalar(@fuscatch_svs_patient) > 0) {
+			$fuscatch_input = join(' ', @fuscatch_svs_patient);
+			}
 
 		if (scalar(@rna_ids_patient) > 0) {
 
@@ -582,8 +599,6 @@ sub main {
 				fusioncatcher	=> $fuscatch_input,
 				output		=> $mavis_cfg
 				);
-
-			$memory = '8G';
 
 			} else {
 
@@ -639,8 +654,8 @@ sub main {
 				cmd	=> $mavis_cmd,
 				modules	=> [$mavis, $bwa, 'perl', 'R'],
 				dependencies	=> join(':', @format_jobs),
-				max_time	=> '12:00:00',
-				mem		=> $memory,
+				max_time	=> '5-00:00:00',
+				mem		=> $mavis_memory,
 				hpc_driver	=> $args{hpc_driver},
 				kill_on_error	=> 0,
 				extra_args	=> [$hpc_group]
