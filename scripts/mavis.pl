@@ -242,8 +242,14 @@ sub main {
 	print $log "\n  Tool config used: $tool_config";
 	print $log "\n  Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
-	print $log "\n    Manta directory: $args{manta_dir}";
-	print $log "\n    Delly directory: $args{delly_dir}";
+
+	if (defined($args{manta_dir})) {
+		print $log "\n    Manta directory: $args{manta_dir}";
+		}
+
+	if (defined($args{delly_dir})) {
+		print $log "\n    Delly directory: $args{delly_dir}";
+		}
 
 	if (defined($args{novobreak_dir})) {
 		print $log "\n    NovoBreak directory: $args{novobreak_dir}";
@@ -257,9 +263,15 @@ sub main {
 		print $log "\n    SViCT directory: $args{svict_dir}";
 		}
 
-	if (defined($args{starfusion_dir})) {
+	if (defined($rna_config)) {
 		print $log "\n  RNA sample config used: $rna_config";
+		}
+
+	if (defined($args{starfusion_dir})) {
 		print $log "\n    STAR-Fusion directory: $args{starfusion_dir}";
+		}
+
+	if (defined($args{fusioncatcher_dir})) {
 		print $log "\n    FusionCatcher directory: $args{fusioncatcher_dir}";
 		}
 
@@ -288,6 +300,17 @@ sub main {
 		"export MAVIS_DRAW_FUSIONS_ONLY=$tool_data->{mavis}->{mavis_draw_fusions_only}",
 		"export MAVIS_SCHEDULER=" . uc($args{hpc_driver})
 		);
+
+	if (defined($args{pindel_dir})) {
+		$mavis_export .= "\n" . join("\n",
+			"export MAVIS_MIN_CLUSTERS_PER_FILE=100",
+			"export MAVIS_MAX_FILES=100"
+			);
+		}
+
+	unless ('wgs' eq $tool_data->{seq_type}) {
+		$mavis_export .= "\n" . "export MAVIS_UNINFORMATIVE_FILTER=True";
+		}
 
 	# get optional HPC group
 	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
@@ -619,6 +642,17 @@ sub main {
 		$mavis_cmd .= "\n\necho 'Running MAVIS setup.';\n\n";
 		$mavis_cmd .= "mavis setup $mavis_cfg -o $patient_directory";
 
+		# if hpc_group is specified (not default)
+		if (defined($hpc_group)) {
+
+			my $add_group = join(' ',
+				"find $patient_directory -name 'submit.sh' -exec",
+				"sed -i '/^#!/a #SBATCH -A $hpc_group'" . ' {} \;'
+				);
+
+			$mavis_cmd .= "\n\n" . $add_group;
+			}
+
 		# if build.cfg already exists, then try resubmitting
 		if ('Y' eq missing_file("$patient_directory/build.cfg")) {
 			$mavis_cmd .= "\n\necho 'Running MAVIS schedule.';\n\n";
@@ -626,6 +660,7 @@ sub main {
 			} else {
 			$mavis_cmd =~ s/mavis config/#mavis config/;
 			$mavis_cmd =~ s/mavis setup/#mavis setup/;
+			$mavis_cmd =~ s/^find/#^find/;
 			$mavis_cmd .= "\n\necho 'Running MAVIS schedule with resubmit.';\n\n";
 			$mavis_cmd .= "mavis schedule -o $patient_directory --resubmit";
 			}
@@ -641,6 +676,14 @@ sub main {
 			"perl $cwd/mavis_check.pl",
 			"-j", join('/', $patient_directory, 'job_ids')
 			);
+
+#		$mavis_cmd .= "\n\n" . join(' ',
+#			"if [ -s $mavis_output ]; then",
+#			'  exit 0;',
+#			'else',
+#			'  exit 1;',
+#			'fi'
+#			);
 
 		# check if this should be run
 		if ('Y' eq missing_file($mavis_output)) {
