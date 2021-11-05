@@ -155,7 +155,7 @@ sub get_delly_filter_command {
 	}
 
 # format command to generate PON
-sub generate_pon {
+sub generate_delly_pon {
 	my %args = (
 		input		=> undef,
 		intermediate	=> undef,
@@ -229,6 +229,7 @@ sub get_finalize_command {
 
 		$job_command = join(' ',
 			'bcftools view',
+			'-f PASS',
 			'-s', $tumour_id,
 			'-O v -o', $args{output},
 			$args{input}
@@ -239,7 +240,8 @@ sub get_finalize_command {
 		$job_command = "echo $sm_tag $tumour_id > $args{output}.reheader";
 		$job_command .= "\n\n" . join(' ',
 			'bcftools view',
-			'-f PASS -e' . "'" . 'GT="ref" | FORMAT/FT="LowQual"' . "'",
+			'-f PASS',
+#			' -e' . "'" . 'GT="ref" | FORMAT/FT="LowQual"' . "'",
 			'-s', $sm_tag,
 			$args{input},
 			'| bcftools reheader',
@@ -558,7 +560,7 @@ sub pon {
 	push @all_jobs, @part2_jobs;
 
 	# merge these genotyped results and filter only germline
-	$pon_command = generate_pon(
+	$pon_command = generate_delly_pon(
 		input		=> join(' ', @genotyped_bcfs),
 		intermediate	=> $pon_merged,
 		output		=> $pon_genotyped

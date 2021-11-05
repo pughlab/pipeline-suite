@@ -38,11 +38,15 @@ if (is.null(sv.data)) {
 	# supply header
 	colnames(sv.data) <- c('IDX','event_type','break1_chromosome','break1_position_start','break1_position_end','break2_chromosome','break2_position_start','break2_position_end','support_1','support_2','quality');
 
+	# drop incomplete cases
+	sv.data <- sv.data[!is.na(sv.data$break1_position_end),];
+	sv.data <- sv.data[!is.na(sv.data$break2_position_end),];
+
 	# initiate object for output
 	total.variants <- nrow(sv.data);
 
 	# print some metrics	
-	print(paste0('found ', length(input.files), ' input files consisting of ', total.variants, ' variants'));	
+	print(paste0('found ', length(input.files), ' input files consisting of ', total.variants, ' variants'));
 
 	gc();
 
@@ -78,14 +82,14 @@ if (is.null(sv.data)) {
 		);
 
 	# do some more filtering
-	# for deletions: only keep length > 50
-	del.idx <- which(sv.data$event_type == 'DEL' & sv.data$Length >= 50);
+	# for deletions: only keep length > 100 bases
+	del.idx <- which(sv.data$event_type == 'DEL' & sv.data$Length >= 100);
 
-	# for insertions: only keep length > 20
-	ins.idx <- which(sv.data$event_type == 'INS' & sv.data$Length >= 20);
+	# for insertions: only keep length > 100 bases
+	ins.idx <- which(sv.data$event_type == 'INS' & sv.data$Length >= 100);
 
-	# for duplications: only keep length > 20
-	dup.idx <- which(sv.data$event_type == 'DUP' & sv.data$Length >= 20);
+	# for duplications: only keep length > 50 bases
+	dup.idx <- which(sv.data$event_type == 'DUP' & sv.data$Length >= 50);
 
 	# for inversions: keep all remaining
 	inv.idx <- which(sv.data$event_type == 'INV');

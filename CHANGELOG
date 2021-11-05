@@ -1,3 +1,11 @@
+2021-11-05: PughLab pipeline-suite (version 0.6.1)
+- many updates to summarize/report functions!
+- added panelcn.mops output summary to report
+- removed quotes from final output file from format_ensemble_mutations.R [required for cbioportal and mutsig]
+- added germline SViCT data, and optional memory parameter, to Mavis runs
+- BUG fix in mavis; was skipping to next sample if any SV tool had no data
+- BUG fix in delly; would exclude variants if GT = ref in ANY sample (filtering performed BEFORE sample subset)
+
 2021-10-29: PughLab pipeline-suite (version 0.6.0)
 - initial add of panelCN.mops for targeted-seq data
 - major update to genotype_gvcfs; added hard filtering and annotation options

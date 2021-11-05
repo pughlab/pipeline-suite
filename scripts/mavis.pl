@@ -242,8 +242,14 @@ sub main {
 	print $log "\n  Tool config used: $tool_config";
 	print $log "\n  Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
-	print $log "\n    Manta directory: $args{manta_dir}";
-	print $log "\n    Delly directory: $args{delly_dir}";
+
+	if (defined($args{manta_dir})) {
+		print $log "\n    Manta directory: $args{manta_dir}";
+		}
+
+	if (defined($args{delly_dir})) {
+		print $log "\n    Delly directory: $args{delly_dir}";
+		}
 
 	if (defined($args{novobreak_dir})) {
 		print $log "\n    NovoBreak directory: $args{novobreak_dir}";
@@ -257,9 +263,15 @@ sub main {
 		print $log "\n    SViCT directory: $args{svict_dir}";
 		}
 
-	if (defined($args{starfusion_dir})) {
+	if (defined($rna_config)) {
 		print $log "\n  RNA sample config used: $rna_config";
+		}
+
+	if (defined($args{starfusion_dir})) {
 		print $log "\n    STAR-Fusion directory: $args{starfusion_dir}";
+		}
+
+	if (defined($args{fusioncatcher_dir})) {
 		print $log "\n    FusionCatcher directory: $args{fusioncatcher_dir}";
 		}
 
@@ -289,8 +301,22 @@ sub main {
 		"export MAVIS_SCHEDULER=" . uc($args{hpc_driver})
 		);
 
+	if (defined($args{pindel_dir})) {
+		$mavis_export .= "\n" . join("\n",
+			"export MAVIS_MIN_CLUSTERS_PER_FILE=100",
+			"export MAVIS_MAX_FILES=100"
+			);
+		}
+
+	unless ('wgs' eq $tool_data->{seq_type}) {
+		$mavis_export .= "\n" . "export MAVIS_UNINFORMATIVE_FILTER=True";
+		}
+
 	# get optional HPC group
 	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
+	# indicate memory to give for mavis
+	my $mavis_memory = defined($tool_data->{mavis}->{mem}) ? $tool_data->{mavis}->{mem} : '4G';
 
 	### RUN ###########################################################################################
 	# get sample data
@@ -388,6 +414,22 @@ sub main {
 		my (@starfus_svs_patient, @fuscatch_svs_patient);
 		my $format_command;
 
+		foreach my $normal (@normal_ids) {
+
+			print $log ">> Initiating process for NORMAL: $normal\n";
+
+			# organize SViCT input
+			if (scalar(@svict_files) > 0) {
+				my @svict_svs = grep { /$normal/ } @svict_files;
+
+				unless (scalar(@svict_svs) == 0) {
+					$link = join('/', $link_directory, $normal . '_SViCT.vcf');
+					symlink($svict_svs[0], $link);
+					push @svict_svs_patient, $svict_svs[0];
+					}
+				}
+			}
+
 		foreach my $tumour (@tumour_ids) {
 
 			print $log ">> Initiating process for TUMOUR: $tumour\n";
@@ -399,10 +441,12 @@ sub main {
 			# organize Delly input
 			if (scalar(@delly_files) > 0) {
 				my @delly_svs = grep { /$tumour/ } @delly_files;
-				$link = join('/', $link_directory, $tumour . '_Delly_SVs.bcf');
-				symlink($delly_svs[0], $link);
 
-				push @delly_svs_patient, $delly_svs[0];
+				unless (scalar(@delly_svs) == 0) {
+					$link = join('/', $link_directory, $tumour . '_Delly_SVs.bcf');
+					symlink($delly_svs[0], $link);
+					push @delly_svs_patient, $delly_svs[0];
+					}
 				}
 
 			# organize Manta input
@@ -437,31 +481,34 @@ sub main {
 			# organize NovoBreak input
 			if (scalar(@novobreak_files) > 0) {
 				my @novobreak_svs = grep { /$tumour/ } @novobreak_files;
-				next if (scalar(@novobreak_svs) == 0);
 
-				$link = join('/', $link_directory, $tumour . '_NovoBreak.tsv');
-				symlink($novobreak_svs[0], $link);
-				push @novobreak_svs_patient, $novobreak_svs[0];
+				unless (scalar(@novobreak_svs) == 0) {
+					$link = join('/', $link_directory, $tumour . '_NovoBreak.tsv');
+					symlink($novobreak_svs[0], $link);
+					push @novobreak_svs_patient, $novobreak_svs[0];
+					}
 				}
 
 			# organize Pindel input
 			if (scalar(@pindel_files) > 0) {
 				my @pindel_svs = grep { /$tumour/ } @pindel_files;
-				next if (scalar(@pindel_svs) == 0);
 
-				$link = join('/', $link_directory, $tumour . '_Pindel.txt');
-				symlink($pindel_svs[0], $link);
-				push @pindel_svs_patient, $pindel_svs[0];
+				unless (scalar(@pindel_svs) == 0) {
+					$link = join('/', $link_directory, $tumour . '_Pindel.txt');
+					symlink($pindel_svs[0], $link);
+					push @pindel_svs_patient, $pindel_svs[0];
+					}
 				}
 
 			# organize SViCT input
 			if (scalar(@svict_files) > 0) {
 				my @svict_svs = grep { /$tumour/ } @svict_files;
-				next if (scalar(@svict_svs) == 0);
 
-				$link = join('/', $link_directory, $tumour . '_SViCT.vcf');
-				symlink($svict_svs[0], $link);
-				push @svict_svs_patient, $svict_svs[0];
+				unless (scalar(@svict_svs) == 0) {
+					$link = join('/', $link_directory, $tumour . '_SViCT.vcf');
+					symlink($svict_svs[0], $link);
+					push @svict_svs_patient, $svict_svs[0];
+					}
 				}
 			}
 
@@ -538,16 +585,24 @@ sub main {
 			'MAVIS*.COMPLETE'
 			);
 
-		my $memory = '4G';
-	
 		my ($novobreak_input, $pindel_input, $svict_input) = undef;
 		my ($starfus_input, $fuscatch_input) = undef;
 
-		if (scalar(@novobreak_svs_patient) > 0) { $novobreak_input = join(' ', @novobreak_svs_patient); }
-		if (scalar(@pindel_svs_patient) > 0)    { $pindel_input	   = join(' ', @pindel_svs_patient); }
-		if (scalar(@svict_svs_patient) > 0)     { $svict_input	   = join(' ', @svict_svs_patient); }
-		if (scalar(@starfus_svs_patient) > 0)	{ $starfus_input   = join(' ', @starfus_svs_patient); }
-		if (scalar(@fuscatch_svs_patient) > 0)	{ $fuscatch_input  = join(' ', @fuscatch_svs_patient); }
+		if (scalar(@novobreak_svs_patient) > 0) {
+			$novobreak_input = join(' ', @novobreak_svs_patient);
+			}
+		if (scalar(@pindel_svs_patient) > 0) {
+			$pindel_input = join(' ', @pindel_svs_patient);
+			}
+		if (scalar(@svict_svs_patient) > 0) {
+			$svict_input = join(' ', @svict_svs_patient);
+			}
+		if (scalar(@starfus_svs_patient) > 0) {
+			$starfus_input = join(' ', @starfus_svs_patient);
+			}
+		if (scalar(@fuscatch_svs_patient) > 0) {
+			$fuscatch_input = join(' ', @fuscatch_svs_patient);
+			}
 
 		if (scalar(@rna_ids_patient) > 0) {
 
@@ -568,8 +623,6 @@ sub main {
 				output		=> $mavis_cfg
 				);
 
-			$memory = '8G';
-
 			} else {
 
 			$mavis_cmd .= "\n\necho 'Running MAVIS config.';\n\n" . get_mavis_command(
@@ -589,6 +642,17 @@ sub main {
 		$mavis_cmd .= "\n\necho 'Running MAVIS setup.';\n\n";
 		$mavis_cmd .= "mavis setup $mavis_cfg -o $patient_directory";
 
+		# if hpc_group is specified (not default)
+		if (defined($hpc_group)) {
+
+			my $add_group = join(' ',
+				"find $patient_directory -name 'submit.sh' -exec",
+				"sed -i '/^#!/a #SBATCH -A $hpc_group'" . ' {} \;'
+				);
+
+			$mavis_cmd .= "\n\n" . $add_group;
+			}
+
 		# if build.cfg already exists, then try resubmitting
 		if ('Y' eq missing_file("$patient_directory/build.cfg")) {
 			$mavis_cmd .= "\n\necho 'Running MAVIS schedule.';\n\n";
@@ -596,6 +660,7 @@ sub main {
 			} else {
 			$mavis_cmd =~ s/mavis config/#mavis config/;
 			$mavis_cmd =~ s/mavis setup/#mavis setup/;
+			$mavis_cmd =~ s/^find/#^find/;
 			$mavis_cmd .= "\n\necho 'Running MAVIS schedule with resubmit.';\n\n";
 			$mavis_cmd .= "mavis schedule -o $patient_directory --resubmit";
 			}
@@ -612,6 +677,14 @@ sub main {
 			"-j", join('/', $patient_directory, 'job_ids')
 			);
 
+#		$mavis_cmd .= "\n\n" . join(' ',
+#			"if [ -s $mavis_output ]; then",
+#			'  exit 0;',
+#			'else',
+#			'  exit 1;',
+#			'fi'
+#			);
+
 		# check if this should be run
 		if ('Y' eq missing_file($mavis_output)) {
 
@@ -624,8 +697,8 @@ sub main {
 				cmd	=> $mavis_cmd,
 				modules	=> [$mavis, $bwa, 'perl', 'R'],
 				dependencies	=> join(':', @format_jobs),
-				max_time	=> '12:00:00',
-				mem		=> $memory,
+				max_time	=> '5-00:00:00',
+				mem		=> $mavis_memory,
 				hpc_driver	=> $args{hpc_driver},
 				kill_on_error	=> 0,
 				extra_args	=> [$hpc_group]

@@ -108,8 +108,10 @@ sub main {
 		'delly'	=> defined($tool_data->{delly}->{run}) ? $tool_data->{delly}->{run} : 'N',
 		'svict'	=> defined($tool_data->{svict}->{run}) ? $tool_data->{svict}->{run} : 'N',
 		'ichor_cna'	=> defined($tool_data->{ichor_cna}->{run}) ? $tool_data->{ichor_cna}->{run} : 'N',
+		'mops'  => defined($tool_data->{panelcn_mops}->{run}) ? $tool_data->{panelcn_mops}->{run} : 'N',
 		'mavis'	=> defined($tool_data->{mavis}->{run}) ? $tool_data->{mavis}->{run} : 'N',
 		'msi'	=> defined($tool_data->{other_tools}->{run_msi}) ? $tool_data->{other_tools}->{run_msi} : 'N',
+		'mutsig'	=> defined($tool_data->{other_tools}->{run_mutsig}) ? $tool_data->{other_tools}->{run_mutsig} : 'N',
 		'star'	=> defined($tool_data->{star}->{run}) ? $tool_data->{star}->{run} : 'N',
 		'rsem'	=> defined($tool_data->{rsem}->{run}) ? $tool_data->{rsem}->{run} : 'N',
 		'star_fusion'	=> defined($tool_data->{star_fusion}->{run}) ? $tool_data->{star_fusion}->{run} : 'N',
@@ -565,7 +567,7 @@ sub main {
 
 		# somatic variants
 		my ($mutect_data, $mutect2_data, $strelka_data, $varscan_data, $sniper_data, $vardict_data);
-		my ($pindel_data, $sequenza_data, $ploidy_data, $gatk_cnv, $gatk_pga, $msi_data);
+		my ($pindel_data, $sequenza_data, $ploidy_data, $gatk_cnv, $gatk_pga, $mops_cnv, $msi_data);
 
 		# find ENSEMBLE mutations
 		my $ensemble_command .= join(' ',
@@ -736,7 +738,7 @@ sub main {
 
 				# plot CNA summary
 				my $cna_plot_command = join(' ',
-					"Rscript $cwd/report/plot_cna_summary.R",
+					"Rscript $cwd/report/plot_seqz_cna_summary.R",
 					'-p', $tool_data->{project_name},
 					'-o', $plot_directory,
 					'-c', $sequenza_data,
@@ -748,7 +750,7 @@ sub main {
 				print $log "Submitting job to plot somatic copy-number variants...\n";
 				$run_script = write_script(
 					log_dir		=> $log_directory,
-					name		=> 'plot_cna_summary',
+					name		=> 'plot_seqz_cna_summary',
 					cmd		=> $cna_plot_command,
 					modules		=> [$r_version],
 					max_time	=> '04:00:00',
@@ -758,7 +760,7 @@ sub main {
 					);
 
 				$run_id = submit_job(
-					jobname		=> 'plot_cna_summary',
+					jobname		=> 'plot_seqz_cna_summary',
 					shell_command	=> $run_script,
 					hpc_driver	=> $args{cluster},
 					dry_run		=> $args{dry_run},
@@ -795,7 +797,7 @@ sub main {
 			symlink($cnv_data, join('/', $data_directory, 'gatk_cnv_ratio_matrix.tsv'));
 			symlink($pga_data, join('/', $data_directory, 'gatk_cnv_pga_estimates.tsv'));
 
-			# plot SV summary
+			# plot CNV summary
 			my $cnv_plot_command = join(' ',
 				"Rscript $cwd/report/plot_gatk_cna_summary.R",
 				'-p', $tool_data->{project_name},
@@ -855,7 +857,7 @@ sub main {
 			symlink($cnv_data, join('/', $data_directory, 'ichor_cna_ratio_matrix.tsv'));
 			symlink($metric_data, join('/', $data_directory, 'ichor_cna_estimates.tsv'));
 
-			# plot SV summary
+			# plot CNV summary
 			my $cnv_plot_command = join(' ',
 				"Rscript $cwd/report/plot_ichor_cna_summary.R",
 				'-p', $tool_data->{project_name},
@@ -889,12 +891,68 @@ sub main {
 			push @job_ids, $run_id;
 			}
 
+		# get CNAs calls from PanelCN.mops
+		if ('Y' eq $tool_set{'mops'}) {
+			my $mops_cnv_dir = join('/', $output_directory, 'PanelCNmops');
+
+			opendir(MOPSCNV, $mops_cnv_dir) or die "Cannot open '$mops_cnv_dir' !";
+			my @mops_cnv_files = readdir(MOPSCNV);
+			my @cnv_files = grep { /panelCN.mops_output.tsv/ } @mops_cnv_files;
+			@cnv_files = sort @cnv_files;
+			closedir(MOPSCNV);
+
+			my $cnv_data = join('/', $mops_cnv_dir, $cnv_files[-1]);
+
+			if ( -l join('/', $data_directory, 'mops_combined_output.tsv')) {
+				unlink join('/', $data_directory, 'mops_combined_output.tsv');
+				}
+
+			symlink($cnv_data, join('/', $data_directory, 'mops_combined_output.tsv'));
+
+			# plot SV summary
+			my $cnv_plot_command = join(' ',
+				"Rscript $cwd/report/plot_cn_mops_summary.R",
+				'-p', $tool_data->{project_name},
+				'-o', $plot_directory,
+				'-c', $cnv_data,
+				'-s', 'ratio'
+				);
+
+			# run command
+			print $log "Submitting job to plot PanelCN.mops CNVs...\n";
+			$run_script = write_script(
+				log_dir		=> $log_directory,
+				name		=> 'plot_mops_cnv_summary',
+				cmd		=> $cnv_plot_command,
+				modules		=> [$r_version],
+				max_time	=> '04:00:00',
+				mem		=> '2G',
+				hpc_driver	=> $args{cluster},
+				extra_args	=> [$hpc_group]
+				);
+
+			$run_id = submit_job(
+				jobname		=> 'plot_mops_cnv_summary',
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @job_ids, $run_id;
+			}
+
 		# get SVs calls from MAVIS
 		if ('Y' eq $tool_set{'mavis'}) {
 			my $mavis_dir = join('/', $output_directory, 'Mavis');
 
 			opendir(MAVIS, $mavis_dir) or die "Cannot open '$mavis_dir' !";
-			my @mavis_files = grep { /mavis_output.tsv/ } readdir(MAVIS);
+			my @mavis_files;
+			if ('wgs' eq $tool_data->{seq_type}) {
+				@mavis_files = grep { /mavis_output.tsv/ } readdir(MAVIS);
+				} else {
+				@mavis_files = grep { /mavis_output_filtered.tsv/ } readdir(MAVIS);
+				}
 			@mavis_files = sort @mavis_files;
 			closedir(MAVIS);
 
@@ -1011,6 +1069,59 @@ sub main {
 
 		push @job_ids, $plot1_run_id;
 
+		# run MutSigCV
+		my $mutsig_command = join(' ',
+			'sh /cluster/tools/software/MutSigCV/1.4/run_MutSigCV.sh',
+			'/cluster/tools/software/MCR/8.1/v81',
+			join('/', $plot_directory, 'ensemble_mutation_data.tsv'),
+			'/cluster/projects/pughlab/references/MutSigCV/exome_full192.coverage.txt',
+			'/cluster/projects/pughlab/references/MutSigCV/gene.covariates.txt',
+			join('/', $plot_directory, $tool_data->{project_name} . '_MutSigCV'),
+			'/cluster/projects/pughlab/references/MutSigCV/mutation_type_dictionary_file.txt'
+			);
+
+		if ( ('hg19' eq $tool_data->{ref_type}) || ('GRCh37' eq $tool_data->{ref_type}) ) {
+			$mutsig_command .= ' /cluster/projects/pughlab/references/MutSigCV/chr_files_hg19';
+			} elsif (('hg38' eq $tool_data->{ref_type}) || ('GRCh38' eq $tool_data->{ref_type})) {
+			$mutsig_command .= ' /cluster/projects/pughlab/references/MutSigCV/chr_files_hg38';
+			} else {
+			print $log "MutSigCV requested but unknown ref_type provided; not running.\n";
+			$tool_set{'mutsig'} = 'N';
+			}
+
+		my $mutsig_run_id = '';
+		my $significance_data = join('/',
+			$plot_directory,
+			$tool_data->{project_name} . '_MutSigCV.sig_genes.txt'
+			);
+
+		if ('Y' eq $tool_set{'mutsig'}) {
+
+			# run command
+			print $log "Submitting job to check mutation significance...\n";
+			$run_script = write_script(
+				log_dir		=> $log_directory,
+				name		=> 'run_mutsigcv',
+				cmd		=> $mutsig_command,
+				modules		=> ['MutSigCV/1.4'],
+				dependencies	=> $ensemble_run_id,
+				max_time	=> '04:00:00',
+				mem		=> '6G',
+				hpc_driver	=> $args{cluster},
+				extra_args	=> [$hpc_group]
+				);
+
+			$mutsig_run_id = submit_job(
+				jobname		=> 'run_mutsigcv',
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @job_ids, $mutsig_run_id;
+			}
+
 		# plot mutation signatures
 		my $sig_plot_command = join(' ',
 			"Rscript $cwd/report/apply_cosmic_mutation_signatures.R",
@@ -1059,8 +1170,12 @@ sub main {
 			'-t', $tool_data->{seq_type}
 			);
 
-		if ('Y' eq $tool_data->{other_tools}->{run_msi}) {
+		if ('Y' eq $tool_set{'msi'}) {
 			$snv_plot_command .= " -m $msi_data";
+			}
+
+		if ('Y' eq $tool_set{'mutsig'}) {
+			$snv_plot_command .= " -s $significance_data";
 			}
 
 		# run command
@@ -1070,7 +1185,7 @@ sub main {
 			name		=> 'plot_snv_summary',
 			cmd		=> $snv_plot_command,
 			modules		=> [$r_version],
-			dependencies	=> join(':', $plot1_run_id, $plot2_run_id),
+			dependencies	=> join(':', $plot1_run_id, $plot2_run_id, $mutsig_run_id),
 			max_time	=> '04:00:00',
 			mem		=> '2G',
 			hpc_driver	=> $args{cluster},

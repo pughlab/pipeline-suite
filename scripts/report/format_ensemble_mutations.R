@@ -319,6 +319,7 @@ write.table(
 	file = generate.filename(arguments$project, 'ensemble_mutation_data', 'tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
+	quote = FALSE,
 	sep = '\t'
 	);
 

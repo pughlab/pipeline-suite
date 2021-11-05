@@ -57,6 +57,7 @@ simplify.ids <- function(x) {
 ### PREPARE SESSION ################################################################################
 # import libraries
 library(BoutrosLab.plotting.general);
+library(xtable);
 library(deconstructSigs);
 library(BSgenome);
 library(argparse);
@@ -184,6 +185,18 @@ if (all(is.na(sig.weights))) {
 	sample.order <- rownames(heatmap.data);
 	sig.order <- colnames(heatmap.data);
 
+	# extract top signatures
+	top.signatures <- sig.order[1:10];
+	sig.summary <- data.frame(
+		Signature = top.signatures,
+		N.Samples = NA
+		);	
+
+	for (i in 1:10) {
+		sig <- top.signatures[i];
+		sig.summary[i,2] <- nrow(sig.weights[which(sig.weights[,sig] > 0.05),]);
+		}
+
 	should.plot <- TRUE;
 	}
 
@@ -227,6 +240,36 @@ if (should.plot) {
 		width = 12,
 		resolution = 600,
 		filename = generate.filename(arguments$project, 'mutation_signatures', 'png')
+		);
+
+	### LATEX ##################################################################################
+	# write for latex
+	write("\\section{Mutation Signatures}", file = 'mutation_signature_summary.tex');
+
+	# add mutation_signatures plot
+	write("\\begin{figure}[h!]", file = 'mutation_signature_summary.tex', append = TRUE);
+	write("\\begin{center}", file = 'mutation_signature_summary.tex', append = TRUE);
+	write(paste0(
+		"\\includegraphics[width=0.95\\textwidth]{",
+		getwd(), '/',
+		generate.filename(arguments$project, 'mutation_signatures', 'png'), '}'
+		), file = 'mutation_signature_summary.tex', append = TRUE);
+	write("\\end{center}", file = 'mutation_signature_summary.tex', append = TRUE);
+	write(paste0(
+		"\\caption{COSMIC mutation signatures were applied to the current dataset using deconstructSig. Heatmap shows weights attributed to each signature for each sample.}"
+		), file = 'mutation_signature_summary.tex', append = TRUE);
+	write("\\end{figure}\n", file = 'mutation_signature_summary.tex', append = TRUE);
+
+	# add table summary
+	caption <- 'Summary of top 10 recurrent signatures across the cohort. Table shows number of samples with signature weight $>$ 0.05.';
+	print(
+		xtable(
+			sig.summary,
+			caption = caption 
+			),
+		file = 'mutation_signature_summary.tex',
+		include.rownames = FALSE,
+		append = TRUE
 		);
 	}
 

@@ -125,6 +125,7 @@ bamqc:
             time: '48:00:00'
 other_tools:
     run_msi: Y
+    run_mutsig: Y
 haplotype_caller:
     run: Y
     parameters:
@@ -368,6 +369,7 @@ ichor_cna:
             time: '24:00:00'
 mavis:
     run: Y
+    mem: 4G # increase this is patient has multiple tumours and/or many SV callers were run
     mavis_annotations: /cluster/projects/pughlab/references/MAVIS_ref_hg19/ensembl69_hg19_annotations.json
     mavis_masking: /cluster/projects/pughlab/references/MAVIS_ref_hg19/hg19_masking.tab
     mavis_dgv_anno: /cluster/projects/pughlab/references/MAVIS_ref_hg19/dgv_hg19_variants.tab
