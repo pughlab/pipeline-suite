@@ -647,7 +647,7 @@ sub main {
 
 			my $add_group = join(' ',
 				"find $patient_directory -name 'submit.sh' -exec",
-				"sed -i '/^#!/a #SBATCH -A $hpc_group'" . ' {} \;'
+				"sed -i '/^#!/a #SBATCH $hpc_group'" . ' {} \;'
 				);
 
 			$mavis_cmd .= "\n\n" . $add_group;
