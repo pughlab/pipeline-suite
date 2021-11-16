@@ -385,31 +385,7 @@ sub main {
 
 		# wait until it finishes
 		unless ($args{no_wait}) {
-
-			my $complete = 0;
-			my $timeouts = 0;
-
-			while (!$complete && $timeouts < 20 ) {
-				sleep(30);
-				my $status = `sacct --format='State' -j $run_id`;
-
-				# if final job has finished successfully:
-				if ($status =~ m/COMPLETED/s) { $complete = 1; }
-				# if we run into a server connection error (happens rarely with sacct)
-				# increment timeouts (if we continue to repeatedly timeout, we will exit)
-				elsif ($status =~ m/Connection timed out/) {
-					$timeouts++;
-					}
-				# if the job is still pending or running, try again in a bit
-				# but also reset timeouts, because we only care about consecutive timeouts
-				elsif ($status =~ m/PENDING|RUNNING/) {
-					$timeouts = 0;
-					}
-				# if none of the above, we will exit with an error
-				else {
-					die("Final RSEM accounting job: $run_id finished with errors.");
-					}
-				}
+			check_final_status(job_id => $run_id);
 			}
 		}
 

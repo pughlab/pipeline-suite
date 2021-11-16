@@ -482,6 +482,44 @@ sub collect_job_stats {
 	return($sacct_command);
 	}
 
+# command to check job status
+sub check_final_status {
+	my %args = (
+		job_id	=> undef,
+		@_
+		);
+
+	my $complete = 0;
+	my $timeouts = 0;
+
+	while (!$complete && $timeouts < 20 ) {
+		sleep(30);
+		my $status = `sacct --format='State' -j $args{job_id}`;
+
+		# if we run into a server connection error (happens rarely with sacct)
+		# increment timeouts (if we continue to repeatedly timeout, we will exit)
+		if ($status =~ m/Connection timed out/) {
+			$timeouts++;
+			}
+		else {
+			my @status_lines = split("\n", $status);
+			$status = $status_lines[2];
+
+			# if final job has finished successfully:
+			if ($status =~ m/COMPLETED/s) { $complete = 1; }
+			# if the job is still pending or running, try again in a bit
+			# but also reset timeouts, because we only care about consecutive timeouts
+			elsif ($status =~ m/PENDING|RUNNING/) {
+				$timeouts = 0;
+				}
+			# if none of the above, we will exit with an error
+			else {
+				die("Final accounting job: $args{job_id} finished with errors.");
+				}
+			}
+		}
+	}
+
 # format command to generate PON
 sub generate_pon {
 	my %args = (
