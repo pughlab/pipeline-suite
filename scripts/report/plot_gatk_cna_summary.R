@@ -227,21 +227,21 @@ save(
 cna.caption <- "Heatmap shows log$_2$(ratio); ordered by genomic position (chr1 [left] to chrX [right], indicated by top covariate) and PGA. Note: unlike Sequenza, GATK does not produce cellulary or ploidy estimates, but does provide calls for samples without a matched normal through use of a panel of normals.";
 
 # write latex for report
-write("\\section{SCNA Summary}", file = 'cna_summarygatk.tex');
-write("Copy number variation was also called using GATK (v4.1.8.1) using GATK's best practices guidelines:", file = 'cna_summarygatk.tex', append = TRUE);
+write("\\section{SCNA Summary}", file = 'cna_summary_gatk.tex');
+write("Copy number variation was also called using GATK (v4.1.8.1) using GATK's best practices guidelines:", file = 'cna_summary_gatk.tex', append = TRUE);
 
-write("\\begin{figure}[h!]", file = 'cna_summarygatk.tex', append = TRUE);
-write("\\begin{center}", file = 'cna_summarygatk.tex', append = TRUE);
+write("\\begin{figure}[h!]", file = 'cna_summary_gatk.tex', append = TRUE);
+write("\\begin{center}", file = 'cna_summary_gatk.tex', append = TRUE);
 write(paste0(
 	"\\includegraphics[width=0.9\\textwidth]{",
 	getwd(), '/',
 	generate.filename(arguments$project, 'gatk_scna_landscape','png'), '}'
-	), file = 'cna_summarygatk.tex', append = TRUE);
-write("\\end{center}", file = 'cna_summarygatk.tex', append = TRUE);
+	), file = 'cna_summary_gatk.tex', append = TRUE);
+write("\\end{center}", file = 'cna_summary_gatk.tex', append = TRUE);
 write(paste0(
 	"\\caption{", cna.caption, "}"
-	), file = 'cna_summarygatk.tex', append = TRUE);
-write("\\end{figure}\n", file = 'cna_summarygatk.tex', append = TRUE);
+	), file = 'cna_summary_gatk.tex', append = TRUE);
+write("\\end{figure}\n", file = 'cna_summary_gatk.tex', append = TRUE);
 
 ### SAVE SESSION INFO ##############################################################################
 save.session.profile(generate.filename('GATKCNASummary','SessionProfile','txt'));

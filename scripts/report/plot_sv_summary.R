@@ -55,7 +55,7 @@ arguments <- parser$parse_args();
 
 ### READ DATA ######################################################################################
 # get data
-input.data <- read.delim(arguments$mavis);
+input.data <- read.delim(arguments$mavis, stringsAsFactors = FALSE);
 
 # collect list of all samples
 tumour.samples <- colnames(input.data)[grep('diseased_genome', colnames(input.data))];
