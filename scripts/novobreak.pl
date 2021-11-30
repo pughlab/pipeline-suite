@@ -70,6 +70,27 @@ sub get_novobreak_command {
 	return($nb_command);
 	}
 
+# format command to group SVs by reads 
+sub get_group_by_reads_command {
+	my %args = (
+		directory	=> undef,
+		nb_file		=> undef,
+		@_
+		);
+
+	my $group_command = join("\n",
+		"cd $args{directory}",
+		'if [ ! -s bp_reads.tsv ] && [ ! -s ssake.sam.md5 ]; then',
+		'  samtools bam2fq -1 read1.fq -2 read2.fq ../somaticreads.bam;',
+		'  group_bp_reads.pl ' . $args{nb_file} . ' read1.fq read2.fq > bp_reads.tsv;',
+		'  rm ../{somaticreads,germlinereads}.bam;',
+		'  rm read{1,2}.fq;',
+		'fi'
+		);
+
+	return($group_command);
+	}
+
 # format command to prepare ssake 
 sub get_prep_ssake_command {
 	my %args = (
@@ -81,12 +102,6 @@ sub get_prep_ssake_command {
 	my $nb_output = $args{output_file};
 	my $cpu_count = $args{n_cpus} - 1;
 	my $part1_command = join("\n",
-		'  if [ ! -s bp_reads.tsv ] && [ ! -s ssake.sam.md5 ]; then',
-		'    samtools bam2fq -1 read1.fq -2 read2.fq ../somaticreads.bam;',
-		'    group_bp_reads.pl ' . $nb_output . ' read1.fq read2.fq > bp_reads.tsv;',
-		'    rm ../{somaticreads,germlinereads}.bam;',
-		'    rm read{1,2}.fq;',
-		'  fi',
 		'  if [ -s bp_reads.tsv ] && [ ! -s ssake.sam.md5 ]; then',
 		'    cls=$(tail -1 bp_reads.tsv | cut -f1);',
 		'    rec=$(echo $cls/' . $args{n_cpus} . ' | bc);',
@@ -420,7 +435,47 @@ sub main {
 				}
 
 			# run post-process steps on full novoBreak output
-			my $final_nb_output = join('/', $sample_directory, $sample . '_novoBreak.pass.vcf');
+			my $final_nb_output = join('/',
+				$sample_directory,
+				$sample . '_novoBreak.pass.vcf'
+				);
+
+			my $group_reads_command = get_group_by_reads_command(
+				nb_file		=> $nb_output,
+				directory	=> $tmp_directory
+				);
+
+			if ( ('Y' eq missing_file($tmp_directory . '/bp_reads.tsv')) &
+				 ('Y' eq missing_file($final_nb_output . '.md5')) ) {
+			
+				# record command (in log directory) and then run job
+				print $log "Submitting job for NovoBreak GroupByReads...\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_novobreak_group_reads_' . $sample,
+					cmd	=> $group_reads_command,
+					modules	=> [$samtools, $novobreak, 'perl'],
+					dependencies	=> $run_id,
+					max_time	=> $parameters->{group_reads}->{time},
+					mem		=> $parameters->{group_reads}->{mem},
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_novobreak_group_reads_' . $sample,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
+				} else {
+				print $log "Skipping GroupByReads step as this is already complete!\n";
+				}
 
 			my $nb_process_command = get_process_novobreak_command(
 				tumour_id	=> $sample,
@@ -554,8 +609,6 @@ sub main {
 
 			print $log "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
 			print $log "---\n";
-
-			unless($args{dry_run}) { sleep(60); }
 			}
 		}
 
