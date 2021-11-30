@@ -169,6 +169,7 @@ sub get_merge_pindel_command {
 		tmp_dir		=> undef,
 		input		=> undef,
 		output		=> undef,
+		seq_type	=> undef,
 		@_
 		);
 
@@ -182,7 +183,7 @@ sub get_merge_pindel_command {
 		"| awk -v FS=' ' -v OFS='\\t'", 
 		"'{ if ((\$1 ~ /^[0-9]+\$/) && (\$27 >= 30))",
 		'{ print $1, $2, $8, $10, $13, $8, $11, $14, $16, NA, $27 }}' . "'",
-		'> pindel_output_p1.txt'
+		"> $args{input}\_output_p1.txt"
 		);
 
 	# for long insertions:
@@ -193,20 +194,22 @@ sub get_merge_pindel_command {
 		"| awk -v FS=' ' -v OFS='\\t'",
 		"'{ if (\$1 ~ /^[0-9]+\$/)",
 		'{ print $1, $2, $4, $5, $5, $4, $8, $8, $7, $10, NA }}' . "'",
-		'> pindel_output_p2.txt'
+		"> $args{input}\_output_p2.txt"
 		);
 
-	# for translocations:
+	# for translocations (only target-seq, all other types run per-chromosome):
 	# 	idx, type, bp1_chr, bp1_start, bp1_end, bp2_chr, bp2_start, bp2_end, support_1, support_2, qual
-	$pindel_command .= "\n\n" . join(' ',
-		"cat $args{input}*_INT_final",
-		"| awk -v FS=' ' -v OFS='\\t'",
-		"-v type='INT'",
-		"'{ print NR, type, \$2, \$16, \$25, \$6, \$19, \$28, \$12, NA, NA }'",
-		'> pindel_output_p3.txt'
-		);
+	if ($args{seq_type}) {
+		$pindel_command .= "\n\n" . join(' ',
+			"cat $args{input}*_INT_final",
+			"| awk -v FS=' ' -v OFS='\\t'",
+			"-v type='INT'",
+			"'{ print NR, type, \$2, \$16, \$25, \$6, \$19, \$28, \$12, NA, NA }'",
+			"> $args{input}\_output_p3.txt"
+			);
+		}
 	
-	$pindel_command .= "\ncat pindel_output_p*.txt > $args{output}";
+	$pindel_command .= "\ncat $args{input}\_output_p*.txt > $args{output}";
 	$pindel_command .= "\nmd5sum $args{output} > $args{output}.md5";
 
 	return($pindel_command);
@@ -320,7 +323,7 @@ sub main {
 	$ref_type  = $tool_data->{ref_type};
 
 	my $intervals_bed = undef;
-	if (defined($tool_data->{intervals_bed})) {
+	if ( ('wgs' ne $tool_data->{seq_type}) && (defined($tool_data->{intervals_bed})) ) {
 		$intervals_bed = $tool_data->{intervals_bed};
 		$intervals_bed =~ s/\.bed/_padding100bp.bed/;
 		print $log "\n    Target intervals: $intervals_bed"; 
@@ -580,7 +583,8 @@ sub main {
 			my $merge_command = get_merge_pindel_command(
 				input		=> $sample . '_pindel',
 				output		=> $merged_file,
-				tmp_dir		=> $tmp_directory
+				tmp_dir		=> $tmp_directory,
+				seq_type	=> $is_targeted
 				);
 
 			# check if this should be run
@@ -841,31 +845,7 @@ sub main {
 
 		# wait until it finishes
 		unless ($args{no_wait}) {
-
-			my $complete = 0;
-			my $timeouts = 0;
-
-			while (!$complete && $timeouts < 20 ) {
-				sleep(30);
-				my $status = `sacct --format='State' -j $run_id`;
-
-				# if final job has finished successfully:
-				if ($status =~ m/COMPLETED/s) { $complete = 1; }
-				# if we run into a server connection error (happens rarely with sacct)
-				# increment timeouts (if we continue to repeatedly timeout, we will exit)
-				elsif ($status =~ m/Connection timed out/) {
-					$timeouts++;
-					}
-				# if the job is still pending or running, try again in a bit
-				# but also reset timeouts, because we only care about consecutive timeouts
-				elsif ($status =~ m/PENDING|RUNNING/) {
-					$timeouts = 0;
-					}
-				# if none of the above, we will exit with an error
-				else {
-					die("Final PINDEL accounting job: $run_id finished with errors.");
-					}
-				}
+			check_final_status(job_id => $run_id);
 			}
 		}
 

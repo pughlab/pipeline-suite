@@ -464,12 +464,12 @@ sub main {
 		}
 
 	# for MSI
+	$methods .= "\\subsection{MSI}\n";
 	if ('Y' eq $tool_set{'msi'}) {
 
 		my $msi	= 'msisensor-pro/1.2.0';
 
 		# fill in methods
-		$methods .= "\\subsection{MSI}\n";
 		$methods .= "MSI-Sensor pro (v1.2.0) was run using recommended best practices with target regions provided to msi (T/N pairs) or pro (tumour only) commands and coverage threshold of 20x (as recommended).\\newline\n";
 		} else {
 		$methods .= "MSI-Sensor was not run.\\newline\n";

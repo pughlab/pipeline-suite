@@ -11,7 +11,11 @@ output <- args[n.args];
 # write function to read in data
 read.pindel <- function(file) {
 	tmp <- tryCatch(
-		read.delim(file, comment.char = '#', header = F),
+		read.delim(file,
+			comment.char = '#',
+			header = FALSE,
+			col.names = c('IDX','event_type','break1_chromosome','break1_position_start','break1_position_end','break2_chromosome','break2_position_start','break2_position_end','support_1','support_2','quality')
+			),
 		error = function(e) { NA }
 		);
 	if (is.logical(tmp)) { return(NULL); } else { return(tmp); }
@@ -34,9 +38,6 @@ if (is.null(sv.data)) {
 		sep = '\t'
 		);	
 	} else {
-
-	# supply header
-	colnames(sv.data) <- c('IDX','event_type','break1_chromosome','break1_position_start','break1_position_end','break2_chromosome','break2_position_start','break2_position_end','support_1','support_2','quality');
 
 	# drop incomplete cases
 	sv.data <- sv.data[!is.na(sv.data$break1_position_end),];

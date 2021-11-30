@@ -236,7 +236,7 @@ if (should.plot) {
 		fill.colour = 'white',
 		colourkey.cex = 1,
 		at = seq(0,1,0.001),
-		height = if (length(all.samples) < 10) { 6 } else { 8 },
+		height = if (length(all.samples) < 10) { 5 } else { 7 },
 		width = 12,
 		resolution = 600,
 		filename = generate.filename(arguments$project, 'mutation_signatures', 'png')
@@ -250,7 +250,7 @@ if (should.plot) {
 	write("\\begin{figure}[h!]", file = 'mutation_signature_summary.tex', append = TRUE);
 	write("\\begin{center}", file = 'mutation_signature_summary.tex', append = TRUE);
 	write(paste0(
-		"\\includegraphics[width=0.95\\textwidth]{",
+		"\\includegraphics[height=0.3\\textheight]{",
 		getwd(), '/',
 		generate.filename(arguments$project, 'mutation_signatures', 'png'), '}'
 		), file = 'mutation_signature_summary.tex', append = TRUE);

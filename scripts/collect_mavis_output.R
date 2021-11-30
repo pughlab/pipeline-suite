@@ -239,7 +239,7 @@ if (arguments$find_drawings) {
 
 	# is this a tumour or normal sample?
 	tmp$Status <- 'somatic';
-	if (length(normal.smps) > 0) {
+	if ( (length(normal.smps) > 0) & (any(tmp$library %in% normal.smps)) ) {
 		tmp[which(tmp$library %in% normal.smps),]$Status <- 'germline';
 		}
 
@@ -260,8 +260,10 @@ if (arguments$find_drawings) {
 	germline.svs <- germline.svs[!duplicated(germline.svs[,c('library','tracking_id')]),];
 
 	# is this truely somatic, or observed in matched normal?
-	germ.idx <- apply(somatic.svs[,smp.fields],1,function(i) { any(i == 'germline', na.rm = TRUE) } );
-	somatic.svs[germ.idx,]$Status <- 'germline';
+	germ.idx <- which(apply(somatic.svs[,smp.fields],1,function(i) { any(i == 'germline', na.rm = TRUE) } ));
+	if (length(germ.idx) > 0) {
+		somatic.svs[germ.idx,]$Status <- 'germline';
+		}
 
 	# add in RNA support if present
 	if (!is.null(rna) & (length(rna.smps) > 0)) {
@@ -293,6 +295,8 @@ if (arguments$find_drawings) {
 				}
 			}
 		}
+
+	somatic.svs <- somatic.svs[which(somatic.svs$Status == 'somatic'),];
 
 	somatic.svs$library <- gsub('-rna|-wgs|-wxs','',somatic.svs$library);
 	somatic.svs <- somatic.svs[!duplicated(somatic.svs[,c('library','tracking_id')]),];

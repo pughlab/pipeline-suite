@@ -72,7 +72,7 @@ variant.codes <- data.frame(
 	);
 
 variant.colours <- c('darkseagreen4','darkorchid4','#9AA3F2','yellow','darkorange3','#F9B38E','turquoise1','plum','grey50')
-names(variant.colours) <- c('missense','nonsense','nonstop','splicing','frameshift_indel','in_frame_indel','tss','RNA','other');
+names(variant.colours) <- c('missense','nonsense','nonstop','splicing','frameshift_indel','in_frame_indel','tss','RNA','noncoding');
 
 # for these plots, we will ignore some variant types
 variant.colours <- variant.colours[c(1:6,9)];

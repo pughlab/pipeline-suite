@@ -339,9 +339,12 @@ novobreak:
             mem: 40G
             time: '24:00:00'
             n_cpu: 10
+        group_reads:
+            mem: 40G
+            time: '24:00:00'
         process:
-            mem: 16G
-            time: '48:00:00'
+            mem: 12G
+            time: '5-00:00:00'
             n_cpu: 4
         filter:
             mem: 4G

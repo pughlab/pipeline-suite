@@ -79,7 +79,7 @@ For DNA-Seq:
 --output_dir /path/to/output/directory \
 --maf /path/to/germline/snv/matrix { produced by collect_snv_output.R; ideally CPSR annotated } 
 
-Rscript plot_cna_summary.R \
+Rscript plot_seqz_cna_summary.R \
 --project PROJECT_NAME \
 --output_dir /path/to/output/directory \
 --cnas /path/to/cna/matrix { produced by collect_sequenza_output.R } \
@@ -107,6 +107,7 @@ Rscript format_ensemble_mutations.R \
 --somaticsniper /path/to/somaticsniper/output { produced by collect_snv_output.R } \
 --vardict /path/to/vardict/output { produced by collect_snv_output.R } \
 --varscan /path/to/varscan/output { produced by collect_snv_output.R } \
+--pindel /path/to/pindel/output { produced by collect_snv_output.R } \
 --coverage minimum depth to be considered callable { default 20,15 for T/N }
 
 Rscript plot_snv_tool_summary.R \
@@ -114,11 +115,31 @@ Rscript plot_snv_tool_summary.R \
 --output_dir /path/to/output/directory \
 --input /path/to/combined/tool/output { RData produced by format_ensemble_mutations.R }
 
+module load MutSigCV/1.4;
+sh /cluster/tools/software/MutSigCV/1.4/run_MutSigCV.sh /cluster/tools/software/MCR/8.1/v81 \
+/path/to/ensemble/matrix { produced by format_ensemble_mutations.R } \
+/cluster/projects/pughlab/references/MutSigCV/exome_full192.coverage.txt \
+/cluster/projects/pughlab/references/MutSigCV/gene.covariates.txt \
+/path/to/output/directory/STEM_MutSigCV \
+/cluster/projects/pughlab/references/MutSigCV/mutation_type_dictionary_file.txt \
+/cluster/projects/pughlab/references/MutSigCV/chr_files_hg38
+
+Rscript apply_cosmic_mutation_signatures.R \
+--project PROJECT_NAME \
+--output_dir /path/to/output/directory \
+--input /path/to/ensemble/matrix { produced by format_ensemble_mutations.R } \
+--ref_type hg38 { or hg19 } \
+--seq_type exome { or wgs } \
+--vaf_threshold 0.1 \
+--signatures /path/to/COSMIC/SBS/matrix
+
 Rscript plot_snv_summary.R \
 --project PROJECT_NAME \
 --output_dir /path/to/output/directory \
---maf /path/to/ensemble/matrix { produced by format_ensemble_mutations.R } \
+--input /path/to/ensemble/matrix { produced by format_ensemble_mutations.R } \
 --callable /path/to/callable/bases { produced by count_callable_bases.R } \
+--msi /path/to/msi/estimates { produed by collect_msi_output.R } \
+--mutsig /path/to/output/directory/STEM_MutSigCV.sig_genes.txt \
 --seq_type exome { or wgs }
 
 Output summary methods for each tool that was run ({tool}->{run} = Y):
@@ -139,12 +160,10 @@ python3 /path/to/oncokb-annotator/MafAnnotator.py \
 </code></pre>
 
 You can then summarize the OncoKB output (this also filters any tumour-only samples, using OncoKB as a white-list):
-<pre><code>Rscript filter_ensemble_mutations.R \
+<pre><code>Rscript apply_oncokb_filter_and_summarize.R \
 --project PROJECT_NAME \
 --output_dir /path/to/output/directory \
---maf /path/to/oncokb/matrix { produced by format_ensemble_mutations.R and annotated by OncoKB } \
---callable /path/to/callable/bases { produced by count_callable_bases.R } \
---seq_type exome { or wgs }
+--input /path/to/oncokb/matrix { produced by format_ensemble_mutations.R and annotated by OncoKB } \
 </code></pre>
 
 Once all plotting/summary functions are complete, create the report pdf:

@@ -56,7 +56,7 @@ sub _get_files {
 	return(@files);
 	}
 
-# format command to run Manta
+# format command to run Mavis
 sub get_mavis_command {
 	my %args = (
 		tumour_ids	=> [],
@@ -371,10 +371,12 @@ sub main {
 
 	# initialize objects
 	my ($run_script, $run_id, $link, $cleanup_cmd);
-	my @all_jobs;
+	my (@delay_jobs, @all_jobs);
 
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
+
+		$run_id = '';
 
 		print $log "\nInitiating process for PATIENT: $patient\n";
 
@@ -548,7 +550,7 @@ sub main {
 			}
 
 		# check if this should be run
-		if ('Y' eq missing_file(@manta_svs_formatted)) {
+		if ( ('Y' eq missing_file(@manta_svs_formatted)) && ('Y' eq missing_file($mavis_output)) ) {
 
 			# record command (in log directory) and then run job
 			print $log "\nSubmitting job to format Manta SVs...\n";
@@ -647,7 +649,7 @@ sub main {
 
 			my $add_group = join(' ',
 				"find $patient_directory -name 'submit.sh' -exec",
-				"sed -i '/^#!/a #SBATCH -A $hpc_group'" . ' {} \;'
+				"sed -i '/^#!/a #SBATCH $hpc_group'" . ' {} \;'
 				);
 
 			$mavis_cmd .= "\n\n" . $add_group;
@@ -677,13 +679,11 @@ sub main {
 			"-j", join('/', $patient_directory, 'job_ids')
 			);
 
-#		$mavis_cmd .= "\n\n" . join(' ',
-#			"if [ -s $mavis_output ]; then",
-#			'  exit 0;',
-#			'else',
-#			'  exit 1;',
-#			'fi'
-#			);
+		$mavis_cmd .= "\n\n" . join("\n",
+			"if [ ! -s $mavis_output ]; then",
+			"  exit 1;",
+			"fi"
+			);
 
 		# check if this should be run
 		if ('Y' eq missing_file($mavis_output)) {
@@ -691,16 +691,26 @@ sub main {
 			# record command (in log directory) and then run job
 			print $log "Submitting job for MAVIS SV annotator...\n";
 
+			my $dependencies = join(':', @format_jobs);
+			if (scalar(@delay_jobs) >= 5) {
+				my $current = scalar(@delay_jobs);
+				my $start_point = $current - (5 + $current % 5);
+				$dependencies = join(':',
+					@format_jobs,
+					@delay_jobs[$start_point..$start_point + 4]
+					);
+				}
+
 			$run_script = write_script(
 				log_dir	=> $log_directory,
 				name	=> 'run_mavis_sv_annotator_' . $patient,
 				cmd	=> $mavis_cmd,
 				modules	=> [$mavis, $bwa, 'perl', 'R'],
-				dependencies	=> join(':', @format_jobs),
+				dependencies	=> $dependencies,
 				max_time	=> '5-00:00:00',
 				mem		=> $mavis_memory,
-				hpc_driver	=> $args{hpc_driver},
 				kill_on_error	=> 0,
+				hpc_driver	=> $args{hpc_driver},
 				extra_args	=> [$hpc_group]
 				);
 
@@ -712,6 +722,7 @@ sub main {
 				log_file	=> $log
 				);
 
+			push @delay_jobs, $run_id;
 			push @all_jobs, $run_id;
 			} else {
 			print $log "Skipping MAVIS because this has already been completed!\n";
@@ -732,7 +743,8 @@ sub main {
 			name	=> 'extract_key_drawings_' . $patient,
 			cmd	=> $get_drawings,
 			modules	=> [$r_version],
-			dependencies	=> join(':', @all_jobs),
+			dependencies	=> $run_id,
+			max_time	=> '10:00:00',
 			hpc_driver	=> $args{hpc_driver},
 			extra_args	=> [$hpc_group]
 			);
@@ -751,7 +763,6 @@ sub main {
 		# run per patient
 		if ($args{del_intermediates}) {
 
-
 			my $tar = 'tar -czvf intermediate_files.tar.gz pairing/ *_genome/';
 			if (scalar(@rna_ids_patient) > 0) {
 				$tar .= ' *_transcriptome/';
@@ -769,6 +780,7 @@ sub main {
 				"  " . $tar,
 				"else",
 				'  echo "FINAL OUTPUT FILE is missing; not removing intermediates"',
+				'  exit 1;',
 				"fi"
 				);
 
@@ -777,9 +789,9 @@ sub main {
 				name	=> 'run_cleanup_' . $patient,
 				cmd	=> $cleanup_cmd,
 				dependencies	=> $run_id,
+				max_time	=> '08:00:00',
 				mem		=> '256M',
 				hpc_driver	=> $args{hpc_driver},
-				kill_on_error	=> 0,
 				extra_args	=> [$hpc_group]
 				);
 
@@ -867,31 +879,7 @@ sub main {
 
 		# wait until it finishes
 		unless ($args{no_wait}) {
-
-			my $complete = 0;
-			my $timeouts = 0;
-
-			while (!$complete && $timeouts < 20 ) {
-				sleep(30);
-				my $status = `sacct --format='State' -j $run_id`;
-
-				# if final job has finished successfully:
-				if ($status =~ m/COMPLETED/s) { $complete = 1; }
-				# if we run into a server connection error (happens rarely with sacct)
-				# increment timeouts (if we continue to repeatedly timeout, we will exit)
-				elsif ($status =~ m/Connection timed out/) {
-					$timeouts++;
-					}
-				# if the job is still pending or running, try again in a bit
-				# but also reset timeouts, because we only care about consecutive timeouts
-				elsif ($status =~ m/PENDING|RUNNING/) {
-					$timeouts = 0;
-					}
-				# if none of the above, we will exit with an error
-				else {
-					die("Final MAVIS accounting job: $run_id finished with errors.");
-					}
-				}
+			check_final_status(job_id => $run_id);
 			}
 		}
 

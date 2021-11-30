@@ -948,10 +948,10 @@ sub main {
 
 			opendir(MAVIS, $mavis_dir) or die "Cannot open '$mavis_dir' !";
 			my @mavis_files;
-			if ('wgs' eq $tool_data->{seq_type}) {
-				@mavis_files = grep { /mavis_output.tsv/ } readdir(MAVIS);
-				} else {
+			if ('targeted' eq $tool_data->{seq_type}) {
 				@mavis_files = grep { /mavis_output_filtered.tsv/ } readdir(MAVIS);
+				} else {
+				@mavis_files = grep { /mavis_output.tsv/ } readdir(MAVIS);
 				}
 			@mavis_files = sort @mavis_files;
 			closedir(MAVIS);
@@ -1105,8 +1105,8 @@ sub main {
 				cmd		=> $mutsig_command,
 				modules		=> ['MutSigCV/1.4'],
 				dependencies	=> $ensemble_run_id,
-				max_time	=> '04:00:00',
-				mem		=> '6G',
+				max_time	=> '06:00:00',
+				mem		=> '8G',
 				hpc_driver	=> $args{cluster},
 				extra_args	=> [$hpc_group]
 				);
@@ -1323,31 +1323,7 @@ sub main {
 
 		# wait until it finishes
 		unless ($args{no_wait}) {
-
-			my $complete = 0;
-			my $timeouts = 0;
-
-			while (!$complete && $timeouts < 20 ) {
-				sleep(30);
-				my $status = `sacct --format='State' -j $run_id`;
-
-				# if final job has finished successfully:
-				if ($status =~ m/COMPLETED/s) { $complete = 1; }
-				# if we run into a server connection error (happens rarely with sacct)
-				# increment timeouts (if we continue to repeatedly timeout, we will exit)
-				elsif ($status =~ m/Connection timed out/) {
-					$timeouts++;
-					}
-				# if the job is still pending or running, try again in a bit
-				# but also reset timeouts, because we only care about consecutive timeouts
-				elsif ($status =~ m/PENDING|RUNNING/) {
-					$timeouts = 0;
-					}
-				# if none of the above, we will exit with an error
-				else {
-					die("Final REPORT accounting job: $run_id finished with errors.");
-					}
-				}
+			check_final_status(job_id => $run_id);
 			}
 		}
 	}

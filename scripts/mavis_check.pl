@@ -35,7 +35,7 @@ open(my $INPUT, '<', $jobid_file) or die "Cannot open '$jobid_file' file\n";
 my @jobs;
 while (my $line = <$INPUT>) {
 	chomp($line);
-	push @jobs, $line;
+	unless ('None' eq $line) { push @jobs, $line; }
 	}
 close $INPUT;
 
