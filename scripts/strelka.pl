@@ -190,9 +190,6 @@ sub get_filter_command {
 	return($filter_command);
 	}
 
-	return($pon_command);
-	}
-
 # function to extract SM tag from BAM header
 sub get_sm_tag {
 	my %args = (
