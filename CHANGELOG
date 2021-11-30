@@ -1,3 +1,11 @@
+2021-11-30: PughLab pipeline-suite (version 0.6.2)
+- moved common function (check_final_status) to utilities
+- minor updates to report functions
+- update to convert_fusioncatcher to catch empty input files
+- pindel update to fix typo that caused files to be overwritten (merge output step)
+- minor updates to mavis dependencies to avoid overloading the queue
+- split novobreak process into 2 steps to reduce resource requirements
+
 2021-11-05: PughLab pipeline-suite (version 0.6.1)
 - many updates to summarize/report functions!
 - added panelcn.mops output summary to report
