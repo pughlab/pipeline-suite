@@ -76,14 +76,23 @@ sub get_mavis_command {
 		@_
 		);
 
-	my @tools = ('manta','delly');
+	my @dna_tools;
+	my @rna_tools;
 
 	my $mavis_cmd = join(' ',
 		'mavis config',
-		'-w', $args{output},
-		'--convert delly', $args{delly}, 'delly',
-		'--convert manta', $args{manta}, 'manta'
+		'-w', $args{output}
 		);
+
+	if (defined($args{delly})) {
+		$mavis_cmd .= join(' ', ' --convert delly', $args{delly}, 'delly');
+		push @dna_tools, 'delly';
+		}
+
+	if (defined($args{manta})) {
+		$mavis_cmd .= join(' ', ' --convert manta', $args{manta}, 'manta');
+		push @dna_tools, 'manta';
+		}
 
 	if (defined($args{novobreak})) {
 
@@ -93,7 +102,7 @@ sub get_mavis_command {
 			$args{novobreak} . '"'
 			);
 
-		push @tools, 'novobreak';
+		push @dna_tools, 'novobreak';
 		}
 
 	if (defined($args{svict})) {
@@ -104,7 +113,7 @@ sub get_mavis_command {
 			$args{svict} . '"'
 			);
 
-		push @tools, 'svict';
+		push @dna_tools, 'svict';
 		}
 
 	if (defined($args{pindel})) {
@@ -115,8 +124,27 @@ sub get_mavis_command {
 			$args{pindel} . '"'
 			);
 
-		push @tools, 'pindel';
+		push @dna_tools, 'pindel';
 		}
+
+	if (defined($args{starfusion})) {
+		$mavis_cmd .= ' ' . join(' ',
+			'--convert starfusion', $args{starfusion}, 'starfusion'
+			);
+
+		push @rna_tools, 'starfusion';
+		}
+
+	if (defined($args{fusioncatcher})) {
+		$mavis_cmd .= ' ' . join(' ',
+			'--external_conversion fusioncatcher "Rscript',
+			"$cwd/convert_fusioncatcher.R",
+			$args{fusioncatcher} . '"'
+			);
+
+		push @rna_tools, 'fusioncatcher';
+		}
+
 
 	foreach my $smp ( @{$args{tumour_ids}} ) {
 
@@ -128,7 +156,7 @@ sub get_mavis_command {
 
 		$mavis_cmd .= ' ' . join(' ',
 			'--library', $id, 'genome diseased False', $args{tumour_bams}->{$smp},
-			'--assign', $id, join(' ', @tools)
+			'--assign', $id, join(' ', @dna_tools)
 			);
 		}
 
@@ -142,18 +170,11 @@ sub get_mavis_command {
 
 		$mavis_cmd .= ' ' . join(' ',
 			'--library', $id, 'genome normal False', $args{normal_bam},
-			'--assign', $id, join(' ', @tools)
+			'--assign', $id, join(' ', @dna_tools, @rna_tools)
 			);
 		}
 
 	if (scalar(@{$args{rna_ids}}) > 0) {
-
-		$mavis_cmd .= ' ' . join(' ',
-			'--convert starfusion', $args{starfusion}, 'starfusion',
-			'--external_conversion fusioncatcher "Rscript',
-			"$cwd/convert_fusioncatcher.R",
-			$args{fusioncatcher} . '"'
-			);
 
 		foreach my $smp ( @{$args{rna_ids}} ) {
 
@@ -166,7 +187,7 @@ sub get_mavis_command {
 
 			$mavis_cmd .= ' ' . join(' ',
 				'--library', $id, 'transcriptome diseased True', $args{rna_bams}->{$smp},
-				'--assign', $id, 'starfusion fusioncatcher'
+				'--assign', $id, join(' ', @rna_tools)
 				);
 			}
 		}
@@ -241,38 +262,41 @@ sub main {
 	print $log "Running Mavis SV annotation pipeline.\n";
 	print $log "\n  Tool config used: $tool_config";
 	print $log "\n  Output directory: $output_directory";
-	print $log "\n  Sample config used: $data_config";
 
-	if (defined($args{manta_dir})) {
-		print $log "\n    Manta directory: $args{manta_dir}";
-		}
+	if (defined($args{dna_config})) {
+		print $log "\n  DNA sample config used: $data_config";
 
-	if (defined($args{delly_dir})) {
-		print $log "\n    Delly directory: $args{delly_dir}";
-		}
+		if (defined($args{manta_dir})) {
+			print $log "\n    Manta directory: $args{manta_dir}";
+			}
 
-	if (defined($args{novobreak_dir})) {
-		print $log "\n    NovoBreak directory: $args{novobreak_dir}";
-		}
+		if (defined($args{delly_dir})) {
+			print $log "\n    Delly directory: $args{delly_dir}";
+			}
 
-	if (defined($args{pindel_dir})) {
-		print $log "\n    Pindel directory: $args{pindel_dir}";
-		}
+		if (defined($args{novobreak_dir})) {
+			print $log "\n    NovoBreak directory: $args{novobreak_dir}";
+			}
 
-	if (defined($args{svict_dir})) {
-		print $log "\n    SViCT directory: $args{svict_dir}";
+		if (defined($args{pindel_dir})) {
+			print $log "\n    Pindel directory: $args{pindel_dir}";
+			}
+
+		if (defined($args{svict_dir})) {
+			print $log "\n    SViCT directory: $args{svict_dir}";
+			}
 		}
 
 	if (defined($rna_config)) {
 		print $log "\n  RNA sample config used: $rna_config";
-		}
 
-	if (defined($args{starfusion_dir})) {
-		print $log "\n    STAR-Fusion directory: $args{starfusion_dir}";
-		}
+		if (defined($args{starfusion_dir})) {
+			print $log "\n    STAR-Fusion directory: $args{starfusion_dir}";
+			}
 
-	if (defined($args{fusioncatcher_dir})) {
-		print $log "\n    FusionCatcher directory: $args{fusioncatcher_dir}";
+		if (defined($args{fusioncatcher_dir})) {
+			print $log "\n    FusionCatcher directory: $args{fusioncatcher_dir}";
+			}
 		}
 
 	my $intervals_bed;
@@ -320,24 +344,42 @@ sub main {
 
 	### RUN ###########################################################################################
 	# get sample data
-	my $smp_data = LoadFile($data_config);
+	my $smp_data;
 
-	unless($args{dry_run}) {
-		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
+	# find DNA samples (if provided)
+	if (defined($data_config)) {
+		my $dna_data = LoadFile($data_config);	
+
+		foreach my $patient (sort keys %{$dna_data}) {
+			my @normal_ids = sort keys %{$dna_data->{$patient}->{'normal'}};
+			my @tumour_ids = sort keys %{$dna_data->{$patient}->{'tumour'}};
+
+			foreach my $normal ( @normal_ids ) {
+				my $bam = $dna_data->{$patient}->{'normal'}->{$normal};
+				$smp_data->{$patient}->{'normal_dna'}->{$normal} = $bam;
+				}
+			foreach my $tumour ( @tumour_ids ) {
+				my $bam = $dna_data->{$patient}->{'tumour'}->{$tumour};
+				$smp_data->{$patient}->{'tumour_dna'}->{$tumour} = $bam;
+				}
+			}
 		}
 
 	# find RNA samples (if provided)
 	if (defined($rna_config)) {
 		my $rna_data = LoadFile($rna_config);
 
-		foreach my $patient (sort keys %{$smp_data}) {
-			next if ( !any { /$patient/ } keys %{$rna_data});
+		foreach my $patient (sort keys %{$rna_data}) {
 			my @rna_ids = sort keys %{$rna_data->{$patient}->{'tumour'}};
-			foreach my $id (@rna_ids) {
+			foreach my $id ( @rna_ids ) {
 				my $bam = $rna_data->{$patient}->{'tumour'}->{$id};
-				$smp_data->{$patient}->{'rna'}->{$id} = $bam;
+				$smp_data->{$patient}->{'tumour_rna'}->{$id} = $bam;
 				}
 			}
+		}
+
+	unless($args{dry_run}) {
+		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
 		}
 
 	# find SV files in each directory
@@ -358,6 +400,7 @@ sub main {
 		}
 	if (defined($args{pindel_dir})) {
 		@pindel_files = _get_files($args{pindel_dir}, '_combined_Pindel_output.txt');
+		push @pindel_files, _get_files($args{pindel_dir}, '_combined_Pindel_output.txt.gz');
 		}
 	if (defined($args{svict_dir})) {
 		@svict_files = _get_files($args{svict_dir}, 'SViCT.vcf');
@@ -381,9 +424,9 @@ sub main {
 		print $log "\nInitiating process for PATIENT: $patient\n";
 
 		# find bams
-		my @normal_ids = sort keys %{$smp_data->{$patient}->{'normal'}};
-		my @tumour_ids = sort keys %{$smp_data->{$patient}->{'tumour'}};
-		my @rna_ids_patient = sort keys %{$smp_data->{$patient}->{'rna'}};
+		my @normal_ids = sort keys %{$smp_data->{$patient}->{'normal_dna'}};
+		my @tumour_ids = sort keys %{$smp_data->{$patient}->{'tumour_dna'}};
+		my @rna_ids_patient = sort keys %{$smp_data->{$patient}->{'tumour_rna'}};
 
 		print $log "> Found " . scalar(@normal_ids) . " normal BAMs.\n";
 		print $log "> Found " . scalar(@tumour_ids) . " tumour BAMs.\n";
@@ -405,9 +448,9 @@ sub main {
 		my $normal_id = undef;
 		if (scalar(@normal_ids) > 0) {
 			$normal_id = $normal_ids[0];
-			my @tmp = split /\//, $smp_data->{$patient}->{normal}->{$normal_id};
+			my @tmp = split /\//, $smp_data->{$patient}->{'normal_dna'}->{$normal_id};
 			$link = join('/', $link_directory, $tmp[-1]);
-			symlink($smp_data->{$patient}->{normal}->{$normal_id}, $link);
+			symlink($smp_data->{$patient}->{'normal_dna'}->{$normal_id}, $link);
 			}
 
 		# and format input files
@@ -418,7 +461,7 @@ sub main {
 
 		foreach my $normal (@normal_ids) {
 
-			print $log ">> Initiating process for NORMAL: $normal\n";
+			print $log ">> Finding files for NORMAL: $normal\n";
 
 			# organize SViCT input
 			if (scalar(@svict_files) > 0) {
@@ -434,11 +477,11 @@ sub main {
 
 		foreach my $tumour (@tumour_ids) {
 
-			print $log ">> Initiating process for TUMOUR: $tumour\n";
+			print $log ">> Finding files for TUMOUR: $tumour\n";
 
-			my @tmp = split /\//, $smp_data->{$patient}->{tumour}->{$tumour};
+			my @tmp = split /\//, $smp_data->{$patient}->{'tumour_dna'}->{$tumour};
 			$link = join('/', $link_directory, $tmp[-1]);
-			symlink($smp_data->{$patient}->{tumour}->{$tumour}, $link);
+			symlink($smp_data->{$patient}->{'tumour_dna'}->{$tumour}, $link);
 
 			# organize Delly input
 			if (scalar(@delly_files) > 0) {
@@ -524,11 +567,11 @@ sub main {
 
 		foreach my $smp (@rna_ids_patient) {
 
-			print $log ">> Initiating process for RNA: $smp\n";
+			print $log ">> Finding files for RNA: $smp\n";
 
-			my @tmp = split /\//, $smp_data->{$patient}->{rna}->{$smp};
+			my @tmp = split /\//, $smp_data->{$patient}->{'tumour_rna'}->{$smp};
 			$link = join('/', $link_directory, 'rna_' . $tmp[-1]);
-			symlink($smp_data->{$patient}->{rna}->{$smp}, $link);
+			symlink($smp_data->{$patient}->{'tumour_rna'}->{$smp}, $link);
 
 			my @starfus_svs = grep { /$smp/ } @starfusion_files;
 			$link = join('/', $link_directory, $smp . '_star-fusion_predictions.abridged.tsv');
@@ -549,8 +592,17 @@ sub main {
 			print $log "> Found " . scalar(@fuscatch_svs_patient) . " fusioncatcher files for $patient.\n";
 			}
 
+		# indicate expected mavis output file
+		my $mavis_output = join('/',
+			$patient_directory,
+			'summary',
+			'MAVIS*.COMPLETE'
+			);
+
+		my @is_mavis_complete = glob($mavis_output);
+
 		# check if this should be run
-		if ( ('Y' eq missing_file(@manta_svs_formatted)) && ('Y' eq missing_file($mavis_output)) ) {
+		if ( ('Y' eq missing_file(@manta_svs_formatted)) && (!@is_mavis_complete) ) {
 
 			# record command (in log directory) and then run job
 			print $log "\nSubmitting job to format Manta SVs...\n";
@@ -581,15 +633,16 @@ sub main {
 		# now, run mavis (config, setup, schedule)
 		my $mavis_cmd = $mavis_export;
 		my $mavis_cfg = join('/', $patient_directory, 'mavis.cfg');
-		my $mavis_output = join('/',
-			$patient_directory,
-			'summary',
-			'MAVIS*.COMPLETE'
-			);
 
-		my ($novobreak_input, $pindel_input, $svict_input) = undef;
+		my ($delly_input, $manta_input, $novobreak_input, $pindel_input, $svict_input) = undef;
 		my ($starfus_input, $fuscatch_input) = undef;
 
+		if (scalar(@delly_svs_patient) > 0) {
+			$delly_input = join(' ', @delly_svs_patient);
+			}
+		if (scalar(@manta_svs_formatted) > 0) {
+			$manta_input = join(' ', @manta_svs_formatted);
+			}
 		if (scalar(@novobreak_svs_patient) > 0) {
 			$novobreak_input = join(' ', @novobreak_svs_patient);
 			}
@@ -606,40 +659,22 @@ sub main {
 			$fuscatch_input = join(' ', @fuscatch_svs_patient);
 			}
 
-		if (scalar(@rna_ids_patient) > 0) {
-
-			$mavis_cmd .= "\n\necho 'Running MAVIS config.';\n\n" . get_mavis_command(
-				tumour_ids	=> \@tumour_ids,
-				normal_id	=> $normal_id,
-				rna_ids		=> \@rna_ids_patient,
-				tumour_bams	=> $smp_data->{$patient}->{tumour},
-				normal_bam	=> defined($normal_id) ? $smp_data->{$patient}->{normal}->{$normal_id} : undef,
-				rna_bams	=> $smp_data->{$patient}->{rna},
-				manta		=> join(' ', @manta_svs_formatted),
-				delly		=> join(' ', @delly_svs_patient),
-				novobreak	=> $novobreak_input,
-				pindel		=> $pindel_input,
-				svict		=> $svict_input,
-				starfusion	=> $starfus_input,
-				fusioncatcher	=> $fuscatch_input,
-				output		=> $mavis_cfg
-				);
-
-			} else {
-
-			$mavis_cmd .= "\n\necho 'Running MAVIS config.';\n\n" . get_mavis_command(
-				tumour_ids	=> \@tumour_ids,
-				normal_id	=> $normal_id,
-				tumour_bams	=> $smp_data->{$patient}->{tumour},
-				normal_bam	=> defined($normal_id) ? $smp_data->{$patient}->{normal}->{$normal_id} : undef,
-				manta		=> join(' ', @manta_svs_formatted),
-				delly		=> join(' ', @delly_svs_patient),
-				novobreak	=> $novobreak_input,
-				pindel		=> $pindel_input,
-				svict		=> $svict_input,
-				output		=> $mavis_cfg
-				);
-			}
+		$mavis_cmd .= "\n\necho 'Running MAVIS config.';\n\n" . get_mavis_command(
+			tumour_ids	=> \@tumour_ids,
+			normal_id	=> $normal_id,
+			rna_ids		=> \@rna_ids_patient,
+			tumour_bams	=> $smp_data->{$patient}->{'tumour_dna'},
+			normal_bam	=> defined($normal_id) ? $smp_data->{$patient}->{'normal_dna'}->{$normal_id} : undef,
+			rna_bams	=> $smp_data->{$patient}->{'tumour_rna'},
+			manta		=> $manta_input,
+			delly		=> $delly_input,
+			novobreak	=> $novobreak_input,
+			pindel		=> $pindel_input,
+			svict		=> $svict_input,
+			starfusion	=> $starfus_input,
+			fusioncatcher	=> $fuscatch_input,
+			output		=> $mavis_cfg
+			);
 
 		$mavis_cmd .= "\n\necho 'Running MAVIS setup.';\n\n";
 		$mavis_cmd .= "mavis setup $mavis_cfg -o $patient_directory";
@@ -660,9 +695,11 @@ sub main {
 			$mavis_cmd .= "\n\necho 'Running MAVIS schedule.';\n\n";
 			$mavis_cmd .= "mavis schedule -o $patient_directory --submit";
 			} else {
+			$mavis_cmd =~ s/Running MAVIS config/MAVIS config already complete/;
 			$mavis_cmd =~ s/mavis config/#mavis config/;
+			$mavis_cmd =~ s/Running MAVIS setup/MAVIS setup already complete/;
 			$mavis_cmd =~ s/mavis setup/#mavis setup/;
-			$mavis_cmd =~ s/^find/#^find/;
+			$mavis_cmd =~ s/find/#find/;
 			$mavis_cmd .= "\n\necho 'Running MAVIS schedule with resubmit.';\n\n";
 			$mavis_cmd .= "mavis schedule -o $patient_directory --resubmit";
 			}
@@ -686,7 +723,7 @@ sub main {
 			);
 
 		# check if this should be run
-		if ('Y' eq missing_file($mavis_output)) {
+		if (!@is_mavis_complete) {
 
 			# record command (in log directory) and then run job
 			print $log "Submitting job for MAVIS SV annotator...\n";
@@ -738,26 +775,35 @@ sub main {
 			'--find_drawings TRUE'
 			);
 
-		$run_script = write_script(
-			log_dir	=> $log_directory,
-			name	=> 'extract_key_drawings_' . $patient,
-			cmd	=> $get_drawings,
-			modules	=> [$r_version],
-			dependencies	=> $run_id,
-			max_time	=> '10:00:00',
-			hpc_driver	=> $args{hpc_driver},
-			extra_args	=> [$hpc_group]
-			);
+		# check if this should be run
+		if ('Y' eq missing_file($patient_directory . '/key_drawings/find_drawings.COMPLETE')) {
 
-		$run_id = submit_job(
-			jobname		=> 'extract_key_drawings_' . $patient,
-			shell_command	=> $run_script,
-			hpc_driver	=> $args{hpc_driver},
-			dry_run		=> $args{dry_run},
-			log_file	=> $log
-			);
+			# record command (in log directory) and then run job
+			print $log "Submitting job to extract gene-gene drawings...\n";
 
-		push @all_jobs, $run_id;
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'extract_key_drawings_' . $patient,
+				cmd	=> $get_drawings,
+				modules	=> [$r_version],
+				dependencies	=> $run_id,
+				max_time	=> '10:00:00',
+				hpc_driver	=> $args{hpc_driver},
+				extra_args	=> [$hpc_group]
+				);
+
+			$run_id = submit_job(
+				jobname		=> 'extract_key_drawings_' . $patient,
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @all_jobs, $run_id;
+			} else {
+			print $log "Skipping EXTRACT DRAWINGS because this has already been completed!\n";
+			}
 
 		# should intermediate files be removed
 		# run per patient
@@ -768,8 +814,6 @@ sub main {
 				$tar .= ' *_transcriptome/';
 				}
 			$tar .= ' --remove-files;';
-
-			print $log "Submitting job to clean up temporary/intermediate files...\n";
 
 			# make sure final output exists before removing intermediate files!
 			$cleanup_cmd = join("\n",
@@ -784,25 +828,32 @@ sub main {
 				"fi"
 				);
 
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'run_cleanup_' . $patient,
-				cmd	=> $cleanup_cmd,
-				dependencies	=> $run_id,
-				max_time	=> '08:00:00',
-				mem		=> '256M',
-				hpc_driver	=> $args{hpc_driver},
-				extra_args	=> [$hpc_group]
-				);
+			if ('Y' eq missing_file($patient_directory . '/intermediate_files.tar.gz')) {
 
-			$run_id = submit_job(
-				jobname		=> 'run_cleanup_' . $patient,
-				shell_command	=> $run_script,
-				hpc_driver	=> $args{hpc_driver},
-				dry_run		=> $args{dry_run},
-				log_file	=> $log
-				);
-			}	
+				print $log "Submitting job to clean up temporary/intermediate files...\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_cleanup_' . $patient,
+					cmd	=> $cleanup_cmd,
+					dependencies	=> $run_id,
+					max_time	=> '08:00:00',
+					mem		=> '256M',
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_cleanup_' . $patient,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+				} else {
+				print $log "Skipping CLEANUP as this is already complete!\n";
+				}
+			}
 		}
 
 	# collate results
@@ -943,10 +994,10 @@ if ($help) {
 
 # do some quick error checks to confirm valid arguments	
 if (!defined($tool_config)) { die("No tool config file defined; please provide -t | --tool (ie, tool_config.yaml)"); }
-if (!defined($data_config)) { die("No data config file defined; please provide -d | --data (ie, sample_config.yaml)"); }
+if ( (!defined($data_config)) && (!defined($rna_config)) ) {
+	die("No data config file defined; please provide -d | --data and/or -r | --rna (ie, sample_config.yaml)");
+	}
 if (!defined($output_directory)) { die("No output directory defined; please provide -o | --out_dir"); }
-if (!defined($manta_directory)) { die("No manta directory defined; please provide -m | --manta"); }
-if (!defined($delly_directory)) { die("No delly directory defined; please provide -e | --delly"); }
 
 main(
 	tool_config		=> $tool_config,
