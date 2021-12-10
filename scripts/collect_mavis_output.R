@@ -80,13 +80,25 @@ if (arguments$find_drawings) {
 	# create new folder
 	dir.create(output.dir);
 
+	# read in final mavis calls
+	mavis.files <- list.files(pattern = 'mavis_summary_all', recursive = TRUE);
+	mavis.data <- read.delim(mavis.files[1]);
+
+	keep.figures <- unique(mavis.data$annotation_figure);
+	keep.figures <- keep.figures[!grepl('None', keep.figures)];
+
 	# find all svg files
 	all.drawings <- list.files(path = input.dir, pattern = '.svg$', recursive = TRUE, full.names = TRUE);
 
 	print(paste('Found', length(all.drawings), 'svg files.'));
 
+	# subset to only final mavis calls
+	key.drawings <- intersect(keep.figures, all.drawings);
+
+	print(paste('Found', length(key.drawings), 'svg files also in final MAVIS callset.'));
+
 	# filter drawings (remove any intergenic ones)
-	key.drawings <- all.drawings[!grepl('-NA_|_NA.svg', all.drawings)];
+	key.drawings <- key.drawings[!grepl('-NA_|_NA.svg', key.drawings)];
 
 	print(paste('  Copying', length(key.drawings), 'gene-gene .svg files to', output.dir, '...'));
 
@@ -96,6 +108,11 @@ if (arguments$find_drawings) {
 		cp.cmd <- paste0('cp ', i, ' .');
 		system(cp.cmd);
 		}
+
+	write(
+		'Copying of gene-gene drawings completed successfully.',
+		file = 'find_drawings.COMPLETE'
+		);
 
 	} else {
 
@@ -232,7 +249,7 @@ if (arguments$find_drawings) {
 	# sort by evidence
 	tmp$N.tools <- sapply(tmp$tools, function(i) { length(unlist(strsplit(i,';'))) } );
 	tmp$Evidence <- apply(tmp[,grep('reads|pairs', colnames(tmp))],1, function(i) { 
-		sum(sapply(i[which(i != 'None')],function(y) { max(as.numeric(unlist(strsplit(y,';')))) } ))
+		sum(sapply(i[which(i != 'None')],function(y) { max(as.numeric(unlist(strsplit(as.character(y),';')))) } ))
 		} );
 
 	tmp <- tmp[order(tmp$library, tmp$tracking_id, -tmp$N.tools, -tmp$Evidence),];
@@ -245,8 +262,12 @@ if (arguments$find_drawings) {
 
 	# is this an inframe or frameshift variant?
 	tmp$Frame <- 'unknown';
-	tmp[which(tmp$fusion_splicing_pattern == 'normal'),]$Frame <- 'inframe';
-	tmp[which(!tmp$fusion_splicing_pattern %in% c('normal','None')),]$Frame <- 'frameshift';
+	if (any(tmp$fusion_splicing_pattern == 'normal')) {
+		tmp[which(tmp$fusion_splicing_pattern == 'normal'),]$Frame <- 'inframe';
+		}
+	if (any(!tmp$fusion_splicing_pattern %in% c('normal','None'))) {
+		tmp[which(!tmp$fusion_splicing_pattern %in% c('normal','None')),]$Frame <- 'frameshift';
+		}
 
 	# trim to unique events (most evidence wins)
 	dna <- tmp[which(tmp$protocol == 'genome'),];
@@ -291,7 +312,25 @@ if (arguments$find_drawings) {
 				} else if (length(dna.idx) == 0) {
 				somatic.svs <- rbind(somatic.svs, rna[i,]);
 				} else if (length(dna.idx) > 1) {
-				stop();
+				fusion.status <- rna[i,]$fusion_splicing_pattern;
+				dna.idx <- which(somatic.svs$Fusion == fusion &
+					somatic.svs$event_type == type &
+					somatic.svs$library == smp &
+					somatic.svs$exon_last_5prime == exon1 &
+					somatic.svs$exon_first_3prime == exon2 &
+					somatic.svs$fusion_splicing_pattern == fusion.status
+					);
+				if (length(dna.idx) == 1) {
+					somatic.svs[dna.idx,]$tools <- paste(unique(c(
+						unlist(strsplit(somatic.svs[dna.idx,]$tools,';|,')),
+						unlist(strsplit(rna[i,]$tools,';|,')))),
+						collapse = ','
+						);
+					} else if (length(dna.idx) == 0) {
+					somatic.svs <- rbind(somatic.svs, rna[i,]);
+					} else if (length(dna.idx) > 1) {
+					stop();
+					}
 				}
 			}
 		}
@@ -329,7 +368,9 @@ if (arguments$find_drawings) {
 		somatic.svs$tools == 'pindel'
 		);
 
-	somatic.svs <- somatic.svs[-c(indel.idx,dup.idx),];
+	if (length(indel.idx)+length(dup.idx) > 0) {
+		somatic.svs <- somatic.svs[-c(indel.idx,dup.idx),];
+		}
 
 	# format for cBioportal
 	cbio.svs <- data.frame(
