@@ -1,3 +1,10 @@
+2021-12-10: PughLab pipeline-suite (version 0.6.3)
+- added mavis to rnaseq pipeline (with additions to report functions as well)
+- bug fix in convert_fusioncatcher.R
+- added to cleanup step for novobreak
+- minor updates to subset/vcf2maf steps in genotype_gvcfs.pl
+- minor updates to report/plot functions
+
 2021-11-30: PughLab pipeline-suite (version 0.6.2)
 - moved common function (check_final_status) to utilities
 - minor updates to report functions
