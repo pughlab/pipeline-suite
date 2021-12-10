@@ -395,6 +395,7 @@ sub main {
 
 			# run novoBreak using full BAMs
 			my $nb_output = join('/', $sample_directory, $sample . '_nb.out');
+			$cleanup_cmd .= "\n" . "rm $nb_output";
 
 			my $full_novo_command = get_novobreak_command(
 				tumour_id	=> $sample,
@@ -520,6 +521,16 @@ sub main {
 
 			# sort and filter output
 			my $filtered_output = join('/', $sample_directory, $sample . '_novoBreak_filtered.vcf');
+
+			my $final_nb_output = join('/',
+				$sample_directory,
+				$sample . '_novoBreak.pass.vcf'
+				);
+
+			$cleanup_cmd .= "\nrm " . join('/',
+				$sample_directory,
+				$sample . '_novoBreak.pass_sorted.vcf;'
+				);
 
 			my $filter_command = get_filter_command(
 				sample_dir	=> $sample_directory,

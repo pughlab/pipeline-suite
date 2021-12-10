@@ -44,8 +44,8 @@ if ( (is.null(input.data)) | (nrow(input.data) == 0) ) {
 	for (i in 1:nrow(unique.data)) {
 
 		tracking.id <- unique.data[i,]$x;
-		break1 <- unlist(strsplit(unique.data$break1,':'));
-		break2 <- unlist(strsplit(unique.data$break2,':'));
+		break1 <- unlist(strsplit(unique.data[i,]$break1,':'));
+		break2 <- unlist(strsplit(unique.data[i,]$break2,':'));
 
 		tmp <- data.frame(
 			'#tracking_id'		= rep(tracking.id, 4),

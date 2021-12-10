@@ -517,12 +517,32 @@ if (!is.null(arguments$mutsig)) {
 
 	plot.data$Label <- factor(plot.data$Label, levels = rev(as.character(plot.data$Label)));
 
+	if (any(plot.data$p < 10**-20)) {
+		plot.data[which(plot.data$p < 10**-20),]$p <- 10**-20;
+		}
+	if (any(plot.data$q < 10**-20)) {
+		plot.data[which(plot.data$q < 10**-20),]$q <- 10**-20;
+		}
+
+	key1 <- list(
+		rect = list(size = 2, col = 'black'),
+		text = list(lab = 'p-value', cex = 0.8)
+		);
+	key2 <- list(
+		points = list(pch = 16, col = 'red'),
+		text = list(lab = 'FDR', cex = 0.8)
+		);
+	key3 <- list(
+		lines = list(lty = 2, col = 'grey50', size = 2),
+		text = list(lab = as.character(threshold), cex = 0.8)
+		);
+	
 	create.barplot(
 		Label ~ -log10(p),
 		plot.data,
 		plot.horizontal = TRUE,
 		ylab.label = NULL,
-		xlab.label = expression('-log'['10']*'(p-value)'),
+		xlab.label = expression('-log'['10']*'(value)'),
 		xlab.cex = 1.5,
 		yaxis.fontface = 'plain',
 		xaxis.fontface = 'plain',
@@ -531,11 +551,22 @@ if (!is.null(arguments$mutsig)) {
 		yaxis.tck = c(0.5,0),
 		xaxis.tck = c(0.5,0),
 		abline.v = -log10(threshold),
-		abline.col = 'red',
+		abline.col = 'grey50',
 		abline.lty = 2,
 		xlimits = c(0, ceiling(max(-log10(plot.data$p))) + 1),
+		add.text = TRUE,
+		text.labels = '\u2022',
+		text.x = -log10(plot.data[which(plot.data$q < 1),]$q),
+		text.y = nrow(plot.data) - (which(plot.data$q < 1)) + 1,
+		text.col = 'red',
+		legend = list(
+			inside = list(fun = draw.key, args = list(key = key1), x = 1.04, y = 0.55),
+			inside = list(fun = draw.key, args = list(key = key2), x = 1.1, y = 0.50),
+			inside = list(fun = draw.key, args = list(key = key3), x = 1.04, y = 0.45)
+			),
+		right.padding = 12,
 		height = 6,
-		width = 3,
+		width = 4,
 		resolution = 200,
 		filename = generate.filename(arguments$project, 'MutSigCV_pvalues','png')
 		);

@@ -874,6 +874,7 @@ sub main{
 					cmd	=> $trim_variants_cmd,
 					modules	=> [$gatk],
 					dependencies	=> $run_id,
+					max_time	=> '48:00:00', 
 					hpc_driver	=> $args{hpc_driver},
 					extra_args	=> [$hpc_group]
 					);

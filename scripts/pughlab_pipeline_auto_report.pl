@@ -370,6 +370,27 @@ sub main {
 
 			}
 
+		# get SVs calls from MAVIS
+		if ('Y' eq $tool_set{'mavis'}) {
+			my $mavis_dir = join('/', $output_directory, 'Mavis');
+
+			opendir(MAVIS, $mavis_dir) or die "Cannot open '$mavis_dir' !";
+			my @mavis_files = grep { /mavis_output.tsv/ } readdir(MAVIS);
+			@mavis_files = sort @mavis_files;
+			closedir(MAVIS);
+
+			my $sv_data = join('/', $mavis_dir, $mavis_files[-1]);
+
+			if ( -l join('/', $data_directory, 'mavis_sv_data.tsv')) {
+				unlink join('/', $data_directory, 'mavis_sv_data.tsv');
+				}
+
+			symlink($sv_data, join('/', $data_directory, 'mavis_sv_data.tsv'));
+
+			# for fusion summary
+			$rna_fusion_command .= " -m $sv_data";
+			}
+
 		if ($tool_count > 0) {
 
 			# run command

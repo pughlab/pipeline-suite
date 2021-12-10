@@ -57,6 +57,8 @@ arguments <- parser$parse_args();
 # get data
 input.data <- read.delim(arguments$mavis, stringsAsFactors = FALSE);
 
+input.data$library <- gsub('^X', '', gsub('\\.', '-', input.data$library));
+
 # collect list of all samples
 tumour.samples <- colnames(input.data)[grep('diseased_genome', colnames(input.data))];
 tumour.samples <- as.character(sapply(tumour.samples, function(i) { unlist(strsplit(i,'_'))[1] } ));
@@ -80,7 +82,6 @@ input.data[which(input.data$library %in% normal.samples),]$Status <- 'germline';
 
 # trim down input data
 sv.data <- input.data[,!grepl('genome|transcriptome', colnames(input.data))];
-sv.data$library <- gsub('^X', '', gsub('\\.', '-', sv.data$library));
 
 # move to output directory
 setwd(arguments$output);

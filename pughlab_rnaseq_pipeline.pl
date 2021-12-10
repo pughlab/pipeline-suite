@@ -11,6 +11,7 @@ use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
 use List::Util 'any';
+use Data::Dumper;
 
 my $cwd = dirname(__FILE__);
 require "$cwd/scripts/utilities.pl";
@@ -88,6 +89,20 @@ sub main {
 	my $rsem_directory = join('/', $output_directory, 'RSEM');
 	my $gatk_directory = join('/', $output_directory, 'GATK');
 	my $vc_directory = join('/', $output_directory, 'HaplotypeCaller');
+	my $mavis_directory = join('/', $output_directory, 'Mavis');
+
+	# check which tools have been requested
+	my %tool_set = (
+		'star'	=> defined($tool_data->{star}->{run}) ? $tool_data->{star}->{run} : 'N',
+		'rsem'	=> defined($tool_data->{rsem}->{run}) ? $tool_data->{rsem}->{run} : 'N',
+		'gatk'	=> defined($tool_data->{gatk}->{run}) ? $tool_data->{gatk}->{run} : 'N',
+		'haplotype_caller' => defined($tool_data->{haplotype_caller}->{run}) ? $tool_data->{haplotype_caller}->{run} : 'N',
+		'star_fusion'	=> defined($tool_data->{star_fusion}->{run}) ? $tool_data->{star_fusion}->{run} : 'N',
+		'fusioncatcher'	=> defined($tool_data->{fusioncatcher}->{run}) ? $tool_data->{fusioncatcher}->{run} : 'N',
+		'mavis'	=> defined($tool_data->{mavis}->{run}) ? $tool_data->{mavis}->{run} : 'N'
+		);
+
+	print $log Dumper \%tool_set;
 
 	# indicate YAML files for processed BAMs
 	my $star_output_yaml = join('/', $star_directory, 'star_bam_config_' . $timestamp . '.yaml');
@@ -96,7 +111,7 @@ sub main {
 	## run FusionCatcher pipeline
 	unless(-e $fc_directory) { make_path($fc_directory); }
 
-	if ('Y' eq $tool_data->{fusioncatcher}->{run}) {
+	if ('Y' eq $tool_set{'fusioncatcher'}) {
 
 		my $fc_command = join(' ',
 			"perl $cwd/scripts/fusioncatcher.pl",
@@ -148,7 +163,7 @@ sub main {
 	## run STAR-alignment pipeline
 	unless(-e $star_directory) { make_path($star_directory); }
 
-	if ('Y' eq $tool_data->{star}->{run}) {
+	if ('Y' eq $tool_set{'star'}) {
 
 		my $star_command = join(' ',
 			"perl $cwd/scripts/star.pl",
@@ -201,7 +216,7 @@ sub main {
 	## run STAR-Fusion pipeline
 	unless(-e $starfus_directory) { make_path($starfus_directory); }
 
-	if ('Y' eq $tool_data->{star_fusion}->{run}) {
+	if ('Y' eq $tool_set{'star_fusion'}) {
 
 		my $starfus_command = join(' ',
 			"perl $cwd/scripts/star_fusion.pl",
@@ -251,10 +266,71 @@ sub main {
 			}
 		}
 
+	## run Mavis pipeline
+	unless(-e $mavis_directory) { make_path($mavis_directory); }
+
+	if ('Y' eq $tool_set{'mavis'}) {
+
+		my $mavis_command = join(' ',
+			"perl $cwd/scripts/mavis.pl",
+			"-o", $mavis_directory,
+			"-t", $tool_config,
+			"-d", $star_output_yaml,
+			"-c", $args{cluster}
+			);
+
+		# because mavis.pl will search provided directories and run based on what it finds
+		# (Manta/Delly/NovoBreak/Pindel/SViCT resuts), this can only be run AFTER these
+		# respective jobs finish
+		my @depends;
+		if (defined($fc_run_id)) {
+			$mavis_command .= " --fusioncatcher $fc_directory";
+			push @depends, $fc_run_id;
+			}
+		if (defined($starfus_run_id)) {
+			$mavis_command .= " --starfus $starfus_directory";
+			push @depends, $starfus_run_id;
+			}
+
+		if ($args{cleanup}) {
+			$mavis_command .= " --remove";
+			}
+
+		# record command (in log directory) and then run job
+		print $log "Submitting job for mavis.pl\n";
+		print $log "  COMMAND: $mavis_command\n\n";
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'pughlab_rna_pipeline__run_mavis',
+			cmd	=> $mavis_command,
+			modules	=> ['perl'],
+			dependencies	=> join(':', @depends),
+			mem		=> '256M',
+			max_time	=> '7-00:00:00',
+			extra_args	=> [$hpc_group],
+			hpc_driver	=> $args{cluster}
+			);
+
+		if ($args{dry_run}) {
+			$mavis_command .= 'pughlab_rna_pipeline__run_mavis';
+			} else {
+			$mavis_run_id = submit_job(
+				jobname		=> $log_directory,
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+			print $log ">>> MAVIS job id: $mavis_run_id\n\n";
+			push @job_ids, $mavis_run_id;
+			}
+		}
+
 	## run RSEM pipeline
 	unless(-e $rsem_directory) { make_path($rsem_directory); }
 
-	if ('Y' eq $tool_data->{rsem}->{run}) {
+	if ('Y' eq $tool_set{'rsem'}) {
 
 		my $rsem_command = join(' ',
 			"perl $cwd/scripts/rsem.pl",
@@ -307,7 +383,7 @@ sub main {
 	## run GATK indel realignment/recalibration pipeline
 	unless(-e $gatk_directory) { make_path($gatk_directory); }
 
-	if ('Y' eq $tool_data->{gatk}->{run}) {
+	if ('Y' eq $tool_set{'gatk'}) {
 
 		my $gatk_command = join(' ',
 			"perl $cwd/scripts/gatk.pl",
@@ -362,7 +438,7 @@ sub main {
 	## run GATK's HaplotypeCaller pipeline
 	unless(-e $vc_directory) { make_path($vc_directory); }
 
-	if ('Y' eq $tool_data->{haplotype_caller}->{run}) {
+	if ('Y' eq $tool_set{'haplotype_caller'}) {
 
 		my $vc_command = join(' ',
 			"perl $cwd/scripts/haplotype_caller.pl",
