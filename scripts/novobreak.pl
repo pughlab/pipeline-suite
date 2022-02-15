@@ -522,11 +522,6 @@ sub main {
 			# sort and filter output
 			my $filtered_output = join('/', $sample_directory, $sample . '_novoBreak_filtered.vcf');
 
-			my $final_nb_output = join('/',
-				$sample_directory,
-				$sample . '_novoBreak.pass.vcf'
-				);
-
 			$cleanup_cmd .= "\nrm " . join('/',
 				$sample_directory,
 				$sample . '_novoBreak.pass_sorted.vcf;'
