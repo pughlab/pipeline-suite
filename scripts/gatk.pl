@@ -916,7 +916,7 @@ sub main {
 
 		# wait until it finishes
 		unless ($args{no_wait}) {
-			check_final_status(job_id => $run_id);
+			check_final_status(job_id => $run_id_extra);
 			}
 		}
 
