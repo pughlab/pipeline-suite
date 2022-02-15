@@ -914,7 +914,7 @@ sub main {
 
 		# get CNAs calls from PanelCN.mops
 		if ('Y' eq $tool_set{'mops'}) {
-			my $mops_cnv_dir = join('/', $output_directory, 'PanelCNmops');
+			my $mops_cnv_dir = join('/', $output_directory, 'panelCNmops');
 
 			opendir(MOPSCNV, $mops_cnv_dir) or die "Cannot open '$mops_cnv_dir' !";
 			my @mops_cnv_files = readdir(MOPSCNV);

@@ -116,7 +116,7 @@ if (!is.null(cohort.data)) {
 
 	# save raw data to file
 	write.table(
-		cor.results
+		cor.results,
 		file = generate.filename(arguments$project, 
 			'split_vs_combined_per-sample_correlations','tsv'),
 		row.names = FALSE,
