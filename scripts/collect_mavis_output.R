@@ -320,16 +320,15 @@ if (arguments$find_drawings) {
 					somatic.svs$exon_first_3prime == exon2 &
 					somatic.svs$fusion_splicing_pattern == fusion.status
 					);
-				if (length(dna.idx) == 1) {
-					somatic.svs[dna.idx,]$tools <- paste(unique(c(
-						unlist(strsplit(somatic.svs[dna.idx,]$tools,';|,')),
-						unlist(strsplit(rna[i,]$tools,';|,')))),
-						collapse = ','
-						);
-					} else if (length(dna.idx) == 0) {
+				if (length(dna.idx) == 0) {
 					somatic.svs <- rbind(somatic.svs, rna[i,]);
-					} else if (length(dna.idx) > 1) {
-					stop();
+					} else if (length(dna.idx) > 0) {
+					somatic.svs[dna.idx,]$tools <- sapply(
+						somatic.svs[dna.idx,]$tools, function(j) {
+						paste(c(unlist(strsplit(j,';|,')),
+						unlist(strsplit(rna[i,]$tools, ';|,'))),
+						collapse = ',') }
+						);
 					}
 				}
 			}

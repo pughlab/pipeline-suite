@@ -112,29 +112,16 @@ sample.info <- as.data.frame(matrix(nrow = 0, ncol = 2));
 colnames(sample.info) <- c('Patient','Sample');
 
 if (is.dna) {
-	if ('targeted' == arguments$seq_type) {
-		path <- 'BAMQC/SequenceMetrics/';
-		} else {
-		path <- 'BWA';
-		}
+	path <- 'BAMQC/SequenceMetrics/';
 	} else {
 	path <- 'STAR';
 	}
 
 patients <- list.dirs(path = path, full.names = FALSE, recursive = FALSE);
-patients <- patients[!grepl('logs|RNASeQC|STAR|2020|configs', patients)];
+patients <- patients[!grepl('bam_links|logs|RNASeQC|STAR|2020|configs', patients)];
 
 for (patient in patients) {
-	if ('targeted' == arguments$seq_type) { 
-		smps <- rownames(metric.data)[grep(patient, rownames(metric.data))];
-		} else {
-		smps <- list.dirs(
-			path = paste0(path, '/', patient), 
-			full.names = FALSE, 
-			recursive = FALSE
-			);
-		}
-
+	smps <- rownames(metric.data)[grep(patient, rownames(metric.data))];
 	sample.info <- rbind(sample.info, 
 		data.frame(Patient = rep(patient, length(smps)), Sample = smps)
 		);

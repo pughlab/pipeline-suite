@@ -1,3 +1,12 @@
+2022-02-15: PughLab pipeline-suite (version 0.6.4)
+- gatk: final check status now looks at correct job ID
+- cleaned up check for/report RNA support (mavis output)
+- fixed a few typos in the panelCNmops functions
+- gatk_cnv: fixed a bug in cleanup step
+- novobreak: removed duplicated code block
+- genotype_gvcfs: added force overwrite for bgzip
+- report/qc: extracts patient/sample info from qc directories instead of bwa (dna)
+ 
 2021-12-10: PughLab pipeline-suite (version 0.6.3)
 - added mavis to rnaseq pipeline (with additions to report functions as well)
 - bug fix in convert_fusioncatcher.R
