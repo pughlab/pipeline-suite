@@ -194,7 +194,7 @@ sub create_filter_command {
 
 	$filter_command .= "\n\n" . join("\n",
 		"md5sum $args{output} > $args{output}.md5",
-		"bgzip $args{output}",
+		"bgzip -f $args{output}",
 		"tabix -p vcf $args{output}.gz"
 		);
 
@@ -452,7 +452,7 @@ sub main{
 
 	$genotype_cmd .= "\n\n" . join(' ',
 		"md5sum $combined_gvcf > $combined_gvcf.md5", 
-		"\nbgzip $combined_gvcf",
+		"\nbgzip -f $combined_gvcf",
 		"\ntabix -p vcf $combined_gvcf.gz"
 		);
 
@@ -508,7 +508,7 @@ sub main{
 
 		$hard_filter_cmd .= "\n\n" . join("\n",
 			"md5sum $hard_filter_vcf > $hard_filter_vcf.md5",
-			"bgzip $hard_filter_vcf",
+			"bgzip -f $hard_filter_vcf",
 			"tabix -p vcf $hard_filter_vcf.gz"
 			);
 	 
@@ -607,7 +607,7 @@ sub main{
 
 		my $apply_vqsr_indel = create_apply_vqsr_command(
 			var_type	=> 'INDEL',
-			input		=> "$output_stem.gz",
+			input		=> "$combined_gvcf.gz",
 			vqsr_stem	=> $output_stem . '_indel',
 			output		=> $indel_vqsr_vcf,
 			tmp_dir		=> $tmp_directory,
@@ -707,7 +707,7 @@ sub main{
 
 		$apply_vqsr_snp .= "\n\n" . join("\n",
 			"md5sum $final_vqsr_vcf > $final_vqsr_vcf.md5",
-			"bgzip $final_vqsr_vcf",
+			"bgzip -f $final_vqsr_vcf",
 			"tabix -p vcf $final_vqsr_vcf.gz"
 			);
 	 
@@ -824,7 +824,6 @@ sub main{
 
 			print $log "\n>> Running SAMPLE: $sample\n";
 
-			$run_id = '';
 			my ($list, $normal) = undef;
 			if ( (any { $_ =~ m/$sample/ } @normal_ids) ) {
 				$list = $sample;
@@ -918,7 +917,7 @@ sub main{
 					"  md5sum $final_maf > $final_maf.md5",
 					"  mv $tmp_directory/$sample" . "_recalibrated.vep.vcf $final_vcf",
 					"  md5sum $final_vcf > $final_vcf.md5",
-					"  bgzip $final_vcf",
+					"  bgzip -f $final_vcf",
 					"  tabix -p vcf $final_vcf.gz",
 					"else",
 					'  echo "FINAL OUTPUT MAF is missing; not running md5sum/bgzip/tabix..."',
