@@ -76,10 +76,12 @@ sub get_vardict_command_wgs {
 		output_stem	=> undef,
 		intervals	=> undef,
 		modifier	=> undef,
+		java_mem	=> undef,
 		@_
 		);
 
 	my $vardict_command = 'DIRNAME=$(which VarDict | xargs dirname)';
+	$vardict_command .= "\n" . "export JAVA_OPTS='-Xmx" . $args{java_mem} . "'";
 
 	$vardict_command .= "\n" . 'LINE=$(expr $SLURM_ARRAY_TASK_ID + ' . $args{modifier} . ')';
 	$vardict_command .= "\n" . 'REGION=$(sed -n "$LINE"p ' . $args{intervals} . ')';
@@ -94,7 +96,9 @@ sub get_vardict_command_wgs {
 		'-G', $reference,
 		'-f 0.01',
 		'-R $REGION',
-		'-N', $args{tumour_id}
+		'-N', $args{tumour_id},
+		'-Q 10 --dedup --nosv',
+		'-k 0' # turn off local realignment (GATK realignment already performed!)
 		);
 
 	my $tumour_bam = join('/', $args{tmp_dir}, $args{tumour_id});
@@ -455,6 +459,13 @@ sub main {
 		my (@patient_jobs, @final_outputs, @germline_vcfs, @germline_jobs, @sample_jobs);
 		my @split_jobs;
 
+		my $is_split_complete = join('/', $tmp_directory, 'split_bam.COMPLETE');
+		my $check_split_command = join(' ',
+			'echo',
+			"'split commands completed successfully' >",
+			 $is_split_complete
+			);
+
 		# create some symlinks
 		foreach my $normal (@normal_ids) {
 			my @tmp = split /\//, $smp_data->{$patient}->{normal}->{$normal};
@@ -468,30 +479,35 @@ sub main {
 				tmp_dir		=> $tmp_directory
 				);
 
-			# record command (in log directory) and then run job
-			print $log "Submitting job for SplitBam...\n";
+			if ('Y' eq missing_file($is_split_complete)) {
 
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'run_split_by_chromosome_' . $normal,
-				cmd	=> $split_bam_command,
-				modules	=> [$samtools],
-				max_time	=> '04:00:00',
-				hpc_driver	=> $args{hpc_driver},
-				extra_args	=> [$hpc_group, '--array=1-' . scalar(@chroms)]
-				);
+				# record command (in log directory) and then run job
+				print $log "Submitting job for SplitBam...\n";
 
-			$run_id = submit_job(
-				jobname		=> 'run_split_by_chromosome_' . $normal,
-				shell_command	=> $run_script,
-				hpc_driver	=> $args{hpc_driver},
-				dry_run		=> $args{dry_run},
-				log_file	=> $log
-				);
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_split_by_chromosome_' . $normal,
+					cmd	=> $split_bam_command,
+					modules	=> [$samtools],
+					max_time	=> '04:00:00',
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group, '--array=1-' . scalar(@chroms)]
+					);
 
-			push @split_jobs, $run_id;
-			push @patient_jobs, $run_id;
-			push @all_jobs, $run_id;
+				$run_id = submit_job(
+					jobname		=> 'run_split_by_chromosome_' . $normal,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				push @split_jobs, $run_id;
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
+				} else {
+				print $log "Skipping SplitBAM because this has already been completed!\n";
+				}
 			}
 
 		foreach my $tumour (@tumour_ids) {
@@ -506,32 +522,37 @@ sub main {
 				tmp_dir		=> $tmp_directory
 				);
 
-			# record command (in log directory) and then run job
-			print $log "Submitting job for SplitBam...\n";
+			if ('Y' eq missing_file($is_split_complete)) {
+		
+				# record command (in log directory) and then run job
+				print $log "Submitting job for SplitBam...\n";
 
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'run_split_by_chromosome_' . $tumour,
-				cmd	=> $split_bam_command,
-				modules	=> [$samtools],
-				max_time	=> '04:00:00',
-				hpc_driver	=> $args{hpc_driver},
-				extra_args	=> [$hpc_group, '--array=1-' . scalar(@chroms)]
-				);
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_split_by_chromosome_' . $tumour,
+					cmd	=> $split_bam_command,
+					modules	=> [$samtools],
+					max_time	=> '04:00:00',
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group, '--array=1-' . scalar(@chroms)]
+					);
 
-			$run_id = submit_job(
-				jobname		=> 'run_split_by_chromosome_' . $tumour,
-				shell_command	=> $run_script,
-				hpc_driver	=> $args{hpc_driver},
-				dry_run		=> $args{dry_run},
-				log_file	=> $log
-				);
+				$run_id = submit_job(
+					jobname		=> 'run_split_by_chromosome_' . $tumour,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
 
-			unless($args{dry_run}) { sleep(10); }
+				unless($args{dry_run}) { sleep(20); }
 
-			push @split_jobs, $run_id;
-			push @patient_jobs, $run_id;
-			push @all_jobs, $run_id;
+				push @split_jobs, $run_id;
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
+				} else {
+				print $log "Skipping SplitBAM because this has already been completed!\n";
+				}
 
 			# if there are any samples to run, we will run the final combine job
 			$should_run_final = 1;
@@ -539,6 +560,32 @@ sub main {
 
 		# indicate this should be removed at the end
 		$cleanup_cmd = "\nrm -rf $tmp_directory";
+
+		# check to confirm splitBAM jobs are complete
+		if ('Y' eq missing_file($is_split_complete)) {
+		
+			# record command (in log directory) and then run job
+			print $log "Submitting job for check SplitBAMs...\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'run_check_split_by_chromosome_' . $patient,
+				cmd	=> $check_split_command,
+				dependencies	=> join(':', @split_jobs),
+				hpc_driver	=> $args{hpc_driver}
+				);
+
+			$run_id = submit_job(
+				jobname		=> 'run_check_split_by_chromosome_' . $patient,
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @patient_jobs, $run_id;
+			push @all_jobs, $run_id;
+			}
 
 		# check if this patient ONLY has a normal
 		if ( (scalar(@tumour_ids) == 0) & (scalar(@normal_ids) > 0)) {
@@ -569,7 +616,8 @@ sub main {
 					tmp_dir		=> $tmp_directory,
 					output_stem	=> $output_stem,
 					intervals	=> $intervals_bed,
-					modifier	=> $task_array_modifier 
+					modifier	=> $task_array_modifier,
+					java_mem	=> $parameters->{vardict}->{java_mem} 
 					);
 
 				# check if this should be run
@@ -603,8 +651,7 @@ sub main {
 					push @sample_jobs, $run_id;
 					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
-					}
-				else {
+					} else {
 					print $log "Skipping VarDict because this has already been completed!\n";
 					}
 
@@ -718,7 +765,6 @@ sub main {
 				push @sample_jobs, $run_id;
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
-
 				} else {
 				print $log "Skipping VCF-Filter because this has already been completed!\n";
 				push @germline_jobs, '';
@@ -789,8 +835,7 @@ sub main {
 					push @sample_jobs, $run_id;
 					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
-					}
-				else {
+					} else {
 					print $log "Skipping VarDict because this has already been completed!\n";
 					}
 
@@ -911,7 +956,6 @@ sub main {
 				push @sample_jobs, $run_id;
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
-
 				} else {
 				print $log "Skipping VCF-Filter because this has already been completed!\n";
 				push @germline_jobs, '';
@@ -1200,30 +1244,64 @@ sub main {
 				tmp_dir		=> $tmp_directory
 				);
 
-			# record command (in log directory) and then run job
-			print $log "Submitting job for SplitBam...\n";
-
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'run_split_by_chromosome_' . $sample,
-				cmd	=> $split_bam_command,
-				modules	=> [$samtools],
-				max_time	=> '12:00:00',
-				hpc_driver	=> $args{hpc_driver},
-				extra_args	=> [$hpc_group, '--array=1-' . scalar(@chroms)]
+			my $is_split_complete = join('/', $tmp_directory, 'split_bam.COMPLETE');
+			my $check_split_command = join(' ',
+				'echo',
+				"'split commands completed successfully' >",
+				 $is_split_complete
 				);
 
-			$run_id = submit_job(
-				jobname		=> 'run_split_by_chromosome_' . $sample,
-				shell_command	=> $run_script,
-				hpc_driver	=> $args{hpc_driver},
-				dry_run		=> $args{dry_run},
-				log_file	=> $log
-				);
+			if ('Y' eq missing_file($is_split_complete)) {
 
-			push @sample_jobs, $run_id;
-			push @patient_jobs, $run_id;
-			push @all_jobs, $run_id;
+				# record command (in log directory) and then run job
+				print $log "Submitting job for SplitBam...\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_split_by_chromosome_' . $sample,
+					cmd	=> $split_bam_command,
+					modules	=> [$samtools],
+					max_time	=> '12:00:00',
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group, '--array=1-' . scalar(@chroms)]
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_split_by_chromosome_' . $sample,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				push @sample_jobs, $run_id;
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
+
+				# record command (in log directory) and then run job
+				print $log "Submitting job for check SplitBAMs...\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_check_split_by_chromosome_' . $sample,
+					cmd	=> $check_split_command,
+					dependencies	=> $run_id,
+					hpc_driver	=> $args{hpc_driver}
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_check_split_by_chromosome_' . $sample,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
+				} else {
+				print $log "Skipping SplitBAM because this has already been completed!\n";
+				}
 
 			# create output stem
 			my $output_stem = join('/', $tmp_directory, $sample . '_VarDict');

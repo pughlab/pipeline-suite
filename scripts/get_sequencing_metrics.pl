@@ -591,6 +591,8 @@ sub main {
 					cmd	=> $contest_command,
 					modules	=> [$gatk],
 					dependencies	=> join(':', @pileup_jobs),
+					max_time	=> ('wgs' eq $tool_data->{seq_type}) ? '12:00:00' : '01:00:00',
+					mem		=> ('wgs' eq $tool_data->{seq_type}) ? '4G' : '1G',
 					hpc_driver	=> $args{hpc_driver},
 					extra_args	=> [$hpc_group]
 					);

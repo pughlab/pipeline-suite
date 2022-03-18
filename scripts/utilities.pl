@@ -300,12 +300,15 @@ sub write_script {
 
 	my $script = join('/', $cmd_log_dir, 'script.sh');
 	open (my $fh_script, '>', $script) or Carp::croak("Cannot open file $script: $!");
-	print $fh_script "#!/bin/bash\n";
+
+	 my $job_params;
 
 	# add in SBATCH parameters
 	if ('slurm' eq $args{hpc_driver}) {
 
-		my $sbatch_params = "#SBATCH " . join("\n#SBATCH ",
+		print $fh_script "#!/bin/bash\n";
+
+		$job_params = "#SBATCH " . join("\n#SBATCH ",
 			'--job-name="' . $args{name} . '"',
 			'-D ' . $job_log_dir,
 			'-t ' . $args{max_time},
@@ -318,7 +321,9 @@ sub write_script {
 			$size = $1;
 			$unit = $2;
 			if (($size > 28) && ($size < 61) && ('G' eq $unit)) {
-				$sbatch_params .= "\n#SBATCH -p himem";
+				$job_params .= "\n#SBATCH -p himem";
+			} elsif (($size >= 61) && ($size < 184) && ('G' eq $unit)) {
+				$job_params .= "\n#SBATCH -p veryhimem";
 			}
 		}
 
@@ -330,13 +335,13 @@ sub write_script {
 				( ($days == 5) && ($hours ne '00') ) ||
 				( ($days > 5) )
 				) {
-				$sbatch_params .= "\n#SBATCH -p long";
+				$job_params .= "\n#SBATCH -p long";
 			}
 		}
 
 		for (my $i=0; $i < scalar (@{$args{extra_args}}); $i++) {
 			if (defined($args{extra_args}->[$i])) {
-				$sbatch_params .= "\n#SBATCH " . $args{extra_args}->[$i];
+				$job_params .= "\n#SBATCH " . $args{extra_args}->[$i];
 			}
 		}
 
@@ -352,21 +357,90 @@ sub write_script {
 				if (scalar(@depends) > 1) { $args{dependencies} = join(':', @depends); }
 				elsif (scalar(@depends) == 1) { $args{dependencies} = $depends[0]; }
 				else { $args{dependencies} = ''; }
-				}
+			}
 
 			if ('' ne $args{dependencies}) {
 
 				if ($args{name} =~ m/job_metrics/) {
-					$sbatch_params .= "\n#SBATCH --dependency=afterany:" . $args{dependencies};
-					} else {
-					$sbatch_params .= "\n#SBATCH --dependency=afterok:" . $args{dependencies};
-					$sbatch_params .= "\n#SBATCH --kill-on-invalid-dep=yes";
-					}
+					$job_params .= "\n#SBATCH --dependency=afterany:" . $args{dependencies};
+				} else {
+					$job_params .= "\n#SBATCH --dependency=afterok:" . $args{dependencies};
+					$job_params .= "\n#SBATCH --kill-on-invalid-dep=yes";
 				}
 			}
-
-		print $fh_script $sbatch_params . "\n\n";
 		}
+
+		# add in PBS parameters
+		} elsif ('pbs' eq $args{hpc_driver}) {
+
+		$job_params = "#PBS " . join("\n#PBS ",
+			'-S /bin/bash',
+			'-N' . $args{name},
+			'-e ' . $job_log_dir . '/errorlog',
+			'-k e',
+			'-l nodes=1:ppn=' . $args{cpus_per_task}
+			);
+
+		my ($size, $unit);
+		if ($args{mem} =~ m/(\d+)([A-Z])/) {
+			$size = $1;
+			$unit = $2;
+			if ('G' eq $unit) { $unit = 'gb'; }
+			if (($size > 28) && ($size < 61) && ('G' eq $unit)) {
+				$job_params .= "\n#PBS -q himem";
+			} elsif (($size >= 61) && ($size < 184) && ('G' eq $unit)) {
+				$job_params .= "\n#PBS -q veryhimem";
+			}
+
+		$job_params .= "\n" . "#PBS -l mem=" . $size . $unit;
+		}
+
+		my ($days, $hours);
+		if ($args{max_time} =~ m/(\d+)(-)(\d+)/) {
+			$days = $1;
+			$hours = $3;
+			if (
+				( ($days == 5) && ($hours ne '00') ) ||
+				( ($days > 5) )
+				) {
+				$job_params .= "\n#PBS -q long";
+			}
+
+		$job_params .= "\n" . "#PBS -l walltime=" . $args{max_time};
+		}
+
+		for (my $i=0; $i < scalar (@{$args{extra_args}}); $i++) {
+			if (defined($args{extra_args}->[$i])) {
+				$job_params .= "\n#PBS " . $args{extra_args}->[$i];
+			}
+		}
+
+		if (defined($args{dependencies})) {
+
+			# change any , to :
+			$args{dependencies} =~ s/,/:/g;
+
+			if ($args{dependencies} =~ m/:/) {
+				my @parts = split(/:/, $args{dependencies});
+				my @depends = grep { $_ ne '' } @parts;
+
+				if (scalar(@depends) > 1) { $args{dependencies} = join(':', @depends); }
+				elsif (scalar(@depends) == 1) { $args{dependencies} = $depends[0]; }
+				else { $args{dependencies} = ''; }
+			}
+
+			if ('' ne $args{dependencies}) {
+
+				if ($args{name} =~ m/job_metrics/) {
+					$job_params .= "\n#PBS -W depend=afterany:" . $args{dependencies};
+				} else {
+					$job_params .= "\n#PBS -W depend=afterok:" . $args{dependencies};
+				}
+			}
+		}
+	}
+
+	print $fh_script $job_params . "\n\n";
 
 	if ($args{kill_on_error}) {
 		print $fh_script "set -e\n\n";
@@ -424,11 +498,15 @@ sub submit_job {
 	my $log = $args{log_file};
 
 	my $job_command;
-	unless('slurm' eq $args{hpc_driver}) {
-		die("Unrecognized HPC driver: currently only compatible with slurm");
-		}
 
-	$job_command = "sbatch " . $args{shell_command};
+	if ('slurm' eq $args{hpc_driver}) {
+		$job_command = "sbatch " . $args{shell_command};
+	} elsif ('pbs' eq $args{hpc_driver}) {
+		$job_command = "qsub " . $args{shell_command};
+	} else {
+		die("Unrecognized HPC driver: currently only compatible with slurm or pbs");
+	}
+
 	print $log "\nCOMMAND IS: " . $job_command . "\n";
 
 	my $job_id = $args{jobname};
@@ -455,29 +533,45 @@ sub submit_job {
 # command to extract job status / metrics
 sub collect_job_stats {
 	my %args = (
-		job_ids	=> undef,
-		outfile	=> undef,
+		job_ids		=> undef,
+		outfile		=> undef,
+		hpc_driver	=> undef,
 		@_
 		);
 
-	my $sacct_command = join(' ',
-		'sacct -P --delimiter=","',
-		'--format="User,JobID,JobName,Start,End,AllocCPUS,CPUTime,MaxRSS,State,ExitCode"',
-		'-j', $args{job_ids},
-		'>', $args{outfile} . ';',
-		'sed -i "s/,/\t/g"', $args{outfile}
-		);
+	my $sacct_command;
 
-	$sacct_command .= "\n\n" . join(' ',
-		'STATUS_COUNT=$(cut -f9', $args{outfile},
-		"| awk '", '$1 != "COMPLETED" { print $0 }', "' | wc -l)",
-		);
+	if ('slurm' eq $args{hpc_driver}) {
 
-	$sacct_command .= "\n\n" . join("\n",
-		'if (( $STATUS_COUNT > 1 )); then',
-		'  exit 1;',
-		'fi'
-		);
+		$sacct_command = join(' ',
+			'sacct -P --delimiter=","',
+			'--format="User,JobID,JobName,Start,End,AllocCPUS,CPUTime,MaxRSS,State,ExitCode"',
+			'-j', $args{job_ids},
+			'>', $args{outfile} . ';',
+			'sed -i "s/,/\t/g"', $args{outfile}
+			);
+
+		$sacct_command .= "\n\n" . join(' ',
+			'STATUS_COUNT=$(cut -f9', $args{outfile},
+			"| awk '", '$1 != "COMPLETED" { print $0 }', "' | wc -l)",
+			);
+
+		$sacct_command .= "\n\n" . join("\n",
+			'if (( $STATUS_COUNT > 1 )); then',
+			'  exit 1;',
+			'fi'
+			);
+
+		} elsif ('pbs' eq $args{hpc_driver}) {
+
+		$sacct_command = join(' ',
+			'qstat -f', $args{job_ids},
+			'>', $args{outfile} . ';',
+			);
+
+		} else {
+		$sacct_command = 'Job IDs to check: ' . $args{job_ids};
+		}
 
 	return($sacct_command);
 	}
@@ -552,6 +646,19 @@ sub generate_pon {
 	return($pon_command);
 	}
 
+# find files recursively
+sub _get_files {
+	my ($dirs, $exten) = @_;
+
+	my @files;
+	my $want = sub {
+		-e && /\Q$exten\E$/ && push @files, $File::Find::name
+		};
+
+	find($want, $dirs);
+	return(@files);
+	}
+
 # format command to convert annotated VCF to MAF
 sub get_vcf2maf_command {
 	my %args = (
@@ -591,7 +698,7 @@ sub get_vcf2maf_command {
 		'--vep-data', $args{vep_data},
 		'--vep-forks 4',
 		'--filter-vcf', $args{filter_vcf},
-		'--buffer-size 100',
+		'--buffer-size 1000',
 		'--tmp-dir', $args{tmp_dir}
 		);
 

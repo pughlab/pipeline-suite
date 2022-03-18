@@ -337,7 +337,7 @@ sub main{
 					log_dir	=> $log_directory,
 					name	=> 'run_haplotype_caller_' . $sample,
 					cmd	=> $call_variants_cmd,
-					modules	=> [$gatk, $samtools],
+					modules	=> [$gatk, $samtools, 'tabix'],
 					max_time	=> $parameters->{haplotype_call}->{time},
 					mem		=> $parameters->{haplotype_call}->{mem},
 					hpc_driver	=> $args{hpc_driver},

@@ -39,6 +39,7 @@ pindel_version: 0.2.5b8
 mavis_version: 2.2.5
 cpsr_version: 0.6.1
 pcgr_version: 0.9.1
+msi_sensor: msisensor-pro/1.2.0
 r_version: 3.6.1
 # tool specific parameters
 bwa:
@@ -124,7 +125,6 @@ bamqc:
             mem: 4G
             time: '48:00:00'
 other_tools:
-    run_msi: Y
     run_mutsig: Y
 haplotype_caller:
     run: Y
@@ -269,6 +269,7 @@ vardict:
         vardict:
             # vardict_wgs requires slightly higher mem (~16G) and more time (min 32 hours)
             mem: 12G
+            java_mem: 11g
             time: '12:00:00'
         test_somatic:
             mem: 16G
@@ -380,3 +381,15 @@ mavis:
     mavis_cytoband: /cluster/projects/pughlab/references/MAVIS_ref/cytoBand.txt
     mavis_draw_fusions_only: false
     mavis_aligner: 'bwa mem'
+msi_sensor:
+    run: Y
+    parameters:
+        scan:
+            mem: 1G
+            time: '04:00:00'
+        baseline: # only required if tumour-only samples are also present
+            mem: 4G
+            time: '5-00:00:00'
+        sensor: # some WGS require up to 36G, but most (WXS/WGS/targeted) are fine with 4G
+            mem: 4G
+            time: '24:00:00'

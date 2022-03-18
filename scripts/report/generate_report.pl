@@ -33,7 +33,7 @@ sub main {
 		);
 
 	# ensure no special characters in title
-	$args{title} =~ s/_/\\_/;
+	$args{title} =~ s/_/\\_/g;
 
 	# find all input files
 	opendir(PLOTS, $args{input_dir}) or die $!;

@@ -379,7 +379,6 @@ sub main {
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'gatk');
-	my $date = strftime "%F", localtime;
 
 	my $needed = version->declare('4.1')->numify;
 	my $given = version->declare($tool_data->{gatk_cnv_version})->numify;
@@ -749,7 +748,7 @@ sub main {
 
 	my $pon = join('/',
 		$pon_directory,
-		join('_', $date, $tool_data->{project_name}, 'gatk_cnv.pon.hdf5')
+		join('_', $tool_data->{project_name}, 'gatk_cnv.pon.hdf5')
 		);
 		
 	my $pon_cmd = get_create_pon_command(
@@ -1185,7 +1184,8 @@ sub main {
 		my $collect_output = join(' ',
 			"Rscript $cwd/collect_gatk_cnv_output.R",
 			'-d', $output_directory,
-			'-p', $tool_data->{project_name}
+			'-p', $tool_data->{project_name},
+			'-r', $tool_data->{ref_type}
 			);
 
 		if (defined($intervals_bed)) {
@@ -1196,7 +1196,7 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'combine_gatk_cnv_output',
 			cmd	=> $collect_output,
-			modules	=> [$r_version],
+			modules	=> ['R/4.1.0'],
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '4G',
 			max_time	=> '12:00:00',

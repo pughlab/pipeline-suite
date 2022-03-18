@@ -1,3 +1,13 @@
+2022-03-18: PughLab pipeline-suite (version 0.6.5)
+- added custom version/memory/time requirements for msi sensor
+- updated method for annotated CNA segments for Sequenza and GATK_CNV output
+- vardict (wgs): added additional check step to prevent completed steps from re-running on resume
+- vardict: added argument to customize java mem (increasing mem previously had no effect on jvm)
+- initial add of compatibility for PBS (job scheduling system)
+- moved sub _get_files to utilities.pl (removed from all other locations)
+- minor bug/efficiency fixes: gatk_cnv, get_sequencing_metrics, haplotype_caller, mutect, mutect2
+- minor updates to report functions
+
 2022-02-15: PughLab pipeline-suite (version 0.6.4)
 - gatk: final check status now looks at correct job ID
 - cleaned up check for/report RNA support (mavis output)

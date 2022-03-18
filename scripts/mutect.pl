@@ -520,7 +520,7 @@ sub pon {
 			"if [ -s $pon.md5 ]; then",
 			"  $cleanup_cmd",
 			"else",
-			'  "FINAL trimmed file is missing; not removing intermediates"',
+			'  echo "FINAL trimmed file is missing; not removing intermediates"',
 			"fi"
 			);
 

@@ -315,7 +315,7 @@ for (field in c('t_depth','t_ref_count','t_alt_count','n_depth','n_ref_count','n
 
 # save to file
 write.table(
-	annotated.data,
+	unique(annotated.data),
 	file = generate.filename(arguments$project, 'ensemble_mutation_data', 'tsv'),
 	row.names = FALSE,
 	col.names = TRUE,

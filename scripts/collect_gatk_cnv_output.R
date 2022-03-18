@@ -38,6 +38,7 @@ save.session.profile <- function(file.name) {
 ### PREPARE SESSION ################################################################################
 # import libraries
 library(GenomicRanges);
+library(org.Hs.eg.db);
 library(argparse);
 
 # import command line arguments
@@ -45,8 +46,7 @@ parser <- ArgumentParser();
 
 parser$add_argument('-d', '--directory', type = 'character', help = 'path to data directory');
 parser$add_argument('-p', '--project', type = 'character', help = 'project name');
-parser$add_argument('-g', '--gtf', type = 'character', help = 'annotation gtf (refGene)',
-	default = '/cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.annotation.gtf');
+parser$add_argument('-r', '--ref_type', type = 'character', help = 'reference type', default = 'hg38');
 parser$add_argument('-t', '--targets', type = 'character', help = 'target intervals');
 
 arguments <- parser$parse_args();
@@ -56,66 +56,96 @@ date <- Sys.Date();
 
 setwd(arguments$directory);
 
-### FORMAT ANNOTATION
-# using refGene, indicate genes to keep (coding genes) for gene x patient matrix
-refGene <- read.delim(arguments$gtf, header = F, comment.char = '#');
+### FORMAT ANNOTATION ##############################################################################
+if (arguments$ref_type %in% c('hg38','GRCh38')) {
+	library(TxDb.Hsapiens.UCSC.hg38.knownGene);
+	txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene;
+	} else if (arguments$ref_type %in% c('hg19','GRCh37')) {
+	library(TxDb.Hsapiens.UCSC.hg19.knownGene);
+	txdb <- TxDb.Hsapiens.UCSC.hg19.knownGene;
+	}
+ 
+# organize all transcripts by GeneID
+txdb_table <- transcriptsBy(txdb, by = 'gene');
 
-refGene <- droplevels(refGene[which(refGene$V3 == 'gene'),c(1,4,5,9)]);
-refGene <- droplevels(refGene[which(refGene$V1 != 'chrM'),]);
-colnames(refGene) <- c('Chromosome','Start','End','INFO');
+# extract GeneIDs
+tx_ids <- names(txdb_table);
 
-refGene <- refGene[grepl('gene_type protein_coding', refGene$INFO),];
-refGene <- refGene[!grepl('tag PAR', refGene$INFO),];
+# extract 
+transcript_table <- select(
+	TxDb.Hsapiens.UCSC.hg38.knownGene,
+	keys = tx_ids,
+	columns = c('GENEID','TXNAME','TXCHROM','TXSTART','TXEND'),
+	keytype = 'GENEID'
+	);
+colnames(transcript_table)[1] <- 'ENTREZID';
 
-gene.widths <- refGene$End - refGene$Start;
-refGene <- droplevels(refGene[which(gene.widths > 20),]);
+# pull in extra annotations
+transcript_table$SYMBOL <- mapIds(
+	org.Hs.eg.db,
+	keys = transcript_table$TXNAME,
+	keytype = 'UCSCKG',
+	column = 'SYMBOL'
+	);
 
-refGene.gr <- GRanges(refGene);
+transcript_table$ENSEMBL <- mapIds(
+	org.Hs.eg.db,
+	keys = transcript_table$TXNAME,
+	keytype = 'UCSCKG',
+	column = 'ENSEMBL'
+	);
 
-refGene$GeneID <- sapply(
-        refGene$INFO,
-        function(i) {
-                parts <- unlist(strsplit(as.character(i), ';'));
-                gene_name <- unlist(strsplit(parts[grepl('gene_id', parts)], ' '));
-                gene_id  <- gene_name[length(gene_name)];
-                return(gene_id);
-                }
-        );
+transcript_table$MAP <- mapIds(
+	org.Hs.eg.db,
+	keys = transcript_table$TXNAME,
+	keytype = 'UCSCKG',
+	column = 'MAP'
+	);
 
-refGene$Symbol <- sapply(
-        refGene$INFO,
-        function(i) {
-                parts <- unlist(strsplit(as.character(i), ';'));
-                gene_name <- unlist(strsplit(parts[grepl('gene_name', parts)], ' '));
-                gene_symbol <- gene_name[length(gene_name)];
-                return(gene_symbol);
-                }
-        );
+transcript_table$GENETYPE <- mapIds(
+	org.Hs.eg.db,
+	keys = transcript_table$TXNAME,
+	keytype = 'UCSCKG',
+	column = 'GENETYPE'
+	);
 
-refGene$Chromosome <- factor(refGene$Chromosome, levels = paste0('chr',c(1:22,'X','Y')));
-refGene <- refGene[,-4];
+# remove unmatching cases
+transcript_table$MAPCHROM <- sapply(
+	transcript_table$MAP,
+	function(i) { paste0('chr', unlist(strsplit(i, 'p|q'))[1]) }
+	);
 
-gene.gr <- GRanges(refGene);
+transcript_table <- transcript_table[which(transcript_table$TXCHROM == transcript_table$MAPCHROM),];
+
+# squish it to 1 entry per gene
+gene.annotation <- merge(
+	aggregate(TXSTART ~ ENTREZID + SYMBOL + ENSEMBL + GENETYPE + TXCHROM, transcript_table, min),
+	aggregate(TXEND ~ ENTREZID + SYMBOL + ENSEMBL + GENETYPE + TXCHROM, transcript_table, max),
+	);
+colnames(gene.annotation)[5:7] <- c('Chromosome','Start','End');
+gene.annotation$Chromosome <- factor(gene.annotation$Chromosome, levels = paste0('chr',c(1:22,'X','Y')));
+gene.annotation <- gene.annotation[order(gene.annotation$Chromosome, gene.annotation$Start),];
+
+gene.gr <- GRanges(gene.annotation);
 
 # if provided, filter to target intervals
-refGene$Target <- NA;
+gene.annotation$Target <- NA;
 if (!is.null(arguments$targets)) {
 
-	target.intervals <- read.delim(arguments$targets, header = F, comment.char = '@');
-	colnames(target.intervals)[1:4] <- c('Chromosome','Start','End','Strand');
+	target.intervals <- read.delim(arguments$targets, header = F, comment.char = '#');
+	colnames(target.intervals)[1:3] <- c('Chromosome','Start','End');
 
 	target.gr <- GRanges(target.intervals);
 
-	overlaps <- as.data.frame(findOverlaps(refGene.gr, target.gr));
+	overlaps <- as.data.frame(findOverlaps(gene.gr, target.gr));
 
-	refGene$Target <- 0;
-	refGene[unique(overlaps$queryHits),]$Target <- 1;
+	gene.annotation$Target <- 0;
+	gene.annotation[unique(overlaps$queryHits),]$Target <- 1;
 	}
 
 ### MAIN ###########################################################################################
 # find results files
 cr.files <- list.files(pattern = 'called.seg', recursive = TRUE);
-#cr.files <- cr.files[!grepl('^2021', cr.files)];
 
 # read them in
 cn.list <- list();
@@ -157,10 +187,8 @@ write.table(
 	);
 
 # define a results table
-gene.data.cn <- refGene;
-for (smp in names(cn.list)) {
-	gene.data.cn[,smp] <- 0;
-	}
+gene.data.cn <- gene.annotation;
+gene.data.cn[,names(cn.list)] <- 0;
 gene.data.ratio <- gene.data.cn;
 
 pga.values <- list();
@@ -182,16 +210,16 @@ for (smp in names(cn.list)) {
 	pga.values[[smp]] <- pga;
 
 	# extract gene data
-	gr <- GRanges(tmp);
+	seg.gr <- GRanges(tmp);
 
 	# find overlap with genes (any amount of overlap)
-	overlapGenes <- as.data.frame(findOverlaps(gr, gene.gr, minoverlap = 20));
-	regionsWithHits <- as.data.frame(gr[unique(overlapGenes$queryHits)]);
+	overlapGenes <- as.data.frame(findOverlaps(seg.gr, gene.gr, minoverlap = 20));
+	regionsWithHits <- as.data.frame(seg.gr[unique(overlapGenes$queryHits)]);
 
 	for (i in rownames(regionsWithHits)) {
-		genes <- gene.gr[overlapGenes[which(overlapGenes$queryHits == sub('seg','',i)),]$subjectHits,]$GeneID;
-		gene.data.cn[which(gene.data.cn$GeneID %in% genes),smp] <- tmp[i,]$CN;
-		gene.data.ratio[which(gene.data.ratio$GeneID %in% genes),smp] <- tmp[i,]$RATIO;
+		genes <- gene.gr[overlapGenes[which(overlapGenes$queryHits == sub('seg','',i)),]$subjectHits,]$SYMBOL;
+		gene.data.cn[which(gene.data.cn$SYMBOL %in% genes),smp] <- tmp[i,]$CN;
+		gene.data.ratio[which(gene.data.ratio$SYMBOL %in% genes),smp] <- tmp[i,]$RATIO;
 		}
 	}
 
@@ -207,10 +235,9 @@ write.table(
 	sep = '\t'
 	);
 
-colnames(gene.data.cn)[which(colnames(gene.data.cn) == 'Symbol')] <- 'Hugo_Symbol';
 write.table(
-	gene.data.cn[,c('Hugo_Symbol',names(cn.list))],
-	file = generate.filename(arguments$project, 'gatk_cna_matrix_for_cbioportal', 'tsv'),
+	gene.data.cn,
+	file = generate.filename(arguments$project, 'gatk_cna_gene_matrix', 'tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
 	sep = '\t'
