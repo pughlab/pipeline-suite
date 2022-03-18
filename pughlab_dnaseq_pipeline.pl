@@ -142,7 +142,7 @@ sub main {
 		'svict'	=> defined($tool_data->{svict}->{run}) ? $tool_data->{svict}->{run} : 'N',
 		'mops'	=> defined($tool_data->{panelcn_mops}->{run}) ? $tool_data->{panelcn_mops}->{run} : 'N',
 		'mavis'	=> defined($tool_data->{mavis}->{run}) ? $tool_data->{mavis}->{run} : 'N',
-		'msi'	=> defined($tool_data->{other_tools}->{run_msi}) ? $tool_data->{other_tools}->{run_msi} : 'N'
+		'msi'	=> defined($tool_data->{msi_sensor}->{run}) ? $tool_data->{msi_sensor}->{run} : 'N'
 		);
 
 	print $log Dumper \%tool_set;
@@ -639,7 +639,7 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> 'pughlab_dna_pipeline__run_strelka_pon',
 					cmd	=> $strelka_command,
-					modules	=> ['perl'],
+					modules	=> ['perl',$samtools],
 					dependencies	=> $current_dependencies,
 					mem		=> '256M',
 					max_time	=> $max_time,
@@ -691,7 +691,7 @@ sub main {
 				log_dir	=> $log_directory,
 				name	=> 'pughlab_dna_pipeline__run_strelka',
 				cmd	=> $strelka_command,
-				modules	=> ['perl'],
+				modules	=> ['perl',$samtools],
 				dependencies	=> join(':', $current_dependencies, $strelka_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,

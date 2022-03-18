@@ -94,7 +94,7 @@ all.samples <- rownames(pga);
 input.data$Chromosome <- factor(input.data$Chromosome, levels = paste0('chr',c(1:22,'X','Y')));
 input.data <- input.data[order(input.data$Chromosome, input.data$Start),];
 input.data <- input.data[which(input.data$Chromosome != 'chrY'),];
-rownames(input.data) <- input.data$GeneID;
+rownames(input.data) <- input.data$SYMBOL;
 
 # ensure sample names match
 if (!any(all.samples %in% colnames(input.data))) {
@@ -149,7 +149,7 @@ cna.plot <- create.heatmap(
 	cluster.dimensions = 'none',
 	covariates.top = list(
 		rect = list(
-			col = 'black',
+			col = 'transparent',
 			fill = covariate.colours,
 			lwd = 0
 			)
@@ -203,7 +203,7 @@ create.multipanelplot(
 	plot.objects = list(cna.plot, pga.plot),
 	height = if (nrow(pga) <= 30) { 6 } else { 8 },
 	width = 12,
-	resolution = 400,
+	resolution = 1600,
 	filename = generate.filename(arguments$project, 'gatk_scna_landscape','png'),
 	layout.width = 2,
 	layout.height = 1,

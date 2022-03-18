@@ -211,18 +211,23 @@ if (length(significant.hits) > 0) {
 		write("\\vspace{1.0cm}\n", file = 'oncokb_summary.tex', append = TRUE);
 		}
 
-	if (nrow(oncokb.to.print) <= 20) {
-		print(
-			xtable(
-				oncokb.to.print,
-				caption = oncokb.caption
-				),
-			file = 'oncokb_summary.tex',
-			include.rownames = FALSE,
-			size = 'scriptsize',
-			append = TRUE
-			);
+
+	oncokb.to.print <- oncokb.to.print[order(oncokb.to.print$Gene, -oncokb.to.print$VAF),];
+	idx <- if (nrow(oncokb.to.print) <= 15) { idx <- 1:nrow(oncokb.to.print); } else {
+		idx <- which(oncokb.to.print$VARIANT_IN_ONCOKB == TRUE);
+		idx <- idx[1:min(length(idx),15)];
 		}
+
+	print(
+		xtable(
+			oncokb.to.print[idx,],
+			caption = oncokb.caption
+			),
+		file = 'oncokb_summary.tex',
+		include.rownames = FALSE,
+		size = 'scriptsize',
+		append = TRUE
+		);
 	}
 
 ### SAVE SESSION INFO ##############################################################################

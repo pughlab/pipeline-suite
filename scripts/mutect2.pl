@@ -448,7 +448,7 @@ sub pon {
 
 				$mutect_command .= "\n\n" . join("\n",
 					'if [ -s ' . $chr_stem . '_$CHROM.vcf.md5 ]; then',
-					'  Output file for $CHROM already exists',
+					'  echo Output file for $CHROM already exists',
 					'  exit',
 					'fi'
 					);
@@ -505,7 +505,7 @@ sub pon {
 
 				$mutect_command .= "\n\n" . join("\n",
 					'  if [ -s ' . $chr_stem . '_$CHROM.vcf.md5 ]; then',
-					'    Output file for $CHROM already exists',
+					'     echo Output file for $CHROM already exists',
 					'  else'
 					);
 
@@ -757,7 +757,7 @@ sub pon {
 			"if [ -s $pon.md5 ]; then",
 			"  $cleanup_cmd",
 			"else",
-			'  "FINAL trimmed file is missing; not removing intermediates"',
+			'  echo "FINAL trimmed file is missing; not removing intermediates"',
 			"fi"
 			);
 
@@ -1105,7 +1105,7 @@ sub main {
 
 				$mutect_command .= "\n\n" . join("\n",
 					'if [ -s ' . $chr_stem . '_$CHROM.vcf.md5 ]; then',
-					'  Output file for $CHROM already exists',
+					'  echo Output file for $CHROM already exists',
 					'  exit',
 					'fi'
 					);

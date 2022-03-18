@@ -93,7 +93,7 @@ all.samples <- rownames(ploidy.estimates);
 input.data$Chromosome <- factor(input.data$Chromosome, levels = paste0('chr',c(1:22,'X','Y')));
 input.data <- input.data[order(input.data$Chromosome, input.data$Start),];
 input.data <- input.data[which(input.data$Chromosome != 'chrY'),];
-rownames(input.data) <- input.data$GeneID;
+rownames(input.data) <- input.data$SYMBOL;
 
 # ensure sample names match
 if (!any(all.samples %in% colnames(input.data))) {
@@ -144,7 +144,7 @@ create.heatmap(
 	cluster.dimensions = 'none',
 	covariates.top = list(
 		rect = list(
-			col = 'black',
+			col = 'transparent',
 			fill = covariate.colours,
 			lwd = 0
 			)
@@ -176,7 +176,7 @@ create.heatmap(
 	colourkey.cex = 1,
 	height = if (length(all.samples) > 12) { 8 } else { 5 },
 	width = 12,
-	resolution = 400,
+	resolution = 1600,
 	right.padding = 12,
 	filename = generate.filename(arguments$project, 'cna_landscape','png')
 	);

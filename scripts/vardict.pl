@@ -45,10 +45,12 @@ sub get_vardict_command {
 		normal_id	=> undef,
 		output		=> undef,
 		intervals	=> undef,
+		java_mem	=> undef,
 		@_
 		);
 
 	my $vardict_command = 'DIRNAME=$(which VarDict | xargs dirname)';
+	$vardict_command .= "\n" . "export JAVA_OPTS='-Xmx" . $args{java_mem} . "'";
 
 	# note, we only want to call SNVs and indels (-U/--nosv)
 	$vardict_command .= "\n\n" . join(' ',
@@ -342,7 +344,8 @@ sub main {
 				tumour		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
 				tumour_id	=> $normal_ids[0],
 				output		=> $output_stem . '.vcf',
-				intervals	=> $intervals_bed
+				intervals	=> $intervals_bed,
+				java_mem	=> $parameters->{vardict}->{java_mem}
 				);
 
 			$vardict_command .= "\n\nmd5sum $output_stem.vcf > $output_stem.vcf.md5";

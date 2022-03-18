@@ -26,19 +26,6 @@ our ($reference) = undef;
 # 1.0		sprokopec	run sequenza with gamma tuning
 
 ### DEFINE SUBROUTINES #############################################################################
-# find files recursively
-sub _get_files {
-	my ($dirs, $exten) = @_;
-
-	my @files;
-	my $want = sub {
-		-e && /\Q$exten\E$/ && push @files, $File::Find::name
-		};
-
-	find($want, $dirs);
-	return(@files);
-	}
-
 # run sequenza: create seqz file
 sub create_seqz_command {
 	my %args = (
@@ -380,7 +367,7 @@ sub main {
 			"Rscript $cwd/collect_sequenza_output.R",
 			'-d', $output_directory,
 			'-p', $tool_data->{project_name},
-			'-g', $tool_data->{gtf}
+			'-r', $tool_data->{ref_type}
 			);
 
 		if ( (('exome' eq $tool_data->{seq_type}) || ('targeted' eq $tool_data->{seq_type})) &&
@@ -392,7 +379,7 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'combine_sequenza_segment_calls',
 			cmd	=> $collect_output,
-			modules	=> ['R/3.6.1'],
+			modules	=> ['R/4.1.0'],
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '6G',
 			max_time	=> '24:00:00',

@@ -43,19 +43,6 @@ our ($reference, $exclude_regions) = undef;
 #	--dry_run indicates that this is a dry run
 
 ### DEFINE SUBROUTINES #############################################################################
-# find files recursively
-sub _get_files {
-	my ($dirs, $exten) = @_;
-
-	my @files;
-	my $want = sub {
-		-e && /\Q$exten\E$/ && push @files, $File::Find::name
-		};
-
-	find($want, $dirs);
-	return(@files);
-	}
-
 # format command to run Mavis
 sub get_mavis_command {
 	my %args = (

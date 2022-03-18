@@ -54,8 +54,8 @@ setwd(arguments$directory);
 
 ### MAIN ###########################################################################################
 # find results files
-detail.files <- list.files(pattern = 'pre_adapter_detail_metrics', recursive = TRUE);
-summary.files <- list.files(pattern = 'pre_adapter_summary_metrics', recursive = TRUE);
+bait.bias.files <- list.files(pattern = 'bait_bias_summary_metrics', recursive = TRUE);
+pre.adapter.files <- list.files(pattern = 'pre_adapter_summary_metrics', recursive = TRUE);
 contamination.files <- list.files(pattern = 'contamination.table', recursive = TRUE);
 
 alignment.files <- list.files(pattern = 'alignment_metrics.txt', recursive = TRUE);
@@ -67,18 +67,24 @@ contamination.list <- list();
 alignment.list <- list();
 wgs.list <- list();
 
-for (file in detail.files) {
+for (file in bait.bias.files) {
 	# extract sample ID
-	smp <- sub('_artifact_metrics.pre_adapter_detail_metrics','',basename(file));
+	smp <- sub('_artifact_metrics.bait_bias_summary_metrics','',basename(file));
 	# store data in list
-	detailed <- read.delim(file, comment.char = '#');
-	summarized <- read.delim(sub('detail','summary',file), comment.char = '#');
-
-	summarized <- summarized[!is.na(summarized$ARTIFACT_NAME),];
-	tmp <- merge(summarized[,c(1:4,12)], detailed);
-
+	tmp <- read.delim(file, comment.char = '#');
+	tmp <- tmp[,c('SAMPLE_ALIAS','LIBRARY','REF_BASE','ALT_BASE','TOTAL_QSCORE','ARTIFACT_NAME')];
+	tmp$TYPE <- 'bait bias';
 	artefact.list[[smp]] <- tmp;
-	rm(detailed,summarized,tmp);
+	}
+
+for (file in pre.adapter.files) {
+	# extract sample ID
+	smp <- sub('_artifact_metrics.pre_adapter_summary_metrics','',basename(file));
+	# store data in list
+	tmp <- read.delim(file, comment.char = '#');
+	tmp <- tmp[,c('SAMPLE_ALIAS','LIBRARY','REF_BASE','ALT_BASE','TOTAL_QSCORE','ARTIFACT_NAME')];
+	tmp$TYPE <- 'pre-adapter';
+	artefact.list[[smp]] <- rbind(artefact.list[[smp]], tmp);
 	}
 
 for (file in contamination.files) {
@@ -122,9 +128,6 @@ if (length(wgs.files) > 0) {
 artefact.data <- do.call(rbind, artefact.list);
 contest.data <- do.call(rbind, contamination.list);
 metric.data <- do.call(rbind, alignment.list);
-
-# format data
-artefact.data <- artefact.data[,c('SAMPLE_ALIAS','REF_BASE','ALT_BASE','ARTIFACT_NAME','CONTEXT','QSCORE')];
 
 # save combined/formatted data to file
 write.table(

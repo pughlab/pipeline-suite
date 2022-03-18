@@ -189,8 +189,11 @@ sub main {
 	print $log "\n---\n";
 
 	# set tools and versions
-	my $msi_pro	= 'msisensor-pro/1.2.0';
+	my $msi_pro	= $tool_data->{msi_sensor};
 	my $r_version	= 'R/' . $tool_data->{r_version};
+
+	# get user-specified tool parameters
+	my $parameters = $tool_data->{msi_sensor}->{parameters};
 
 	# get optional HPC group
 	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
@@ -235,6 +238,8 @@ sub main {
 			name	=> 'run_msi_scan_reference',
 			cmd	=> $format_intervals_cmd,
 			modules	=> [$msi_pro],
+			max_time	=> $parameters->{scan}->{time},
+			mem		=> $parameters->{scan}->{mem},
 			hpc_driver	=> $args{hpc_driver},
 			extra_args	=> [$hpc_group]
 			);
@@ -321,8 +326,8 @@ sub main {
 				cmd	=> $baseline_cmd,
 				modules	=> [$msi_pro],
 				dependencies	=> $intervals_run_id,
-				max_time	=> '5-00:00:00',
-				mem		=> '4G',
+				max_time	=> $parameters->{baseline}->{time},
+				mem		=> $parameters->{baseline}->{mem},
 				hpc_driver	=> $args{hpc_driver},
 				extra_args	=> [$hpc_group]
 				);
@@ -398,8 +403,8 @@ sub main {
 					cmd	=> $msi_command,
 					modules	=> [$msi_pro],
 					dependencies	=> $depends,
-					max_time	=> '24:00:00',
-					mem		=> '4G',
+					max_time	=> $parameters->{sensor}->{time},
+					mem		=> $parameters->{sensor}->{mem},
 					hpc_driver	=> $args{hpc_driver},
 					extra_args	=> [$hpc_group]
 					);
