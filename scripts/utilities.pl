@@ -386,11 +386,11 @@ sub write_script {
 			$size = $1;
 			$unit = $2;
 			if ('G' eq $unit) { $unit = 'gb'; }
-			#if (($size > 28) && ($size < 61) && ('G' eq $unit)) {
-			#	$job_params .= "\n#PBS -q himem";
-			#} elsif (($size >= 61) && ($size < 184) && ('G' eq $unit)) {
-			#	$job_params .= "\n#PBS -q veryhimem";
-			}
+		#	if (($size > 28) && ($size < 61) && ('G' eq $unit)) {
+		#		$job_params .= "\n#PBS -q himem";
+		#	} elsif (($size >= 61) && ($size < 184) && ('G' eq $unit)) {
+		#		$job_params .= "\n#PBS -q veryhimem";
+		#	}
 
 		$job_params .= "\n" . "#PBS -l mem=" . $size . $unit;
 		}
@@ -404,7 +404,7 @@ sub write_script {
 		#		( ($days > 5) )
 		#		) {
 		#		$job_params .= "\n#PBS -q long";
-			}
+		#	}
 
 		$job_params .= "\n" . "#PBS -l walltime=" . $args{max_time};
 		}
