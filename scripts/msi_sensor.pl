@@ -44,7 +44,7 @@ sub get_format_intervals_command {
 		@_
 		);
 
-	my $format_command .= "\n\n" . join(' ',
+	my $format_command = join(' ',
 		'msisensor-pro scan',
 		'-d', $args{reference},
 		'-o', $args{output}
@@ -189,7 +189,7 @@ sub main {
 	print $log "\n---\n";
 
 	# set tools and versions
-	my $msi_pro	= $tool_data->{msi_sensor};
+	my $msi_pro	= $tool_data->{msi_sensor_version};
 	my $r_version	= 'R/' . $tool_data->{r_version};
 
 	# get user-specified tool parameters

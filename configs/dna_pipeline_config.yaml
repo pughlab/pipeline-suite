@@ -39,7 +39,7 @@ pindel_version: 0.2.5b8
 mavis_version: 2.2.5
 cpsr_version: 0.6.1
 pcgr_version: 0.9.1
-msi_sensor: msisensor-pro/1.2.0
+msi_sensor_version: msisensor-pro/1.2.0
 r_version: 3.6.1
 # tool specific parameters
 bwa:
