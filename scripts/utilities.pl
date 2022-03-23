@@ -375,7 +375,7 @@ sub write_script {
 
 		$job_params = "#PBS " . join("\n#PBS ",
 			'-S /bin/bash',
-			'-N' . $args{name},
+			'-N ' . $args{name},
 			'-e ' . $job_log_dir . '/errorlog',
 			'-k e',
 			'-l nodes=1:ppn=' . $args{cpus_per_task}
