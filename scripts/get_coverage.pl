@@ -530,11 +530,8 @@ sub main {
 	# collate results
 	if ($should_run_final) {
 
-		my $collect_output = join(' ',
+		my $collect_coverage_output = join(' ',
 			"Rscript $cwd/collect_coverage_output.R",
-			'-d', $output_directory,
-			'-p', $tool_data->{project_name},
-			"\n\nRscript $cwd/count_callable_bases.R",
 			'-d', $output_directory,
 			'-p', $tool_data->{project_name}
 			);
@@ -542,7 +539,35 @@ sub main {
 		$run_script = write_script(
 			log_dir	=> $log_directory,
 			name	=> 'combine_coverage_output',
-			cmd	=> $collect_output,
+			cmd	=> $collect_coverage_output,
+			modules	=> [$r_version],
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '4G',
+			max_time	=> '12:00:00',
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'combine_coverage_output',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @all_jobs, $run_id;
+
+		my $collect_cb_output = join(' ',
+			"Rscript $cwd/count_callable_bases.R",
+			'-d', $output_directory,
+			'-p', $tool_data->{project_name}
+			);
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'combine_callable_base_output',
+			cmd	=> $collect_cb_output,
 			modules	=> [$r_version],
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '4G',
@@ -568,8 +593,9 @@ sub main {
 
 		# collect job stats
 		my $collect_metrics = collect_job_stats(
-			job_ids	=> join(',', @all_jobs),
-			outfile	=> $outfile
+			job_ids		=> join(',', @all_jobs),
+			outfile		=> $outfile,
+			hpc_driver	=> $args{hpc_driver}
 			);
 
 		$run_script = write_script(
