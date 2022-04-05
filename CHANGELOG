@@ -1,3 +1,12 @@
+2022-03-29: PughLab pipeline-suite (version 0.6.7)
+- updates to annotate_germline to consider recalibrated variants as candidates
+- updates to pindel to ensure failed segments are not carried downstream
+- for pindel, removed SV tracking for WGS to improve run times (removed pindel option from mavis for wgs)
+- updates to collect_job_stats (all tools) for pbs compatibility
+- updates throughout for use with vcf2maf module (alternative to providing path)
+- updates to get_coverage.pl to split final data collection into two parts (coverage and callable bases)
+- updates to count_callable_bases.R to find callable bases for different intervals (total,target,exon,cds)
+
 2022-03-23: PughLab pipeline-suite (version 0.6.6)
 - bug fixes for msi-sensor
 - minor update for pbs

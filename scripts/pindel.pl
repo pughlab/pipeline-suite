@@ -141,7 +141,6 @@ sub get_split_pindel_command {
 		'-T', $args{n_cpus},
 		'-J', $exclude_regions,
 		'-w 1 -A 20',
-		'--report_long_insertions',
 		'-c $CHROM'
 		);
 
@@ -231,9 +230,9 @@ sub get_pindel2vcf_command {
 
 	my $pindel_command = "cd $args{tmp_dir}\n";
 
-	$pindel_command .= "for file in *_INT_final; do";
+	$pindel_command .= "for file in *COMPLETE; do";
 
-	$pindel_command .= "\n  " . 'STEM=$(echo $file | sed ' . "'s/_INT_final//');\n  " . join(' ',
+	$pindel_command .= "\n  " . 'STEM=$(echo $file | sed ' . "'s/.COMPLETE//');\n  " . join(' ',
 		'pindel2vcf',
 		'-r', $reference,
 		'-R', $ref_type,
@@ -364,6 +363,12 @@ sub main {
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
 	my $r_version	= 'R/'. $tool_data->{r_version};
+
+	my $vcf2maf = undef;
+	if (defined($tool_data->{vcf2maf_version})) {
+		$vcf2maf = 'vcf2maf/' . $tool_data->{vcf2maf_version};
+		$tool_data->{annotate}->{vcf2maf_path} = undef;
+		}
 
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{pindel}->{parameters};
@@ -579,43 +584,46 @@ sub main {
 					}
 				}
 
-			# merge chromosome output (for mavis)
-			my $merge_command = get_merge_pindel_command(
-				input		=> $sample . '_pindel',
-				output		=> $merged_file,
-				tmp_dir		=> $tmp_directory,
-				seq_type	=> $is_targeted
-				);
+			unless('wgs' eq $tool_data->{seq_type}) {
 
-			# check if this should be run
-			if ('Y' eq missing_file($merged_file . '.md5')) {
-
-				# record command (in log directory) and then run job
-				print $log "Submitting job for merge step...\n";
-
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_merge_pindel_' . $sample,
-					cmd	=> $merge_command,
-					dependencies	=> join(':', @pindel_jobs),
-					max_time	=> $parameters->{convert}->{time},
-					mem		=> $parameters->{convert}->{mem},
-					hpc_driver	=> $args{hpc_driver},
-					extra_args	=> [$hpc_group]
+				# merge chromosome output (for mavis)
+				my $merge_command = get_merge_pindel_command(
+					input		=> $sample . '_pindel',
+					output		=> $merged_file,
+					tmp_dir		=> $tmp_directory,
+					seq_type	=> $is_targeted
 					);
 
-				$run_id = submit_job(
-					jobname		=> 'run_merge_pindel_' . $sample,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{hpc_driver},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
-					);
+				# check if this should be run
+				if ('Y' eq missing_file($merged_file . '.md5')) {
 
-				push @patient_jobs, $run_id;
-				push @all_jobs, $run_id;
-				} else {
-				print $log "Skipping merge step because this has already been completed!\n";
+					# record command (in log directory) and then run job
+					print $log "Submitting job for merge step...\n";
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_merge_pindel_' . $sample,
+						cmd	=> $merge_command,
+						dependencies	=> join(':', @pindel_jobs),
+						max_time	=> $parameters->{convert}->{time},
+						mem		=> $parameters->{convert}->{mem},
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group]
+						);
+
+					$run_id = submit_job(
+						jobname		=> 'run_merge_pindel_' . $sample,
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @patient_jobs, $run_id;
+					push @all_jobs, $run_id;
+					} else {
+					print $log "Skipping merge step because this has already been completed!\n";
+					}
 				}
 
 			# merge and convert to VCF
@@ -703,7 +711,7 @@ sub main {
 					log_dir => $log_directory,
 					name    => 'run_vcf2maf_and_VEP_' . $sample,
 					cmd     => $vcf2maf_cmd,
-					modules => ['perl', $samtools, 'tabix'],
+					modules => ['perl', $samtools, 'tabix', $vcf2maf],
 					dependencies    => $run_id,
 					cpus_per_task	=> 4,
 					max_time        => $tool_data->{annotate}->{time},
@@ -812,8 +820,9 @@ sub main {
 
 		# collect job stats
 		my $collect_metrics = collect_job_stats(
-			job_ids	=> join(',', @all_jobs),
-			outfile	=> $outfile
+			job_ids		=> join(',', @all_jobs),
+			outfile		=> $outfile,
+			hpc_driver	=> $args{hpc_driver}
 			);
 
 		$run_script = write_script(

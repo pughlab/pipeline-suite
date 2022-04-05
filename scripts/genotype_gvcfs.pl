@@ -397,6 +397,12 @@ sub main{
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $r_version	= 'R/'. $tool_data->{r_version};
 
+	my $vcf2maf = undef;
+	if (defined($tool_data->{vcf2maf_version})) {
+		$vcf2maf = 'vcf2maf/' . $tool_data->{vcf2maf_version};
+		$tool_data->{annotate}->{vcf2maf_path} = undef;
+		}
+
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{haplotype_caller}->{parameters};
 	if (!defined($parameters->{hard_filtering}->{run})) {
@@ -931,7 +937,7 @@ sub main{
 					log_dir	=> $log_directory,
 					name	=> 'run_vcf2maf_and_VEP_' . $sample,
 					cmd	=> $vcf2maf_cmd,
-					modules	=> ['perl', $samtools, 'tabix'],
+					modules => ['perl', $samtools, 'tabix', $vcf2maf],
 					dependencies	=> $subset_run_id,
 					cpus_per_task	=> 4,
 					max_time	=> '5-00:00:00',
@@ -1049,8 +1055,9 @@ sub main{
 
 		# collect job stats
 		my $collect_metrics = collect_job_stats(
-			job_ids => join(',', @all_jobs),
-			outfile => $outfile
+			job_ids		=> join(',', @all_jobs),
+			outfile		=> $outfile,
+			hpc_driver	=> $args{hpc_driver}
 			);
 
 		$run_script = write_script(

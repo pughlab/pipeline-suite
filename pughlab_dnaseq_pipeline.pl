@@ -561,7 +561,7 @@ sub main {
 			$hc_command = join(' ',
 				"perl $cwd/scripts/annotate_germline.pl",
 				"-o", $hc_directory,
-				"-i", join('/', $hc_directory, 'cohort','germline_variants'),
+				"-i", join('/', $hc_directory, 'cohort'),
 				"-t", $tool_config,
 				"-d", $gatk_output_yaml,
 				"-c", $args{cluster}
@@ -1658,7 +1658,9 @@ sub main {
 				$mavis_command .= " --novobreak $novobreak_directory";
 				push @depends, $novobreak_run_id;
 				}
-			if (defined($pindel_run_id)) {
+			# for wgs, because pindel is run in chunks, we miss the large SVs
+			# so won't include it here
+			if (defined($pindel_run_id) & ('wgs' ne $tool_data->{seq_type})) {
 				$mavis_command .= " --pindel $pindel_directory";
 				push @depends, $pindel_run_id;
 				}

@@ -56,6 +56,7 @@ sub create_prepare_vcf_command {
 		'-sn', $args{sample_id},
 		'--maxIndelSize 1000', #'--max-indel-size 1000',
 		'--excludeNonVariants',
+		'--excludeFiltered',
 		'-o', $args{output}
 		);
 
@@ -92,6 +93,7 @@ sub create_annotate_command {
 sub create_extract_command {
 	my %args = (
 		tier_files	=> undef,
+		samples		=> undef,
 		input_vcf	=> undef,
 		output_vcf	=> undef,
 		tmp_dir		=> undef,
@@ -116,14 +118,10 @@ sub create_extract_command {
 		'> keep_positions.txt'
 		);
 
-	if ($args{input_vcf} =~ m/gz$/) {
-		$extract_command .= "\n\nvcftools --gzvcf $args{input_vcf}";
-		} else {
-		$extract_command .= "\n\nvcftools --vcf $args{input_vcf}";
-		}
-
-	$extract_command .= ' ' . join(' ',
+	$extract_command .= "\n\n" . join(' ',
+		"vcftools --gzvcf $args{input_vcf}",
 		'--positions keep_positions.txt --stdout --recode',
+		'--indv', $args{samples},
 		'>', $args{output_vcf}
 		);
 
@@ -212,6 +210,12 @@ sub main{
 	my $r_version	= 'R/' . $tool_data->{r_version};
 	my $pcgr	= 'pcgr/' . $tool_data->{pcgr_version};
 
+	my $vcf2maf = undef;
+	if (defined($tool_data->{vcf2maf_version})) {
+		$vcf2maf = 'vcf2maf/' . $tool_data->{vcf2maf_version};
+		$tool_data->{annotate}->{vcf2maf_path} = undef;
+		}
+
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{haplotype_caller}->{parameters};
 
@@ -233,23 +237,16 @@ sub main{
 	my $annotate_directory = join('/', $output_directory, 'CPSR');
 	unless (-e $annotate_directory) { make_path($annotate_directory); }
 
-	# First step, find all of the GenotypeGVCF output files
-	opendir(HC_OUTPUT, $input_directory) or die "Could not open $input_directory";
-	my @filtered_gvcfs = grep { /variants.vcf$|variants.vcf.gz$/ } readdir(HC_OUTPUT);
-	closedir(HC_OUTPUT);
+	# First step, find the combined, recalibrated GenotypeGVCF file
+	my $recalibrated_gvcf = join('/',
+		$input_directory,
+		'haplotype_caller_genotypes_recalibrated.vcf.gz'
+		);
 
 	# process each patient in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
 		print $log "\nInitiating process for PATIENT: $patient\n";
-
-		my @patient_vcfs = grep { /$patient/ } @filtered_gvcfs;
-		if (scalar(@patient_vcfs) == 0) {
-			print $log "\n>> No filtered gvcf found; skipping patient.\n\n";
-			next;
-			}
-	
-		my $patient_vcf = join('/', $input_directory, $patient_vcfs[0]);
 
 		# make some directories
 		my $patient_directory = join('/', $annotate_directory, $patient);
@@ -264,9 +261,14 @@ sub main{
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
 		my @tumour_ids = keys %{$smp_data->{$patient}->{'tumour'}};
 
+		# get sample lists (full and normal/tumour-only)
+		my @all_sample_ids;
+		push @all_sample_ids, @normal_ids;
+		push @all_sample_ids, @tumour_ids;
+
 		my @sample_ids;
 		push @sample_ids, @normal_ids;
-		push @sample_ids, @tumour_ids;
+		if (scalar(@normal_ids) == 0) { push @sample_ids, @tumour_ids; }
 
 		# create an array to hold final outputs and job id
 		my (@final_outputs, @patient_jobs, @tier_files);
@@ -292,7 +294,7 @@ sub main{
 				);
 
 			my $prepare_vcf_cmd = create_prepare_vcf_command(
-				input		=> $patient_vcf,
+				input		=> $recalibrated_gvcf,
 				sample_id	=> $sample,
 				output		=> $subset_vcf,
 				tmp_dir		=> $tmp_directory,
@@ -382,7 +384,8 @@ sub main{
 
 		my $filter_cmd = create_extract_command(
 			tier_files	=> join(' ', @tier_files),
-			input_vcf	=> $patient_vcf,
+			samples		=> join(' --indv ', @all_sample_ids),
+			input_vcf	=> $recalibrated_gvcf,
 			output_vcf	=> $filtered_vcf,
 			tmp_dir		=> $tmp_directory,
 			known_positions	=> $known_positions
@@ -479,7 +482,7 @@ sub main{
 					log_dir => $log_directory,
 					name    => 'run_vcf2maf_and_VEP_' . $sample,
 					cmd     => $vcf2maf_cmd,
-					modules => ['perl', $samtools, 'tabix'],
+					modules => ['perl', $samtools, 'tabix', $vcf2maf],
 					dependencies    => $previous_job_id,
 					hpc_driver      => $args{hpc_driver},
 					extra_args	=> [$hpc_group]
@@ -564,7 +567,7 @@ sub main{
 					log_dir => $log_directory,
 					name    => 'run_vcf2maf_and_VEP_' . $sample,
 					cmd     => $vcf2maf_cmd,
-					modules => ['perl', $samtools, 'tabix'],
+					modules => ['perl', $samtools, 'tabix', $vcf2maf],
 					dependencies    => $run_id,
 					hpc_driver      => $args{hpc_driver},
 					extra_args	=> [$hpc_group]
@@ -655,8 +658,9 @@ sub main{
 
 		# collect job stats
 		my $collect_metrics = collect_job_stats(
-			job_ids => join(',', @all_jobs),
-			outfile => $outfile
+			job_ids		=> join(',', @all_jobs),
+			outfile		=> $outfile,
+			hpc_driver	=> $args{hpc_driver}
 			);
 
 		$run_script = write_script(

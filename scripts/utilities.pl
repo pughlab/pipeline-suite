@@ -291,9 +291,9 @@ sub write_script {
 
 	my @modules_list;
 	for (my $i=0; $i < scalar (@{$args{modules}}); $i++) {
-		unless('' eq $args{modules}->[$i]) {
-			$modules_list[$i] = "module load $args{modules}->[$i]";
-			}
+		next if (!defined($args{modules}->[$i]));
+		next if ('' eq $args{modules}->[$i]);
+		$modules_list[$i] = "module load $args{modules}->[$i]";
 		}
 
 	my $modules_to_load = join(";\n", @modules_list);
@@ -686,8 +686,12 @@ sub get_vcf2maf_command {
 		$ref_type = $args{ref_type};
 		}
 
-	my $maf_command = join(' ',
-		'perl', $args{vcf2maf},
+	my $maf_command = 'vcf2maf.pl';
+	if (defined($args{vcf2maf})) {
+		$maf_command = "perl $args{vcf2maf}"; 
+		}
+
+	$maf_command .= ' ' . join(' ',
 		'--species homo_sapiens',
 		'--ncbi-build', $ref_type,
 		'--ref-fasta', $args{reference},

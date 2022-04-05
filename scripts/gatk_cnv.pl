@@ -1221,8 +1221,9 @@ sub main {
 
 		# collect job stats
 		my $collect_metrics = collect_job_stats(
-			job_ids	=> join(',', @all_jobs),
-			outfile	=> $outfile
+			job_ids		=> join(',', @all_jobs),
+			outfile		=> $outfile,
+			hpc_driver	=> $args{hpc_driver}
 			);
 
 		$run_script = write_script(
