@@ -65,14 +65,14 @@ for (file in meta.files) {
 	# extract sample ID
 	smp <- sub('_ContEst_META.tsv','',basename(file));
 	# store data in list
-	meta.list[[smp]] <- read.delim(file);
+	meta.list[[smp]] <- read.delim(file, stringsAsFactors = FALSE);
 	}
 
 for (file in lane.files) {
 	# extract sample ID
 	smp <- sub('_ContEst_READGROUP.tsv','',basename(file));
 	# store data in list
-	lane.list[[smp]] <- read.delim(file);
+	lane.list[[smp]] <- read.delim(file, stringsAsFactors = FALSE);
 	}
 
 # reshape/format data
