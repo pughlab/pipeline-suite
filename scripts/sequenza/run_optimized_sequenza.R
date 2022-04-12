@@ -29,7 +29,7 @@ alternative.cp.solutions <- function(cp.table) {
 	} else {
 		data.frame(
 			cellularity = ci$max.cellularity, 
-			 ploidy = ci$max.ploidy,
+			ploidy = ci$max.ploidy,
 			SLPP = cp.table$lpp[which(cp.table$ploidy == ci$max.ploidy),
 			which(cp.table$cellularity == ci$max.cellularity)]
 			);
@@ -184,7 +184,11 @@ print("Feeding in prior probabilities for ploidy");
 
 load(opt$ploidy_priors);
 
-priors <- subset(ploidy_table, cancer_type==toupper(usr_cancer_type))[c("CN","value")];
+if ('all' == usr_cancer_type) {
+	priors <- subset(ploidy_table, cancer_type == 'all')[c('CN','value')];
+	} else {
+	priors <- subset(ploidy_table, cancer_type == toupper(usr_cancer_type))[c("CN","value")];
+	}
 
 CP <- sequenza.fit(
 	data,
@@ -214,7 +218,7 @@ if (length(purities) > 1) { ## bug fix to not run alt solutions if there are no 
 	for (i in 2:length(purities)) {
 		print(paste("Creating new directories and printing solution:", i));
 		output_alt <- paste0(new.outdir,"/sol",i,"_",purities[i],"/");
-		dir.create(output_udp, showWarnings = FALSE, recursive = TRUE);
+		dir.create(output_alt, showWarnings = FALSE, recursive = TRUE);
 		sequenza.results(
 			sequenza.extract = data, 
 			cp.table = CP,
