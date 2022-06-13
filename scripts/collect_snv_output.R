@@ -85,10 +85,10 @@ names(variant.colours) <- c("nonstop","frameshift_indel","other", "missense", "n
 	);
 
 # determine type of experiment that was run
-is.rnaseq <- grepl('RNASeq', getwd());
-is.exome <- grepl('Exome|WEX|WXS|ctDNA', getwd());
-is.wgs <- grepl('WGS', getwd());
-is.germline <- grepl('CPSR', getwd());
+is.rnaseq <- grepl('RNASeq', arguments$directory);
+is.exome <- grepl('Exome|WEX|WXS|ctDNA', arguments$directory);
+is.wgs <- grepl('WGS', arguments$directory);
+is.germline <- grepl('CPSR', arguments$directory);
 
 # if this is RNA-Seq, only keep variants in coding regions
 classes.to.keep <- c('RNA','Missense_Mutation','Splice_Region','Splice_Site','In_Frame_Del','In_Frame_Ins',
@@ -166,6 +166,18 @@ if (!is.rnaseq & is.germline) {
 	if (length(norm.idx) > 0) { full.maf.data[norm.idx,]$Mutation_Status <- 'germline'; }
 	}
 
+# if this is germline data, make sure n_vaf > 0
+# [there are cases with wonky alleles (genotype 3/3) that vcf2maf converts to reference?]
+if (is.germline) {
+	t_vaf <- full.maf.data$t_alt_count / full.maf.data$t_depth;
+	n_vaf <- full.maf.data$n_alt_count / full.maf.data$n_depth;
+	keep.idx <- which(
+		(!is.na(full.maf.data$Matched_Norm_Sample_Barcode) & n_vaf > 0) |
+		(is.na(full.maf.data$Matched_Norm_Sample_Barcode) & t_vaf > 0)
+		);
+	full.maf.data <- full.maf.data[keep.idx,];
+	}
+
 # replace NAs with blanks (required for cBioportal upload)
 for (field in c('t_depth','t_ref_count','t_alt_count','n_depth','n_ref_count','n_alt_count')) {
 	if (any(is.na(full.maf.data[,field]))) {
@@ -235,7 +247,6 @@ if (any(full.maf.data$dbSNP_RS == 'rs2293607' & full.maf.data$SYMBOL == 'ACTRT3'
 
 # there are most likely more wierd cases and I will add them as I find them
 ###
-
 
 # save to file
 write.table(
