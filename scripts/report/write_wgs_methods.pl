@@ -60,7 +60,7 @@ sub main {
 		'svict'		=> 'N', 
 		'ichor_cna'	=> defined($tool_data->{ichor_cna}->{run}) ? $tool_data->{ichor_cna}->{run} : 'N',
 		'mavis'	=> defined($tool_data->{mavis}->{run}) ? $tool_data->{mavis}->{run} : 'N',
-		'msi'	=> defined($tool_data->{other_tools}->{run_msi}) ? $tool_data->{other_tools}->{run_msi} : 'N'
+		'msi'	=> defined($tool_data->{msi_sensor}->{run}) ? $tool_data->{msi_sensor}->{run} : 'N'
 		);
 
 	# how was BWA run?
@@ -480,6 +480,7 @@ sub main {
 
 	if ('Y' eq $tool_set{'mavis'}) {
 		$mavis = $tool_data->{mavis_version};
+		$ref_type	= $tool_data->{ref_type};
 		$methods .= "Mavis (v$mavis) was run once for each patient, using available SV calls, with the $ref_type reference files provided by the developers. BWA was indicated as the aligner, with the bwa-indexed reference file as above.\\newline\n";
 		} else {
 		$methods .= "Mavis not run.\\newline\n";
