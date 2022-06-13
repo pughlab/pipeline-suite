@@ -1,3 +1,15 @@
+2022-06-13: PughLab pipeline-suite (version 0.6.8)
+- updates to germline filtering
+- updates to collection/annotation of mavis output
+- updates to collection/annotation of sequencing metrics (ensures provided sample IDs are used rather than tags from BAM header)
+- updates to method for counting callable bases (to count total/all genic/only coding bases)
+- updates to collect_snv_data to filter ambiguous germline events
+- sequenza: capped max CN at 9 (from default 20); other minor updates for clarity
+- vardict: minor fix re:customizable java mem
+- report: added methods for MSI
+- report: minor change to ensemble code to accept maf (deals with header)
+- report: minor change to snv_tool_overlap to cap N tool combinations shown
+
 2022-03-29: PughLab pipeline-suite (version 0.6.7)
 - updates to annotate_germline to consider recalibrated variants as candidates
 - updates to pindel to ensure failed segments are not carried downstream
