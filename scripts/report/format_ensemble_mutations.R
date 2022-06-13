@@ -95,25 +95,25 @@ if (is.na(n_depth)) { n_depth <- 0; }
 mutation.data <- list();
 
 if (!is.null(arguments$strelka)) {
-	mutation.data[['Strelka']] <- read.delim(arguments$strelka);
+	mutation.data[['Strelka']] <- read.delim(arguments$strelka, comment.char = '#');
 	}
 if (!is.null(arguments$somaticsniper)) {
-	mutation.data[['SomaticSniper']] <- read.delim(arguments$somaticsniper);
+	mutation.data[['SomaticSniper']] <- read.delim(arguments$somaticsniper, comment.char = '#');
 	}
 if (!is.null(arguments$varscan)) {
-	mutation.data[['VarScan']] <- read.delim(arguments$varscan);
+	mutation.data[['VarScan']] <- read.delim(arguments$varscan, comment.char = '#');
 	}
 if (!is.null(arguments$vardict)) {
-	mutation.data[['VarDict']] <- read.delim(arguments$vardict);
+	mutation.data[['VarDict']] <- read.delim(arguments$vardict, comment.char = '#');
 	}
 if (!is.null(arguments$mutect2)) {
-	mutation.data[['MuTect2']] <- read.delim(arguments$mutect2);
+	mutation.data[['MuTect2']] <- read.delim(arguments$mutect2, comment.char = '#');
 	}
 if (!is.null(arguments$mutect)) {
-	mutation.data[['MuTect']] <- read.delim(arguments$mutect);
+	mutation.data[['MuTect']] <- read.delim(arguments$mutect, comment.char = '#');
 	}
 if (!is.null(arguments$pindel)) {
-	mutation.data[['Pindel']] <- read.delim(arguments$pindel);
+	mutation.data[['Pindel']] <- read.delim(arguments$pindel, comment.char = '#');
 	}
 
 setwd(arguments$output);
