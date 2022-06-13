@@ -55,33 +55,7 @@ arguments <- parser$parse_args();
 
 ### READ DATA ######################################################################################
 # get data
-input.data <- read.delim(arguments$mavis, stringsAsFactors = FALSE);
-
-input.data$library <- gsub('^X', '', gsub('\\.', '-', input.data$library));
-
-# collect list of all samples
-tumour.samples <- colnames(input.data)[grep('diseased_genome', colnames(input.data))];
-tumour.samples <- as.character(sapply(tumour.samples, function(i) { unlist(strsplit(i,'_'))[1] } ));
-tumour.samples <- gsub('^X', '', gsub('\\.', '-', tumour.samples));
-
-normal.samples <- colnames(input.data)[grep('normal_genome', colnames(input.data))];
-normal.samples <- as.character(sapply(normal.samples, function(i) { unlist(strsplit(i,'_'))[1] } ));
-normal.samples <- gsub('^X', '', gsub('\\.', '-', normal.samples));
-
-rna.samples <- colnames(input.data)[grep('transcriptome', colnames(input.data))];
-rna.samples <- as.character(sapply(rna.samples, function(i) { unlist(strsplit(i,'_'))[1] } ));
-rna.samples <- gsub('^X', '', gsub('\\.', '-', rna.samples));
-
-# find out which are actually germline variants	
-germ.idx <- apply(input.data[,grep('normal_genome', colnames(input.data))],1,
-	function(i) { any(i == 'germline', na.rm = TRUE) } );
-
-input.data$Status <- 'somatic';
-input.data[germ.idx,]$Status <- 'germline';
-input.data[which(input.data$library %in% normal.samples),]$Status <- 'germline';
-
-# trim down input data
-sv.data <- input.data[,!grepl('genome|transcriptome', colnames(input.data))];
+sv.data <- read.delim(arguments$mavis, stringsAsFactors = FALSE);
 
 # move to output directory
 setwd(arguments$output);
@@ -89,111 +63,34 @@ setwd(arguments$output);
 ### FILTER DATA ####################################################################################
 print(paste0("Total SVs: ", nrow(sv.data)));
 
-# remove short INDELs (< 100bp)
-sv.data$Length <- abs(sv.data$break2_position_start - sv.data$break1_position_start);
-inter.chrom <- which(sv.data$break1_chromosome != sv.data$break2_chromosome);
-if (length(inter.chrom) > 0) { sv.data[inter.chrom,]$Length <- NA; }
-
-indel.idx <- which(
-	sv.data$event_type %in% c('deletion','insertion') &
-	sv.data$Length < 100
-	);
-dup.idx <- which(
-	sv.data$event_type == 'duplication' &
-	sv.data$Length < 50 &
-	sv.data$tools == 'pindel'
-	);
-
-sv.data <- sv.data[-c(indel.idx,dup.idx),];
-
-print(paste0("> Removed ", length(indel.idx), " short INDELs (< 100bp length)."));
-print(paste0("> Removed ", length(dup.idx), " short DUPs (< 50bp length; called by pindel only)."));
-
 # split into germline and somatic
-germline.svs <- sv.data[which(sv.data$library %in% normal.samples),];
-somatic.svs <- sv.data[which(sv.data$library %in% tumour.samples),];
+germline.svs <- sv.data[which(sv.data$Status == 'germline'),];
+somatic.svs <- sv.data[which(sv.data$Status == 'somatic'),];
 
 # add quick recurrence filter (likely false positives/artefacts)
 print(paste0("Total germline SVs: ", nrow(germline.svs)));
 print(paste0("Total somatic SVs: ", nrow(somatic.svs)));
 
-germline.recurrence <- aggregate(
-	library ~ break1_chromosome + break1_position_start + break1_position_end + break2_chromosome + break2_position_start + break2_position_end + event_type,
-	germline.svs,
-	length
-	);
-colnames(germline.recurrence)[ncol(germline.recurrence)] <- 'Count';
-
-somatic.recurrence <- aggregate(
-	library ~ break1_chromosome + break1_position_start + break1_position_end + break2_chromosome + break2_position_start + break2_position_end + event_type,
-	somatic.svs,
-	length
-	);
-colnames(somatic.recurrence)[ncol(somatic.recurrence)] <- 'Count';
-
-recurrence.data <- merge(
-	germline.recurrence,
-	somatic.recurrence,
-	by = colnames(germline.recurrence)[1:7],
-	suffixes = c('.germline','.somatic'),
-	all = TRUE
-	);
-
-# determine recurrence thresholds (number of samples)*90%
-germline.threshold <- length(unique(normal.samples))*0.9;
-somatic.threshold <- length(unique(tumour.samples))*0.9;
-
-# filter germline data
-tmp <- merge(germline.svs, recurrence.data, all.x = TRUE);
-germline.to.remove <- which(tmp$Count.germline >= germline.threshold);
-
-if (length(germline.to.remove) > 0) {
-	germline.svs <- tmp[-germline.to.remove,colnames(germline.svs)];
-	}
-
-# filter somatic data
-tmp <- merge(somatic.svs, recurrence.data, all.x = TRUE);
-somatic.to.remove <- which(tmp$Count.germline >= germline.threshold | 
-	tmp$Count.somatic >= somatic.threshold
-	);
-
-if (length(somatic.to.remove) > 0) {
-	somatic.svs <- tmp[-somatic.to.remove,colnames(somatic.svs)];
-	}
-
-print(paste0("> Removed ", length(germline.to.remove), " germline SVs for high recurrence"));
-print(paste0("> Removed ", length(somatic.to.remove), " somatic SVs for high recurrence"));
-
-# also remove tumour events labelled as germline
-remove.mislabelled <- which(somatic.svs$Status == 'germline');
-
-print(paste0("> Removed ", length(remove.mislabelled), " germline events from tumour callset."));
-somatic.svs <- somatic.svs[which(somatic.svs$Status == 'somatic'),];
-
 ### FORMAT DATA ####################################################################################
-combined.data <- rbind(germline.svs, somatic.svs);
-
 # summarize tool data
-tool.list <- c('Manta','Delly','Pindel','SViCT','NovoBreak'); 
+tool.list <- c('Manta','Delly','SViCT','NovoBreak'); 
 tool.summary <- data.frame(
 	Tool = tool.list,
 	Total = c(
-		nrow(combined.data[grepl('manta',combined.data$tool),]),
-		nrow(combined.data[grepl('delly',combined.data$tool),]),
-		nrow(combined.data[grepl('pindel',combined.data$tool),]),
-		nrow(combined.data[grepl('svict',combined.data$tool),]),
-		nrow(combined.data[grepl('novobreak',combined.data$tool),])
+		nrow(sv.data[grepl('manta',sv.data$Tools),]),
+		nrow(sv.data[grepl('delly',sv.data$Tools),]),
+		nrow(sv.data[grepl('svict',sv.data$Tools),]),
+		nrow(sv.data[grepl('novobreak',sv.data$Tools),])
 		)
 	);
 
-for (type in unique(combined.data$event_type)) {
-	tmp <- combined.data[which(combined.data$event_type == type),];
+for (type in unique(sv.data$Class)) {
+	tmp <- sv.data[which(sv.data$Class == type),];
 	tool.summary[,type] <- c(
-		nrow(tmp[grepl('manta',tmp$tool),]),
-		nrow(tmp[grepl('delly',tmp$tool),]),
-		nrow(tmp[grepl('pindel',tmp$tool),]),
-		nrow(tmp[grepl('svict',tmp$tool),]),
-		nrow(tmp[grepl('novobreak',tmp$tool),])
+		nrow(tmp[grepl('manta',tmp$Tools),]),
+		nrow(tmp[grepl('delly',tmp$Tools),]),
+		nrow(tmp[grepl('svict',tmp$Tools),]),
+		nrow(tmp[grepl('novobreak',tmp$Tools),])
 		);
 	}
 
@@ -201,49 +98,49 @@ rownames(tool.summary) <- tool.summary$Tool;
 tool.summary <- t(tool.summary[,-1]);
 
 # now format data for plotting
-tool.list <- unique(unlist(strsplit(as.character(combined.data$tools),';')));
-tool.data <- as.data.frame(matrix(nrow = nrow(combined.data), ncol = length(tool.list), data = 0));
+tool.list <- unique(unlist(strsplit(as.character(sv.data$Tools),';')));
+tool.data <- as.data.frame(matrix(nrow = nrow(sv.data), ncol = length(tool.list), data = 0));
 colnames(tool.data) <- tool.list;
 
 for (tool in tool.list) {
-	idx <- grepl(tool, combined.data$tools);
+	idx <- grepl(tool, sv.data$Tools);
 	tool.data[idx,tool] <- 1;
 	}
 
 # count variants
-sample.counts <- data.frame(table(combined.data$library));
+sample.counts <- data.frame(table(sv.data$Sample_ID));
 colnames(sample.counts) <- c('Sample','Count');
 sample.counts <- sample.counts[order(sample.counts$Count),];
 
 # summarize mutations
-functional.summary <- data.frame(table(combined.data[,c('library','event_type')]));
-functional.summary <- merge(functional.summary, sample.counts, by.x = 'library', by.y = 'Sample');
+functional.summary <- data.frame(table(somatic.svs[,c('Sample_ID','Class')]));
+functional.summary <- merge(functional.summary, sample.counts, by.x = 'Sample_ID', by.y = 'Sample');
 functional.summary$Proportion <- functional.summary$Freq / functional.summary$Count;
 functional.summary$Tumor_Sample_Barcode <- factor(
-	functional.summary$library,
+	functional.summary$Sample_ID,
 	levels = sample.counts$Sample
 	);
 
-functional.summary$event_type <- factor(
-	functional.summary$event_type,
-	levels = c('deletion','duplication','insertion','inversion','inverted translocation','translocation')
+functional.summary$Class <- factor(
+	functional.summary$Class,
+	levels = toupper( c('deletion','duplication','insertion','inversion','inverted translocation','translocation') ),
+	labels = c('deletion','duplication','insertion','inversion','inverted translocation','translocation')
 	);
 
-functional.summary <- functional.summary[order(functional.summary$Tumor_Sample_Barcode, functional.summary$event_type),];
+functional.summary <- functional.summary[order(functional.summary$Tumor_Sample_Barcode, functional.summary$Class),];
 
 # search for recurrent (somatic) events
-tmp <- combined.data[!grepl('None', combined.data$gene1_aliases) & !grepl('None', combined.data$gene2_aliases),];
+tmp <- sv.data[which(sv.data$Fusion != 'None--None'),];
 tmp <- tmp[which(tmp$Status == 'somatic'),];
-tmp$Fusion <- paste0(tmp$gene1_aliases, '--', tmp$gene2_aliases);
 
 # first, bin by breakpoint (1kbp)
-tmp$start_chr <- tmp$break1_chromosome;
-tmp$end_chr <- tmp$break2_chromosome;
-tmp$start_bin <- as.integer(floor(tmp$break1_position_start/10**3)*10**3);
-tmp$end_bin <- as.integer(ceiling(tmp$break2_position_end/10**3)*10**3);
+tmp$start_chr <- tmp$Site1_Chromosome;
+tmp$end_chr <- tmp$Site2_Chromosome;
+tmp$start_bin <- as.integer(floor(tmp$Site1_Position/10**3)*10**3);
+tmp$end_bin <- as.integer(ceiling(tmp$Site2_Position/10**3)*10**3);
 
 event.data <- unique(
-	tmp[,c('library','event_type','Fusion','start_chr','end_chr','start_bin','end_bin')]
+	tmp[,c('Sample_ID','Class','Fusion','start_chr','end_chr','start_bin','end_bin')]
 	);
 
 event.data$Event <- paste0(
@@ -252,7 +149,7 @@ event.data$Event <- paste0(
 	);
 
 event.counts <- aggregate(
-	library ~ Fusion + event_type + Event,
+	Sample_ID ~ Fusion + Class + Event,
 	event.data,
 	length
 	);
@@ -270,11 +167,11 @@ event.counts <- event.counts[order(event.counts$Count, decreasing = TRUE),];
 #colnames(plot.data) <- gsub('Count.','',colnames(plot.data));
 #colnames(plot.data) <- gsub(' ', '_', colnames(plot.data));
 
-event.counts <- event.counts[which(event.counts$Count > 1),c('Event','Fusion','event_type','Count')];
+event.counts <- event.counts[which(event.counts$Count > 1),c('Event','Fusion','Class','Count')];
 
 recurrence.data <- list();
-for (type in unique(combined.data$event_type)) {
-	tmp <- event.counts[which(event.counts$event_type == type),];
+for (type in unique(sv.data$Class)) {
+	tmp <- event.counts[which(event.counts$Class == type),];
 	if (nrow(tmp) == 0) { next; }
 	if (nrow(tmp) > 10) { tmp <- tmp[1:10,]; }
 	recurrence.data[[type]] <- tmp[,c(1,2,4)];
@@ -311,49 +208,8 @@ functional.legend <- legend.grob(
 	);
 
 # grab some parameters
-axis.cex <- if (length(normal.samples) <= 30) { 1
-	} else if (length(normal.samples) <= 50) { 0.75
-	} else if (length(normal.samples) <= 80) { 0.5
-	} else { 0 };
+tumour.samples <- unique(somatic.svs$Sample_ID);
 
-plot.height <- if (length(normal.samples) <= 30) { 6
-	} else if (length(normal.samples) <= 50) { 8
-	} else { 9 }
-
-legend.pos <- if (plot.height == 6) { 1.2
-	} else { 1.1 }
-
-# create plot for functional summary
-if (length(normal.samples) > 1) {
-	create.barplot(
-		Tumor_Sample_Barcode ~ Freq,
-		functional.summary[which(functional.summary$library %in% normal.samples),],
-		groups = functional.summary$event_type,
-		stack = TRUE,
-		plot.horizontal = TRUE,
-		col = sv.colour.scheme,
-		yaxis.tck = if (axis.cex == 0) { 0 } else { c(0.5,0) },
-		xaxis.tck = c(0.5,0),
-		xaxis.fontface = 'plain',
-		yaxis.fontface = 'plain',
-		xlab.label = 'Count',
-		xlab.cex = 1.2,
-		ylab.label = NULL,
-		yaxis.cex = axis.cex,
-		xaxis.cex = 1,
-		axes.lwd = 1,
-		top.padding = 10,
-		legend = list(
-			inside = list(fun = functional.legend, x = 0.1, y = legend.pos)
-			),
-		height = plot.height,
-		width = 7,
-		resolution = 200,
-		filename = generate.filename(arguments$project, 'germline_sv_summary', 'png')
-		);
-	}
-
-# grab some parameters
 axis.cex <- if (length(tumour.samples) <= 30) { 1
 	} else if (length(tumour.samples) <= 50) { 0.75
 	} else if (length(tumour.samples) <= 80) { 0.5
@@ -369,8 +225,8 @@ legend.pos <- if (plot.height == 6) { 1.2
 # create plot for functional summary
 create.barplot(
 	Tumor_Sample_Barcode ~ Freq,
-	functional.summary[which(functional.summary$library %in% tumour.samples),],
-	groups = functional.summary$event_type,
+	functional.summary,
+	groups = functional.summary$Class,
 	stack = TRUE,
 	plot.horizontal = TRUE,
 	col = sv.colour.scheme,
@@ -395,7 +251,7 @@ create.barplot(
 	);
 
 save(
-	combined.data,
+	sv.data,
 	tool.summary,
 	functional.summary,
 	event.data,
@@ -430,20 +286,6 @@ if (nrow(combined.data) == 0) {
 	write("\\caption{Number of structural variants detected by each tool or set of tools.}",
 		file = 'sv_summary.tex', append = TRUE);
 	write("\\end{figure}\n", file = 'sv_summary.tex', append = TRUE);
-
-	if (length(normal.samples) > 1) {
-		write("\\pagebreak\n\\begin{figure}[h!]", file = 'sv_summary.tex', append = TRUE);
-		write("\\begin{center}", file = 'sv_summary.tex', append = TRUE);
-		write(paste0(
-			"\\includegraphics[width=0.9\\textwidth]{",
-			getwd(), '/',
-			generate.filename(arguments$project, 'germline_sv_summary','png'), '}'
-			), file = 'sv_summary.tex', append = TRUE);
-		write("\\end{center}", file = 'sv_summary.tex', append = TRUE);
-		write("\\caption{Number of structural variants detected in germline samples, split by event type.}",
-			file = 'sv_summary.tex', append = TRUE);
-		write("\\end{figure}\n", file = 'sv_summary.tex', append = TRUE);
-		}
 
 	write("\\pagebreak\n\\begin{figure}[h!]", file = 'sv_summary.tex', append = TRUE);
 	write("\\begin{center}", file = 'sv_summary.tex', append = TRUE);
