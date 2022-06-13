@@ -119,9 +119,11 @@ sub create_extract_command {
 		);
 
 	$extract_command .= "\n\n" . join(' ',
-		"vcftools --gzvcf $args{input_vcf}",
-		'--positions keep_positions.txt --stdout --recode',
-		'--indv', $args{samples},
+		"bcftools view -a --no-update", 
+		'-R keep_positions.txt',
+		'-s', $args{samples},
+		$args{input_vcf},
+		"| bcftools view -e 'FORMAT/GT[0]=" . '"RR"' . "'",
 		'>', $args{output_vcf}
 		);
 
@@ -206,7 +208,6 @@ sub main{
 	# set tools and versions
 	my $gatk	= 'gatk/' . $tool_data->{gatk_version};
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
-	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
 	my $r_version	= 'R/' . $tool_data->{r_version};
 	my $pcgr	= 'pcgr/' . $tool_data->{pcgr_version};
 
@@ -384,7 +385,7 @@ sub main{
 
 		my $filter_cmd = create_extract_command(
 			tier_files	=> join(' ', @tier_files),
-			samples		=> join(' --indv ', @all_sample_ids),
+			samples		=> join(',', @all_sample_ids),
 			input_vcf	=> $recalibrated_gvcf,
 			output_vcf	=> $filtered_vcf,
 			tmp_dir		=> $tmp_directory,
@@ -400,7 +401,7 @@ sub main{
 				log_dir	=> $log_directory,
 				name	=> 'run_vcf_filter_' . $patient,
 				cmd	=> $filter_cmd,
-				modules => [$vcftools],
+				modules => [$samtools],
 				dependencies	=> join(':', @patient_jobs),
 				hpc_driver	=> $args{hpc_driver},
 				extra_args	=> [$hpc_group]
