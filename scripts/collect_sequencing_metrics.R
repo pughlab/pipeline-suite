@@ -74,6 +74,7 @@ for (file in bait.bias.files) {
 	tmp <- read.delim(file, comment.char = '#');
 	tmp <- tmp[,c('SAMPLE_ALIAS','LIBRARY','REF_BASE','ALT_BASE','TOTAL_QSCORE','ARTIFACT_NAME')];
 	tmp$TYPE <- 'bait bias';
+	tmp$ID <- smp;
 	artefact.list[[smp]] <- tmp;
 	}
 
@@ -84,6 +85,7 @@ for (file in pre.adapter.files) {
 	tmp <- read.delim(file, comment.char = '#');
 	tmp <- tmp[,c('SAMPLE_ALIAS','LIBRARY','REF_BASE','ALT_BASE','TOTAL_QSCORE','ARTIFACT_NAME')];
 	tmp$TYPE <- 'pre-adapter';
+	tmp$ID <- smp;
 	artefact.list[[smp]] <- rbind(artefact.list[[smp]], tmp);
 	}
 
@@ -126,7 +128,19 @@ if (length(wgs.files) > 0) {
 
 # reshape/format data
 artefact.data <- do.call(rbind, artefact.list);
+if (any(grepl('fastq', artefact.data$SAMPLE_ALIAS))) {
+	colnames(artefact.data)[which(colnames(artefact.data) == 'SAMPLE_ALIAS')] <- 'FASTQ';
+	colnames(artefact.data)[which(colnames(artefact.data) == 'ID')] <- 'SAMPLE_ALIAS';
+	artefact.data <- artefact.data[,c('SAMPLE_ALIAS','LIBRARY','REF_BASE','ALT_BASE','TOTAL_QSCORE','ARTIFACT_NAME','TYPE','FASTQ')];
+	}
+
 contest.data <- do.call(rbind, contamination.list);
+if (any(grepl('fastq', contest.data$sample))) {
+	colnames(contest.data)[which(colnames(contest.data) == 'sample')] <- 'FASTQ';
+	contest.data$sample <- rownames(contest.data);
+	contest.data <- contest.data[,c('sample','contamination','error','FASTQ')];
+	}
+
 metric.data <- do.call(rbind, alignment.list);
 
 # save combined/formatted data to file
