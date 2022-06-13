@@ -242,9 +242,7 @@ if (arguments$find_drawings) {
 		}
 
 	### CBIOPORTAL ######################
-	# format SV data for cbioportal (NEW!)
-	tmp <- sv.data.filtered[which(sv.data.filtered$gene1_aliases != 'None' &
-		sv.data.filtered$gene2_aliases != 'None'),];
+	tmp <- sv.data.filtered;
 
 	# sort by evidence
 	tmp$N.tools <- sapply(tmp$tools, function(i) { length(unlist(strsplit(i,';'))) } );
@@ -258,6 +256,23 @@ if (arguments$find_drawings) {
 	tmp$Status <- 'somatic';
 	if ( (length(normal.smps) > 0) & (any(tmp$library %in% normal.smps)) ) {
 		tmp[which(tmp$library %in% normal.smps),]$Status <- 'germline';
+		germ.idx <- which(apply(
+			tmp[,names(normal.smps)],1,function(i) { any(i == 'germline', na.rm = TRUE) } ));
+		tmp[germ.idx,]$Status <- 'germline';
+		}
+
+	# get type of evidence (DNA or RNA)
+	tmp[,c('DNA_Support','RNA_Support')] <- 'no';
+	tmp[which(tmp$protocol == 'genome'),]$DNA_Support <- 'yes';
+
+	if (length(rna.smps) > 0) {
+		tmp[which(tmp$protocol == 'transcriptome'),]$RNA_Support <- 'yes';
+		rna.idx <- which(apply(
+			tmp[,names(rna.smps)],1,function(i) { any(i == 'expressed', na.rm = TRUE) } ));
+		tmp[rna.idx,]$RNA_Support <- 'yes';
+		dna.idx <- which(apply(
+			tmp[,names(tumour.smps)],1,function(i) { any(i == 'genomic support', na.rm = TRUE) } ));
+		tmp[dna.idx,]$DNA_Support <- 'yes';
 		}
 
 	# is this an inframe or frameshift variant?
@@ -269,132 +284,108 @@ if (arguments$find_drawings) {
 		tmp[which(!tmp$fusion_splicing_pattern %in% c('normal','None')),]$Frame <- 'frameshift';
 		}
 
-	# trim to unique events (most evidence wins)
-	dna <- tmp[which(tmp$protocol == 'genome'),];
-	rna <- if (any(grepl('transcriptome', tmp$protocol))) {
-		tmp[which(tmp$protocol == 'transcriptome'),];
-		} else { NULL; }
+	### RECURRENCE FILTER ##############################################################################
+	# add quick recurrence filter (likely false positives/artefacts)
+	if (length(normal.smps) > 0) {
+		germline.recurrence <- aggregate(
+			library ~ break1_chromosome + break1_position_start + break1_position_end + break2_chromosome + break2_position_start + break2_position_end + event_type + Status,
+			tmp[which(tmp$library %in% normal.smps),],
+			length
+			);
+		colnames(germline.recurrence)[ncol(germline.recurrence)] <- 'NormalCount';
 
-	somatic.svs <- dna[which(dna$Status == 'somatic'),];
-	somatic.svs <- somatic.svs[!duplicated(somatic.svs[,c('library','tracking_id')]),];
-	germline.svs <- dna[which(dna$Status == 'germline'),];
-	germline.svs <- germline.svs[!duplicated(germline.svs[,c('library','tracking_id')]),];
-
-	# is this truely somatic, or observed in matched normal?
-	germ.idx <- which(apply(somatic.svs[,smp.fields],1,function(i) { any(i == 'germline', na.rm = TRUE) } ));
-	if (length(germ.idx) > 0) {
-		somatic.svs[germ.idx,]$Status <- 'germline';
+		recurrence.data <- germline.recurrence;
 		}
 
-	# add in RNA support if present
-	if (!is.null(rna) & (length(rna.smps) > 0)) {
+	if (length(tumour.smps) > 0) {
+		somatic.recurrence <- aggregate(
+			library ~ break1_chromosome + break1_position_start + break1_position_end + break2_chromosome + break2_position_start + break2_position_end + event_type + Status,
+			tmp[which(tmp$library %in% tumour.smps),],
+			length
+			);
+		colnames(somatic.recurrence)[ncol(somatic.recurrence)] <- 'TumourCount';
 
-		for (i in 1:nrow(rna)) {
-			fusion <- as.character(rna[i,]$Fusion);
-			type <- as.character(rna[i,]$event_type);
-			smp <- sub('-rna','',rna[i,]$library);
-			exon1 <- rna[i,]$exon_last_5prime;
-			exon2 <- rna[i,]$exon_first_3prime;
-
-			dna.idx <- which(somatic.svs$Fusion == fusion &
-				somatic.svs$event_type == type &
-				somatic.svs$library == smp &
-				somatic.svs$exon_last_5prime == exon1 &
-				somatic.svs$exon_first_3prime == exon2
-				);
-
-			if (length(dna.idx) == 1) {
-				somatic.svs[dna.idx,]$tools <- paste(
-					unique(c(unlist(strsplit(somatic.svs[dna.idx,]$tools,';|,')),
-						unlist(strsplit(rna[i,]$tools,';|,')))),
-					collapse = ','
-					);
-				} else if (length(dna.idx) == 0) {
-				somatic.svs <- rbind(somatic.svs, rna[i,]);
-				} else if (length(dna.idx) > 1) {
-				fusion.status <- rna[i,]$fusion_splicing_pattern;
-				dna.idx <- which(somatic.svs$Fusion == fusion &
-					somatic.svs$event_type == type &
-					somatic.svs$library == smp &
-					somatic.svs$exon_last_5prime == exon1 &
-					somatic.svs$exon_first_3prime == exon2 &
-					somatic.svs$fusion_splicing_pattern == fusion.status
-					);
-				if (length(dna.idx) == 0) {
-					somatic.svs <- rbind(somatic.svs, rna[i,]);
-					} else if (length(dna.idx) > 0) {
-					somatic.svs[dna.idx,]$tools <- sapply(
-						somatic.svs[dna.idx,]$tools, function(j) {
-						paste(c(unlist(strsplit(j,';|,')),
-						unlist(strsplit(rna[i,]$tools, ';|,'))),
-						collapse = ',') }
-						);
-					}
-				}
+		if (exists('recurrence.data')) {
+			recurrence.data <- merge(germline.recurrence,somatic.recurrence,all = TRUE);
+			} else {
+			recurrence.data <- somatic.recurrence;
 			}
 		}
 
-	somatic.svs <- somatic.svs[which(somatic.svs$Status == 'somatic'),];
+	if (length(rna.smps) > 0) {
+		rna.recurrence <- aggregate(
+			library ~ break1_chromosome + break1_position_start + break1_position_end + break2_chromosome + break2_position_start + break2_position_end + event_type + Status,
+			tmp[which(tmp$library %in% rna.smps),],
+			length
+			);
+		colnames(rna.recurrence)[ncol(rna.recurrence)] <- 'RNACount';
 
-	somatic.svs$library <- gsub('-rna|-wgs|-wxs','',somatic.svs$library);
-	somatic.svs <- somatic.svs[!duplicated(somatic.svs[,c('library','tracking_id')]),];
+		if (exists('recurrence.data')) {
+			recurrence.data <- merge(recurrence.data, rna.recurrence, all = TRUE);
+			} else {
+			recurrence.data <- rna.recurrence;
+			}
+		}
 
-	# add quick recurrence filter (likely false positives/artefacts)
-	recurrence.data <- aggregate(
-		library ~ break1_chromosome + break1_position_start + break1_position_end + break2_chromosome + break2_position_start + break2_position_end + event_type,
-		somatic.svs,
-		length
+	# define thresholds
+	germline.threshold <- length(normal.smps)*0.9;
+	somatic.threshold <- length(tumour.smps)*0.9;
+	rna.threshold <- length(rna.smps)*0.9;
+
+	tmp2 <- merge(tmp, recurrence.data, all.x = TRUE);
+	to.remove <- c(
+		which(tmp2$Status == 'germline' & tmp2$NormalCount > germline.threshold),
+		which(tmp2$Status == 'somatic' & tmp2$TumourCount > somatic.threshold),
+		which(tmp2$protocol == 'transcriptome' & tmp2$RNACount > rna.threshold)
 		);
-	colnames(recurrence.data)[ncol(recurrence.data)] <- 'RecurrenceCount';
 
-	recurrence.threshold <- length(unique(somatic.svs$library))*0.9;
-	tmp <- merge(somatic.svs, recurrence.data, all.x = TRUE);
-	tmp <- tmp[which(tmp$RecurrenceCount < recurrence.threshold),];
-	somatic.svs <- tmp[,colnames(somatic.svs)];
+	print(paste0('Removing ', length(to.remove), ' (', round(length(to.remove)/nrow(tmp)*100),
+		'%) SVs for high breakpoint recurrence.'));
 
+	filtered.svs <- tmp2[-to.remove,colnames(tmp)];
+
+	### SIZE FILTER ####################################################################################
 	# remove short INDELs (< 100bp)
-	somatic.svs$Length <- abs(somatic.svs$break2_position_start - somatic.svs$break1_position_start);
-	inter.chrom <- which(somatic.svs$break1_chromosome != somatic.svs$break2_chromosome);
-	if (length(inter.chrom) > 0) { somatic.svs[inter.chrom,]$Length <- NA; }
+	filtered.svs$Length <- abs(filtered.svs$break2_position_start - filtered.svs$break1_position_start);
+	inter.chrom <- which(filtered.svs$break1_chromosome != filtered.svs$break2_chromosome);
+	if (length(inter.chrom) > 0) { filtered.svs[inter.chrom,]$Length <- NA; }
 
 	indel.idx <- which(
-		somatic.svs$event_type %in% c('deletion','insertion') &
-		somatic.svs$Length < 100
-		);
-	dup.idx <- which(
-		somatic.svs$event_type == 'duplication' &
-		somatic.svs$Length < 50 &
-		somatic.svs$tools == 'pindel'
+		filtered.svs$event_type %in% c('deletion','insertion','duplication') &
+		filtered.svs$Length < 100
 		);
 
-	if (length(indel.idx)+length(dup.idx) > 0) {
-		somatic.svs <- somatic.svs[-c(indel.idx,dup.idx),];
+	if (length(indel.idx) > 0) {
+		print(paste0('Removing ', length(indel.idx), ' (', round(length(indel.idx)/nrow(filtered.svs)*100),
+			'%) short DEL/INS/DUP (<100bp).'));
+		filtered.svs <- filtered.svs[-c(indel.idx),];
 		}
 
 	# format for cBioportal
 	cbio.svs <- data.frame(
-		Sample_ID = somatic.svs$library,
-		Site1_Hugo_Symbol = somatic.svs$gene1_aliases,
-		Site1_Entrez_Gene_Id = annotate.by.symbol(somatic.svs$gene1_aliases),
-		Site1_Ensembl_Transcript_Id = somatic.svs$transcript1,
-		Site1_Exon = somatic.svs$exon_last_5prime,
-		Site1_Chromosome = somatic.svs$break1_chromosome,
-		Site1_Position = somatic.svs$break1_position_start,
+		Sample_ID = filtered.svs$library,
+		Site1_Hugo_Symbol = filtered.svs$gene1_aliases,
+		Site1_Entrez_Gene_Id = annotate.by.symbol(filtered.svs$gene1_aliases),
+		Site1_Ensembl_Transcript_Id = filtered.svs$transcript1,
+		Site1_Exon = filtered.svs$exon_last_5prime,
+		Site1_Chromosome = filtered.svs$break1_chromosome,
+		Site1_Position = filtered.svs$break1_position_start,
 		Site1_Description = NA,
-		Site2_Hugo_Symbol = somatic.svs$gene2_aliases,
-		Site2_Entrez_Gene_Id = annotate.by.symbol(somatic.svs$gene2_aliases),
-		Site2_Ensembl_Transcript_Id = somatic.svs$transcript2,
-		Site2_Exon = somatic.svs$exon_first_3prime,
-		Site2_Chromosome = somatic.svs$break2_chromosome,
-		Site2_Position = somatic.svs$break2_position_start,
+		Site2_Hugo_Symbol = filtered.svs$gene2_aliases,
+		Site2_Entrez_Gene_Id = annotate.by.symbol(filtered.svs$gene2_aliases),
+		Site2_Ensembl_Transcript_Id = filtered.svs$transcript2,
+		Site2_Exon = filtered.svs$exon_first_3prime,
+		Site2_Chromosome = filtered.svs$break2_chromosome,
+		Site2_Position = filtered.svs$break2_position_start,
 		Site2_Description = NA,
-		Site2_Effect_On_Frame = toupper(somatic.svs$Frame),
-		NCBI_Build = rep(arguments$genome,nrow(somatic.svs)),
-		DNA_Support = rep('no', nrow(somatic.svs)),
-		RNA_Support = rep('no', nrow(somatic.svs)), 
+		Site2_Effect_On_Frame = c('INFRAME','FRAMESHIFT','FRAMESHIFT','NONE')[match(
+			filtered.svs$fusion_splicing_pattern,c('normal','retained intron','skipped exon','None'))],
+		NCBI_Build = rep(arguments$genome,nrow(filtered.svs)),
+		DNA_support = filtered.svs$DNA_Support,
+		RNA_support = filtered.svs$RNA_Support,
 		Normal_Read_Count = NA,
 		Tumor_Read_Count = NA,
-		Normal_Variant_count = NA,
+		Normal_Variant_Count = NA,
 		Tumor_Variant_Count = NA,
 		Normal_Paired_End_Read_Count = NA,
 		Tumor_Paired_End_Read_Count = NA,
@@ -402,37 +393,53 @@ if (arguments$find_drawings) {
 		Tumor_Split_Read_Count = NA,
 		Annotation = NA,
 		Breakpoint_Type = NA,
-		Connection_Type = paste0(somatic.svs$gene1_direction,'to',somatic.svs$gene2_direction),
+		Connection_Type = paste0(filtered.svs$gene1_direction,'to',filtered.svs$gene2_direction),
 		Event_Info = NA, 
-		Class = toupper(somatic.svs$event_type),
-		Length = somatic.svs$Length,
-		Comments = somatic.svs$Status,
-		Fusion = paste0(somatic.svs$gene1_aliases, '--', somatic.svs$gene2_aliases)
+		Class = toupper(filtered.svs$event_type),
+		Length = filtered.svs$Length,
+		Comments = NA,
+		Fusion = paste0(filtered.svs$gene1_aliases, '--', filtered.svs$gene2_aliases),
+		Site1_Split_Read_Count = filtered.svs$break1_split_reads,
+		Site2_Split_Read_Count = filtered.svs$break2_split_reads,
+		Linking_Split_Reads = filtered.svs$linking_split_reads,
+		Spanning_Reads = filtered.svs$spanning_reads,
+		Flanking_Read_Pairs = filtered.svs$flanking_pairs,
+		Tools = filtered.svs$tools,
+		Total_Evidence = filtered.svs$Evidence,
+		Status = filtered.svs$Status
 		);
 
-	# fill in support types
-	cbio.svs$DNA_Support <- as.character(cbio.svs$DNA_Support);
-	cbio.svs$RNA_Support <- as.character(cbio.svs$RNA_Support);
-	dna.support <- grepl('manta|delly|pindel|novobreak|svict', somatic.svs$tools);
-	rna.support <- grepl('starfusion|fusioncatcher', somatic.svs$tools);
-	if (any(dna.support)) { cbio.svs[dna.support,]$DNA_Support <- 'yes'; }
-	if (any(rna.support)) { cbio.svs[rna.support,]$RNA_Support <- 'yes'; }
-
-	# extract breakpoint type (precise/imprecise)
-#	cbio.svs$Breakpoint_Type <- 'IMPRECISE';
-#	precise.idx <- which(somatic.svs$break1_position_start == somatic.svs$break1_position_end &
-#		somatic.svs$break2_position_start == somatic.svs$break2_position_end);
-#	cbio.svs[precise.idx,]$Breakpoint_Type <- 'PRECISE';
+	# clean up connection type
+	cbio.svs$Connection_Type <- factor(cbio.svs$Connection_Type,
+		levels = c('5to3','3to5','5to5','3to3')
+		);
 
 	# clean up Frame status
 	cbio.svs$Site2_Effect_On_Frame <- factor(cbio.svs$Site2_Effect_On_Frame,
 		levels = c('INFRAME','FRAMESHIFT')
 		);
 
+	to.remove <- unique(c(
+		which(cbio.svs$Status == 'germline'),
+		which( grepl('None', cbio.svs$Fusion) ),
+		which( !grepl(';', cbio.svs$Tools) & cbio.svs$Total_Evidence < 20)
+		));
+
+	for.cbio <- cbio.svs[-to.remove,1:35];
+
 	# save to file
 	write.table(
-		cbio.svs,
+		for.cbio,
 		file = generate.filename(arguments$project, 'sv_data_for_cbioportal','tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		quote = FALSE,
+		sep = '\t'
+		);
+
+	write.table(
+		cbio.svs,
+		file = generate.filename(arguments$project, 'sv_data_formatted','tsv'),
 		row.names = FALSE,
 		col.names = TRUE,
 		quote = FALSE,
@@ -445,23 +452,29 @@ if (arguments$find_drawings) {
 	# format for cbioportal (fusion_data.txt > DEPRECATED in cbioportal)
 	fusion.data <- data.frame(
 		Hugo_Symbol = c(
-			as.character(cbio.svs$Site1_Hugo_Symbol),
-			as.character(cbio.svs$Site2_Hugo_Symbol)
+			as.character(for.cbio$Site1_Hugo_Symbol),
+			as.character(for.cbio$Site2_Hugo_Symbol)
 			),
-		Entrez_Gene_Id = c(cbio.svs$Site1_Entrez_Gene_Id, cbio.svs$Site2_Entrez_Gene_Id),
-		Center = rep(arguments$center, nrow(cbio.svs)*2),
-		Tumor_Sample_Barcode = rep(cbio.svs$Sample_ID, times = 2),
-		Fusion = rep(cbio.svs$Fusion, times = 2),
-		DNA_Support = rep(cbio.svs$DNA_Support, times = 2),
-		RNA_Support = rep(cbio.svs$RNA_Support, times = 2),
-		Method = rep(gsub(';', ',', somatic.svs$tools), times = 2),
-		Frame = tolower(rep(cbio.svs$Site2_Effect_On_Frame, times = 2)),
-		Fusion_Status = rep(cbio.svs$Comments, times = 2)
+		Entrez_Gene_Id = c(
+			as.character(for.cbio$Site1_Entrez_Gene_Id), 
+			as.character(for.cbio$Site2_Entrez_Gene_Id)
+			),
+		Center = rep(arguments$center, nrow(for.cbio)*2),
+		Tumor_Sample_Barcode = rep(for.cbio$Sample_ID, times = 2),
+		Fusion = rep(for.cbio$Fusion, times = 2),
+		DNA_support = rep(for.cbio$DNA_support, times = 2),
+		RNA_support = rep(for.cbio$RNA_support, times = 2),
+		Method = rep(gsub(';', ',', cbio.svs[-to.remove,]$Tools), times = 2),
+		Frame = tolower(rep(for.cbio$Site2_Effect_On_Frame, times = 2)),
+		Fusion_Status = rep(for.cbio$Comments, times = 2)
 		);
+
+	fusion.data <- fusion.data[order(fusion.data$Tumor_Sample_Barcode, fusion.data$Fusion, fusion.data$Method, fusion.data$Frame, na.last = FALSE),];
+	fusion.data <- fusion.data[!duplicated(fusion.data[,1:5]),];
 
 	# save to file
 	write.table(
-		unique(fusion.data),
+		fusion.data,
 		file = generate.filename(arguments$project, 'fusion_data_for_cbioportal','tsv'),
 		row.names = FALSE,
 		col.names = TRUE,
