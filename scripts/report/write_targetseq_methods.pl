@@ -60,7 +60,7 @@ sub main {
 		'svict'		=> defined($tool_data->{svict}->{run}) ? $tool_data->{svict}->{run} : 'N',
 		'ichor_cna'	=> 'N',
 		'mavis'	=> defined($tool_data->{mavis}->{run}) ? $tool_data->{mavis}->{run} : 'N',
-		'msi'	=> defined($tool_data->{other_tools}->{run_msi}) ? $tool_data->{other_tools}->{run_msi} : 'N'
+		'msi'	=> defined($tool_data->{msi_sensor}->{run}) ? $tool_data->{msi_sensor}->{run} : 'N'
 		);
 
 	# how was QC run?

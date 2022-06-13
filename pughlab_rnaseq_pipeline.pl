@@ -77,7 +77,7 @@ sub main {
 
 	### MAIN ###########################################################################################
 
-	my ($fc_run_id, $star_run_id, $gatk_run_id, $vc_run_id, $rsem_run_id, $starfus_run_id);
+	my ($fc_run_id, $star_run_id, $gatk_run_id, $vc_run_id, $rsem_run_id, $starfus_run_id, $mavis_run_id);
 	my ($run_script, $report_run_id);
 
 	my @job_ids;

@@ -124,12 +124,16 @@ tool.data <- combined.data[,tool.list];
 tool.data[is.na(tool.data)] <- 0;
 
 ### PLOT DATA ######################################################################################
+total.combinations <- 0;
+for (i in 1:tool.count) { total.combinations <- total.combinations + length(combn(tool.count, m = i)) }
+
 # plot tool summary (overlap plot)
 png(filename = generate.filename(arguments$project, 'SNV_tool_overlap','png'),
 	res = 200, units = 'in', height = 5, width = 7);
 
 upset(tool.data, sets = tool.list, mainbar.y.label = 'Number of Variants',
-	sets.x.label = 'Number of Variants', show.numbers = FALSE); #, set_size.scale_max = 85000);
+	sets.x.label = 'Number of Variants', show.numbers = FALSE,
+	nintersects = if (total.combinations < 100) { NA } else { 50 }); #, set_size.scale_max = 85000);
 
 dev.off();
 

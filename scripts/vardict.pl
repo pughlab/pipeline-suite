@@ -476,6 +476,7 @@ sub main {
 				tumour_id	=> $sample,
 				normal_id	=> $normal_ids[0],
 				output		=> $output_stem . '.vcf',
+				java_mem	=> $parameters->{vardict}->{java_mem},
 				intervals	=> $intervals_bed
 				);
 
@@ -874,7 +875,8 @@ sub main {
 				tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
 				tumour_id	=> $sample,
 				output		=> $output_stem . '.vcf',
-				intervals	=> $intervals_bed
+				intervals	=> $intervals_bed,
+				java_mem	=> $parameters->{vardict}->{java_mem}
 				);
 
 			$vardict_command .= "\n\nmd5sum $output_stem.vcf > $output_stem.vcf.md5";

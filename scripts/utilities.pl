@@ -87,7 +87,7 @@ sub error_checking {
 		);
 
 		if ('dna' eq $data_type) {
-			if (!defined($tool_data->{intervals_bed})) {
+			if (!defined($tool_data->{intervals_bed}) & ('wgs' ne $tool_data->{seq_type})) {
 				print "gatk_config: WARNING: no target intervals provided.\n";
 				print ">>If this is exome data, target regions are recommended!\n";
 			}

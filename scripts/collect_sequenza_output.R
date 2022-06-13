@@ -198,6 +198,9 @@ seg.files <- list.files(pattern = 'segments.txt$', recursive = TRUE);
 ploidy.files <- ploidy.files[grepl('optimized', ploidy.files)];
 seg.files <- seg.files[grepl('optimized', seg.files)];
 
+ploidy.files <- ploidy.files[!grepl('output_udp|/sol', ploidy.files)];
+seg.files <- seg.files[!grepl('output_udp|/sol', seg.files)];
+
 # read them in
 ploidy.list <- list();
 

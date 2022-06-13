@@ -54,6 +54,8 @@ date <- Sys.Date();
 setwd(arguments$directory);
 
 ### MAIN ###########################################################################################
+library(org.Hs.eg.db);
+
 # find regions of interest (CDS/EXON)
 if (arguments$ref_type %in% c('hg38','GRCh38')) {
         library(TxDb.Hsapiens.UCSC.hg38.knownGene);
@@ -69,6 +71,63 @@ txdb_table <- transcriptsBy(txdb, by = 'gene');
 # extract GeneIDs
 tx_ids <- names(txdb_table);
 
+# extract 
+transcript_table <- select(
+	TxDb.Hsapiens.UCSC.hg38.knownGene,
+	keys = tx_ids,
+	columns = c('GENEID','TXNAME','TXCHROM','TXSTART','TXEND'),
+	keytype = 'GENEID'
+	);
+colnames(transcript_table)[1] <- 'ENTREZID';
+
+# pull in extra annotations
+transcript_table$SYMBOL <- mapIds(
+	org.Hs.eg.db,
+	keys = transcript_table$TXNAME,
+	keytype = 'UCSCKG',
+	column = 'SYMBOL'
+	);
+
+transcript_table$ENSEMBL <- mapIds(
+	org.Hs.eg.db,
+	keys = transcript_table$TXNAME,
+	keytype = 'UCSCKG',
+	column = 'ENSEMBL'
+	);
+
+transcript_table$MAP <- mapIds(
+	org.Hs.eg.db,
+	keys = transcript_table$TXNAME,
+	keytype = 'UCSCKG',
+	column = 'MAP'
+	);
+
+transcript_table$GENETYPE <- mapIds(
+	org.Hs.eg.db,
+	keys = transcript_table$TXNAME,
+	keytype = 'UCSCKG',
+	column = 'GENETYPE'
+	);
+
+# remove unmatching cases
+transcript_table$MAPCHROM <- sapply(
+	transcript_table$MAP,
+	function(i) { paste0('chr', unlist(strsplit(i, 'p|q'))[1]) }
+	);
+
+transcript_table <- transcript_table[which(transcript_table$TXCHROM == transcript_table$MAPCHROM),];
+
+# squish it to 1 entry per gene
+gene.annotation <- merge(
+	aggregate(TXSTART ~ ENTREZID + SYMBOL + ENSEMBL + GENETYPE + TXCHROM, transcript_table, min),
+	aggregate(TXEND ~ ENTREZID + SYMBOL + ENSEMBL + GENETYPE + TXCHROM, transcript_table, max),
+	);
+colnames(gene.annotation)[5:7] <- c('Chromosome','Start','End');
+gene.annotation$Chromosome <- factor(gene.annotation$Chromosome, levels = paste0('chr',c(1:22,'X','Y')));
+gene.annotation <- gene.annotation[order(gene.annotation$Chromosome, gene.annotation$Start),];
+
+gene.gr <- GRanges(gene.annotation);
+
 # extract CDS info
 transcript_table <- select(
         TxDb.Hsapiens.UCSC.hg38.knownGene,
@@ -82,20 +141,6 @@ transcript_table$CDSCHROM <- factor(transcript_table$CDSCHROM, levels = paste0('
 transcript_table <- transcript_table[order(transcript_table$CDSCHROM, transcript_table$CDSSTART),];
 
 cds.gr <- GRanges(transcript_table[!is.na(transcript_table$CDSCHROM),]);
-
-# extract EXON info
-transcript_table <- select(
-        TxDb.Hsapiens.UCSC.hg38.knownGene,
-        keys = tx_ids,
-        columns = c('GENEID','TXNAME','TXCHROM','TXSTART','TXEND','EXONID','EXONCHROM','EXONSTART','EXONEND'),
-        keytype = 'GENEID'
-        );
-
-transcript_table <- unique(transcript_table[!is.na(transcript_table$EXONID),2:5]);
-transcript_table$EXONCHROM <- factor(transcript_table$EXONCHROM, levels = paste0('chr',c(1:22,'X','Y')));
-transcript_table <- transcript_table[order(transcript_table$EXONCHROM, transcript_table$EXONSTART),];
-
-exon.gr <- GRanges(transcript_table[!is.na(transcript_table$EXONCHROM),]);
 
 
 # find results files
@@ -119,20 +164,20 @@ for (file in cov.files) {
 callable.bases <- data.frame(
 	Sample = sample.list,
 	Sample.total = NA,
-	Sample.exon = NA,
+	Sample.gene = NA,
 	Sample.cds = NA,
 	Patient.total = NA,
-	Patient.exon = NA,
+	Patient.gene = NA,
 	Patient.cds = NA
 	);
 
 if ('TargetRegions' %in% colnames(cov.list[[1]])) {
 	callable.bases$TargetRegions <- NA;
 	callable.bases$Sample.targeted <- NA;
-	callable.bases$Sample.exon.targeted <- NA;
+	callable.bases$Sample.gene.targeted <- NA;
 	callable.bases$Sample.cds.targeted <- NA;
 	callable.bases$Patient.targeted <- NA;
-	callable.bases$Patient.exon.targeted <- NA;
+	callable.bases$Patient.gene.targeted <- NA;
 	callable.bases$Patient.cds.targeted <- NA;
 	}
 
@@ -154,8 +199,8 @@ for (i in 1:length(cov.list)) {
 		# get total callable
 		callable.bases[smp.idx,]$Sample.total <- sum(data.frame(smp.gr)$width);
 
-		# get total callable in exons
-		callable.bases[smp.idx,]$Sample.exon <- sum(data.frame(intersect(smp.gr, exon.gr))$width);
+		# get total callable in genes
+		callable.bases[smp.idx,]$Sample.gene <- sum(data.frame(intersect(smp.gr, gene.gr))$width);
 
 		# get total callable in CDS
 		callable.bases[smp.idx,]$Sample.cds <- sum(data.frame(intersect(smp.gr, cds.gr))$width);
@@ -173,8 +218,8 @@ for (i in 1:length(cov.list)) {
 			# get total target + callable
 			callable.bases[smp.idx,]$Sample.targeted <- sum(data.frame(target.smp.gr)$width);
 
-			# get total target + callable in exons
-			callable.bases[smp.idx,]$Sample.exon.targeted <- sum(data.frame(intersect(target.smp.gr, exon.gr))$width);
+			# get total target + callable in genes
+			callable.bases[smp.idx,]$Sample.gene.targeted <- sum(data.frame(intersect(target.smp.gr, gene.gr))$width);
 
 			# get total target + callable in CDS
 			callable.bases[smp.idx,]$Sample.cds.targeted <- sum(data.frame(intersect(target.smp.gr, cds.gr))$width);
@@ -186,13 +231,17 @@ for (i in 1:length(cov.list)) {
 	patient.idx <- which(callable.bases$Sample %in% these.smps);
 
 	# make a genomic ranges object
-	patient.gr <- GRanges(tmp[which(tmp$num == length(these.smps)),c('chrom','start','end')]);
+	patient.gr <- if (length(these.smps) > 1) {
+		GRanges(tmp[which(apply(tmp[,these.smps],1,sum) == length(these.smps)),c('chrom','start','end')]);
+		 } else {
+		GRanges(tmp[which(tmp[,these.smps] == 1),c('chrom','start','end')]);
+		}
 
 	# get total callable
 	callable.bases[patient.idx,]$Patient.total <- sum(data.frame(patient.gr)$width);
 
-	# get total callable in exons
-	callable.bases[patient.idx,]$Patient.exon <- sum(data.frame(intersect(patient.gr, exon.gr))$width);
+	# get total callable in genes
+	callable.bases[patient.idx,]$Patient.gene <- sum(data.frame(intersect(patient.gr, gene.gr))$width);
 
 	# get total callable in CDS
 	callable.bases[patient.idx,]$Patient.cds <- sum(data.frame(intersect(patient.gr, cds.gr))$width);
@@ -200,13 +249,16 @@ for (i in 1:length(cov.list)) {
 	# get overlap with target regions too if required
 	if ('TargetRegions' %in% colnames(tmp)) {
 
-		target.patient.gr <- intersect(target.gr, patient.gr);
+		# make a genomic ranges object
+		target.patient.gr <- GRanges(
+			tmp[which(tmp$num > length(these.smps)),c('chrom','start','end')]
+			);
 
 		# get total target + callable
 		callable.bases[patient.idx,]$Patient.targeted <- sum(data.frame(target.patient.gr)$width);
 
-		# get total target + callable in exons
-		callable.bases[patient.idx,]$Patient.exon.targeted <- sum(data.frame(intersect(target.patient.gr, exon.gr))$width);
+		# get total target + callable in genes
+		callable.bases[patient.idx,]$Patient.gene.targeted <- sum(data.frame(intersect(target.patient.gr, gene.gr))$width);
 
 		# get total target + callable in CDS
 		callable.bases[patient.idx,]$Patient.cds.targeted <- sum(data.frame(intersect(target.patient.gr, cds.gr))$width);

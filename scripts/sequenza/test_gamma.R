@@ -142,6 +142,9 @@ assembly <- opt$assembly;
 ########
 
 filestem <- gsub('.seqz','',basename(seqz.file));
+if (grepl('.gz$', basename(seqz.file))) {
+	filestem <- gsub('.seqz.gz','',basename(seqz.file));
+	}
 
 output_tune <- paste0(outdir,"/output_tuning/");
 output_html <- paste0(outdir,"/output_tuning/html_selector/");
