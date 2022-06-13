@@ -64,7 +64,11 @@ option_list <- list(
 	make_option(c("-a", "--assembly"), type="character", default='hg38', metavar="character",
 		help="Reference type (one of hg19, GRCh37, hg38, GRCh38) [default= %default]"),
 	make_option(c("-f", "--min_reads_baf"), type="integer", default=1,
-		help="Threshold on the depth of the positions included to calculate the average BAF for segment. Set to extreme value (ex. 1x10^6) to exclude BAF from calculations [default= %default]", metavar="integer")
+		help="Threshold on the depth of the positions included to calculate the average BAF for segment. Set to extreme value (ex. 1x10^6) to exclude BAF from calculations [default= %default]", metavar="integer"),
+	make_option(c("-c", "--ud_purity"), type="double", default=1, metavar="double",
+		help="User defined purity [default= %default]"),
+	make_option(c("-u", "--ud_ploidy"), type="double", default=2, metavar="double",
+		help="User defined ploidy [default= %default]")
 	); 
 
 opt_parser <- OptionParser(option_list = option_list);
@@ -75,8 +79,8 @@ seqz.file <- opt$seqz_file;
 outdir <- opt$out_dir;
 
 usr_cancer_type <- opt$cancer_type;
-purity <- 1;
-ud_ploidy <- 2;
+purity <- opt$ud_purity;
+ud_ploidy <- opt$ud_ploidy;
 
 min.reads.normal <- opt$min.reads.normal;
 min.reads.baf <- opt$min_reads_baf;
@@ -200,6 +204,7 @@ CP <- sequenza.fit(
 sequenza.results(
 	sequenza.extract = data,
 	cp.table = CP,
+	CNt.max = 9,
 	sample.id = filestem,
 	out.dir = new.outdir
 	);
@@ -224,6 +229,7 @@ if (length(purities) > 1) { ## bug fix to not run alt solutions if there are no 
 			cp.table = CP,
 			sample.id = filestem,
 			out.dir = output_alt,
+			CNt.max = 9,
 			cellularity = purities[i],
 			ploidy = ploidies[i]
 			);
