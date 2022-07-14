@@ -213,6 +213,7 @@ sub get_plot_denoise_command {
 		input_stem	=> undef,
 		plot_dir	=> undef,
 		output_stem	=> undef,
+		seq_type	=> undef,
 		@_
 		);
 
@@ -228,6 +229,10 @@ sub get_plot_denoise_command {
 		'--output', $args{plot_dir},
 		'--output-prefix', $args{output_stem}
 		);
+
+	if ('targeted' eq $args{seq_type}) {
+		$gatk_command .= ' --point-size-copy-ratio 2';
+		}
 
 	return($gatk_command);
 	}
@@ -310,14 +315,20 @@ sub get_modelsegments_command {
 		'--output-prefix', $args{output_stem}
 		);
 
-	if (('exome' eq $args{seq_type}) || ('targeted' eq $args{seq_type})) {
+	if ('exome' eq $args{seq_type}) {
 		$gatk_command .= ' --number-of-smoothing-iterations-per-fit 1';
+		} elsif ('targeted' eq $args{seq_type}) {
+		$gatk_command .= ' --number-of-smoothing-iterations-per-fit 5';
+		$gatk_command .= '  --window-size 2 --window-size 4 --window-size 8 --window-size 16 --window-size 32 --window-size 64 --window-size 128';
 		} elsif ('wgs' eq $args{seq_type}) {
-		$gatk_command .= ' --number-of-changepoints-penalty-factor 2.0 --number-of-smoothing-iterations-per-fit 1';
+		$gatk_command .= ' --number-of-changepoints-penalty-factor 2.0';
+		$gatk_command .= ' --number-of-smoothing-iterations-per-fit 1';
 		}
 
 	if ($args{normal_counts}) {
 		$gatk_command .= " --normal-allelic-counts $args{normal_counts}";
+		} else {
+		$gatk_command .= ' --minimum-total-allele-count-case 1';
 		}
 
 	$gatk_command .= "\n\n" . join(' ',
@@ -335,6 +346,7 @@ sub get_plot_segments_command {
 		input_stem	=> undef,
 		plot_dir	=> undef,
 		output_stem	=> undef,
+		seq_type	=> undef,
 		@_
 		);
 
@@ -351,6 +363,10 @@ sub get_plot_segments_command {
 		'--output', $args{plot_dir},
 		'--output-prefix', $args{output_stem}
 		);
+
+	if ('targeted' eq $args{seq_type}) {
+		$gatk_command .= ' --point-size-copy-ratio 2 --point-size-allele-fraction 2';
+		}
 
 	return($gatk_command);
 	}
@@ -428,7 +444,7 @@ sub main {
 	if ( (('exome' eq $tool_data->{seq_type}) || ('targeted' eq $tool_data->{seq_type})) &&
 		(defined($tool_data->{intervals_bed}))) {
 		$intervals_bed = $tool_data->{intervals_bed};
-		print $log "\n    Target intervals (exome): $intervals_bed";
+		print $log "\n    Target intervals: $intervals_bed";
 		}
 
 	my $is_wgs = 0;
@@ -965,7 +981,8 @@ sub main {
 			my $plot_cmd = get_plot_denoise_command(
 				input_stem	=> $output_stem,
 				plot_dir	=> $plot_directory,
-				output_stem	=> $sample
+				output_stem	=> $sample,
+				seq_type	=> $tool_data->{seq_type}
 				);
 
 			# check if this should be run
@@ -1094,7 +1111,8 @@ sub main {
 			$plot_cmd = get_plot_segments_command(
 				input_stem	=> $output_stem,
 				plot_dir	=> $plot_directory,
-				output_stem	=> $sample
+				output_stem	=> $sample,
+				seq_type	=> $tool_data->{seq_type}
 				);
 
 			# check if this should be run
