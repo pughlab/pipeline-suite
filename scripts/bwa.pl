@@ -330,8 +330,8 @@ sub main {
 						print $log "    SE: $se\n\n";
 						}
 
-					# if this is single-end data, let's just call it r1 so we don't need to 
-					# replicate so much code
+					# if this is single-end data, let's just call it r1 so
+					# we don't need to replicate so much code
 					unless ($is_paired) { $r1 = $se; }
 
 					my @tmp = split /\//, $r1;
@@ -357,7 +357,8 @@ sub main {
 						center		=> $tool_data->{seq_center}
 						);
 
-					my $bwa = get_bwa_command(
+					my $bwa = "cd $lane_directory;\n";
+					$bwa .= get_bwa_command(
 						r1		=> $r1,
 						r2		=> $r2,
 						stem		=> $filestem,
@@ -365,15 +366,18 @@ sub main {
 						reference	=> $tool_data->{bwa}->{reference}
 						);
 
-					$bwa = 'cd ' . $lane_directory . ";\n" . $bwa ;
+					$bwa .= "\n\n" . "echo 'alignment finished successfully' > bwa.COMPLETE";
+
+					my $output = join('/', $lane_directory, $filestem);
 
 					# check if this should be run
 					if ( 
-						('Y' eq missing_file(join('/', $lane_directory, $filestem . '.sam'))) &&
+						('Y' eq missing_file(join('/', $lane_directory, 'bwa.COMPLETE'))) &&
 						# if the index is missing, then this has been run before and the 
 						# resulting sam deleted, (so don't do it again)
-						('Y' eq missing_file(join('/', $lane_directory, $filestem . '.bam.bai')))
+						('Y' eq missing_file("$output.bam.bai"))
 						) {
+
 						# record command (in log directory) and then run job
 						print $log "Submitting job for bwa...\n";
 						$run_script = write_script(
@@ -398,8 +402,7 @@ sub main {
 
 						push @smp_jobs, $run_id;
 						push @all_jobs, $run_id;
-						}
-					else {
+						} else {
 						print $log "Skipping alignment because output already exists...\n";
 						}
 
@@ -412,10 +415,10 @@ sub main {
 
 					# check if this should be run
 					if (
-						('Y' eq missing_file(join('/', $lane_directory, $filestem . '.bam'))) &&
+						('Y' eq missing_file("$output.bam")) &&
 						# if the index is missing, then this has been run before and
 						# the resulting sam deleted (so don't do it again)
-						('Y' eq missing_file(join('/', $lane_directory, $filestem . '.bam.bai')))
+						('Y' eq missing_file("$output.bam.bai"))
 						) {
 						# record command (in log directory) and then run job
 						print $log "Submitting job to sort bam...\n";
@@ -441,8 +444,7 @@ sub main {
 
 						push @smp_jobs, $run_id;
 						push @all_jobs, $run_id;
-						}
-					else {
+						} else {
 						print $log "Skipping sort step because this was performed previously...\n";
 						}
 
@@ -456,8 +458,8 @@ sub main {
 
 					# check if this should be run
 					if (
-						('Y' eq missing_file(join('/', $lane_directory, $filestem . '.bam.bai'))) ||
-						('Y' eq missing_file(join('/', $lane_directory, $filestem . '.bam.md5')))
+						('Y' eq missing_file("$output.bam.bai")) ||
+						('Y' eq missing_file("$output.bam.md5"))
 						) {
 						# record command (in log directory) and then run job
 						print $log "Submitting job to index bam...\n";
@@ -483,12 +485,11 @@ sub main {
 
 						push @smp_jobs, $run_id;
 						push @all_jobs, $run_id;
-						}
-					else {
+						} else {
 						print $log "Skipping index step because this was performed previously...\n";
 						}
 
-					push @lane_intermediates, $lane_directory . '/' . $filestem . '.bam';
+					push @lane_intermediates, $output . '.bam';
 					push @lane_holds, $run_id;
 					}
 				}
@@ -508,9 +509,8 @@ sub main {
 					tmp_dir		=> $tmp_directory,
 					java_mem	=> $parameters->{merge}->{java_mem}->{$type}
 					);
-				}
 
-			elsif ('Y' eq $parameters->{merge}->{mark_dup}) {
+				} elsif ('Y' eq $parameters->{merge}->{mark_dup}) {
 
 				$smp_output = join('/', $patient_directory, $sample . '_bwamem_aligned_sorted_merged_markdup.bam');
 				$jobname = 'run_merge_markdup_' . $sample;
@@ -557,8 +557,7 @@ sub main {
 
 				push @smp_jobs, $run_id;
 				push @all_jobs, $run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping mark duplicate step because this was performed previously...\n";	
 				}
 
