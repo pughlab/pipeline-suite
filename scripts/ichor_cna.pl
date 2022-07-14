@@ -68,11 +68,12 @@ sub get_ichor_cna_command {
 		@_
 		);
 
-	my $ichor_command = join(' ',
+	my $ichor_command = "cd $args{out_dir}";
+	$ichor_command .= "\n\n". join(' ',
 		'Rscript', $ichor_path,
 		'--WIG', $args{tumour_wig},
 		'--id', $args{tumour_id},
-		"--chrs c('" . $args{chroms} . "')"
+		'--chrs "c(' . "'" . $args{chroms} . "'" . ')"'
 		);
 
 	if ( ('hg38' eq $ref_type) || ('hg19' eq $ref_type) ) {
