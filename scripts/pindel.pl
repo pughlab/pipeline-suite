@@ -409,12 +409,6 @@ sub main {
 		my $patient_directory = join('/', $output_directory, $patient);
 		unless(-e $patient_directory) { make_path($patient_directory); }
 
-		my $tmp_directory = join('/', $patient_directory, 'TEMP');
-		unless(-e $tmp_directory) { make_path($tmp_directory); }
-
-		# indicate this should be removed at the end
-		$cleanup_cmd = "rm -rf $tmp_directory";
-
 		my $link_directory = join('/', $patient_directory, 'bam_links');
 		unless(-e $link_directory) { make_path($link_directory); }
 
@@ -447,6 +441,8 @@ sub main {
 
 		foreach my $sample (@tumour_ids) {
 
+			my @sample_jobs;
+
 			# if there are any samples to run, we will run the final combine job
 			$should_run_final = 1;
 
@@ -454,6 +450,12 @@ sub main {
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
+
+			my $tmp_directory = join('/', $patient_directory, 'TEMP');
+			unless(-e $tmp_directory) { make_path($tmp_directory); }
+
+			# indicate this should be removed at the end
+			$cleanup_cmd .= "\n" . "rm -rf $tmp_directory";
 
 			# generate necessary samples.tsv
 			my $sample_sheet = join('/', $sample_directory, 'pindel_config.txt');
@@ -529,7 +531,7 @@ sub main {
 						);
 
 					push @pindel_jobs, $run_id;
-					push @patient_jobs, $run_id;
+					push @sample_jobs, $run_id;
 					push @all_jobs, $run_id;
 					} else {
 					print $log "Skipping Pindel because this has already been completed!\n";
@@ -576,7 +578,7 @@ sub main {
 							);
 
 						push @pindel_jobs, $run_id;
-						push @patient_jobs, $run_id;
+						push @sample_jobs, $run_id;
 						push @all_jobs, $run_id;
 						} else {
 						print $log "Skipping Pindel ($chr) because this has already been completed!\n";
@@ -619,7 +621,7 @@ sub main {
 						log_file	=> $log
 						);
 
-					push @patient_jobs, $run_id;
+					push @sample_jobs, $run_id;
 					push @all_jobs, $run_id;
 					} else {
 					print $log "Skipping merge step because this has already been completed!\n";
@@ -660,7 +662,7 @@ sub main {
 					log_file	=> $log
 					);
 
-				push @patient_jobs, $run_id;
+				push @sample_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
 				print $log "Skipping Pindel2VCF because this has already been completed!\n";
@@ -728,13 +730,16 @@ sub main {
 					log_file	=> $log
 					);
 
-				push @patient_jobs, $run_id;
+				push @sample_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
 				print $log "Skipping vcf2maf because this has already been completed!\n";
 				}
 
 			push @final_outputs, $final_maf;
+			push @patient_jobs, @sample_jobs;
+
+			if (scalar(@sample_jobs) == 0) { `rm -rf $tmp_directory`; }
 
 			}
 
@@ -742,9 +747,7 @@ sub main {
 		# run per patient
 		if ($args{del_intermediates}) {
 
-			if (scalar(@patient_jobs) == 0) {
-				`rm -rf $tmp_directory`;
-				} else {
+			unless (scalar(@patient_jobs) == 0) {
 
 				print $log "Submitting job to clean up temporary/intermediate files...\n";
 
