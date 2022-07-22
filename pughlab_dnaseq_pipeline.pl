@@ -1304,7 +1304,7 @@ sub main {
 				log_dir	=> $log_directory,
 				name	=> 'pughlab_dna_pipeline__run_panelcn_mops',
 				cmd	=> $mops_command,
-				modules	=> ['perl'],
+				modules	=> ['perl', $samtools],
 				dependencies	=> $current_dependencies,
 				mem		=> '256M',
 				max_time	=> $max_time,

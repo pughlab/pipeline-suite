@@ -342,7 +342,11 @@ if (arguments$find_drawings) {
 	print(paste0('Removing ', length(to.remove), ' (', round(length(to.remove)/nrow(tmp)*100),
 		'%) SVs for high breakpoint recurrence.'));
 
-	filtered.svs <- tmp2[-to.remove,colnames(tmp)];
+	if (length(to.remove) > 0) {
+		filtered.svs <- tmp2[-to.remove,colnames(tmp)];
+		} else {
+		filtered.svs <- tmp2[,colnames(tmp)];
+		}
 
 	### SIZE FILTER ####################################################################################
 	# remove short INDELs (< 100bp)

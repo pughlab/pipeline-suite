@@ -17,7 +17,7 @@ my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
 # define some global variables
-our ($reference, $exclude_regions) = undef;
+our ($reference, $exclude_regions, $intervals_bed) = undef;
 
 ####################################################################################################
 # version	author		comment
@@ -241,7 +241,6 @@ sub get_finalize_command {
 		$job_command .= "\n\n" . join(' ',
 			'bcftools view',
 			'-f PASS',
-#			' -e' . "'" . 'GT="ref" | FORMAT/FT="LowQual"' . "'",
 			'-s', $sm_tag,
 			$args{input},
 			'| bcftools reheader',
@@ -345,6 +344,12 @@ sub pon {
 		$exclude_regions = '/cluster/projects/pughlab/references/Delly/excludeTemplates/human.hg19.excl.tsv';
 		}
 
+	if ( (('exome' eq $tool_data->{seq_type}) || ('targeted' eq $tool_data->{seq_type})) &&
+		(defined($tool_data->{intervals_bed}))) {
+		$intervals_bed = $tool_data->{intervals_bed};
+		print $log "\n    Target intervals: $intervals_bed";
+		}
+
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n---";
@@ -367,7 +372,7 @@ sub pon {
 		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
 		}
 
-	my ($run_script, $run_id, $link);
+	my ($run_script, $run_id, $link, $should_run_final);
 	my (@part1_jobs, @part2_jobs, @all_jobs);
 	my (@pon_bcfs, @genotyped_bcfs);
 
@@ -389,6 +394,9 @@ sub pon {
 			print $log "\n>> No normal BAM provided, skipping patient.\n";
 			next;
 			}
+
+		# if there are any samples to run, we will run the final combine job
+		if (scalar(@normal_ids) > 0) { $should_run_final = 1; }
 
 		# for germline variants
 		foreach my $norm (@normal_ids) {
@@ -554,6 +562,7 @@ sub pon {
 				}
 
 			push @genotyped_bcfs, $genotype_output;
+
 			}
 		}
 
@@ -585,6 +594,44 @@ sub pon {
 
 		$run_id = submit_job(
 			jobname		=> 'create_panel_of_normals',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @all_jobs, $run_id;
+		}
+
+	# collate results
+	if ($should_run_final) {
+
+		my $collect_output = join(' ',
+			"Rscript $cwd/collect_delly_output.R",
+			'-d', $output_directory,
+			'-p', $tool_data->{project_name},
+			'-r', $tool_data->{ref_type},
+			'--germline TRUE'
+			);
+
+		if (defined($intervals_bed)) {
+			$collect_output .= " -t $intervals_bed";
+			}
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'combine_delly_output',
+			cmd	=> $collect_output,
+			modules	=> ['R'],
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '4G',
+			max_time	=> '12:00:00',
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'combine_delly_output',
 			shell_command	=> $run_script,
 			hpc_driver	=> $args{hpc_driver},
 			dry_run		=> $args{dry_run},
@@ -746,6 +793,12 @@ sub main {
 		$exclude_regions = '/cluster/projects/pughlab/references/Delly/excludeTemplates/human.hg19.excl.tsv';
 		}
 
+	if ( (('exome' eq $tool_data->{seq_type}) || ('targeted' eq $tool_data->{seq_type})) &&
+		(defined($tool_data->{intervals_bed}))) {
+		$intervals_bed = $tool_data->{intervals_bed};
+		print $log "\n    Target intervals: $intervals_bed";
+		}
+
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n---";
@@ -768,7 +821,7 @@ sub main {
 		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
 		}
 
-	my ($run_script, $run_id, $link);
+	my ($run_script, $run_id, $link, $should_run_final);
 	my (@part1_jobs, @part2_jobs, @all_jobs);
 	my (@normal_sample_ids, @filtered_bcfs, @genotyped_bcfs);
 
@@ -790,7 +843,10 @@ sub main {
 		if (scalar(@tumour_ids) == 0) {
 			print $log "\n>> No tumour BAM provided, skipping patient.\n";
 			next;
-			}
+		} else {
+			# if there are any samples to run, we will run the final combine job
+			$should_run_final = 1;
+		}
 
 		@patient_jobs{$patient} = [];
 		@final_outputs{$patient} = [];
@@ -1254,6 +1310,43 @@ sub main {
 
 		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @{$final_outputs{$patient}}) . "\n";
 		print $log "---\n";
+		}
+
+	# collate results
+	if ($should_run_final) {
+
+		my $collect_output = join(' ',
+			"Rscript $cwd/collect_delly_output.R",
+			'-d', $output_directory,
+			'-p', $tool_data->{project_name},
+			'-r', $tool_data->{ref_type}
+			);
+
+		if (defined($intervals_bed)) {
+			$collect_output .= " -t $intervals_bed";
+			}
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'combine_delly_output',
+			cmd	=> $collect_output,
+			modules	=> ['R'],
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '4G',
+			max_time	=> '12:00:00',
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'combine_delly_output',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @all_jobs, $run_id;
 		}
 
 	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then

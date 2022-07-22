@@ -105,13 +105,22 @@ if (make_pon) {
 		multiVals = "first"
 		);
 
+	# reduce to gene coordinates (from transcript)
+	gene.info <- gene.info[order(gene.info$GENEID, gene.info$TXCHROM, gene.info$TXNAME),];
+
+	gene.data <- gene.info[!duplicated(gene.info$GENEID),c(1,9,6,5,7,8)];
+	gene.data <- gene.data[order(gene.data$TXCHROM, gene.data$TXSTART, gene.data$TXEND),];
+
+	exon.data <- merge(gene.data[,1:4],gene.info);
+	exon.data <- exon.data[order(exon.data$TXCHROM, exon.data$EXONSTART, exon.data$EXONEND),];
+
 	# add gene annotations
-	gene.gr <- makeGRangesFromDataFrame(gene.info,
+	gene.gr <- makeGRangesFromDataFrame(gene.data,
 		seqnames.field = 'TXCHROM',
 		start.field = 'TXSTART',
 		end.field = 'TXEND'
 		);
-	exon.gr <- makeGRangesFromDataFrame(gene.info,
+	exon.gr <- makeGRangesFromDataFrame(exon.data,
 		seqnames.field = 'TXCHROM',
 		start.field = 'EXONSTART',
 		end.field = 'EXONEND'
@@ -127,12 +136,12 @@ if (make_pon) {
 	for (i in 1:nrow(tmp_bed)) {
 		if (i %in% gene.overlaps$subjectHits) {
 			gene.idx <- gene.overlaps[which(gene.overlaps$subjectHits == i),]$queryHits;
-			gene <- sort(unique(gene.info[gene.idx,]$Symbol))[1];
+			gene <- sort(unique(gene.data[gene.idx,]$Symbol))[1];
 			} else { gene <- 'GENE';
 			}
 		if (i %in% exon.overlaps$subjectHits) {
 			exon.idx <- exon.overlaps[which(exon.overlaps$subjectHits == i),]$queryHits;
-			exon <- paste0('E',unique(gene.info[exon.idx,]$EXONRANK)[1]);
+			exon <- paste0('E',unique(exon.data[exon.idx,]$EXONRANK)[1]);
 			} else { exon <- 'EXON';
 			}
 

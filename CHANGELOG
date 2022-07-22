@@ -1,3 +1,14 @@
+2022-07-22: PughLab pipeline-suite (version 0.7.0)
+- bwa: added file used to check for completion of alignment step prior to sorting
+- pindel: moved intermediate directory to sample directory (from patient directory) to avoid overwritting necessary files
+- ichorCNA: fixed a bug/typo in the ichorCNA command (re: chromosomes to run)
+- gatk_cnv: minor updates to account for different seq_types (targeted/exome/wgs)
+- delly: added final data collection step for Delly (SV and CN calls per segment)
+- mavis: minor bug fix in data collection step
+- run_panelCN_mops: updates to gene annotation in data collection step
+- NEW: erds_gcnv.pl; ERDS for WGS (g)CNV detection
+- NEW: gatk_gcnv.pl; initial add GATK:gCNV for germline CNV detection
+
 2022-06-13: PughLab pipeline-suite (version 0.6.8)
 - updates to germline filtering
 - updates to collection/annotation of mavis output
