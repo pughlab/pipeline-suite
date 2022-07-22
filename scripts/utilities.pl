@@ -118,9 +118,11 @@ sub error_checking {
 
 	# ichorCNA
 	if ('ichor' eq $pipeline) {
-		unless ( ('true' eq $tool_data->{is_ctdna}) && ('wgs' eq $tool_data->{seq_type}) ) {
-			die("Should only be run on WGS ctDNA cohorts.");
-		}
+		if ( 'wgs' eq $tool_data->{seq_type} ) {
+			print("IchorCNA is intended for sWGS. Current seq_type set to wgs so we will try to run this, however results may vary.");
+		} else {
+			die("Should only be run on sWGS cohorts.");
+		} 
 	}
 
 	# panelCN.mops
@@ -281,6 +283,10 @@ sub write_script {
 		kill_on_error	=> 1,
 		@_
 		);
+
+	if (!defined($args{max_time})) { $args{max_time} = '01:00:00'; }
+	if (!defined($args{mem})) { $args{mem} = '1G'; }
+	if (!defined($args{cpus_per_task})) { $args{cpus_per_task} = 1; }
 
 	my $cmd_log_dir = join('/', $args{log_dir}, $args{name});
 	unless(-e $cmd_log_dir) { make_path($cmd_log_dir); }
