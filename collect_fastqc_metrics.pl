@@ -280,7 +280,8 @@ sub main{
 		# collect job stats
 		my $collect_metrics = collect_job_stats(
 			job_ids => join(',', @all_jobs),
-			outfile => $outfile
+			outfile => $outfile,
+			hpc_driver => $args{cluster}
 			);
 
 		$run_script = write_script(
