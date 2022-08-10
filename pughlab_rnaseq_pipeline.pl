@@ -77,7 +77,8 @@ sub main {
 
 	### MAIN ###########################################################################################
 
-	my ($fc_run_id, $star_run_id, $gatk_run_id, $vc_run_id, $rsem_run_id, $starfus_run_id, $mavis_run_id);
+	my ($star_run_id, $gatk_run_id, $vc_run_id, $rsem_run_id);
+	my ($fc_run_id, $starfus_run_id, $arriba_run_id, $mavis_run_id);
 	my ($run_script, $report_run_id);
 
 	my @job_ids;
@@ -86,6 +87,7 @@ sub main {
 	my $fc_directory = join('/', $output_directory, 'FusionCatcher');
 	my $star_directory = join('/', $output_directory, 'STAR');
 	my $starfus_directory = join('/', $output_directory, 'STAR-Fusion');
+	my $arriba_directory = join('/', $output_directory, 'Arriba');
 	my $rsem_directory = join('/', $output_directory, 'RSEM');
 	my $gatk_directory = join('/', $output_directory, 'GATK');
 	my $vc_directory = join('/', $output_directory, 'HaplotypeCaller');
@@ -98,6 +100,7 @@ sub main {
 		'gatk'	=> defined($tool_data->{gatk}->{run}) ? $tool_data->{gatk}->{run} : 'N',
 		'haplotype_caller' => defined($tool_data->{haplotype_caller}->{run}) ? $tool_data->{haplotype_caller}->{run} : 'N',
 		'star_fusion'	=> defined($tool_data->{star_fusion}->{run}) ? $tool_data->{star_fusion}->{run} : 'N',
+		'arriba'	=> defined($tool_data->{arriba}->{run}) ? $tool_data->{arriba}->{run} : 'N',
 		'fusioncatcher'	=> defined($tool_data->{fusioncatcher}->{run}) ? $tool_data->{fusioncatcher}->{run} : 'N',
 		'mavis'	=> defined($tool_data->{mavis}->{run}) ? $tool_data->{mavis}->{run} : 'N'
 		);
@@ -266,6 +269,58 @@ sub main {
 			}
 		}
 
+	## run Arriba pipeline
+	if ('Y' eq $tool_set{'arriba'}) {
+
+		unless(-e $arriba_directory) { make_path($arriba_directory); }
+
+		my $arriba_command = join(' ',
+			"perl $cwd/scripts/arriba.pl",
+			"-o", $arriba_directory,
+			"-t", $tool_config,
+			"-d", $data_config,
+			"-c", $args{cluster}
+			);
+
+		if ($args{cleanup}) {
+			$arriba_command .= " --remove";
+			}
+
+		# record command (in log directory) and then run job
+		print $log "\n\nSubmitting job for arriba.pl\n";
+		print $log "  COMMAND: $arriba_command\n\n";
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'pughlab_rna_pipeline__run_arriba',
+			cmd	=> $arriba_command,
+			modules	=> ['perl'],
+			mem		=> '256M',
+			max_time	=> '7-00:00:00',
+			extra_args	=> [$hpc_group],
+			hpc_driver	=> $args{cluster}
+			);
+
+		if ($args{dry_run}) {
+
+			$arriba_command .= " --dry-run";
+			`$arriba_command`;
+
+			} else {
+
+			$arriba_run_id = submit_job(
+				jobname		=> $log_directory,
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			print $log ">>> ARRIBA job id: $arriba_run_id\n\n";
+			push @job_ids, $arriba_run_id;
+			}
+		}
+
 	## run Mavis pipeline
 	unless(-e $mavis_directory) { make_path($mavis_directory); }
 
@@ -290,6 +345,10 @@ sub main {
 		if (defined($starfus_run_id)) {
 			$mavis_command .= " --starfus $starfus_directory";
 			push @depends, $starfus_run_id;
+			}
+		if (defined($arriba_run_id)) {
+			$mavis_command .= " --arriba $arriba_directory";
+			push @depends, $arriba_run_id;
 			}
 
 		if ($args{cleanup}) {

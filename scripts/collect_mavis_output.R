@@ -161,6 +161,7 @@ if (arguments$find_drawings) {
 			if (any(grepl('svict', ids))) { tools <- c(tools,'svict'); }
 			if (any(grepl('novobreak', ids))) { tools <- c(tools,'novobreak'); }
 			if (any(grepl('fusioncatcher', ids))) { tools <- c(tools,'fusioncatcher'); }
+			if (any(grepl('arriba', ids))) { tools <- c(tools, 'arriba'); }
 
 			toolset <- paste(tools, collapse = ';');
 			if (length(tools) > 0) { 
