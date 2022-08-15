@@ -107,19 +107,19 @@ fusioncatcher:
 arriba:
     run: Y
     star_version: 2.7.9a
-    star_reference: # /cluster/projects/pughlab/references/Arriba/STAR_2.7.9a_GRCh38_gencode_v31_plus_virus/
-    reference: # /cluster/projects/pughlab/references/Arriba/hg38_plus_viral_genomes.fa
+    star_reference: /cluster/projects/pughlab/references/Arriba/STAR_2.7.9a_GRCh38_gencode_v31_plus_virus/
+    reference: /cluster/projects/pughlab/references/Arriba/hg38_plus_viral_genomes.fa
     gtf: # /cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.annotation.gtf
     parameters:
         star:
-            run: N # should STAR be run separately?
-            mem: 8G
+            mem: 38G
             time: '48:00:00'
-            n_cpus: 1
         arriba:
-            mem: 54G # this is tied more to the size of the reference than the tool or sample input
-            time: '48:00:00'
-            n_cpus: 1
+            mem: 18G
+            time: '24:00:00'
+        quantify_virus:
+            mem: 1G
+            time: '04:00:00'
         combine_results:
             mem: 1G
             time: '04:00:00'

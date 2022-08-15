@@ -36,47 +36,7 @@ our ($reference, $gtf, $blacklist, $known_fusions, $protein_domains) = undef;
 #	--dry_run is this a dry run?
 
 ### SUBROUTINES ####################################################################################
-# format command for STAR (output to stdin)
-sub get_star_to_arriba_command {
-	my %args = (
-		r1		=> undef,
-		r2		=> undef,
-		reference_dir	=> undef,
-		n_cpus		=> 8,
-		@_
-		);
-
-	my $star_command = join(' ',
-		'STAR',
-		# basic options
-		'--genomeDir', $args{reference_dir},
-		'--genomeLoad NoSharedMemory',
-		'--runThreadN', $args{n_cpus},
-		'--readFilesCommand zcat',
-		'--readFilesIn', $args{r1}, $args{r2},
-		# output options
-		'--outStd BAM_Unsorted',
-		'--outSAMtype BAM Unsorted',
-		'--outSAMunmapped Within',
-		'--outBAMcompression 0',
-		'--outFilterMultimapNmax 50',
-		'--peOverlapNbasesMin 10',
-		'--alignSplicedMateMapLminOverLmate 0.5',
-		'--alignSJstitchMismatchNmax 5 -1 5 5',
-		'--chimSegmentMin 10',
-		'--chimOutType WithinBAM HardClip',
-		'--chimJunctionOverhangMin 10',
-		'--chimScoreDropMax 30',
-		'--chimScoreJunctionNonGTAG 0',
-		'--chimScoreSeparation 1',
-		'--chimSegmentReadGapMax 3',
-		'--chimMultimapNmax 50'
-		);
-
-	return($star_command);
-	}
-
-# format command for STAR (output to separate bam)
+# format command for STAR
 sub get_star_command {
 	my %args = (
 		r1		=> undef,
@@ -113,10 +73,28 @@ sub get_star_command {
 	return($star_command);
 	}
 
+# format command to run Arriba:
+sub get_arriba_virus_command {
+	my %args = (
+		output		=> undef,
+		input_bam	=> undef,
+		@_
+		);
+
+	my $arriba_command = 'DIRNAME=$(which arriba | xargs dirname)';
+
+	$arriba_command .= "\n\n" . join(' ',
+		'$DIRNAME/scripts/quantify_virus_expression.sh',
+		$args{input_bam},	 # Aligned.out.bam
+		$args{output}
+		);
+
+	return($arriba_command);
+	}
+
 # format command to run Arriba
 sub get_arriba_command {
 	my %args = (
-		star_cmd	=> undef,
 		output_stem	=> undef,
 		input_bam	=> undef,
 		chimeric	=> undef,
@@ -125,24 +103,9 @@ sub get_arriba_command {
 
 	my $arriba_command = 'DIRNAME=$(which arriba | xargs dirname)';
 
-	if (defined($args{star_cmd})) {
-
-		$arriba_command .= "\n\n" . join(' ',
-			$args{star_cmd},
-			'| arriba',
-			'-x /dev/stdin'
-			);
-
-		} else {
-
-		$arriba_command .= "\n\n";
-		$arriba_command .= "arriba -x  $args{input_bam}"; # Aligned.out.bam
-		if (defined($args{chimeric})) {
-			$arriba_command .= " -c $args{chimeric}"; # Chimeric.out.sam
-			}
-		}
-
-	$arriba_command .= ' ' . join(' ',
+	$arriba_command .= "\n\n" . join(' ',
+		'arriba',
+		'-x', $args{input_bam},
 		'-a', $reference,
 		'-g', $gtf,
 		'-o', $args{output_stem} . '.tsv',
@@ -156,6 +119,10 @@ sub get_arriba_command {
 			'-k', '$DIRNAME/database/' . $known_fusions,
 			'-t', '$DIRNAME/database/' . $known_fusions
 			);
+		}
+
+	if (defined($args{chimeric})) {
+		$arriba_command .= " -c $args{chimeric}"; # Chimeric.out.sam
 		}
 
 	return($arriba_command);
@@ -286,7 +253,7 @@ sub main {
 		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
 		}
 
-	my ($run_script, $run_id, $raw_link, $should_run_final);
+	my ($run_script, $run_id, $star_run_id, $raw_link, $should_run_final);
 	my @all_jobs;
 
 	# process each sample in $smp_data
@@ -309,6 +276,7 @@ sub main {
 
 			# clear out run_id for this sample
 			my @sample_jobs;
+			$star_run_id = '';
 			$run_id = '';
 
 			# process this sample
@@ -353,77 +321,95 @@ sub main {
 				}
 
 			# set up commands and output
+			my $bam = join('/', $tmp_directory, 'Aligned.out.bam');
 			my $output_stem = join('/', $sample_directory, 'fusions');
+			my $virus_output = join('/', $sample_directory, 'virus_expression.tsv');
 
-			my ($star_cmd, $arriba_cmd);
+			my $star_cmd = "cd $tmp_directory\n\n";
+			$star_cmd .= get_star_command(
+				r1		=> join(',', @r1_fastqs),
+				r2		=> join(',', @r2_fastqs),
+				reference_dir	=> $arriba_ref
+				);
 
-			# if passing directly to arriba
-			if ('N' eq $parameters->{star}->{run}) {
+			# check if this should be run
+			if ('Y' eq missing_file($bam)) {
 
-				$star_cmd = "cd $sample_directory\n\n";
-				$star_cmd .= get_star_to_arriba_command(
-					r1		=> join(',', @r1_fastqs),
-					r2		=> join(',', @r2_fastqs),
-					reference_dir	=> $arriba_ref,
-					n_cpus		=> $parameters->{arriba}->{n_cpus}
+				# record command (in log directory) and then run job
+				print $log "Submitting job to run STAR...\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_star_' . $sample,
+					cmd	=> $star_cmd,
+					modules => [$star],
+					max_time	=> $parameters->{star}->{time},
+					mem		=> $parameters->{star}->{mem},
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
-				$arriba_cmd = get_arriba_command(
-					star_cmd	=> $star_cmd,
-					output_stem	=> $output_stem
+				$star_run_id = submit_job(
+					jobname		=> 'run_star_' . $sample,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
 					);
 
-				# add to cleanup command
-				$cleanup_cmd .= "\n  rm -rf $sample_directory/_STARtmp/";
-
+				push @sample_jobs, $run_id;
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
 				} else {
-
-				my $bam = join('/', $tmp_directory, 'Aligned.out.bam');
-
-				$star_cmd = "cd $tmp_directory\n\n";
-				$star_cmd .= get_star_command(
-					r1		=> join(',', @r1_fastqs),
-					r2		=> join(',', @r2_fastqs),
-					reference_dir	=> $tool_data->{star_reference_dir}
-					);
-
-				# check if this should be run
-				if ('Y' eq missing_file($bam)) {
-
-					# record command (in log directory) and then run job
-					print $log "Submitting job to run STAR...\n";
-
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> 'run_star_' . $sample,
-						cmd	=> $star_cmd,
-						modules => [$star],
-						max_time	=> $parameters->{star}->{time},
-						mem		=> $parameters->{star}->{mem},
-						hpc_driver	=> $args{hpc_driver},
-						extra_args	=> [$hpc_group]
-						);
-
-					$run_id = submit_job(
-						jobname		=> 'run_star_' . $sample,
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
-						);
-
-					push @sample_jobs, $run_id;
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
-					} else {
-					print $log "Skipping STAR because output already exists...\n";
-					}
-
-				$arriba_cmd = get_arriba_command(
-					input_bam	=> $bam,
-					output_stem	=> $output_stem
-					);
+				print $log "Skipping STAR because output already exists...\n";
 				}
+
+			# run quantify viral expression
+			my $virus_cmd = get_arriba_virus_command(
+				input_bam	=> $bam,
+				output		=> $virus_output
+				);
+
+			# check if this should be run
+			if ('Y' eq missing_file($virus_output)) {
+
+				# record command (in log directory) and then run job
+				print $log "Submitting job to run Arriba: VirusQuantification...\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_arriba_quantify_viral_expression_' . $sample,
+					cmd	=> $virus_cmd,
+					modules => [$star, $arriba],
+					dependencies	=> $star_run_id,
+					max_time	=> $parameters->{quantify_virus}->{time},
+					mem		=> $parameters->{quantify_virus}->{mem},
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_arriba_quantify_viral_expression_' . $sample,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				push @sample_jobs, $run_id;
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
+				} else {
+				print $log "Skipping Arriba: VirusQuantification because output already exists...\n";
+				}
+
+			push @final_outputs, $virus_output;
+
+			# run fusion detection
+			my $arriba_cmd = get_arriba_command(
+				input_bam	=> $bam,
+				output_stem	=> $output_stem
+				);
 
 			# check if this should be run
 			if ('Y' eq missing_file($output_stem . '.tsv')) {
@@ -436,12 +422,11 @@ sub main {
 					name	=> 'run_arriba_' . $sample,
 					cmd	=> $arriba_cmd,
 					modules => [$star, $arriba],
-					dependencies	=> $run_id,
+					dependencies	=> $star_run_id,
 					max_time	=> $parameters->{arriba}->{time},
 					mem		=> $parameters->{arriba}->{mem},
 					hpc_driver	=> $args{hpc_driver},
-					extra_args	=> [$hpc_group],
-					cpus_per_task	=> $parameters->{arriba}->{n_cpus} 
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -472,7 +457,7 @@ sub main {
 
 					# make sure final output exists before removing intermediate files!
 					$cleanup_cmd = join("\n",
-						"if [ -s $output_stem.tsv ]; then",
+						"if [ -s " . join(" ] && [ -s ", @final_outputs) . " ]; then",
 						$cleanup_cmd,
 						"else",
 						'echo "FINAL OUTPUT FILE is missing; not removing intermediates"',

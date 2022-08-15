@@ -55,6 +55,7 @@ setwd(arguments$directory);
 ### MAIN ###########################################################################################
 # find results files 
 fusion.files <- list.files(pattern = 'fusions.tsv', recursive = TRUE);
+virus.files  <- list.files(pattern = 'virus_expression.tsv', recursive = TRUE);
 
 # read them in and store them
 fusion.data <- list();
@@ -66,7 +67,7 @@ for (file in fusion.files) {
 	# extract sample ID
 	smp <- unlist(strsplit(file,'\\/'))[2];
 	# read in data
-	tmp <- read.delim(file);
+	tmp <- read.delim(file, stringsAsFactors = FALSE);
 
 	if (nrow(tmp) == 0) {
 		fusions.empty.samples <- c(fusions.empty.samples, smp);
@@ -79,11 +80,30 @@ for (file in fusion.files) {
 	fusion.data[[length(fusion.data)+1]] <- tmp[,-idx];
 	}
 
+virus.data <- list();
+
+for (file in virus.files) {
+
+	# extract sample ID
+	smp <- unlist(strsplit(file,'\\/'))[2];
+
+	# read in data
+	tmp <- read.delim(file, stringsAsFactors = FALSE);
+	if (nrow(tmp) == 0) { next; }
+
+	# store it
+	tmp$Sample <- smp;
+	virus.data[[length(virus.data)+1]] <- tmp;
+	}
+
 # format data
 combined.fusions <- do.call(rbind, fusion.data);
+combined.virus <- do.call(rbind, virus.data);
+
 colnames(combined.fusions)[1] <- 'gene1';
 
 keep.fields <- c('Sample','gene1','gene2','gene_id1','gene_id2','breakpoint1','breakpoint2','site1','site2','type','split_reads1','split_reads2','confidence','reading_frame');
+virus.fields <- setdiff(colnames(combined.virus),'Sample');
 
 formatted.fusions <- unique(combined.fusions[,keep.fields]);
 
@@ -139,6 +159,14 @@ write.table(
 	sep = '\t'
 	);
 
+write.table(
+	combined.virus[,c('Sample',virus.fields)],
+	file = generate.filename(arguments$project, 'arriba_viral_expression', 'tsv'),
+	row.names = FALSE,
+	col.names = TRUE,
+	sep = '\t'
+	);
+
 # format data for cbioportal
 tmp <- formatted.fusions[which(formatted.fusions$confidence == 'high'),];
 
@@ -150,13 +178,19 @@ cbio.data <- data.frame(
 	Entrez_Gene_Id = NA,
 	Center = NA,
 	Tumor_Sample_Barcode = rep(tmp$Sample, times = 2),
-	Fusion = rep(tmp$Fusion, times = 2),
+	Fusion = gsub('--','-',rep(tmp$Fusion, times = 2)),
 	DNA_support = 'no',
 	RNA_support = 'yes',
-	Method = 'Arriba',
+	Method = 'arriba',
 	Frame = rep(tmp$reading_frame, times = 2),
-	Fusion_Status = '',
+	Fusion_Status = NA,
 	stringsAsFactors = FALSE
+	);
+
+cbio.data$Frame <- factor(
+	cbio.data$Frame,
+	levels = c('out-of-frame','in-frame'),
+	labels = c('frameshift','inframe')
 	);
 
 write.table(
@@ -164,6 +198,7 @@ write.table(
 	file = generate.filename(arguments$project, 'arriba_for_cbioportal', 'tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
+	quote = FALSE,
 	sep = '\t'
 	);
 
