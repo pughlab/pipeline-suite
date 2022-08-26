@@ -605,7 +605,7 @@ sub main {
 			my @arriba_svs = grep { /$smp/ } @arriba_files;
 
 			$link = join('/', $link_directory, $smp . '_arriba.tsv');
-			symlink($farriba_svs[0], $link);
+			symlink($arriba_svs[0], $link);
 
 			push @arriba_svs_patient, $arriba_svs[0];
 			}

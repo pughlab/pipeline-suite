@@ -357,9 +357,9 @@ sub main {
 					log_file	=> $log
 					);
 
-				push @sample_jobs, $run_id;
-				push @patient_jobs, $run_id;
-				push @all_jobs, $run_id;
+				push @sample_jobs, $star_run_id;
+				push @patient_jobs, $star_run_id;
+				push @all_jobs, $star_run_id;
 				} else {
 				print $log "Skipping STAR because output already exists...\n";
 				}
