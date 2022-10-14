@@ -20,6 +20,7 @@ mutation_signatures: /cluster/projects/pughlab/references/COSMIC/Mutational_Siga
 bwa_version: 0.7.15
 samtools_version: 1.9
 picard_version: 2.6.0
+sambamba_version: 0.7.0
 bedtools_version: 2.27.1
 gatk_version: 3.8
 gatk_cnv_version: 4.1.8.1
@@ -70,7 +71,9 @@ bwa:
                 normal: '05:00:00'
                 tumour: '05:00:00'
         merge:
+            tool: 'picard' # or sambamba
             mark_dup: Y
+            n_cpus: 1 # or more for sambamba
             java_mem:
                 normal: 7g
                 tumour: 11g
@@ -125,10 +128,9 @@ bamqc:
                 normal: 15
             mem: 4G
             time: '48:00:00'
-other_tools:
-    run_mutsig: Y
 haplotype_caller:
     run: Y
+    chromosomes:
     parameters:
         haplotype_call:
             java_mem: 3g
@@ -167,7 +169,9 @@ annotate:
     vcf2maf_path: # /cluster/projects/pughlab/bin/vcf2maf-1.6.17/vcf2maf.pl  ## provide EITHER this or vcf2maf_version above ##
     vep_path: /cluster/tools/software/centos7/vep/98
     vep_data: /cluster/projects/pughlab/references/VEP_cache/98
-    filter_vcf: /cluster/projects/pughlab/references/VEP_cache/ExAC_nonTCGA.r1.sites.b37TOhg19.vep.vcf.gz 
+    filter_vcf: /cluster/projects/pughlab/references/VEP_cache/ExAC_nonTCGA.r1.sites.b37TOhg19.vep.vcf.gz
+    buffer_size: 1000
+    n_cpus: 4
     mem: 16G
     time: '12:00:00'
 mutect:
@@ -357,7 +361,7 @@ svict:
             mem: 16G
             time: '24:00:00'
 panelcn_mops:
-    run: Y # only for targeted panel
+    run: N # only for targeted panel
     parameters:
         run_cohort: Y
         cn_mops:
@@ -393,3 +397,5 @@ msi_sensor:
         sensor: # some WGS require up to 36G, but most (WXS/WGS/targeted) are fine with 4G
             mem: 4G
             time: '24:00:00'
+other_tools:
+    run_mutsig: Y

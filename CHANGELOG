@@ -1,3 +1,15 @@
+2022-10-14: PughLab pipeline-suite (version 0.7.2)
+- bwa: added n_cpus argument for bwa step
+- bwa: added sambamba option for merge/markdup (picard merge/markdup fails with large WGS files)
+- pindel: added minimum insert size (pindel fails if insert size provided is shorter than expected read length)
+- delly: added multi-threading capability, which was added in recent delly versions (1.1.3+)
+- haplotypeCaller: will run split by chromosome if input is WGS and running on slurm (uses array ability)
+- VCF2MAF: added arguments to customize buffer size and number of forks used for VEP (can be specified in config.yaml)
+- minor other updates/bug fixes
+
+2022-08-15: PughLab pipeline-suite (version 0.7.1)
+- NEW: arriba.pl; added Arriba for fusion detection in RNA-Seq
+
 2022-07-22: PughLab pipeline-suite (version 0.7.0)
 - bwa: added file used to check for completion of alignment step prior to sorting
 - pindel: moved intermediate directory to sample directory (from patient directory) to avoid overwritting necessary files
