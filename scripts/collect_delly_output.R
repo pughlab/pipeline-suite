@@ -63,7 +63,7 @@ if (arguments$germline) {
 	input.file <- rev(sort(input.file));
 
 	# find VCF header
-	tmp <- read.delim(input.file[1], nrow = 400, header = FALSE);
+	tmp <- read.delim(input.file[1], nrow = 1000, header = FALSE);
 	header <- length(grep('##', tmp$V1));
 	rm(tmp);
 
@@ -75,7 +75,7 @@ if (arguments$germline) {
 	input.files <- list.files(pattern = 'Delly_SVs_somatic_hc.bcf$', recursive = TRUE);
 
 	# find VCF header
-	tmp <- read.delim(input.files[1], nrow = 400, header = FALSE);
+	tmp <- read.delim(input.files[1], nrow = 1000, header = FALSE);
 	header <- length(grep('##', tmp$V1));
 	rm(tmp);
 
@@ -205,7 +205,11 @@ for (smp in all.samples) {
 		extract.format, metric = 'RV'));
 
 	tmp$Filter <- apply(delly.calls[,c('FORMAT',smp)], 1, extract.format, metric = 'FT');
-	tmp$CN <- as.integer(apply(delly.calls[,c('FORMAT',smp)], 1, extract.format, metric = 'CN'));
+	tmp$CN <- if (arguments$germline) {
+		as.integer(apply(delly.calls[,c('FORMAT',smp)], 1, extract.format, metric = 'CN'));
+		} else {
+		as.integer(apply(delly.calls[,c('FORMAT',smp)], 1, extract.format, metric = 'RDCN'));
+		}
 
 	my.data[[smp]] <- tmp;
 	gc();
@@ -277,7 +281,7 @@ if (!is.null(arguments$targets)) {
 	} else {
 
 	# filter by call quality
-	sample.filtered <- combined.data[which(sample.filtered$Filter == 'PASS'),];
+	sample.filtered <- combined.data[which(combined.data$Filter == 'PASS'),];
 	}
 
 # save filtered data

@@ -55,6 +55,16 @@ sub error_checking {
 			$tool_data->{bwa}->{parameters}->{merge}->{mark_dup} = 'N';
 		}
 
+		if (!defined($tool_data->{bwa}->{parameters}->{bwa}->{n_cpus}->{tumour})) {
+			$tool_data->{bwa}->{parameters}->{bwa}->{n_cpus}->{tumour} = 4;
+			print "bwa_config: Number of threads not defined for step bwa:tumour; setting to 4\n";
+		}
+
+		if (!defined($tool_data->{bwa}->{parameters}->{bwa}->{n_cpus}->{normal})) {
+			$tool_data->{bwa}->{parameters}->{bwa}->{n_cpus}->{normal} = 4;
+			print "bwa_config: Number of threads not defined for step bwa:normal; setting to 4\n";
+		}
+
 		if (!defined($tool_data->{reference}))  {
 			die("Must supply path to reference genome!");
 		}
@@ -680,6 +690,8 @@ sub get_vcf2maf_command {
 		vep_path	=> undef,
 		vep_data	=> undef,
 		filter_vcf	=> undef,
+		n_cpus		=> 4,
+		buffer_size	=> 1000,
 		@_
 		);
 
@@ -706,9 +718,9 @@ sub get_vcf2maf_command {
 		'--tumor-id', $args{tumour_id},
 		'--vep-path', $args{vep_path},
 		'--vep-data', $args{vep_data},
-		'--vep-forks 4',
+		'--vep-forks', $args{n_cpus},
 		'--filter-vcf', $args{filter_vcf},
-		'--buffer-size 1000',
+		'--buffer-size', $args{buffer_size},
 		'--tmp-dir', $args{tmp_dir}
 		);
 

@@ -435,9 +435,6 @@ sub main{
 	my $germline_directory = join('/', $cohort_directory, 'germline_variants');
 	unless (-e $germline_directory) { make_path($germline_directory); }
 
-	my $annotated_directory = join('/', $cohort_directory, 'VCF2MAF');
-	unless (-e $annotated_directory) { make_path($annotated_directory); }
-
 	# First step, find all of the CombineGVCF files
 	opendir(HC_OUTPUT, $output_directory) or die "Could not open $output_directory";
 	my @combined_gvcfs = grep { /g.vcf.gz$/ } readdir(HC_OUTPUT);
@@ -754,7 +751,11 @@ sub main{
 
 	# check if we should annotate these variants
 	my $should_run_vcf2maf = 0;
-	if ('Y' eq $parameters->{run_vcf2maf}) { $should_run_vcf2maf = 1; }
+	my $annotated_directory = join('/', $cohort_directory, 'VCF2MAF');
+	if ('Y' eq $parameters->{run_vcf2maf}) {
+		$should_run_vcf2maf = 1;
+		unless (-e $annotated_directory) { make_path($annotated_directory); }
+		}
 
 	my (@germline_jobs, @annotate_jobs);
 

@@ -218,7 +218,7 @@ sub get_plot_denoise_command {
 		);
 
 	my $gatk_command = 'module unload openblas/0.3.13';
-	$gatk_command .= "\nmodule load R";
+	$gatk_command .= "\nmodule load R/4.1.0";
 
 	$gatk_command .= "\n\n" . join(' ',
 		'gatk PlotDenoisedCopyRatios',
@@ -351,7 +351,7 @@ sub get_plot_segments_command {
 		);
 
 	my $gatk_command = 'module unload openblas/0.3.13';
-	$gatk_command .= "\nmodule load R";
+	$gatk_command .= "\nmodule load R/4.1.0";
 
 	$gatk_command .= "\n\n" . join(' ',
 		'gatk PlotModeledSegments',

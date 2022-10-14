@@ -70,7 +70,7 @@ sub get_split_command {
 sub get_target_intervals_command {
 	my %args = (
 		input		=> undef,
-		n_Ramples	=> 1,
+		n_samples	=> 1,
 		output		=> undef,
 		intervals	=> undef,
 		java_mem	=> undef,

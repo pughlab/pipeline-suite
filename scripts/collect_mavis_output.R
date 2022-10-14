@@ -257,6 +257,8 @@ if (arguments$find_drawings) {
 	tmp$Status <- 'somatic';
 	if ( (length(normal.smps) > 0) & (any(tmp$library %in% normal.smps)) ) {
 		tmp[which(tmp$library %in% normal.smps),]$Status <- 'germline';
+		}
+	if (length(normal.smps) > 1) {
 		germ.idx <- which(apply(
 			tmp[,names(normal.smps)],1,function(i) { any(i == 'germline', na.rm = TRUE) } ));
 		tmp[germ.idx,]$Status <- 'germline';
@@ -264,16 +266,18 @@ if (arguments$find_drawings) {
 
 	# get type of evidence (DNA or RNA)
 	tmp[,c('DNA_Support','RNA_Support')] <- 'no';
-	tmp[which(tmp$protocol == 'genome'),]$DNA_Support <- 'yes';
+	if (any(tmp$protocol == 'genome')) {
+		tmp[which(tmp$protocol == 'genome'),]$DNA_Support <- 'yes';
+		}
 
 	if (length(rna.smps) > 0) {
 		tmp[which(tmp$protocol == 'transcriptome'),]$RNA_Support <- 'yes';
 		rna.idx <- which(apply(
 			tmp[,names(rna.smps)],1,function(i) { any(i == 'expressed', na.rm = TRUE) } ));
-		tmp[rna.idx,]$RNA_Support <- 'yes';
+		if (length(rna.idx) > 0) { tmp[rna.idx,]$RNA_Support <- 'yes'; }
 		dna.idx <- which(apply(
 			tmp[,names(tumour.smps)],1,function(i) { any(i == 'genomic support', na.rm = TRUE) } ));
-		tmp[dna.idx,]$DNA_Support <- 'yes';
+		if (length(dna.idx) > 0) { tmp[dna.idx,]$DNA_Support <- 'yes'; }
 		}
 
 	# is this an inframe or frameshift variant?
