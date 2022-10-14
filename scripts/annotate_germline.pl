@@ -244,6 +244,13 @@ sub main{
 		'haplotype_caller_genotypes_recalibrated.vcf.gz'
 		);
 
+	if ('Y' eq $parameters->{hard_filtering}->{run}) {
+		$recalibrated_gvcf = join('/',
+			$input_directory,
+			'haplotype_caller_genotypes_filtered.vcf.gz'
+			);
+		}
+
 	# process each patient in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
