@@ -11,7 +11,7 @@ use POSIX qw(strftime);
 use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
-use List::Util qw(any sum);
+use List::Util qw(any sum max);
 use IO::Handle;
 
 my $cwd = dirname(__FILE__);
@@ -97,7 +97,8 @@ sub get_pindel_command {
 	if (('ALL' eq $args{chrom}) || (!defined($args{chrom}))) {
 		$pindel_command .= ' --report_interchromosomal_events';
 		$pindel_command .= ' --report_long_insertions';
-#		$pindel_command .= ' --detect_DD';
+		} else {
+		$pindel_command .= ' --report_duplications false';
 		}
 
 	if (defined($args{chrom})) {
@@ -425,13 +426,15 @@ sub main {
 			}
 
 		# get normal stats (if present)
-		my $normal_insert_size = 151;
+		my $normal_insert_size = 152; # read length + 1
 		my $normal = undef;
 		if (scalar(@normal_ids) > 0) {
 			$normal = $normal_ids[0];
 			unless($args{dry_run}) {
-				$normal_insert_size = get_mean_insert_size_command(
-					input => $smp_data->{$patient}->{normal}->{$normal}
+				$normal_insert_size = max($normal_insert_size,
+					get_mean_insert_size_command(
+						input => $smp_data->{$patient}->{normal}->{$normal}
+						)
 					);
 				}
 			}
@@ -463,10 +466,13 @@ sub main {
 			if ('Y' eq missing_file($sample_sheet)) {
 				open(my $fh, '>', $sample_sheet) or die "Cannot open '$sample_sheet' !";
 
-				my $tumor_insert_size = 151;
+				my $tumor_insert_size = 152; # read length + 1
 				unless($args{dry_run}) {
-					$tumor_insert_size = get_mean_insert_size_command(
-						input => $smp_data->{$patient}->{tumour}->{$sample}
+					$tumor_insert_size = max(
+						$tumor_insert_size,
+						get_mean_insert_size_command(
+							input => $smp_data->{$patient}->{tumour}->{$sample}
+							)
 						);
 					}
 
@@ -680,10 +686,7 @@ sub main {
 				ref_type	=> $tool_data->{ref_type},
 				output		=> $final_maf,
 				tmp_dir		=> $tmp_directory,
-				vcf2maf		=> $tool_data->{annotate}->{vcf2maf_path},
-				vep_path	=> $tool_data->{annotate}->{vep_path},
-				vep_data	=> $tool_data->{annotate}->{vep_data},
-				filter_vcf	=> $tool_data->{annotate}->{filter_vcf}
+				parameters	=> $tool_data->{annotate}
 				);
 
 			# check if this should be run
@@ -715,7 +718,7 @@ sub main {
 					cmd     => $vcf2maf_cmd,
 					modules => ['perl', $samtools, 'tabix', $vcf2maf],
 					dependencies    => $run_id,
-					cpus_per_task	=> 4,
+					cpus_per_task	=> $tool_data->{annotate}->{n_cpus},
 					max_time        => $tool_data->{annotate}->{time},
 					mem             => $tool_data->{annotate}->{mem},
 					hpc_driver      => $args{hpc_driver},

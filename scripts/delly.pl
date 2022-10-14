@@ -17,7 +17,7 @@ my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
 # define some global variables
-our ($reference, $exclude_regions, $intervals_bed) = undef;
+our ($reference, $exclude_regions, $intervals_bed, $delly_multi) = undef;
 
 ####################################################################################################
 # version	author		comment
@@ -44,10 +44,17 @@ sub get_delly_command {
 		tumour	=> undef,
 		normal	=> undef,
 		output	=> undef,
+		n_cpus	=> 1,
 		@_
 		);
 
-	my $delly_cmd = join(' ',
+	my $delly_cmd;
+
+	if ($delly_multi) {
+		$delly_cmd = 'export OMP_NUM_THREADS=' . $args{n_cpus} . "\n\n";
+		}
+
+	$delly_cmd .= join(' ',
 		'delly call',
 		'-g', $reference,
 		'-x', $exclude_regions,
@@ -807,6 +814,14 @@ sub main {
 	my $delly	= 'delly/' . $tool_data->{delly_version};
 	my $samtools 	= 'samtools/' . $tool_data->{samtools_version};
 
+	# is this version of delly multi-thread capable?
+	$delly_multi = 0;
+	my $needed = version->declare('1.1.3')->numify;
+	my $given = version->declare($tool_data->{delly_version})->numify;
+	if ($given >= $needed) {
+		$delly_multi = 1;
+		}
+
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{delly}->{parameters};
 
@@ -909,7 +924,8 @@ sub main {
 
 			$delly_cmd = get_delly_command(
 				tumour	=> join(' ', @tumour_bams),
-				output	=> $delly_output
+				output	=> $delly_output,
+				n_cpus	=> scalar(@tumour_bams)
 				);
 
 			push @filtered_bcfs, $delly_output;
@@ -919,7 +935,8 @@ sub main {
 			$delly_cmd = get_delly_command(
 				tumour	=> join(' ', @tumour_bams),
 				normal	=> join(' ', @normal_bams),
-				output	=> $delly_output
+				output	=> $delly_output,
+				n_cpus	=> scalar(@tumour_bams) + scalar(@normal_bams)
 				);
 			}
 

@@ -26,6 +26,7 @@ star_fusion_path: /cluster/projects/pughlab/bin/STAR-Fusion-1.8.1/STAR-Fusion
 rsem_version: 1.3.0
 gatk_version: 3.8
 fusioncatcher_version: 1.20
+arriba_version: 2.3.0
 # tool specific parameters
 star:
     run: Y
@@ -102,6 +103,25 @@ fusioncatcher:
             time: '72:00:00'
         combine_results:
             mem: 4G
+            time: '04:00:00'
+arriba:
+    run: Y
+    star_version: 2.7.9a
+    star_reference: /cluster/projects/pughlab/references/Arriba/STAR_2.7.9a_GRCh38_gencode_v31_plus_virus/
+    reference: /cluster/projects/pughlab/references/Arriba/hg38_plus_viral_genomes.fa
+    gtf: # /cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.annotation.gtf
+    parameters:
+        star:
+            mem: 38G
+            time: '48:00:00'
+        arriba:
+            mem: 18G
+            time: '24:00:00'
+        quantify_virus:
+            mem: 1G
+            time: '04:00:00'
+        combine_results:
+            mem: 1G
             time: '04:00:00'
 haplotype_caller:
     run: Y

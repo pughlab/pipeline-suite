@@ -59,6 +59,7 @@ sub get_mavis_command {
 		pindel		=> undef,
 		starfusion	=> undef,
 		fusioncatcher	=> undef,
+		arriba		=> undef,
 		output		=> undef,
 		@_
 		);
@@ -71,6 +72,7 @@ sub get_mavis_command {
 		'-w', $args{output}
 		);
 
+	# add in tool options
 	if (defined($args{delly})) {
 		$mavis_cmd .= join(' ', ' --convert delly', $args{delly}, 'delly');
 		push @dna_tools, 'delly';
@@ -132,7 +134,17 @@ sub get_mavis_command {
 		push @rna_tools, 'fusioncatcher';
 		}
 
+	if (defined($args{arriba})) {
+		$mavis_cmd .= ' ' . join(' ',
+			'--external_conversion arriba "Rscript',
+			"$cwd/convert_arriba.R",
+			$args{arriba} . '"'
+			);
 
+		push @rna_tools, 'arriba';
+		}
+
+	# add in sample options
 	foreach my $smp ( @{$args{tumour_ids}} ) {
 
 		my $id = $smp;
@@ -196,6 +208,7 @@ sub main {
 		svict_dir		=> undef,
 		starfusion_dir		=> undef,
 		fusioncatcher_dir	=> undef,
+		arriba_dir		=> undef,
 		hpc_driver		=> undef,
 		del_intermediates	=> undef,
 		dry_run			=> undef,
@@ -284,6 +297,10 @@ sub main {
 		if (defined($args{fusioncatcher_dir})) {
 			print $log "\n    FusionCatcher directory: $args{fusioncatcher_dir}";
 			}
+
+		if (defined($args{arriba_dir})) {
+			print $log "\n    Arriba directory: $args{arriba_dir}";
+			}
 		}
 
 	my $intervals_bed;
@@ -360,7 +377,13 @@ sub main {
 			my @rna_ids = sort keys %{$rna_data->{$patient}->{'tumour'}};
 			foreach my $id ( @rna_ids ) {
 				my $bam = $rna_data->{$patient}->{'tumour'}->{$id};
-				$smp_data->{$patient}->{'tumour_rna'}->{$id} = $bam;
+				$smp_data->{$patient}->{'rna'}->{$id} = $bam;
+				}
+			my @rna_normals = sort keys %{$rna_data->{$patient}->{'normal'}};
+			foreach my $id ( @rna_normals ) {
+				my $bam = $rna_data->{$patient}->{'normals'}->{$id};
+				$smp_data->{$patient}->{'rna'}->{$id} = $bam;
+				push @rna_ids, $id;
 				}
 			}
 		}
@@ -371,7 +394,7 @@ sub main {
 
 	# find SV files in each directory
 	my (@manta_files, @delly_files, @starfusion_files, @fusioncatcher_files);
-	my (@novobreak_files, @svict_files, @pindel_files);
+	my (@novobreak_files, @svict_files, @pindel_files, @arriba_files);
 	my $should_run_final;
 
 	if (defined($args{manta_dir})) {
@@ -398,6 +421,9 @@ sub main {
 	if (defined($args{fusioncatcher_dir})) {
 		@fusioncatcher_files = _get_files($args{fusioncatcher_dir}, 'final-list_candidate-fusion-genes.txt');
 		}
+	if (defined($args{arriba_dir})) {
+		@arriba_files = _get_files($args{arriba_dir}, 'fusions.tsv');
+		}
 
 	# initialize objects
 	my ($run_script, $run_id, $link, $cleanup_cmd);
@@ -413,7 +439,7 @@ sub main {
 		# find bams
 		my @normal_ids = sort keys %{$smp_data->{$patient}->{'normal_dna'}};
 		my @tumour_ids = sort keys %{$smp_data->{$patient}->{'tumour_dna'}};
-		my @rna_ids_patient = sort keys %{$smp_data->{$patient}->{'tumour_rna'}};
+		my @rna_ids_patient = sort keys %{$smp_data->{$patient}->{'rna'}};
 
 		print $log "> Found " . scalar(@normal_ids) . " normal BAMs.\n";
 		print $log "> Found " . scalar(@tumour_ids) . " tumour BAMs.\n";
@@ -443,7 +469,7 @@ sub main {
 		# and format input files
 		my (@manta_svs_formatted, @format_jobs);
 		my (@delly_svs_patient, @novobreak_svs_patient, @svict_svs_patient, @pindel_svs_patient);
-		my (@starfus_svs_patient, @fuscatch_svs_patient);
+		my (@starfus_svs_patient, @fuscatch_svs_patient, @arriba_svs_patient);
 		my $format_command;
 
 		foreach my $normal (@normal_ids) {
@@ -556,27 +582,38 @@ sub main {
 
 			print $log ">> Finding files for RNA: $smp\n";
 
-			my @tmp = split /\//, $smp_data->{$patient}->{'tumour_rna'}->{$smp};
+			my @tmp = split /\//, $smp_data->{$patient}->{'rna'}->{$smp};
 			$link = join('/', $link_directory, 'rna_' . $tmp[-1]);
-			symlink($smp_data->{$patient}->{'tumour_rna'}->{$smp}, $link);
+			symlink($smp_data->{$patient}->{'rna'}->{$smp}, $link);
 
+			# star-fusion
 			my @starfus_svs = grep { /$smp/ } @starfusion_files;
 			$link = join('/', $link_directory, $smp . '_star-fusion_predictions.abridged.tsv');
 			symlink($starfus_svs[0], $link);
 
 			push @starfus_svs_patient, $starfus_svs[0];
 
+			# fusioncatcher
 			my @fuscatch_svs = grep { /$smp/ } @fusioncatcher_files;
 
 			$link = join('/', $link_directory, $smp . '_final-list_candidate-fusion-genes.txt');
 			symlink($fuscatch_svs[0], $link);
 
 			push @fuscatch_svs_patient, $fuscatch_svs[0];
+
+			# arriba
+			my @arriba_svs = grep { /$smp/ } @arriba_files;
+
+			$link = join('/', $link_directory, $smp . '_arriba.tsv');
+			symlink($arriba_svs[0], $link);
+
+			push @arriba_svs_patient, $arriba_svs[0];
 			}
 
 		if (scalar(@rna_ids_patient) > 0) {
 			print $log "> Found " . scalar(@starfus_svs_patient) . " starfusion files for $patient.\n";
 			print $log "> Found " . scalar(@fuscatch_svs_patient) . " fusioncatcher files for $patient.\n";
+			print $log "> Found " . scalar(@arriba_svs_patient) . " arriba files for $patient.\n";
 			}
 
 		# indicate expected mavis output file
@@ -622,7 +659,7 @@ sub main {
 		my $mavis_cfg = join('/', $patient_directory, 'mavis.cfg');
 
 		my ($delly_input, $manta_input, $novobreak_input, $pindel_input, $svict_input) = undef;
-		my ($starfus_input, $fuscatch_input) = undef;
+		my ($starfus_input, $fuscatch_input, $arriba_input) = undef;
 
 		if (scalar(@delly_svs_patient) > 0) {
 			$delly_input = join(' ', @delly_svs_patient);
@@ -645,6 +682,9 @@ sub main {
 		if (scalar(@fuscatch_svs_patient) > 0) {
 			$fuscatch_input = join(' ', @fuscatch_svs_patient);
 			}
+		if (scalar(@arriba_svs_patient) > 0) {
+			$arriba_input = join(' ', @arriba_svs_patient);
+			}
 
 		$mavis_cmd .= "\n\necho 'Running MAVIS config.';\n\n" . get_mavis_command(
 			tumour_ids	=> \@tumour_ids,
@@ -652,7 +692,7 @@ sub main {
 			rna_ids		=> \@rna_ids_patient,
 			tumour_bams	=> $smp_data->{$patient}->{'tumour_dna'},
 			normal_bam	=> defined($normal_id) ? $smp_data->{$patient}->{'normal_dna'}->{$normal_id} : undef,
-			rna_bams	=> $smp_data->{$patient}->{'tumour_rna'},
+			rna_bams	=> $smp_data->{$patient}->{'rna'},
 			manta		=> $manta_input,
 			delly		=> $delly_input,
 			novobreak	=> $novobreak_input,
@@ -660,6 +700,7 @@ sub main {
 			svict		=> $svict_input,
 			starfusion	=> $starfus_input,
 			fusioncatcher	=> $fuscatch_input,
+			arriba		=> $arriba_input,
 			output		=> $mavis_cfg
 			);
 
@@ -931,7 +972,7 @@ sub main {
 # declare variables
 my ($tool_config, $data_config, $output_directory, $manta_directory, $delly_directory);
 my ($novobreak_directory, $pindel_directory, $svict_directory);
-my ($rna_config, $starfusion_directory, $fusioncatcher_directory);
+my ($rna_config, $starfusion_directory, $fusioncatcher_directory, $arriba_directory);
 my $hpc_driver = 'slurm';
 my ($remove_junk, $dry_run, $help, $no_wait);
 
@@ -949,6 +990,7 @@ GetOptions(
 	'v|svict=s'	=> \$svict_directory,
 	's|starfusion=s'	=> \$starfusion_directory,
 	'f|fusioncatcher=s'	=> \$fusioncatcher_directory,
+	'a|arriba=s'	=> \$arriba_directory,
 	'c|cluster=s'	=> \$hpc_driver,
 	'remove'	=> \$remove_junk,
 	'dry-run'	=> \$dry_run,
@@ -970,6 +1012,7 @@ if ($help) {
 		"\t--svict|-v\t<string> path to svict output directory",
 		"\t--starfusion|-s\t<string> path to star-fusion output directory <optional>",
 		"\t--fusioncatcher|-f\t<string> path to fusioncatcher output directory <optional>",
+		"\t--arriba|-a\t<string> path to arriba output directory <optional>",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
 		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
@@ -999,6 +1042,7 @@ main(
 	novobreak_dir		=> $novobreak_directory,
 	starfusion_dir		=> $starfusion_directory,
 	fusioncatcher_dir	=> $fusioncatcher_directory,
+	arriba_dir		=> $arriba_directory,
 	hpc_driver		=> $hpc_driver,
 	del_intermediates	=> $remove_junk,
 	dry_run			=> $dry_run,

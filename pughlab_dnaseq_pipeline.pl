@@ -925,7 +925,7 @@ sub main {
 				log_dir	=> $log_directory,
 				name	=> 'pughlab_dna_pipeline__run_mutect2',
 				cmd	=> $mutect2_command,
-				modules	=> ['perl'],
+				modules	=> ['perl',$samtools],
 				dependencies	=> join(':', $current_dependencies, $mutect2_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,

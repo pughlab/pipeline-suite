@@ -81,9 +81,11 @@ sub get_pileup_command {
 # format command to run somaticsnipers snpfilter command
 sub get_snp_filter_command {
 	my %args = (
-		input	=> undef,
-		indels	=> undef,
-		output	=> undef,
+		input		=> undef,
+		indels_normal	=> undef,
+		indels_tumour	=> undef,
+		output		=> undef,
+		tmp_dir		=> undef,
 		@_
 		);
 
@@ -92,7 +94,14 @@ sub get_snp_filter_command {
 	$filter_command .= "\n\n" . join(' ',
 		'perl $DIRNAME/snpfilter.pl',
 		'--snp-file', $args{input},
-		'--indel-file', $args{indels},
+		'--indel-file', $args{indels_normal},
+		'--out-file', join('/', $args{tmp_dir}, 'normal_filtered.SNPfilter')
+		);
+
+	$filter_command .= "\n\n" . join(' ',
+		'perl $DIRNAME/snpfilter.pl',
+		'--snp-file', join('/', $args{tmp_dir}, 'normal_filtered.SNPfilter'),
+		'--indel-file', $args{indels_tumour},
 		'--out-file', $args{output}
 		);
 
@@ -532,16 +541,13 @@ sub main {
 
 			# apply somaticsniper snpfilter to initial results
 			my $snp_filter = $output_stem . '_tumour_normal.SNPfilter';
-			my $filter_command = get_snp_filter_command(
-				input	=> $output_stem . '.vcf',
-				indels	=> $norm_pileup,
-				output	=> join('/', $sample_directory, 'normal_filtered.SNPfilter')
-				);
 
-			$filter_command .= "\n\n" . get_snp_filter_command(
-				input	=> join('/', $sample_directory, 'normal_filtered.SNPfilter'),
-				indels	=> $tumour_pileup,
-				output	=> $snp_filter 
+			my $filter_command = get_snp_filter_command(
+				input		=> $output_stem . '.vcf',
+				indels_normal	=> $norm_pileup,
+				indels_tumour	=> $tumour_pileup,
+				output		=> $snp_filter,
+				tmp_dir		=> $sample_directory
 				);
 
 			$cleanup_cmd .= "\nrm " . join('/', $sample_directory, '*SNPfilter');
@@ -712,10 +718,7 @@ sub main {
 				ref_type	=> $tool_data->{ref_type},
 				output		=> $final_maf,
 				tmp_dir		=> $tmp_directory,
-				vcf2maf		=> $tool_data->{annotate}->{vcf2maf_path},
-				vep_path	=> $tool_data->{annotate}->{vep_path},
-				vep_data	=> $tool_data->{annotate}->{vep_data},
-				filter_vcf	=> $tool_data->{annotate}->{filter_vcf}
+				parameters	=> $tool_data->{annotate}
 				);
 
 			# check if this should be run
@@ -747,7 +750,7 @@ sub main {
 					cmd     => $vcf2maf_cmd,
 					modules => ['perl', $samtools, 'tabix', $vcf2maf],
 					dependencies    => $run_id,
-					cpus_per_task	=> 4,
+					cpus_per_task	=> $tool_data->{annotate}->{n_cpus},
 					max_time        => $tool_data->{annotate}->{time},
 					mem             => $tool_data->{annotate}->{mem},
 					hpc_driver      => $args{hpc_driver},

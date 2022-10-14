@@ -55,6 +55,16 @@ sub error_checking {
 			$tool_data->{bwa}->{parameters}->{merge}->{mark_dup} = 'N';
 		}
 
+		if (!defined($tool_data->{bwa}->{parameters}->{bwa}->{n_cpus}->{tumour})) {
+			$tool_data->{bwa}->{parameters}->{bwa}->{n_cpus}->{tumour} = 4;
+			print "bwa_config: Number of threads not defined for step bwa:tumour; setting to 4\n";
+		}
+
+		if (!defined($tool_data->{bwa}->{parameters}->{bwa}->{n_cpus}->{normal})) {
+			$tool_data->{bwa}->{parameters}->{bwa}->{n_cpus}->{normal} = 4;
+			print "bwa_config: Number of threads not defined for step bwa:normal; setting to 4\n";
+		}
+
 		if (!defined($tool_data->{reference}))  {
 			die("Must supply path to reference genome!");
 		}
@@ -667,7 +677,7 @@ sub _get_files {
 
 # format command to convert annotated VCF to MAF
 sub get_vcf2maf_command {
-	my %args = (
+	my $args = {
 		input		=> undef,
 		tumour_id	=> undef,
 		tumour_vcf_id	=> undef,
@@ -676,54 +686,57 @@ sub get_vcf2maf_command {
 		ref_type	=> undef,
 		output		=> undef,
 		tmp_dir		=> undef,
-		vcf2maf		=> undef,
-		vep_path	=> undef,
-		vep_data	=> undef,
-		filter_vcf	=> undef,
+		parameters	=> undef,
+#		vcf2maf		=> undef,
+#		vep_path	=> undef,
+#		vep_data	=> undef,
+#		filter_vcf	=> undef,
+#		n_cpus		=> 4,
+#		buffer_size	=> 1000,
 		@_
-		);
+		};
 
 	my $ref_type;
-	if ('hg19' eq $args{ref_type}) {
+	if ('hg19' eq $args->{ref_type}) {
 		$ref_type = 'GRCh37';
-		} elsif ('hg38' eq $args{ref_type}) {
+		} elsif ('hg38' eq $args->{ref_type}) {
 		$ref_type = 'GRCh38';
-		} elsif ( ('GRCh38' eq $args{ref_type}) || ('GRCh37' eq $args{ref_type}) ) {
-		$ref_type = $args{ref_type};
+		} elsif ( ('GRCh38' eq $args->{ref_type}) || ('GRCh37' eq $args->{ref_type}) ) {
+		$ref_type = $args->{ref_type};
 		}
 
 	my $maf_command = 'vcf2maf.pl';
-	if (defined($args{vcf2maf})) {
-		$maf_command = "perl $args{vcf2maf}"; 
+	if (defined($args->{vcf2maf})) {
+		$maf_command = "perl $args->{vcf2maf}"; 
 		}
 
 	$maf_command .= ' ' . join(' ',
 		'--species homo_sapiens',
 		'--ncbi-build', $ref_type,
-		'--ref-fasta', $args{reference},
-		'--input-vcf', $args{input},
-		'--output-maf', $args{output},
-		'--tumor-id', $args{tumour_id},
-		'--vep-path', $args{vep_path},
-		'--vep-data', $args{vep_data},
-		'--vep-forks 4',
-		'--filter-vcf', $args{filter_vcf},
-		'--buffer-size 1000',
-		'--tmp-dir', $args{tmp_dir}
+		'--ref-fasta', $args->{reference},
+		'--input-vcf', $args->{input},
+		'--output-maf', $args->{output},
+		'--tumor-id', $args->{tumour_id},
+		'--vep-path', $args->{parameters}->{vep_path},
+		'--vep-data', $args->{parameters}->{vep_data},
+		'--vep-forks', $args->{parameters}->{n_cpus},
+		'--filter-vcf', $args->{parameters}->{filter_vcf},
+		'--buffer-size', $args->{parameters}->{buffer_size},
+		'--tmp-dir', $args->{tmp_dir}
 		);
 
-	if (defined($args{normal_id})) {
-		$maf_command .= " --normal-id $args{normal_id}";
+	if (defined($args->{normal_id})) {
+		$maf_command .= " --normal-id $args->{normal_id}";
 
-		if ($args{input} =~ m/Strelka|VarScan|MuTect2|SomaticSniper/) {
+		if ($args->{input} =~ m/Strelka|VarScan|MuTect2|SomaticSniper/) {
 			$maf_command .= " --vcf-tumor-id TUMOR --vcf-normal-id NORMAL";
 			}
 	} else {
-		if ($args{input} =~ m/VarScan/) {
+		if ($args->{input} =~ m/VarScan/) {
 			$maf_command .= " --vcf-tumor-id Sample1";
 		}
-		if ( (defined($args{tumour_vcf_id})) && ($args{input} =~ m/MuTect2|Strelka/)) {
-			$maf_command .= " --vcf-tumor-id $args{tumour_vcf_id}";
+		if ( (defined($args->{tumour_vcf_id})) && ($args->{input} =~ m/MuTect2|Strelka/)) {
+			$maf_command .= " --vcf-tumor-id $args->{tumour_vcf_id}";
 		}
 	}
 

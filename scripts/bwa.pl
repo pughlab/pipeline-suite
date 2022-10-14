@@ -66,11 +66,12 @@ sub get_bwa_command {
 		stem		=> undef,
 		readgroup	=> undef,
 		reference	=> undef,
+		n_cpus		=> 4,
 		@_
 		);
 
 	my $bwa_command = join(' ',
-		'bwa mem -M -t4',  # 4 threads
+		'bwa mem -M -t' . $args{n_cpus},
 		'-R', $args{readgroup},
 		$args{reference},
 		$args{r1}
@@ -80,7 +81,7 @@ sub get_bwa_command {
 		$bwa_command .= ' ' . $args{r2};
 		}
 
-	$bwa_command .= "> $args{stem}" . '.sam';
+	$bwa_command .= " > $args{stem}" . '.sam';
 
 	return($bwa_command);
 	}	
@@ -127,46 +128,92 @@ sub get_index_bam_command {
 
 # format command to merge bams
 sub get_merge_command {
-	my %args = (
+	my $args = {
 		input		=> undef,
 		output		=> undef,
 		tmp_dir		=> undef,
 		java_mem	=> undef,
+		n_cpus		=> 1,
+		tool		=> 'picard',
 		@_
-		);
+		};
 
-	my $merge_command = join(' ',
-		'java -Xmx' . $args{java_mem},
-		'-jar $picard_dir/picard.jar MergeSamFiles',
-		'INPUT=' . $args{input},
-		'OUTPUT=' . $args{output},
-		'ASSUME_SORTED=true USE_THREADING=true',
-		'CREATE_INDEX=true CREATE_MD5_FILE=true',
-		'TMP_DIR=' . $args{tmp_dir}
-		);
+	my $merge_command;
+
+	# if data is WGS, picard merge may struggle, so use sambamba instead
+	if ('sambamba' eq $args->{tool}) {
+		$merge_command = join(' ',
+			'sambamba merge',
+			'-t', $args->{n_cpus},
+			$args->{output},
+			join(' ', @{$args->{input}})
+			);
+
+		$merge_command .= "\n\n" . join("\n",
+			"md5sum $args->{output} > $args->{output}.md5",
+			"sambamba index -t $args->{n_cpus} $args->{output}"
+			);
+
+		} elsif ('picard' eq $args->{tool}) {
+		$merge_command = join(' ',
+			'java -Xmx' . $args->{java_mem},
+			'-jar $picard_dir/picard.jar MergeSamFiles',
+			'INPUT=' . join(' INPUT=', @{$args->{input}}),
+			'OUTPUT=' . $args->{output},
+			'ASSUME_SORTED=true USE_THREADING=true',
+			'CREATE_INDEX=true CREATE_MD5_FILE=true',
+			'TMP_DIR=' . $args->{tmp_dir}
+			);
+		} else {
+			die('Unrecognized tool requested for merge step');
+		}
 
 	return($merge_command);
 	}
 
 sub get_merge_markdup_command {
-	my %args = (
+	my $args = {
 		input		=> undef,
 		output		=> undef,
 		tmp_dir		=> undef,
 		java_mem	=> undef,
+		n_cpus		=> undef,
+		tool		=> 'picard',
 		@_
-		);
+		};
 
-	my $merge_command = join(' ',
-		'java -Xmx' . $args{java_mem},
-		'-jar $picard_dir/picard.jar MarkDuplicates',
-		'INPUT=' . $args{input},
-		'OUTPUT=' . $args{output},
-		'METRICS_FILE=' . $args{output} . '.metrics',
-		'TMP_DIR=' . $args{tmp_dir},
-		'ASSUME_SORTED=true CREATE_INDEX=true CREATE_MD5_FILE=true',
-		'MAX_RECORDS_IN_RAM=100000 VALIDATION_STRINGENCY=SILENT'
-		);
+	my $merge_command;
+
+	# if data is WGS, picard MarkDup may struggle, so use sambamba instead
+	if ('sambamba' eq $args->{tool}) {
+		$merge_command = join(' ',
+			'sambamba markdup',
+			join(' ', @{$args->{input}}),
+			$args->{output},
+			'--tmpdir=' . $args->{tmp_dir},
+			'--overflow-list-size 5000000',
+			'-t', $args->{n_cpus}
+			);
+
+		$merge_command .= "\n\n" . join("\n",
+			"md5sum $args->{output} > $args->{output}.md5",
+			"sambamba index -t $args->{n_cpus} $args->{output}"
+			);
+
+		} elsif ('picard' eq $args->{tool}) {
+		$merge_command = join(' ',
+			'java -Xmx' . $args->{java_mem},
+			'-jar $picard_dir/picard.jar MarkDuplicates',
+			'INPUT=' . join(' INPUT=', @{$args->{input}}),
+			'OUTPUT=' . $args->{output},
+			'METRICS_FILE=' . $args->{output} . '.metrics',
+			'TMP_DIR=' . $args->{tmp_dir},
+			'ASSUME_SORTED=true CREATE_INDEX=true CREATE_MD5_FILE=true',
+			'MAX_RECORDS_IN_RAM=100000 VALIDATION_STRINGENCY=SILENT'
+			);
+		} else {
+			die('Unrecognized tool requested for MarkDuplicates');
+		}
 
 	return($merge_command);
 	}
@@ -238,6 +285,7 @@ sub main {
 	my $bwa_version	= 'bwa/' . $tool_data->{bwa_version};
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $picard	= 'picard/' . $tool_data->{picard_version};
+	my $sambamba	= 'sambamba/' . $tool_data->{sambamba_version};
 
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{bwa}->{parameters};
@@ -363,7 +411,8 @@ sub main {
 						r2		=> $r2,
 						stem		=> $filestem,
 						readgroup	=> $readgroup,
-						reference	=> $tool_data->{bwa}->{reference}
+						reference	=> $tool_data->{bwa}->{reference},
+						n_cpus		=> $parameters->{bwa}->{n_cpus}->{$type}
 						);
 
 					$bwa .= "\n\n" . "echo 'alignment finished successfully' > bwa.COMPLETE";
@@ -387,7 +436,7 @@ sub main {
 							modules => [$bwa_version, $samtools],
 							max_time	=> $parameters->{bwa}->{time}->{$type},
 							mem		=> $parameters->{bwa}->{mem}->{$type},
-							cpus_per_task	=> 4,
+							cpus_per_task	=> $parameters->{bwa}->{n_cpus}->{$type},
 							hpc_driver	=> $args{hpc_driver},
 							extra_args	=> [$hpc_group]
 							);
@@ -496,31 +545,53 @@ sub main {
 
 			# if there are multiple libraries for a single sample, merge them
 			my ($smp_output, $jobname, $merge_cmd);
-			my $input_files = join(' INPUT=', @lane_intermediates);
+			my $merge_tool = $picard;
 
 			if ('N' eq $parameters->{merge}->{mark_dup}) {
 
 				$smp_output = $patient_directory . '/' . $sample . '_bwamem_aligned_sorted_merged.bam';
 				$jobname = 'run_merge_lanes_' . $sample;
 
-				$merge_cmd = get_merge_command(
-					input		=> $input_files,
-					output		=> $smp_output,
-					tmp_dir		=> $tmp_directory,
-					java_mem	=> $parameters->{merge}->{java_mem}->{$type}
-					);
+				if ('sambamba' eq $parameters->{merge}->{tool}) {
+					$merge_tool = $sambamba;
+					$merge_cmd = get_merge_command(
+						tool		=> 'sambamba',
+						input		=> \@lane_intermediates,
+						output		=> $smp_output,
+						n_cpus		=> $parameters->{merge}->{n_cpus}
+						);
+
+					} else {
+					$merge_cmd = get_merge_command(
+						input		=> \@lane_intermediates,
+						output		=> $smp_output,
+						tmp_dir		=> $tmp_directory,
+						java_mem	=> $parameters->{merge}->{java_mem}->{$type}
+						);
+					}
 
 				} elsif ('Y' eq $parameters->{merge}->{mark_dup}) {
 
 				$smp_output = join('/', $patient_directory, $sample . '_bwamem_aligned_sorted_merged_markdup.bam');
 				$jobname = 'run_merge_markdup_' . $sample;
 
-				$merge_cmd = get_merge_markdup_command(
-					input		=> $input_files,
-					output		=> $smp_output,
-					tmp_dir		=> $tmp_directory,
-					java_mem	=> $parameters->{merge}->{java_mem}->{$type}
-					);
+				if ('sambamba' eq $parameters->{merge}->{tool}) {
+					$merge_tool = $sambamba;
+					$merge_cmd = get_merge_markdup_command(
+						tool		=> 'sambamba',
+						input		=> \@lane_intermediates,
+						output		=> $smp_output,
+						tmp_dir		=> $tmp_directory,
+						n_cpus		=> $parameters->{merge}->{n_cpus}
+						);
+					} else {
+					$merge_cmd = get_merge_markdup_command(
+						input		=> \@lane_intermediates,
+						output		=> $smp_output,
+						tmp_dir		=> $tmp_directory,
+						java_mem	=> $parameters->{merge}->{java_mem}->{$type}
+						);
+					}
 				}
 
 			$cleanup_cmd .= "\nrm " . join(";\nrm ", @lane_intermediates) . "\n";
@@ -539,10 +610,11 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> $jobname,
 					cmd	=> $merge_cmd,
-					modules	=> [$picard],
+					modules	=> [$merge_tool],
 					dependencies	=> join(':', @lane_holds),
 					mem 		=> $parameters->{merge}->{mem}->{$type},
 					max_time 	=> $parameters->{merge}->{time}->{$type},
+					cpus_per_task	=> $parameters->{merge}->{n_cpus},
 					hpc_driver	=> $args{hpc_driver},
 					extra_args	=> [$hpc_group]
 					);
