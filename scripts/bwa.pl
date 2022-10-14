@@ -66,11 +66,12 @@ sub get_bwa_command {
 		stem		=> undef,
 		readgroup	=> undef,
 		reference	=> undef,
+		n_cpus		=> 4,
 		@_
 		);
 
 	my $bwa_command = join(' ',
-		'bwa mem -M -t4',  # 4 threads
+		'bwa mem -M -t' . $args{n_cpus},
 		'-R', $args{readgroup},
 		$args{reference},
 		$args{r1}
@@ -80,7 +81,7 @@ sub get_bwa_command {
 		$bwa_command .= ' ' . $args{r2};
 		}
 
-	$bwa_command .= "> $args{stem}" . '.sam';
+	$bwa_command .= " > $args{stem}" . '.sam';
 
 	return($bwa_command);
 	}	
@@ -363,7 +364,8 @@ sub main {
 						r2		=> $r2,
 						stem		=> $filestem,
 						readgroup	=> $readgroup,
-						reference	=> $tool_data->{bwa}->{reference}
+						reference	=> $tool_data->{bwa}->{reference},
+						n_cpus		=> $parameters->{bwa}->{n_cpus}->{$type}
 						);
 
 					$bwa .= "\n\n" . "echo 'alignment finished successfully' > bwa.COMPLETE";
@@ -387,7 +389,7 @@ sub main {
 							modules => [$bwa_version, $samtools],
 							max_time	=> $parameters->{bwa}->{time}->{$type},
 							mem		=> $parameters->{bwa}->{mem}->{$type},
-							cpus_per_task	=> 4,
+							cpus_per_task	=> $parameters->{bwa}->{n_cpus}->{$type},
 							hpc_driver	=> $args{hpc_driver},
 							extra_args	=> [$hpc_group]
 							);
