@@ -1056,10 +1056,7 @@ sub main {
 				ref_type	=> $tool_data->{ref_type},
 				output		=> $final_maf,
 				tmp_dir		=> $sample_directory,
-				vcf2maf		=> $tool_data->{annotate}->{vcf2maf_path},
-				vep_path	=> $tool_data->{annotate}->{vep_path},
-				vep_data	=> $tool_data->{annotate}->{vep_data},
-				filter_vcf	=> $tool_data->{annotate}->{filter_vcf}
+				parameters	=> $tool_data->{annotate}
 				);
 
 			# check if this should be run
@@ -1097,7 +1094,7 @@ sub main {
 					cmd	=> $vcf2maf_cmd,
 					modules	=> ['perl', $samtools, 'tabix', $vcf2maf],
 					dependencies	=> $filter_run_id,
-					cpus_per_task	=> 4,
+					cpus_per_task	=> $tool_data->{annotate}->{cpus},
 					max_time	=> $tool_data->{annotate}->{time},
 					mem		=> $tool_data->{annotate}->{mem},
 					hpc_driver	=> $args{hpc_driver},

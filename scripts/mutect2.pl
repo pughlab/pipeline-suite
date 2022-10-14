@@ -18,7 +18,7 @@ my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
 # define some global variables
-our ($reference, $dbsnp, $cosmic, $pon) = undef;
+our ($reference, $dbsnp, $cosmic, $gnomad, $pon, $gatk_version) = undef;
 
 ####################################################################################################
 # version       author		comment
@@ -54,26 +54,40 @@ sub get_mutect_pon_command {
 		@_
 		);
 
-	my $mutect_command = join(' ',
-		'java -Xmx' . $args{java_mem},
-		'-Djava.io.tmpdir=' . $args{tmp_dir},
-		'-jar $gatk_dir/GenomeAnalysisTK.jar -T MuTect2',
-		'-R', $reference,
-		'-I:tumor', $args{normal},
-		'--out', $args{output},
-		'--artifact_detection_mode',
-		'--enable_strand_artifact_filter'
-		);
+	my $mutect_command;
+	if (4 == $gatk_version) {
 
-	if (defined($dbsnp)) {
-		$mutect_command .= ' --dbsnp ' . $dbsnp;
-		}
-
-	if (defined($args{intervals})) {
-		$mutect_command .= ' ' . join(' ',
-			'--intervals', $args{intervals},
-			'--interval_padding 100'
+		$mutect_command = join(' ',
+			'gatk Mutect2',
+			'-R', $reference,
+			'-max-mnp-distance 0',
+			'-I', $args{normal},
+			'-O', $args{output}
 			);
+
+		} else {
+
+		$mutect_command = join(' ',
+			'java -Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-jar $gatk_dir/GenomeAnalysisTK.jar -T MuTect2',
+			'-R', $reference,
+			'-I:tumor', $args{normal},
+			'--out', $args{output},
+			'--artifact_detection_mode',
+			'--enable_strand_artifact_filter'
+			);
+
+		if (defined($dbsnp)) {
+			$mutect_command .= ' --dbsnp ' . $dbsnp;
+			}
+
+		if (defined($args{intervals})) {
+			$mutect_command .= ' ' . join(' ',
+				'--intervals', $args{intervals},
+				'--interval_padding 100'
+				);
+			}
 		}
 
 	return($mutect_command);
@@ -110,6 +124,34 @@ sub get_split_mutect_pon_command {
 	return($mutect_command);
 	}
 
+# format command to create PoN
+sub get_genomicsdb_pon_command {
+	my %args = (
+		input		=> undef,
+		intervals	=> undef,
+		output		=> undef,
+		dir		=> undef,
+		@_
+		);
+
+	my $pon_command = join(' ',
+		'gatk GenomicsDBImport',
+		'--genomicsdb-workspace-path', $args{dir},
+		'-R', $reference,
+		'-L', $args{intervals},
+		'-V', $args{input}
+		);
+
+	$pon_command .= "\n\n" . join(' ',
+		'gakt CreateSomaticPanelOfNormals',
+		'-R', $reference,
+		'-V', $args{dir},
+		'-O', $args{output}
+		);
+
+	return($pon_command);
+	}
+
 # format command to run MuTect on full genome/exome
 sub get_mutect_command {
 	my %args = (
@@ -122,30 +164,56 @@ sub get_mutect_command {
 		@_
 		);
 
-	my $mutect_command = join(' ',
-		'java -Xmx' . $args{java_mem},
-		'-Djava.io.tmpdir=' . $args{tmp_dir},
-		'-jar $gatk_dir/GenomeAnalysisTK.jar -T MuTect2',
-		'-R', $reference,
-		'-I:tumor', $args{tumour},
-		'--out', $args{output},
-		'--enable_strand_artifact_filter'
-		);
+	my $mutect_command;
+	if (4 == $gatk_version) {
 
-	if (defined($dbsnp)) {
-		$mutect_command .= ' --dbsnp ' . $dbsnp;
-		}
+		$mutect_command = join(' ',
+			'gatk Mutect2',
+			'-R', $reference,
+			'-I', $args{tumour},
+			'-O', $args{output}
+			);
 
-	if (defined($args{normal})) {
-		$mutect_command .= " -I:normal $args{normal}";
-		}
+		if (defined($args{normal})) {
+			$mutect_command .= " -I $args{normal}"; # bam
+			$mutect_command .= " -normal $args{normal}"; # ID
+			}
 
-	if (defined($cosmic)) {
-		$mutect_command .= " --cosmic $cosmic";
-		}
+		if (defined($gnomad)) {
+			$mutect_command .= ' --germline-resource ' . $gnomad;
+			}
 
-	if (defined($pon)) {
-		$mutect_command .= " --normal_panel $pon";
+		if (defined($pon)) {
+			$mutect_command .= " --panel-of-normals $pon";
+			}
+
+		} else {
+
+		$mutect_command = join(' ',
+			'java -Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-jar $gatk_dir/GenomeAnalysisTK.jar -T MuTect2',
+			'-R', $reference,
+			'-I:tumor', $args{tumour},
+			'--out', $args{output},
+			'--enable_strand_artifact_filter'
+			);
+
+		if (defined($args{normal})) {
+			$mutect_command .= " -I:normal $args{normal}";
+			}
+
+		if (defined($dbsnp)) {
+			$mutect_command .= ' --dbsnp ' . $dbsnp;
+			}
+
+		if (defined($cosmic)) {
+			$mutect_command .= " --cosmic $cosmic";
+			}
+
+		if (defined($pon)) {
+			$mutect_command .= " --normal_panel $pon";
+			}
 		}
 
 	if (defined($args{intervals})) {
@@ -228,7 +296,7 @@ sub get_sm_tag {
 		@_
 		);
 
-	# read in bam header (RG tags only)
+	# read i bam header (RG tags only)
 	open (my $bam_fh, "samtools view -H $args{bam} | grep '^\@RG' |");
 	# only look at first line
 	my $line = <$bam_fh>;
@@ -269,10 +337,12 @@ sub pon {
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'gatk');
 	my $date = strftime "%F", localtime;
 
+	$gatk_version = 3;
 	my $needed = version->declare('4')->numify;
 	my $given = version->declare($tool_data->{gatk_version})->numify;
 	if ($given >= $needed) {
-		die("Incompatible GATK version requested! MuTect2 pipeline is currently only compatible with GATK 3.x");
+#		die("Incompatible GATK version requested! MuTect2 pipeline is currently only compatible with GATK 3.x");
+		$gatk_version = 4;
 		}
 
 	# organize output and log directories
@@ -860,8 +930,12 @@ sub main {
 	my $tool_data_orig = LoadFile($tool_config);
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'gatk');
 
-	if ($tool_data->{gatk_version} =~ m/^4/) {
-		die("Incompatible GATK version requested! MuTect2 pipeline is currently only compatible with GATK 3.x");
+	$gatk_version = 3;
+	my $needed = version->declare('4')->numify;
+	my $given = version->declare($tool_data->{gatk_version})->numify;
+	if ($given >= $needed) {
+#		die("Incompatible GATK version requested! MuTect2 pipeline is currently only compatible with GATK 3.x");
+		$gatk_version = 4;
 		}
 
 	# organize output and log directories
@@ -1342,10 +1416,7 @@ sub main {
 					ref_type        => $tool_data->{ref_type},
 					output          => $final_maf,
 					tmp_dir         => $tmp_directory,
-					vcf2maf         => $tool_data->{annotate}->{vcf2maf_path},
-					vep_path        => $tool_data->{annotate}->{vep_path},
-					vep_data        => $tool_data->{annotate}->{vep_data},
-					filter_vcf      => $tool_data->{annotate}->{filter_vcf}
+					parameters	=> $tool_data->{annotate}
 					);
 
 				# paired tumour/normal
@@ -1359,10 +1430,7 @@ sub main {
 					ref_type        => $tool_data->{ref_type},
 					output          => $final_maf,
 					tmp_dir         => $tmp_directory,
-					vcf2maf         => $tool_data->{annotate}->{vcf2maf_path},
-					vep_path        => $tool_data->{annotate}->{vep_path},
-					vep_data        => $tool_data->{annotate}->{vep_data},
-					filter_vcf      => $tool_data->{annotate}->{filter_vcf}
+					parameters	=> $tool_data->{annotate}
 					);
 
 				} else {
@@ -1404,7 +1472,7 @@ sub main {
 					cmd     => $vcf2maf_cmd,
 					modules => ['perl', $samtools, 'tabix', $vcf2maf],
 					dependencies    => $run_id,
-					cpus_per_task	=> 4,
+					cpus_per_task	=> $tool_data->{annotate}->{n_cpus},
 					max_time        => $tool_data->{annotate}->{time},
 					mem             => $tool_data->{annotate}->{mem},
 					hpc_driver      => $args{hpc_driver},
