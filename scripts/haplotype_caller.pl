@@ -219,6 +219,25 @@ sub main{
 		print $log "\n    Target intervals (exome): $tool_data->{intervals_bed}";
 		}
 
+	# over which intervals should this be run?
+	my $string;
+	if ('targeted' eq $tool_data->{seq_type}) {
+		$string = 'panel';
+		} elsif (defined($tool_data->{haplotypecaller}->{chromosomes})) {
+		$string = $tool_data->{haplotypecaller}->{chromosomes}; 
+		} elsif ( ('hg38' eq $tool_data->{ref_type}) || ('hg19' eq $tool_data->{ref_type})) {
+		$string = 'chr' . join(',chr', 1..22) . ',chrX,chrY';
+		} elsif ( ('GRCh37' eq $tool_data->{ref_type}) || ('GRCh38' eq $tool_data->{ref_type})) {
+		$string = join(',', 1..22) . ',X,Y';
+		} else {
+		# if no chromosomes can be determined, run as a whole (very very slow!)
+		print $log "  >> Could not determine chromosomes to run\n";
+		print $log "  >> Will run full genome, however this will be very very slow!\n";
+		$string = 'genome';
+		}
+
+	my @chroms = split(',', $string);
+
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n---";
@@ -240,6 +259,13 @@ sub main{
 
 	# get optional HPC group
 	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
+	# is this WGS (will split by chromosome)
+	my $is_wgs = 0;
+	if ('wgs' eq $tool_data->{seq_type}) {
+		$is_wgs = 1;
+		$tool_data->{intervals_bed} = undef;
+		}
 	
 	### RUN ###########################################################################################
 	# get sample data
@@ -247,6 +273,15 @@ sub main{
 
 	unless($args{dry_run}) {
 		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
+		}
+
+	# if multiple chromosomes are to be run (separately):
+	my $chr_file = join('/', $output_directory, 'chromosome_list.txt');
+	if (scalar(@chroms) > 1) {
+		open (my $chr_list, '>', $chr_file) or die "Could not open $chr_file for writing.";	
+		foreach my $chrom ( @chroms ) {
+			print $chr_list "$chrom\n";
+			}
 		}
 
 	my ($run_script, $run_id, $link, $java_check, $cleanup_cmd_dna, $cleanup_cmd_rna);
@@ -313,6 +348,7 @@ sub main{
 				push @gvcfs, " -V:$sample $hc_vcf.gz";
 				}
 
+			# set up HC command
 			my $call_variants_cmd = get_haplotype_command(
 				bam		=> $smp_data->{$patient}->{$type}->{$sample},
 				output		=> $hc_vcf,
@@ -333,22 +369,66 @@ sub main{
 				"tabix -p vcf $hc_vcf.gz"
 				);
 
+			# special case if multiple chromosomes and SLURM HPC driver
+			if ( (scalar(@chroms) > 1) && ('slurm' eq $args{hpc_driver}) && ($is_wgs) ) {
+
+				my $split_hc_vcf = join('/', $tmp_directory, $sample . '_HC_${CHROM}.g.vcf');
+
+				$call_variants_cmd = 'CHROM=$(sed -n "$SLURM_ARRAY_TASK_ID"p ' . $chr_file . ')';
+				$call_variants_cmd .= "\necho Running chromosome: " . '$CHROM';
+
+				$call_variants_cmd .= "\n\n" . join("\n",
+					"if [ -s $split_hc_vcf.md5 ]; then",
+					'  echo Output file for $CHROM already exists',
+					'  exit',
+					'fi'
+					);
+
+				$call_variants_cmd .= "\n\n" . get_haplotype_command(
+					bam		=> $smp_data->{$patient}->{$type}->{$sample},
+					output		=> $split_hc_vcf,
+					data_type	=> $data_type,
+					intervals	=> '$CHROM',
+					java_mem	=> $parameters->{haplotype_call}->{java_mem},
+					tmp_dir		=> $tmp_directory
+					);
+
+				$call_variants_cmd .= "\n\n" . join("\n",
+					"md5sum $split_hc_vcf > $split_hc_vcf.md5",
+					"bgzip $split_hc_vcf",
+					"tabix -p vcf $split_hc_vcf.gz"
+					);
+				}
+
 			# check if this should be run
 			if ('Y' eq missing_file($hc_vcf . '.md5')) {
 
 				# record command (in log directory) and then run job
 				print $log "Submitting job for HaplotypeCaller...\n";
 
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_haplotype_caller_' . $sample,
-					cmd	=> $call_variants_cmd,
-					modules	=> [$gatk, $samtools, 'tabix'],
-					max_time	=> $parameters->{haplotype_call}->{time},
-					mem		=> $parameters->{haplotype_call}->{mem},
-					hpc_driver	=> $args{hpc_driver},
-					extra_args	=> [$hpc_group]
-					);
+				if ( (scalar(@chroms) > 1) && ('slurm' eq $args{hpc_driver}) && ($is_wgs) ) {
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_haplotype_caller_' . $sample,
+						cmd	=> $call_variants_cmd,
+						modules	=> [$gatk, $samtools, 'tabix'],
+						max_time	=> $parameters->{haplotype_call}->{time},
+						mem		=> $parameters->{haplotype_call}->{mem},
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group, '--array=1-'. scalar(@chroms)]
+						);
+					} else {
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_haplotype_caller_' . $sample,
+						cmd	=> $call_variants_cmd,
+						modules	=> [$gatk, 'tabix'],
+						max_time	=> $parameters->{haplotype_call}->{time},
+						mem		=> $parameters->{haplotype_call}->{mem},
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group]
+						);
+					}
 
 				$run_id = submit_job(
 					jobname		=> 'run_haplotype_caller_' . $sample,
@@ -362,6 +442,65 @@ sub main{
 				push @all_jobs, $run_id;
 				} else {
 				print $log "Skipping HaplotypeCaller because this has already been completed!\n";
+				}
+
+			# special case if multiple chromosomes and SLURM HPC driver
+			if ( (scalar(@chroms) > 1) && ('slurm' eq $args{hpc_driver}) && ($is_wgs) ) {
+
+				my $merge_command = "cd $tmp_directory";
+				$merge_command .= "\n\n" . join(' ',
+					'vcf-concat',
+					$sample . '_HC*.g.vcf.gz',
+					'>', $sample . '_HC_merged.g.vcf'
+					);
+				$merge_command .= "\n" . join(' ',
+					'vcf-sort -c', $sample . '_HC_merged.g.vcf',
+					'>', $hc_vcf					
+					);
+
+				# if samples were aligned elsewhere, the @RG SM tag may differ from the
+				# sample ID this causes problems if there are multiple files with the same 
+				# SM tag (ie, when running combined output from ConsensusCruncher)
+				$merge_command .= "\n\n" . join("",
+					"echo $sample | ",
+					"bcftools reheader -s - $hc_vcf -o $hc_vcf.reheadered",
+					"\nmv $hc_vcf.reheadered $hc_vcf",
+					"\nmd5sum $hc_vcf > $hc_vcf.md5",
+					"\nbgzip $hc_vcf",
+					"\ntabix -p vcf $hc_vcf.gz"
+					);
+
+				# check if this should be run
+				if ('Y' eq missing_file($hc_vcf . '.md5')) {
+
+					# record command (in log directory) and then run job
+					print $log "Submitting job for MERGE (per-chrom)...\n";
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_merge_per_chromosome_vcfs_' . $sample,
+						cmd	=> $merge_command,
+						modules	=> ['vcftools','tabix'],
+						dependencies	=> $run_id,
+						max_time	=> '24:00:00',
+						mem		=> '2G',
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group]
+						);
+
+					$run_id = submit_job(
+						jobname		=> 'run_merge_per_chromosome_vcfs_' . $sample,
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @patient_jobs, $run_id;
+					push @all_jobs, $run_id;
+					} else {
+					print $log "Skipping MERGE because this has already been completed!\n";
+					}
 				}
 
 			if ('dna' eq $data_type) { push @final_outputs, $hc_vcf; }
