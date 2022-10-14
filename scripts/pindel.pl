@@ -11,7 +11,7 @@ use POSIX qw(strftime);
 use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
-use List::Util qw(any sum);
+use List::Util qw(any sum max);
 use IO::Handle;
 
 my $cwd = dirname(__FILE__);
@@ -97,7 +97,8 @@ sub get_pindel_command {
 	if (('ALL' eq $args{chrom}) || (!defined($args{chrom}))) {
 		$pindel_command .= ' --report_interchromosomal_events';
 		$pindel_command .= ' --report_long_insertions';
-#		$pindel_command .= ' --detect_DD';
+		} else {
+		$pindel_command .= ' --report_duplications false';
 		}
 
 	if (defined($args{chrom})) {
@@ -425,13 +426,15 @@ sub main {
 			}
 
 		# get normal stats (if present)
-		my $normal_insert_size = 151;
+		my $normal_insert_size = 152; # read length + 1
 		my $normal = undef;
 		if (scalar(@normal_ids) > 0) {
 			$normal = $normal_ids[0];
 			unless($args{dry_run}) {
-				$normal_insert_size = get_mean_insert_size_command(
-					input => $smp_data->{$patient}->{normal}->{$normal}
+				$normal_insert_size = max($normal_insert_size,
+					get_mean_insert_size_command(
+						input => $smp_data->{$patient}->{normal}->{$normal}
+						)
 					);
 				}
 			}
@@ -463,10 +466,13 @@ sub main {
 			if ('Y' eq missing_file($sample_sheet)) {
 				open(my $fh, '>', $sample_sheet) or die "Cannot open '$sample_sheet' !";
 
-				my $tumor_insert_size = 151;
+				my $tumor_insert_size = 152; # read length + 1
 				unless($args{dry_run}) {
-					$tumor_insert_size = get_mean_insert_size_command(
-						input => $smp_data->{$patient}->{tumour}->{$sample}
+					$tumor_insert_size = max(
+						$tumor_insert_size,
+						get_mean_insert_size_command(
+							input => $smp_data->{$patient}->{tumour}->{$sample}
+							)
 						);
 					}
 
