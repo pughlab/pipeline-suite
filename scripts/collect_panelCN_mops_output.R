@@ -130,6 +130,27 @@ cn.data$CN <- as.numeric(gsub('CN','',as.character(cn.data$CN)));
 cn.data[which(cn.data$lowQual == 'lowQual'),]$CN <- NA;
 colnames(cn.data)[2] <- 'Chromosome';
 
+# summarize gene-level CN status using weighted mean
+gene.calls <- aggregate(
+	CN ~ Sample + Gene,
+	cn.data,
+	function(i) {
+		j <- table(i);
+		sum(as.numeric(names(j))*j)/sum(j)
+		}
+	);
+
+gene.calls$Amplification <- 0;
+gene.calls[which(gene.calls$CN > 2.1),]$Amplification <- 1;
+
+write.table(
+	gene.calls,
+	file = generate.filename(arguments$project, '_summarized_gene_level_calls','tsv'),
+	row.names = FALSE,
+	col.names = TRUE,
+	sep = '\t'
+	);	
+
 # reshape discrete CN calls
 cn.calls <- reshape(
 	cn.data[,c('Chromosome','Gene','Exon','Start','End','Sample','CN')],
