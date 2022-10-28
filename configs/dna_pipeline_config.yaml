@@ -42,7 +42,7 @@ cpsr_version: 0.6.1
 pcgr_version: 0.9.1
 vcf2maf_version: 1.6.17 
 msi_sensor_version: msisensor-pro/1.2.0
-r_version: 3.6.1
+r_version: 4.1.0
 # tool specific parameters
 bwa:
     run: Y
@@ -399,4 +399,7 @@ msi_sensor:
             mem: 4G
             time: '24:00:00'
 other_tools:
+    ascat:
+        run: Y
+        ascat_lib_path:
     run_mutsig: Y
