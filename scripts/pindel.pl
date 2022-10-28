@@ -130,7 +130,7 @@ sub get_split_pindel_command {
 
 	$pindel_command .= "\n\n" . join("\n",
 		"if [ -s $args{output_stem}" . '_${CHROM}.COMPLETE ]; then',
-		"  echo 'Pindel for \$CHROM already complete'",
+		"  echo Pindel for \$CHROM already complete",
 		'else'
 		);
 
@@ -231,7 +231,7 @@ sub get_pindel2vcf_command {
 
 	my $pindel_command = "cd $args{tmp_dir}\n";
 
-	$pindel_command .= "for file in *COMPLETE; do";
+	$pindel_command .= "for file in $args{input}*COMPLETE; do";
 
 	$pindel_command .= "\n  " . 'STEM=$(echo $file | sed ' . "'s/.COMPLETE//');\n  " . join(' ',
 		'pindel2vcf',
