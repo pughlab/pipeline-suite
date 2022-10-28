@@ -867,15 +867,15 @@ sub main {
 			my $cnv_data = join('/', $ichor_cna_dir, $cnv_files[-1]);
 			my $metric_data = join('/', $ichor_cna_dir, $metric_files[-1]);
 
-			if ( -l join('/', $data_directory, 'ichor_cna_ratio_matrix.tsv')) {
-				unlink join('/', $data_directory, 'ichor_cna_ratio_matrix.tsv');
+			if ( -l join('/', $data_directory, 'ichor_cna_output.tsv')) {
+				unlink join('/', $data_directory, 'ichor_cna_output.tsv');
 				}
 
 			if ( -l join('/', $data_directory, 'ichor_cna_estimates.tsv')) {
 				unlink join('/', $data_directory, 'ichor_cna_estimates.tsv');
 				}
 
-			symlink($cnv_data, join('/', $data_directory, 'ichor_cna_ratio_matrix.tsv'));
+			symlink($cnv_data, join('/', $data_directory, 'ichor_cna_output.tsv'));
 			symlink($metric_data, join('/', $data_directory, 'ichor_cna_estimates.tsv'));
 
 			# plot CNV summary
