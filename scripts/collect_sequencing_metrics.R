@@ -187,6 +187,7 @@ write.table(
 	file = generate.filename(arguments$project, 'InsertSizes','tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
+	quote = FALSE,
 	sep = '\t'
 	);
 

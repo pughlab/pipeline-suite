@@ -12,6 +12,8 @@ use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
 use List::Util qw(any sum max);
+use List::MoreUtils qw(first_index);
+use File::Find;
 use IO::Handle;
 
 my $cwd = dirname(__FILE__);
@@ -59,6 +61,41 @@ sub get_mean_insert_size_command {
 	close($bam_fh);
 
 	return(int(sum(@insert_sizes) / scalar(@insert_sizes)));
+	}
+
+# extract mean insert size from sequencing metrics output
+sub get_median_insert_size_command {
+	my %args = (
+		input	=> undef,
+		sample	=> undef,
+		@_
+		);
+
+	my $insert_size;
+
+	open (my $fh, $args{input});
+
+	my $header = <$fh>;
+	chomp($header);
+	my @info = split /\t/, $header;
+
+	# if this line contains the field headings
+	my $insert_size_idx = first_index { $_ eq 'MEDIAN_INSERT_SIZE' } @info;
+	my $smp_idx = first_index { $_ eq 'SAMPLE' } @info;
+	my $group_idx = first_index { $_ eq 'PAIR_ORIENTATION' } @info;
+
+	while (my $line = <$fh>) {
+		chomp($line);
+		my @info = split /\t/, $line;
+
+		next if ($info[$smp_idx] ne $args{sample});
+		next if ($info[$group_idx] ne 'FR');
+
+		$insert_size = $info[$insert_size_idx];
+
+		}
+
+	return($insert_size);
 	}
 
 # format command to run pindel
@@ -376,7 +413,7 @@ sub main {
 
 	# get optional HPC group
 	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
-	
+
 	### RUN ###########################################################################################
 	my ($run_script, $run_id, $link, $cleanup_cmd, $should_run_final);
 	my @all_jobs;
@@ -395,6 +432,16 @@ sub main {
 
 	unless($args{dry_run}) {
 		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
+		}
+
+	# insert sizes are collected as part of pipeline-suite QC step, so let's use that
+	my $bam_metrics_file;
+	my $qc_directory = $output_directory . '/../BAMQC/SequenceMetrics';
+	my @qc_files = _get_files($qc_directory, 'InsertSizes.tsv');
+	if (scalar(@qc_files) > 0) {
+		@qc_files = sort(@qc_files);
+		$bam_metrics_file = $qc_files[-1];
+		print $log "\n>> Extracting insert sizes from: $bam_metrics_file\n";
 		}
 
 	# process each sample in $smp_data
@@ -426,12 +473,18 @@ sub main {
 			}
 
 		# get normal stats (if present)
-		my $normal_insert_size = 152; # read length + 1
+		my $normal_insert_size = 152; # expected read length + 1
 		my $normal = undef;
 		if (scalar(@normal_ids) > 0) {
 			$normal = $normal_ids[0];
-			unless($args{dry_run}) {
-				$normal_insert_size = max($normal_insert_size,
+			if (defined($bam_metrics_file)) {
+				$normal_insert_size = get_median_insert_size_command(
+					input 	=> $bam_metrics_file,
+					sample	=> $normal
+					);
+				} else {
+				$normal_insert_size = max(
+					$normal_insert_size,
 					get_mean_insert_size_command(
 						input => $smp_data->{$patient}->{normal}->{$normal}
 						)
@@ -466,12 +519,17 @@ sub main {
 			if ('Y' eq missing_file($sample_sheet)) {
 				open(my $fh, '>', $sample_sheet) or die "Cannot open '$sample_sheet' !";
 
-				my $tumor_insert_size = 152; # read length + 1
-				unless($args{dry_run}) {
+				my $tumor_insert_size = 152; # expected read length + 1
+				if (defined($bam_metrics_file)) {
+					$tumor_insert_size = get_median_insert_size_command(
+						input 	=> $bam_metrics_file,
+						sample	=> $sample
+						);
+					} else {
 					$tumor_insert_size = max(
 						$tumor_insert_size,
 						get_mean_insert_size_command(
-							input => $smp_data->{$patient}->{tumour}->{$sample}
+							input => $smp_data->{$patient}->{tumour}->{$sample} 
 							)
 						);
 					}
