@@ -61,11 +61,14 @@ contamination.files <- list.files(pattern = 'contamination.table', recursive = T
 alignment.files <- list.files(pattern = 'alignment_metrics.txt', recursive = TRUE);
 wgs.files <- list.files(pattern = 'wgs_metrics.txt', recursive = TRUE);
 
+insert.files <- list.files(pattern = 'insert_size.txt', recursive = TRUE);
+
 # read them in
 artefact.list <- list();
 contamination.list <- list();
 alignment.list <- list();
 wgs.list <- list();
+insert.list <- list();
 
 for (file in bait.bias.files) {
 	# extract sample ID
@@ -94,6 +97,16 @@ for (file in contamination.files) {
 	smp <- sub('_contamination.table','',basename(file));
 	# store data in list
 	contamination.list[[smp]] <- read.delim(file);
+	}
+
+for (file in insert.files) {
+	# extract sample ID
+	smp <- sub('_insert_size.txt','',basename(file));
+	# read in data
+	tmp <- read.delim(file, skip = 6, nrow = 3);
+	tmp$SAMPLE <- smp;
+	# store data in list
+	insert.list[[smp]] <- tmp[,-which(colnames(tmp) %in% c('LIBRARY','READ_GROUP'))];
 	}
 
 for (file in alignment.files) {
@@ -142,6 +155,7 @@ if (any(grepl('fastq', contest.data$sample))) {
 	}
 
 metric.data <- do.call(rbind, alignment.list);
+insert.data <- do.call(rbind, insert.list);
 
 # save combined/formatted data to file
 write.table(
@@ -163,6 +177,14 @@ write.table(
 write.table(
 	metric.data,
 	file = generate.filename(arguments$project, 'AlignmentMetrics','tsv'),
+	row.names = FALSE,
+	col.names = TRUE,
+	sep = '\t'
+	);
+
+write.table(
+	insert.data,
+	file = generate.filename(arguments$project, 'InsertSizes','tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
 	sep = '\t'
