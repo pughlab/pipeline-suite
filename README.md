@@ -1,4 +1,4 @@
-# PughLab pipeline-suite (version 0.7.2)
+# PughLab pipeline-suite (version 0.7.3)
 
 ## Introduction
 This is a collection of pipelines to be used for NGS (both DNA and RNA) analyses, from alignment to variant calling.
@@ -20,6 +20,7 @@ Finally, a number of R packages are required:
 - TxDb.Hsapiens.UCSC.hg19.knownGene, TxDb.Hsapiens.UCSC.hg38.knownGene
 - for sequenza: sequenza
 - for ichorCNA: ichorCNA, HMMcopy and GenomeInfoDb
+- for ASCAT: ASCAT (https://github.com/VanLoo-lab/ascat) and maftools
 - for panelCN.mops: panelcn.mops and CopyNumberPlots
 - for summarization: xtable, deconstructSigs, BSgenome
 - for visualizations: BPG (https://CRAN.R-project.org/package=BoutrosLab.plotting.general) and UpSetR

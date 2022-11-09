@@ -122,7 +122,7 @@ sub error_checking {
 	if ('svict' eq $pipeline) {
 		if (!defined($tool_data->{reference})) { die("Must supply path to reference genome!"); }
 		unless ( ('true' eq $tool_data->{is_ctdna}) && ('targeted' eq $tool_data->{seq_type}) ) {
-			die("Should only be run on targeted-panel ctDNA sequencing.");
+			die("SViCT should only be run on targeted-panel ctDNA sequencing.");
 		}
 	}
 
@@ -131,14 +131,21 @@ sub error_checking {
 		if ( 'wgs' eq $tool_data->{seq_type} ) {
 			print("IchorCNA is intended for sWGS. Current seq_type set to wgs so we will try to run this, however results may vary.");
 		} else {
-			die("Should only be run on sWGS cohorts.");
+			die("IchorCNA should only be run on sWGS cohorts.");
 		} 
+	}
+
+	# ASCAT
+	if ('ascat' eq $pipeline) {
+		unless ( 'wgs' eq $tool_data->{seq_type} ) {
+			die("ASCAT should only be run on WGS cohorts.");
+		}
 	}
 
 	# panelCN.mops
 	if ('mops' eq $pipeline) {
 		unless ('targeted' eq $tool_data->{seq_type}) {
-			die("Should only be run on targeted-panel data.");
+			die("panelCN.mops should only be run on targeted-panel data.");
 		}
 
 		if (!defined($tool_data->{intervals_bed})) {

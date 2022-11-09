@@ -17,7 +17,7 @@ use IO::Handle;
 my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
-our ($ref_type, $r_lib, $ascat_path, $ascat_ref);
+our ($ref_type, $intervals_bed, $r_lib, $ascat_path, $ascat_ref);
 
 ####################################################################################################
 # version	author		comment
@@ -42,7 +42,9 @@ sub get_ascat_command {
 		tumour_id	=> undef,
 		tumour_bam	=> undef,
 		normal_bam	=> undef,
+		tmp_dir		=> undef,
 		out_dir		=> undef,
+		n_cpus		=> 1,
 		@_
 		);
 
@@ -51,13 +53,15 @@ sub get_ascat_command {
 		'--tumour_bam', $args{tumour_bam},
 		'--normal_bam', $args{normal_bam},
 		'--sample_name', $args{tumour_id},
+		'--working_dir', $args{tmp_dir},
 		'--out_dir', $args{out_dir},
 		'--genome_build', $ref_type,
-		'--ref_file', $ascat_ref
+		'--ref_file', $ascat_ref,
+		'--n_threads', $args{n_cpus}
 		);
 
 	if (defined($r_lib)) {
-		$ascat_command .= " --r_lib $r_lib";
+		$ascat_command .= " --lib_paths $r_lib";
 		}
 
 	return($ascat_command);
@@ -122,36 +126,28 @@ sub main {
 	print $log "\n  Tool config used: $tool_config";
 	print $log "\n    Reference used: $tool_data->{reference}";
 
-	$reference = $tool_data->{reference};
 	$ref_type = $tool_data->{ref_type};
 
-	if ('GRCh38' eq $tool_data->{ref_type}) {
-		$ascat_ref	= '/cluster/projects/pughlab/references/ASCAT_refs/GRCh38_SNP6.tsv.gz';
-		$ref_type	= 'hg38';
-		print $log "\n      Using ASCAT reference file: $ascat_ref";
-		} elsif ('hg38' eq $tool_data->{ref_type}) {
-		$ascat_ref	= '/cluster/projects/pughlab/references/ASCAT_refs/GRCh38_SNP6_with_chr.tsv.gz';
-		print $log "\n      Using ASCAT reference file: $ascat_ref";
-		} elsif ('GRCh37' eq $tool_data->{ref_type}) {
-		$ref_type	= 'hg19';
-		$ascat_ref	= '/cluster/projects/pughlab/references/ASCAT_refs/GRCh37_SNP6.tsv.gz';
-		print $log "\n      Using ASCAT reference file: $ascat_ref";
-		} elsif ('hg19' eq $tool_data->{ref_type}) {
-		$ascat_ref	= join('/', $output_directory, 'GRCh37_SNP6_with_chr.tsv');
-		`zcat /cluster/projects/pughlab/references/ASCAT_refs/GRCh37_SNP6.tsv.gz | sed 's/^/chr/g' > $ascat_ref`
-		print $log "\n      Using ASCAT reference file: $ascat_ref";
+	my $snp6_file;
+	if ( ('GRCh38' eq $ref_type) || ('hg38' eq $ref_type) ) {
+		$snp6_file	= '/cluster/projects/pughlab/references/ASCAT_refs/GRCh38_SNP6.tsv.gz';
+		} elsif ( ('GRCh37' eq $ref_type) || ('hg19' eq $ref_type)) {
+		$snp6_file	= '/cluster/projects/pughlab/references/ASCAT_refs/GRCh37_SNP6.tsv.gz';
+		} else {
+		die('Unrecognized reference type requested!');
 		}
 
+	print $log "\n      Using ASCAT reference file: $snp6_file";
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n---\n";
 
 	# get user-specified tool parameters
-	my $parameters = $tool_data->{other_tools}->{ascat};
+	my $parameters = $tool_data->{ascat}->{parameters};
 
 	# set tools and versions
 	$ascat_path	= "$cwd/runASCAT.R";
-	my $r_version	= 'R/'. $tool_data->{r_version};
+	my $r_version	= 'R/'. $tool_data->{ascat_r_version};
 
 	if (defined($parameters->{ascat_lib_path})) {
 		$r_lib = $parameters->{ascat_lib_path};
@@ -167,6 +163,65 @@ sub main {
 	# get sample data
 	my $smp_data = LoadFile($data_config);
 
+	# do an initial check for normals; no normals = don't bother running
+	my @has_normals;
+	foreach my $patient (sort keys %{$smp_data}) {
+		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
+		if (scalar(@normal_ids) > 0) { push @has_normals, $patient; }
+		}
+
+	if (scalar(@has_normals) == 0) {
+		die("No normals provided. ASCAT requires matched normals, therefore we will exit now.");
+		}
+
+	# prep ASCAT reference file (SNP6)
+	my $prep_ref_run_id = '';
+	$ascat_ref = join('/', $output_directory, 'ascat_SNP6_reference.tsv');
+	
+	# should the 'chr' prefix be added?
+	if ( ('GRCh37' eq $ref_type) || ('GRCh37' eq $ref_type) ) {
+
+		$ascat_ref .= $ascat_ref . '.gz';
+		symlink($snp6_file, $ascat_ref);
+
+		} elsif ( ('hg38' eq $ref_type) || ('hg19' eq $ref_type)) {
+		my $prep_ref_command = join('', 'zcat ', $snp6_file, ' | sed s/^/chr/g > ', $ascat_ref);
+		$prep_ref_command .= "\ngzip $ascat_ref";
+
+		$ascat_ref .= '.gz';
+
+		# check if this should be run
+		if ('Y' eq missing_file($ascat_ref)) {
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for PrepSNP6...\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'run_prep_ascat_reference',
+				cmd	=> $prep_ref_command,
+				modules	=> [$r_version],
+				max_time	=> '02:00:00',
+				mem		=> '1G',
+				hpc_driver	=> $args{hpc_driver},
+				extra_args	=> [$hpc_group]
+				);
+
+			$prep_ref_run_id = submit_job(
+				jobname		=> 'run_prep_ascat_reference', 
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @all_jobs, $prep_ref_run_id;
+			} else {
+			print $log "Skipping PreprocessIntervals as this has already been completed!\n";
+			}
+		}
+
+	# begin processing...
 	unless($args{dry_run}) {
 		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
 		}
@@ -206,6 +261,7 @@ sub main {
 
 		# create an array to hold final outputs and all patient job ids
 		my (@final_outputs, @patient_jobs);
+		$cleanup_cmd = '';
 
 		# now, for each tumour sample
 		foreach my $sample (@tumour_ids) {
@@ -218,14 +274,19 @@ sub main {
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
 
-			# create command to run ASCAT
-			$run_id = '';
+			my $tmp_directory = join('/', $sample_directory, 'TEMP');
+			unless(-e $tmp_directory) { make_path($tmp_directory); }
 
+			$cleanup_cmd .= "rm -rf $tmp_directory\n";
+
+			# create command to run ASCAT
 			my $ascat_command = get_ascat_command(
 				tumour_id	=> $sample,
 				tumour_bam	=> $smp_data->{$patient}->{tumour}->{$sample},
-				normal_bam	=> $smp_data->{$patient}->{noraml}->{$normal_ids[0]},
-				out_dir		=> $sample_directory
+				normal_bam	=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
+				tmp_dir		=> $tmp_directory,
+				out_dir		=> $sample_directory,
+				n_cpus		=> $parameters->{ascat}->{n_cpus}
 				);
 
 			my $ascat_output = '';
@@ -241,8 +302,10 @@ sub main {
 					name	=> 'run_ascat_' . $sample,
 					cmd	=> $ascat_command,
 					modules	=> [$r_version],
-					max_time	=> '5-00:00:00', #$parameters->{ichor_cna}->{time},
-					mem		=> '4G', #$parameters->{ichor_cna}->{mem},
+					dependencies	=> $prep_ref_run_id,
+					max_time	=> $parameters->{ascat}->{time},
+					mem		=> $parameters->{ascat}->{mem},
+					cpus_per_task	=> $parameters->{ascat}->{n_cpus},
 					hpc_driver	=> $args{hpc_driver},
 					extra_args	=> [$hpc_group]
 					);
@@ -261,16 +324,14 @@ sub main {
 				print $log "Skipping ASCAT step because this has already been completed!\n";
 				}
 
-			push @final_outputs, $final_file;
+			push @final_outputs, $ascat_output;
 			}
 
 		# should intermediate files be removed
 		# run per patient
 		if ($args{del_intermediates}) {
 
-			if (scalar(@patient_jobs) == 0) {
-				`rm -rf $tmp_directory`;
-				} else {
+			if (scalar(@patient_jobs) > 0) {
 
 				print $log "Submitting job to clean up temporary/intermediate files...\n";
 
@@ -312,14 +373,15 @@ sub main {
 	if ($should_run_final) {
 
 		my $collect_output = join(' ',
-			"Rscript $cwd/collect_ichorCNA_output.R",
+			"Rscript $cwd/collect_ascat_output.R",
 			'-d', $output_directory,
-			'-p', $tool_data->{project_name}
+			'-p', $tool_data->{project_name},
+			'-r', $tool_data->{ref_type}
 			);
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
-			name	=> 'combine_ichorCNA_output',
+			name	=> 'combine_ascat_output',
 			cmd	=> $collect_output,
 			modules	=> [$r_version],
 			dependencies	=> join(':', @all_jobs),
@@ -330,7 +392,7 @@ sub main {
 			);
 
 		$run_id = submit_job(
-			jobname		=> 'combine_ichorCNA_output',
+			jobname		=> 'combine_ascat_output',
 			shell_command	=> $run_script,
 			hpc_driver	=> $args{hpc_driver},
 			dry_run		=> $args{dry_run},

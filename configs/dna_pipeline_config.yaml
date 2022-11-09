@@ -35,6 +35,7 @@ delly_version: 0.8.1
 novobreak_version: 1.1
 svict_version: 1.0.1
 ichor_cna_version: 0.3.2
+ascat_r_version: 4.1.0
 panelcnmops_version: 1.14.0
 pindel_version: 0.2.5b8
 mavis_version: 2.2.5
@@ -377,6 +378,14 @@ ichor_cna:
         ichor_cna:
             mem: 2G
             time: '24:00:00'
+ascat:
+    run: N # only for WGS
+    parameters:
+        ascat_lib_path: '/cluster/projects/pughlab/src/r_lib/library/4.1/'
+        ascat:
+            mem: 4G
+            time: '24:00:00'
+            n_cpus: 1
 mavis:
     run: Y
     mem: 4G # increase this is patient has multiple tumours and/or many SV callers were run
@@ -399,7 +408,4 @@ msi_sensor:
             mem: 4G
             time: '24:00:00'
 other_tools:
-    ascat:
-        run: Y
-        ascat_lib_path:
     run_mutsig: Y
