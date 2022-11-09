@@ -42,6 +42,7 @@ cpsr_version: 0.6.1
 pcgr_version: 0.9.1
 vcf2maf_version: 1.6.17 
 msi_sensor_version: msisensor-pro/1.2.0
+ascat_r_version: 4.1.0
 r_version: 3.6.1
 # tool specific parameters
 bwa:
@@ -376,6 +377,14 @@ ichor_cna:
         ichor_cna:
             mem: 2G
             time: '24:00:00'
+ascat:
+    run: N # only for WGS
+    parameters:
+        ascat_lib_path: '/cluster/projects/pughlab/src/r_lib/library/4.1/'
+        ascat:
+            mem: 4G
+            time: '24:00:00'
+            n_cpus: 1
 mavis:
     run: Y
     mem: 4G # increase this is patient has multiple tumours and/or many SV callers were run

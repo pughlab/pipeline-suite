@@ -1,3 +1,10 @@
+2022-11-09: PughLab pipeline-suite (version 0.7.3)
+- NEW: ascat.pl; run ASCAT on tumour/normal pairs
+- QC: added Picard CollectInsertSizeMetrics
+- Pindel: changed source for insert size to QC output file (CollectInsertSizeMetrics)
+- updates to IchorCNA output collection
+- minor other updates/bug fixes
+
 2022-10-14: PughLab pipeline-suite (version 0.7.2)
 - bwa: added n_cpus argument for bwa step
 - bwa: added sambamba option for merge/markdup (picard merge/markdup fails with large WGS files)

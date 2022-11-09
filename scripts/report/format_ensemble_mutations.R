@@ -116,6 +116,10 @@ if (!is.null(arguments$pindel)) {
 	mutation.data[['Pindel']] <- read.delim(arguments$pindel, comment.char = '#');
 	}
 
+# create (if necessary) and move to output directory
+if (!exists(arguments$output)) {
+	dir.create(arguments$output);
+	}
 setwd(arguments$output);
 
 ### FORMAT DATA ####################################################################################
@@ -313,9 +317,11 @@ for (field in c('t_depth','t_ref_count','t_alt_count','n_depth','n_ref_count','n
 		}
 	}
 
+annotated.data <- unique(annotated.data);
+
 # save to file
 write.table(
-	unique(annotated.data),
+	annotated.data,
 	file = generate.filename(arguments$project, 'ensemble_mutation_data', 'tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
@@ -323,11 +329,36 @@ write.table(
 	sep = '\t'
 	);
 
+# apply some basic filters
+tumour.keep <- which(
+	annotated.data$t_depth > 5 & 
+	(annotated.data$t_alt_count / annotated.data$t_depth) > 0.005
+	);
+
+normal.keep <- which(
+	annotated.data$FLAG.tumour_only |
+	(annotated.data$n_depth > 5 & (annotated.data$n_alt_count / annotated.data$n_depth) < 0.2)
+	);
+
+annotated.filtered <- annotated.data[intersect(tumour.keep, normal.keep),];
+
+# save to file
+write('# ENSEMBLE MAF', file = generate.filename(arguments$project, 'ensemble_mutation_data_filtered', 'tsv'));
+write.table(
+	annotated.filtered,
+	file = generate.filename(arguments$project, 'ensemble_mutation_data_filtered', 'tsv'),
+	row.names = FALSE,
+	col.names = TRUE,
+	quote = FALSE,
+	append = TRUE,
+	sep = '\t'
+	);
+
 # run unlink, in case it exists from a previous run
 unlink('ensemble_mutation_data.tsv');
 
 file.symlink(
-	generate.filename(arguments$project, 'ensemble_mutation_data', 'tsv'),
+	generate.filename(arguments$project, 'ensemble_mutation_data_filtered', 'tsv'),
 	'ensemble_mutation_data.tsv'
 	);
 

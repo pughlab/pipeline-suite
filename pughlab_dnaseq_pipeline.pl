@@ -94,7 +94,7 @@ sub main {
 	my ($bwa_run_id, $gatk_run_id, $contest_run_id, $qc_run_id, $coverage_run_id, $hc_run_id);
 	my ($strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id, $msi_run_id, $pindel_run_id);
 	my ($somaticsniper_run_id, $delly_run_id, $vardict_run_id, $gatk_cnv_run_id, $novobreak_run_id);
-	my ($mops_run_id, $svict_run_id, $ichor_run_id, $mavis_run_id, $report_run_id);
+	my ($mops_run_id, $svict_run_id, $ichor_run_id, $ascat_run_id, $mavis_run_id, $report_run_id);
 
 	my (@step1_job_ids, @step2_job_ids, @step3_job_ids, @step4_job_ids, @job_ids);
 	my $current_dependencies = '';
@@ -120,6 +120,7 @@ sub main {
 	my $mops_directory = join('/', $output_directory, 'panelCNmops');
 	my $svict_directory = join('/', $output_directory, 'SViCT');
 	my $ichor_directory = join('/', $output_directory, 'IchorCNA');
+	my $ascat_directory = join('/', $output_directory, 'AscatCNA');
 	my $mavis_directory = join('/', $output_directory, 'Mavis');
 
 	# check which tools have been requested
@@ -138,6 +139,7 @@ sub main {
 		'gatk_cnv'	=> defined($tool_data->{gatk_cnv}->{run}) ? $tool_data->{gatk_cnv}->{run} : 'N',
 		'novobreak'	=> defined($tool_data->{novobreak}->{run}) ? $tool_data->{novobreak}->{run} : 'N',
 		'ichor_cna'	=> defined($tool_data->{ichor_cna}->{run}) ? $tool_data->{ichor_cna}->{run} : 'N',
+		'ascat'	=> defined($tool_data->{ascat}->{run}) ? $tool_data->{ascat}->{run} : 'N',
 		'delly'	=> defined($tool_data->{delly}->{run}) ? $tool_data->{delly}->{run} : 'N',
 		'svict'	=> defined($tool_data->{svict}->{run}) ? $tool_data->{svict}->{run} : 'N',
 		'mops'	=> defined($tool_data->{panelcn_mops}->{run}) ? $tool_data->{panelcn_mops}->{run} : 'N',
@@ -1388,6 +1390,61 @@ sub main {
 				print $log ">>> IchorCNA job id: $ichor_run_id\n\n";
 				push @step4_job_ids, $ichor_run_id;
 				push @job_ids, $ichor_run_id;
+				}
+			}
+
+		## Ascat pipeline
+		if ('Y' eq $tool_set{'ascat'}) {
+
+			unless(-e $ascat_directory) { make_path($ascat_directory); }
+
+			my $ascat_command = join(' ',
+				"perl $cwd/scripts/ascat.pl",
+				"-o", $ichor_directory,
+				"-t", $tool_config,
+				"-d", $gatk_output_yaml,
+				"-c", $args{cluster}
+				);
+
+			if ($args{cleanup}) {
+				$ascat_command .= " --remove";
+				}
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for ascat.pl\n";
+			print $log "  COMMAND: $ascat_command\n\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_ascat',
+				cmd	=> $ascat_command,
+				modules	=> ['perl'],
+				dependencies	=> $current_dependencies,
+				mem		=> '256M',
+				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
+
+				$ascat_command .= " --dry-run";
+				`$ascat_command`;
+				$ascat_run_id = 'pughlab_dna_pipeline__run_ascat';
+
+				} else {
+
+				$ascat_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> AscatCNA job id: $ascat_run_id\n\n";
+				push @step4_job_ids, $ascat_run_id;
+				push @job_ids, $ascat_run_id;
 				}
 			}
 

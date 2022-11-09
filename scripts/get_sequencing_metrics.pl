@@ -54,6 +54,31 @@ sub get_format_intervals_command {
 	return($format_command);
 	}
 
+# format command to extract insert size metrics
+sub get_insert_sizes_command {
+	my %args = (
+		input		=> undef,
+		output_stem	=> undef,
+		java_mem	=> undef,
+		tmp_dir		=> undef,
+		@_
+		);
+
+	my $qc_command = join(' ',
+		'java -Xmx' . $args{java_mem},
+		'-Djava.io.tmpdir=' . $args{tmp_dir},
+		'-jar $picard_dir/picard.jar CollectInsertSizeMetrics',
+		'I=' . $args{input},
+		'O=' . $args{output_stem} . '.txt',
+		'H=' . $args{output_stem} . '.pdf',
+		'M=0 W=600'
+		);
+
+	$qc_command .= "\n\necho 'CollectInsertSizeMetrics completed successfully.' > $args{output_stem}.COMPLETE";
+
+	return($qc_command);
+	}
+
 # format command to extract alignment metrics
 sub get_alignment_metrics_command {
 	my %args = (
@@ -424,6 +449,49 @@ sub main {
 
 			push @final_outputs, $output_stem . '.bait_bias_summary_metrics';
 			push @final_outputs, $output_stem . '.pre_adapter_summary_metrics';
+
+			## Collect InsertSize metrics 
+			$output_stem = join('/', $patient_directory, $sample . '_insert_size');
+
+			$qc_command = get_insert_sizes_command(
+				input		=> $smp_data->{$patient}->{$type}->{$sample},
+				output_stem	=> $output_stem,
+				java_mem	=> $parameters->{qc}->{java_mem},
+				tmp_dir		=> $tmp_directory
+				);
+
+			# check if this should be run
+			if ('Y' eq missing_file($output_stem . '.COMPLETE')) {
+
+				# record command (in log directory) and then run job
+				print $log "Submitting job for CollectInsertSizeMetrics...\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_collect_insert_sizes_' . $sample,
+					cmd	=> $qc_command,
+					modules	=> [$picard,'R/4.1.0'],
+					max_time	=> $parameters->{qc}->{time},
+					mem		=> $parameters->{qc}->{mem},
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_collect_insert_sizes_' . $sample,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
+				} else {
+				print $log "Skipping CollectInsertSizeMetrics because this has already been completed!\n";
+				}
+
+			push @final_outputs, $output_stem . '.txt';
 
 			## Collect alignment metrics
 			$output_stem = join('/', $patient_directory, $sample . '_alignment_metrics');

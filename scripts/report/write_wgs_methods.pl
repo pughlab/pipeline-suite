@@ -224,6 +224,7 @@ sub main {
 	$varscan        = defined($tool_data->{varscan_version}) ? $tool_data->{varscan_version} : undef;
 	$gatk		= defined($tool_data->{gatk_version}) ? $tool_data->{gatk_version} : undef;
 	$vcftools	= defined($tool_data->{vcftools_version}) ? $tool_data->{vcftools_version} : undef;
+	$vcf2maf	= defined($tool_data->{vcftools_version}) ? $tool_data->{vcf2maf_version} : undef;
 	$samtools	= defined($tool_data->{samtools_version}) ? $tool_data->{samtools_version} : undef;
 	$bcftools	= $samtools;
 	
@@ -235,8 +236,6 @@ sub main {
 	if (defined($tool_data->{annotate}->{vep_path})) {
 		my @parts = split('\\/', $tool_data->{annotate}->{vep_path});
 		$vep = $parts[-1];
-		@parts = split('\\/', $tool_data->{annotate}->{vcf2maf_path});
-		$vcf2maf = $parts[-2];
 		}
 
 	my @snv_tools;
@@ -487,6 +486,8 @@ sub main {
 		}
 
 	# for copy number variants
+	$methods .= "\\subsection{Copy-Number Variation}\n";
+
 	my @cna_tools;
 	if ('Y' eq $tool_set{'gatk_cnv'}) {
 		$gatk4 = $tool_data->{gatk_cnv_version};
@@ -498,28 +499,29 @@ sub main {
 		}
 
 	if ('Y' eq $tool_set{'ichor_cna'}) {
+		$ichor_cna = $tool_data->{ichor_cna_version};
 		push @cna_tools, "IchorCNA (v$ichor_cna)";
 		}
 
 	if (scalar(@cna_tools) > 0) {
-		$methods .= "\\newline\n\\noindent Somatic copy-number aberrations (SCNAs) were identified using the following methods: " . join(', ', @cna_tools) . "\\newline\n";
+		$methods .= "Somatic copy-number aberrations (SCNAs) were identified using the following methods: " . join(', ', @cna_tools) . "\\newline\n\\newline\n";
 		} else {
 		$methods .= "No tools were run to detect copy-number alterations.\\newline\n";
 		}
 
 	# for varscan/sequenza
 	if ('Y' eq $tool_set{'varscan'}) {
-		$methods .= "VarScan was run as above on T/N pairs, using the copynumber and copyCaller tools. Input for Sequenza was formatted using VarScan2seqz (Sequenza v2.1, R v3.3.0). Sequenza functions (extract and fit) were run using Sequenza v3.0.0; R v3.6.1, with the modified copynumber package (v1.29.0.9000 - to ensure compatibility with hg38). Tuning of the gamma parameter within sequenza.extract was performed to obtain the optimal value, and sequenza.fit performed utilizing ploidy priors obtained from TGCA. Resulting copy number segments were mapped to gene IDs and ploidy-adjusted.\\newline\n";
+		$methods .= "VarScan was run as above on T/N pairs, using the copynumber and copyCaller tools. Input for Sequenza was formatted using VarScan2seqz (Sequenza v2.1, R v3.3.0). Sequenza functions (extract and fit) were run using Sequenza v3.0.0; R v3.6.1, with the modified copynumber package (v1.29.0.9000 - to ensure compatibility with hg38). Tuning of the gamma parameter within sequenza.extract was performed to obtain the optimal value, and sequenza.fit performed utilizing ploidy priors obtained from TGCA. Resulting copy number segments were mapped to gene IDs and ploidy-adjusted.\\newline\n\\newline\n";
 		}
 
 	# for gatk4
 	if ('Y' eq $tool_set{'gatk_cnv'}) {
-		$methods .= "GATK's CNV pipeline (v$gatk4) was run using best practice guidelines. Pipeline was run with default parameters except model step which was run using number of smoothing iterations = 1 and number-of-changepoints-penalty-factor = 2.0.\\newline";
+		$methods .= "GATK's CNV pipeline (v$gatk4) was run using best practice guidelines. Pipeline was run with default parameters except model step which was run using number of smoothing iterations = 1 and number-of-changepoints-penalty-factor = 2.0.\\newline\n\\newline\n";
 		}
 
 	# for ichorCNA
 	if ('Y' eq $tool_set{'ichor_cna'}) {
-		$methods .= "Readcounts were first collected using hmmcopy_utils readCounter, using a window size of 1M and quality threshold of 20. The resulting WIG was fed into IchorCNA (v$ichor_cna) using default parameters and the appropriate reference type.\\newline";
+		$methods .= "For IchorCNA, readcounts were first collected using hmmcopy\_utils readCounter, using a window size of 1M and quality threshold of 20. The resulting WIG was fed into IchorCNA (v$ichor_cna) using default parameters and the appropriate reference type.\\newline\n";
 		}
 
 	# for MSI

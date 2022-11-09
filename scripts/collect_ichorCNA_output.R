@@ -65,6 +65,8 @@ metric.data <- do.call(rbind,
 		)
 	);
 
+metric.data$PGA <- NA;
+
 cnData <- list();
 for (file in cn.files) {
 	# extract sample ID
@@ -73,8 +75,12 @@ for (file in cn.files) {
 	tmp <- read.delim(file);
 	if (nrow(tmp) > 0) {
 		tmp$Sample <- smp;
-		colnames(tmp) <- gsub(paste0(smp, '.'),'',colnames(tmp));
+		colnames(tmp) <- gsub(paste0(gsub('-','.',smp), '\\.'),'',colnames(tmp));
 		cnData[[smp]] <- tmp;
+
+		total <- sum(tmp$end - tmp$start);
+		altered <- sum(apply(tmp[which(tmp$Corrected_Copy_Number != 2),c('end','start')],1,function(i) { (i[1] - i[2]) } ));		
+		metric.data[which(metric.data$ID == smp),]$PGA <- altered/total;
 		}
 	}
 

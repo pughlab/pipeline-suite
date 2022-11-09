@@ -422,7 +422,7 @@ sub main{
 						log_dir	=> $log_directory,
 						name	=> 'run_haplotype_caller_' . $sample,
 						cmd	=> $call_variants_cmd,
-						modules	=> [$gatk, 'tabix'],
+						modules	=> [$gatk, $samtools, 'tabix'],
 						max_time	=> $parameters->{haplotype_call}->{time},
 						mem		=> $parameters->{haplotype_call}->{mem},
 						hpc_driver	=> $args{hpc_driver},
@@ -454,7 +454,8 @@ sub main{
 					'>', $sample . '_HC_merged.g.vcf'
 					);
 				$merge_command .= "\n" . join(' ',
-					'vcf-sort -c', $sample . '_HC_merged.g.vcf',
+					'vcf-sort -c -t', $tmp_directory,
+					$sample . '_HC_merged.g.vcf',
 					'>', $hc_vcf					
 					);
 
@@ -480,7 +481,7 @@ sub main{
 						log_dir	=> $log_directory,
 						name	=> 'run_merge_per_chromosome_vcfs_' . $sample,
 						cmd	=> $merge_command,
-						modules	=> ['vcftools','tabix'],
+						modules	=> ['vcftools',$samtools,'tabix'],
 						dependencies	=> $run_id,
 						max_time	=> '24:00:00',
 						mem		=> '2G',
