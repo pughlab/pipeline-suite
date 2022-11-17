@@ -295,6 +295,17 @@ sub main{
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless (-e $sample_directory) { make_path($sample_directory); }
 
+			# has this been run before (does the final output already exist?)
+			my $final_file = join('/',
+				$sample_directory,
+				join('_', $sample, 'CPSR', 'germline_hc.maf.md5')
+				);
+
+			if ('N' eq missing_file($final_file)) {
+				print $log "  >> Final output file $final_file already exists; skipping to next sample.\n\n";
+				next;
+				}
+
 			# run select variants to remove large INDELs and select this sample
 			my $subset_vcf = join('/',
 				$tmp_directory,
