@@ -80,7 +80,7 @@ if (arguments$germline) {
 	rm(tmp);
 
 	# read callset
-	delly.calls <- join_all(lapply(input.files, read.delim, skip = header));
+	delly.calls <- join_all(lapply(input.files, read.delim, skip = header), type = 'full');
 	}
 
 # get common field ids

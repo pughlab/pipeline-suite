@@ -694,12 +694,6 @@ sub get_vcf2maf_command {
 		output		=> undef,
 		tmp_dir		=> undef,
 		parameters	=> undef,
-#		vcf2maf		=> undef,
-#		vep_path	=> undef,
-#		vep_data	=> undef,
-#		filter_vcf	=> undef,
-#		n_cpus		=> 4,
-#		buffer_size	=> 1000,
 		@_
 		};
 
@@ -713,8 +707,8 @@ sub get_vcf2maf_command {
 		}
 
 	my $maf_command = 'vcf2maf.pl';
-	if (defined($args->{vcf2maf})) {
-		$maf_command = "perl $args->{vcf2maf}"; 
+	if (defined($args->{parameters}->{vcf2maf_path})) {
+		$maf_command = "perl $args->{parameters}->{vcf2maf_path}"; 
 		}
 
 	$maf_command .= ' ' . join(' ',
