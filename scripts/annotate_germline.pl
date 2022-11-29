@@ -289,28 +289,24 @@ sub main{
 
 			$run_id = '';
 
-			print $log "  SAMPLE: $sample\n\n";
+			print $log "\n>> Preparing input for SAMPLE: $sample\n\n";
 
 			# make some directories
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless (-e $sample_directory) { make_path($sample_directory); }
-
-			# has this been run before (does the final output already exist?)
-			my $final_file = join('/',
-				$sample_directory,
-				join('_', $sample, 'CPSR', 'germline_hc.maf.md5')
-				);
-
-			if ('N' eq missing_file($final_file)) {
-				print $log "  >> Final output file $final_file already exists; skipping to next sample.\n\n";
-				next;
-				}
 
 			# run select variants to remove large INDELs and select this sample
 			my $subset_vcf = join('/',
 				$tmp_directory,
 				$sample . '_Germline_filtered.vcf'
 				);
+
+			my $annotate_final = join('/',
+				$sample_directory,
+				join('.', $sample, 'cpsr', $ref_type, 'snvs_indels.tiers.tsv')
+				);
+
+			push @tier_files, $annotate_final;
 
 			my $prepare_vcf_cmd = create_prepare_vcf_command(
 				input		=> $recalibrated_gvcf,
@@ -320,7 +316,7 @@ sub main{
 				java_mem	=> '256M'
 				);
 
-			if ('Y' eq missing_file($subset_vcf . '.idx')) {
+			if ( ('Y' eq missing_file("$subset_vcf.idx")) && ('Y' eq missing_file($annotate_final)) ) {
 
 				# record command (in log directory) and then run job
 				print $log "Submitting job for SelectVariants...\n";
@@ -356,13 +352,6 @@ sub main{
 				ref_type	=> $ref_type
 				);
 
-			my $annotate_final = join('/',
-				$sample_directory,
-				join('.', $sample, 'cpsr', $ref_type, 'snvs_indels.tiers.tsv')
-				);
-
-			push @tier_files, $annotate_final;
-
 			if ('Y' eq missing_file($annotate_final)) {
 
 				# record command (in log directory) and then run job
@@ -396,8 +385,10 @@ sub main{
 			}
 
 		# extract 
+		print $log "\n>> Combining and extracting significant variants.\n\n";
+
 		my $filtered_vcf = join('/',
-			$tmp_directory,
+			$patient_directory,
 			$patient . '_significant_hits.vcf'
 			);
 
@@ -443,6 +434,8 @@ sub main{
 
 		# loop over each tumour sample
 		foreach my $sample ( @tumour_ids ) {
+
+			print $log "\n>> Annotating significant variants for SAMPLE: $sample\n\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 
@@ -514,8 +507,7 @@ sub main{
 
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
-				}
-			else {
+				} else {
 				print $log "Skipping vcf2maf because this has already been completed!\n";
 				}
 
