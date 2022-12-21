@@ -370,7 +370,7 @@ panelcn_mops:
             mem: 4G
             time: '24:00:00'
 ichor_cna:
-    run: N # only for ctDNA (WGS)
+    run: N # ideal for low-pass WGS
     parameters:
         readcounter:
             mem: 2G
@@ -407,5 +407,9 @@ msi_sensor:
         sensor: # some WGS require up to 36G, but most (WXS/WGS/targeted) are fine with 4G
             mem: 4G
             time: '24:00:00'
-other_tools:
+summarize_steps:
+    lib_path: '/cluster/projects/pughlab/src/r_lib/library/4.1/'
+    run_cosmic_sbs: Y
     run_mutsig: Y
+    run_chord: N
+    run_hrdetect: N
