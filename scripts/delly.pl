@@ -38,7 +38,7 @@ our ($reference, $exclude_regions, $intervals_bed, $delly_multi) = undef;
 #	--dry_run indicates that this is a dry run
 
 ### DEFINE SUBROUTINES #############################################################################
-# format command to run Manta
+# format command to run Delly
 sub get_delly_command {
 	my %args = (
 		tumour	=> undef,
@@ -408,7 +408,7 @@ sub pon {
 		# for germline variants
 		foreach my $norm (@normal_ids) {
 
-			print $log ">>NORMAL: $norm\n";
+			print $log "  NORMAL: $norm\n";
 
 			# create some symlinks
 			my @tmp = split /\//, $smp_data->{$patient}->{normal}->{$norm};
@@ -431,7 +431,7 @@ sub pon {
 			if ('Y' eq missing_file($germline_output . ".md5")) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for Delly (germline)...\n";
+				print $log "  >>Submitting job for Delly (germline)...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -454,7 +454,7 @@ sub pon {
 
 				push @part1_jobs, $run_id;
 				} else {
-				print $log "Skipping Delly (germline) because this has already been completed!\n";
+				print $log "  >>Skipping Delly (germline) because this has already been completed!\n";
 				}
 
 			push @pon_bcfs, $germline_output;
@@ -522,7 +522,7 @@ sub pon {
 		# for germline variants
 		foreach my $norm (@normal_ids) {
 
-			print $log ">>NORMAL: $norm\n";
+			print $log "  NORMAL: $norm\n";
 
 			$run_id = '';
 
@@ -541,7 +541,7 @@ sub pon {
 			if ('Y' eq missing_file($genotype_output . ".md5")) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for Delly Genotype (germline)...\n";
+				print $log "  >>Submitting job for Delly Genotype (germline)...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -565,7 +565,7 @@ sub pon {
 
 				push @part2_jobs, $run_id;
 				} else {
-				print $log "Skipping Delly Genotype (germline) because this has already been completed!\n";
+				print $log "  >>Skipping Delly Genotype (germline) because this has already been completed!\n";
 				}
 
 			push @genotyped_bcfs, $genotype_output;
@@ -918,6 +918,7 @@ sub main {
 
 		my $delly_cmd;
 		my $delly_output = join('/', $patient_directory, $patient . '_Delly_SVs.bcf');
+		my $n_cpus = 1;
 
 		# run on tumour-only
 		if (scalar(@normal_ids) == 0) {
@@ -929,6 +930,7 @@ sub main {
 				);
 
 			push @filtered_bcfs, $delly_output;
+			$n_cpus = scalar(@tumour_bams);
 
 			} else { # run on T/N pairs
 
@@ -938,11 +940,11 @@ sub main {
 				output	=> $delly_output,
 				n_cpus	=> scalar(@tumour_bams) + scalar(@normal_bams)
 				);
+
+			$n_cpus = scalar(@tumour_bams) + scalar(@normal_bams);
 			}
 
 		$delly_cmd .= "\n\n" . "md5sum $delly_output > $delly_output.md5";
-
-		$cleanup{$patient} .= "rm $delly_output\n";
 
 		# check if this should be run
 		if ('Y' eq missing_file($delly_output . ".md5")) {
@@ -955,6 +957,7 @@ sub main {
 				name	=> 'run_delly_somatic_SV_caller_' . $patient,
 				cmd	=> $delly_cmd,
 				modules	=> [$delly],
+				cpus_per_task	=> $n_cpus,
 				max_time	=> $parameters->{call}->{time},
 				mem		=> $parameters->{call}->{mem},
 				hpc_driver	=> $args{hpc_driver},
@@ -1045,7 +1048,7 @@ sub main {
 	# check if this should be run
 	my $merge_run_id = '';
 
-	if ('Y' eq missing_file($merged_output . ".md5")) {
+	if (scalar(@part1_jobs) > 0) {
 
 		# record command (in log directory) and then run job
 		print $log "Submitting job for Delly merge...\n";
@@ -1094,7 +1097,7 @@ sub main {
 		# for each tumour sample
 		foreach my $sample (@sample_ids) {
 
-			print $log ">>SAMPLE: $sample\n";
+			print $log "  SAMPLE: $sample\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
@@ -1133,10 +1136,10 @@ sub main {
 			$cleanup{$patient} .= "rm $genotype_output\n";
 
 			# check if this should be run
-			if ('Y' eq missing_file($genotype_output . ".md5")) {
+			if ('' ne $merge_run_id) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for Delly Genotype (somatic)...\n";
+				print $log "  >>Submitting job for Delly Genotype (somatic)...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -1161,7 +1164,7 @@ sub main {
 				push @part2_jobs, $run_id;
 				push @{$patient_jobs{$patient}}, $run_id;
 				} else {
-				print $log "Skipping Delly Genotype (somatic) because this has already been completed!\n";
+				print $log "  >>Skipping Delly Genotype (somatic) because this has already been completed!\n";
 				}
 
 			push @genotyped_bcfs, $genotype_output;
@@ -1182,7 +1185,7 @@ sub main {
 
 	$merge_somatic_svs .= "\n\n" . "md5sum $merged_somatic_output > $merged_somatic_output.md5";
 
-	if ('Y' eq missing_file($merged_somatic_output . ".md5")) {
+	if (scalar(@part2_jobs) > 0) {
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
@@ -1211,6 +1214,8 @@ sub main {
 
 	print $log "\nFinalizing somatic SVs for each sample...\n\n";
 
+	my @finalize_jobs;
+
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
@@ -1224,7 +1229,7 @@ sub main {
 		# for each tumour sample
 		foreach my $sample (@tumour_ids) {
 
-			print $log ">>TUMOUR: $sample\n";
+			print $log "  TUMOUR: $sample\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 			my $sample_sheet = join('/', $sample_directory, 'sample_sheet.tsv');
@@ -1262,7 +1267,9 @@ sub main {
 
 			$cleanup{$patient} .= "rm $filter_output\n";
 
-			if ('Y' eq missing_file($final_output . ".md5")) {
+			if ('' ne $merge_run_id) {
+
+				print $log "  >>Submitting job for finalize (filter) step...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -1284,45 +1291,14 @@ sub main {
 					log_file	=> $log
 					);
 
+				push @finalize_jobs, $run_id;
 				push @all_jobs, $run_id;
 				push @{$patient_jobs{$patient}}, $run_id;
+				} else {
+				print $log "  >>Skipping finalize step because this has already been completed!\n";
 				}
 
 			push @{$final_outputs{$patient}}, $final_output;
-			}
-
-		# should intermediate files be removed
-		if ( ($args{del_intermediates}) && (scalar(@{$patient_jobs{$patient}}) > 0) ) {
-
-			print $log "\nSubmitting job to clean up temporary/intermediate files...\n";
-
-			# make sure final output exists before removing intermediate files!
-			my $cleanup_cmd = join("\n",
-				"if [ -s " . join(" ] && [ -s ", @{$final_outputs{$patient}}) . " ]; then",
-				"  $cleanup{$patient}",
-				"else",
-				'  echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
-				"fi"
-				);
-
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'run_somatic_cleanup_' . $patient,
-				cmd	=> $cleanup_cmd,
-				dependencies	=> join(':', @{$patient_jobs{$patient}}),
-				mem		=> '256M',
-				hpc_driver	=> $args{hpc_driver},
-				kill_on_error	=> 0,
-				extra_args	=> [$hpc_group]
-				);
-
-			$run_id = submit_job(
-				jobname		=> 'run_somatic_cleanup_' . $patient,
-				shell_command	=> $run_script,
-				hpc_driver	=> $args{hpc_driver},
-				dry_run		=> $args{dry_run},
-				log_file	=> $log
-				);
 			}
 
 		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @{$final_outputs{$patient}}) . "\n";
@@ -1348,7 +1324,7 @@ sub main {
 			name	=> 'combine_delly_output',
 			cmd	=> $collect_output,
 			modules	=> ['R'],
-			dependencies	=> join(':', @all_jobs),
+			dependencies	=> join(':', @finalize_jobs),
 			mem		=> '4G',
 			max_time	=> '12:00:00',
 			hpc_driver	=> $args{hpc_driver},
@@ -1470,12 +1446,13 @@ if ($germline) {
 
 	} else {
 
+	# don't remove intermediates in case additional samples are added later
 	main(
 		tool_config		=> $tool_config,
 		data_config		=> $data_config,
 		output_directory	=> $output_directory,
 		hpc_driver		=> $hpc_driver,
-		del_intermediates	=> $remove_junk,
+		del_intermediates	=> 0,
 		dry_run			=> $dry_run,
 		no_wait			=> $no_wait
 		);
