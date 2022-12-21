@@ -38,12 +38,9 @@ save.session.profile <- function(file.name) {
 	}
 
 ### PREPARE SESSION ################################################################################
-# import libraries
-library(xtable);
-library(BoutrosLab.plotting.general);
+# import command line arguments
 library(argparse);
 
-# import command line arguments
 parser <- ArgumentParser();
 
 parser$add_argument('-p', '--project', type = 'character', help = 'PROJECT name');
@@ -52,11 +49,23 @@ parser$add_argument('-r', '--rsem', type = 'character', help = 'path to gene by 
 
 arguments <- parser$parse_args();
 
+# import libraries
+library(xtable);
+library(BoutrosLab.plotting.general);
+
 ### READ DATA ######################################################################################
 # get data
-input.data <- read.delim(arguments$rsem);
+if (is.null(arguments$rsem)) {
+	stop('ERROR: No input file provided, please provide path to RSEM results matrix');
+	} else {
+	input.data <- read.delim(arguments$rsem, stringsAsFactors = FALSE);
+	}
 
-# move to output directory
+# create (if necessary) and move to output directory
+if (!dir.exists(arguments$output)) {
+	dir.create(arguments$output);
+	}
+
 setwd(arguments$output);
 
 ### FORMAT DATA ####################################################################################
