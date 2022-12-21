@@ -50,9 +50,9 @@ sub main {
 
 	# if multiple cna callers were run
 	my @cnv_tex;
-	if (any { /cna_summary.tex/ } @tex_files) {
-		push @cnv_tex, 'cna_summary.tex';
-		@tex_files = grep { $_ ne 'cna_summary.tex' } @tex_files;
+	if (any { /cna_summary_seqz.tex/ } @tex_files) {
+		push @cnv_tex, 'cna_summary_seqz.tex';
+		@tex_files = grep { $_ ne 'cna_summary_seqz.tex' } @tex_files;
 		}
 	if (any { /cna_summary_gatk.tex/ } @tex_files) {
 		push @cnv_tex, 'cna_summary_gatk.tex';
@@ -66,11 +66,15 @@ sub main {
 		push @cnv_tex, 'cna_summary_ichor.tex';
 		@tex_files = grep { $_ ne 'cna_summary_ichor.tex' } @tex_files;
 		}
+	if (any { /cna_summary_ascat.tex/ } @tex_files) {
+		push @cnv_tex, 'cna_summary_ascat.tex';
+		@tex_files = grep { $_ ne 'cna_summary_ascat.tex' } @tex_files;
+		}
 
 	foreach my $i ( @cnv_tex) {
 		next if ($i eq $cnv_tex[0]);
 		my $filepath = join('/', $args{input_dir}, $i);
-		`sed -i 's/section{SCNA Summary}/pagebreak/' $filepath`;
+		`sed -i 's/section{SCNA Summary}/pagebreak\\n\\\\noindent/' $filepath`;
 		}
 
 	push @output_tex_files, @cnv_tex;
@@ -92,6 +96,31 @@ sub main {
 		push @output_tex_files, 'oncokb_summary.tex';
 		@tex_files = grep { $_ ne 'oncokb_summary.tex' } @tex_files;
 		}
+
+	# add in mutation signatures
+	my @sig_tex;
+	if (any { /mutation_signature_summary/ } @tex_files) {
+		push @sig_tex, 'mutation_signature_summary.tex';
+		@tex_files = grep { $_ ne 'mutation_signature_summary.tex' } @tex_files;
+		}
+
+	if (any { /chord_signature_summary/ } @tex_files) {
+		push @sig_tex, 'chord_signature_summary.tex';
+		@tex_files = grep { $_ ne 'chord_signature_summary.tex' } @tex_files;
+		}
+
+	if (any { /hrdetect_signature_summary/ } @tex_files) {
+		push @sig_tex, 'hrdetect_signature_summary.tex';
+		@tex_files = grep { $_ ne 'hrdetect_signature_summary.tex' } @tex_files;
+		}
+
+	foreach my $i ( @sig_tex) {
+		next if ($i eq $sig_tex[0]);
+		my $filepath = join('/', $args{input_dir}, $i);
+		`sed -i 's/section{Mutation Signatures}/pagebreak\\n\\\\noindent/' $filepath`;
+		}
+
+	push @output_tex_files, @sig_tex;
 
 	# put the remaining tex files into output array
 	push @output_tex_files, @tex_files;
