@@ -38,21 +38,6 @@ save.session.profile <- function(file.name) {
 
 	}
 
-### PREPARE SESSION ################################################################################
-# import libraries
-library(xtable);
-library(BoutrosLab.plotting.general);
-library(argparse);
-
-# import command line arguments
-parser <- ArgumentParser();
-
-parser$add_argument('-p', '--project', type = 'character', help = 'PROJECT name');
-parser$add_argument('-o', '--output', type = 'character', help = 'path to output directory');
-parser$add_argument('-m', '--mutations', type = 'character', help = 'mutation calls (combined maf output by collect_snv_output.R)');
-
-arguments <- parser$parse_args();
-
 ### VARIANT CODING
 # 1 = missense, 2 = stop gain, 3 = stop loss, 4 = splicing, 5 = frameshift, 6 = in frame indel, 7 = tss
 # 8 = RNA, 9 = other (up/downstream, UTR, intergenic, silent, intron), 10 = ITD
@@ -67,7 +52,23 @@ variant.codes <- data.frame(
 	Code = c(9, 9, 9, 8, 9, 9, 9, 9, 1, 4, 4, 6, 6, 5, 5, 2, 3, 7, 10)
 	);
 
-#variant.colours <- c('#673AB7','#2196F3','#F44336','#00BCD4','#E91E63','#8BC34A','#FFC107','#03A9F4','grey50');
+### PREPARE SESSION ################################################################################
+# import command line arguments
+library(argparse);
+
+parser <- ArgumentParser();
+
+parser$add_argument('-p', '--project', type = 'character', help = 'PROJECT name');
+parser$add_argument('-o', '--output', type = 'character', help = 'path to output directory');
+parser$add_argument('-m', '--mutations', type = 'character',
+	help = 'mutation calls (combined maf output by collect_snv_output.R)');
+
+arguments <- parser$parse_args();
+
+# import libraries
+library(BoutrosLab.plotting.general);
+library(xtable);
+
 variant.colours <- c('darkseagreen4','darkorchid4','#9AA3F2','yellow','darkorange3','#F9B38E','turquoise1','plum','grey50')
 names(variant.colours) <- c('missense','nonsense','nonstop','splicing','frameshift_indel','in_frame_indel','tss','RNA','other');
 
@@ -77,12 +78,20 @@ basechange.colours <- default.colours(8,'pastel')[-5];
 
 ### READ DATA ######################################################################################
 # get data
-input.data <- read.delim(arguments$mutations);
+if (is.null(arguments$maf)) {
+	stop('ERROR: No input MAF provided, please provide path to SNV calls in MAF format.');
+	} else {
+	input.data <- read.delim(arguments$mutations, stringsAsFactors = FALSE, comment.char = '#');
+	}
 
 # collect list of all samples
 all.samples <- unique(input.data$Tumor_Sample_Barcode);
 
-# move to output directory
+# create (if necessary) and move to output directory
+if (!dir.exists(arguments$output)) {
+	dir.create(arguments$output);
+	}
+
 setwd(arguments$output);
 
 ### FORMAT DATA ####################################################################################

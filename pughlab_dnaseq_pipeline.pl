@@ -120,7 +120,7 @@ sub main {
 	my $mops_directory = join('/', $output_directory, 'panelCNmops');
 	my $svict_directory = join('/', $output_directory, 'SViCT');
 	my $ichor_directory = join('/', $output_directory, 'IchorCNA');
-	my $ascat_directory = join('/', $output_directory, 'AscatCNA');
+	my $ascat_directory = join('/', $output_directory, 'ASCAT');
 	my $mavis_directory = join('/', $output_directory, 'Mavis');
 
 	# check which tools have been requested

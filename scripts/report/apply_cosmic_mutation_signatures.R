@@ -26,8 +26,14 @@ save.session.profile <- function(file.name) {
 	cat('### MEMORY USAGE ###############################################################');
 	print(proc.time());
 
+	# write key variables to file
+	cat("\n### VARIABLES #################################################################\n");
+	cat(paste0('Input MAF: ', arguments$maf));
+	cat(paste0('VAF threshold applied: ', vaf.threshold));
+	cat(paste0('Minimum number of SNPs required: ', min.snps));
+
 	# write sessionInfo to file
-	cat("\n### SESSION INFO ###############################################################");
+	cat("\n### SESSION INFO ###############################################################\n");
 	print(sessionInfo());
 
 	# close the file
@@ -55,25 +61,30 @@ simplify.ids <- function(x) {
 	}
 
 ### PREPARE SESSION ################################################################################
-# import libraries
-library(BoutrosLab.plotting.general);
-library(xtable);
-library(deconstructSigs);
-library(BSgenome);
+# import command line arguments
 library(argparse);
 
-# import command line arguments
 parser <- ArgumentParser();
 
 parser$add_argument('-p', '--project', type = 'character', help = 'PROJECT name');
 parser$add_argument('-o', '--output', type = 'character', help = 'path to output directory');
 parser$add_argument('-t', '--seq_type', type = 'character', help = 'exome or wgs', default = 'exome');
 parser$add_argument('-r', '--ref_type', type = 'character', help = 'hg38 or hg19', default = 'hg38');
-parser$add_argument('-i', '--input', type = 'character', help = 'mutation calls in MAF format');
-parser$add_argument('-v', '--vaf_threshold', type = 'character', help = 'threshold to filter variants', default = 0.1);
-parser$add_argument('-s', '--signatures', type = 'character', help = 'path to signatures matrix (96 trinucleotide x N sigs)', default = NULL);
+parser$add_argument('-m', '--maf', type = 'character', help = 'mutation calls in MAF format');
+parser$add_argument('-v', '--vaf_threshold', type = 'character',
+	help = 'threshold to filter variants', default = 0.1);
+parser$add_argument('-s', '--signatures', type = 'character', default = NULL,
+	help = 'path to signatures matrix (96 trinucleotide x N sigs)');
+parser$add_argument('-z', '--report', type = 'character', help = 'path to report directory',
+	default = NULL);
 
 arguments <- parser$parse_args();
+
+# load required libraries
+library(BoutrosLab.plotting.general);
+library(xtable);
+library(deconstructSigs);
+library(BSgenome);
 
 # get genome object
 BSgenome.Hsapiens.UCSC <- if (arguments$ref_type == 'hg38') {
@@ -84,7 +95,7 @@ BSgenome.Hsapiens.UCSC <- if (arguments$ref_type == 'hg38') {
 
 # indicate normalization method (assuming signatures matrix was developed from WGS)
 normalization.method <- 'default';
-if (arguments$seq_type == 'exome') {
+if (arguments$seq_type %in% c('exome','targeted')) {
 	normalization.method <- 'exome2genome';
 	}
 
@@ -94,14 +105,29 @@ min.snps <- 50;
 
 ### READ DATA ######################################################################################
 # get data
-input.maf <- read.delim(arguments$input, stringsAsFactors = FALSE);
+if (is.null(arguments$maf)) {
+	stop('ERROR: No input MAF provided, please provide path to SNV calls in MAF format.');
+	} else {
+	input.maf <- read.delim(arguments$maf, stringsAsFactors = FALSE, comment.char = '#');
+	}
 
 # read in mutation signatures
 signatures.to.apply <- if (is.null(arguments$signatures)) { signatures.cosmic } else {
 	as.data.frame(t(read.delim(arguments$signatures, row.names = 1)));
 	}
 
+# create (if necessary) and move to output directory
+if (!dir.exists(arguments$output)) {
+	dir.create(arguments$output);
+	}
+
 setwd(arguments$output);
+
+# run unlink, in case it exists from a previous run
+if (!is.null(arguments$signatures)) {
+	unlink( basename(arguments$signatures) );
+	file.symlink(arguments$signatures, basename(arguments$signatures));
+	}
 
 ### FORMAT DATA ####################################################################################
 # remove INDELs
@@ -170,6 +196,13 @@ if (all(is.na(sig.weights))) {
 		row.names = TRUE,
 		col.names = NA,
 		sep = '\t'
+	 	);
+
+	# make a symlink for use with final summary plots
+	unlink('mutation_signature_weights.tsv');
+	file.symlink(
+		generate.filename(arguments$project, 'mutation_signature_weights', 'tsv'),
+		'mutation_signature_weights.tsv'
 		);
 
 	# order samples by recurrence for prettier heatmap
@@ -241,39 +274,76 @@ if (should.plot) {
 		resolution = 600,
 		filename = generate.filename(arguments$project, 'mutation_signatures', 'png')
 		);
+	}
 
-	### LATEX ##################################################################################
-	# write for latex
-	write("\\section{Mutation Signatures}", file = 'mutation_signature_summary.tex');
+### LATEX ##########################################################################################
+# if making output for a report
+if (!is.null(arguments$report)) {
 
-	# add mutation_signatures plot
-	write("\\begin{figure}[h!]", file = 'mutation_signature_summary.tex', append = TRUE);
-	write("\\begin{center}", file = 'mutation_signature_summary.tex', append = TRUE);
-	write(paste0(
-		"\\includegraphics[height=0.3\\textheight]{",
-		getwd(), '/',
-		generate.filename(arguments$project, 'mutation_signatures', 'png'), '}'
-		), file = 'mutation_signature_summary.tex', append = TRUE);
-	write("\\end{center}", file = 'mutation_signature_summary.tex', append = TRUE);
-	write(paste0(
-		"\\caption{COSMIC mutation signatures were applied to the current dataset using deconstructSig. Heatmap shows weights attributed to each signature for each sample.}"
-		), file = 'mutation_signature_summary.tex', append = TRUE);
-	write("\\end{figure}\n", file = 'mutation_signature_summary.tex', append = TRUE);
-
-	# add table summary
-	caption <- 'Summary of top 10 recurrent signatures across the cohort. Table shows number of samples with signature weight $>$ 0.05.';
-	print(
-		xtable(
-			sig.summary,
-			caption = caption 
-			),
-		file = 'mutation_signature_summary.tex',
-		include.rownames = FALSE,
-		append = TRUE
+	tex.file <- paste0(
+		arguments$report,
+		'/mutation_signature_summary.tex'
 		);
+
+	# write for latex
+	write("\\section{Mutation Signatures}", file = tex.file);
+
+	if (!should.plot) {
+
+		write(
+			'All signature weights are NA - sample(s) probably have too few mutations.',
+			file = tex.file, append = TRUE
+			);
+
+		} else {
+		sig.version <- if (is.null(arguments$signatures)) {
+			'v2; \\url{https://cancer.sanger.ac.uk/signatures/signatures\_v2/}'
+			} else if (grepl('3.2', basename(arguments$signatures))) {
+			'v3.2; \\url{https://cancer.sanger.ac.uk/signatures/sbs/}';
+			} else {
+			paste0(gsub('_','\_',basename(arguments$signatures)));
+			}
+
+		write(
+			paste0('COSMIC SBS mutation signatures (', sig.version, ') were applied to the current dataset using ENSEMBLE mutations, with minimum a VAF threshold = ', vaf.threshold, '.'),
+			file = tex.file,
+			append = TRUE
+			);
+
+		# run unlink, in case it exists from a previous run
+		unlink('mutation_signatures.png');
+		file.symlink(
+			paste0(arguments$output, '/', 
+				generate.filename(arguments$project, 'mutation_signatures', 'png')),
+			paste0(arguments$report, '/', 'mutation_signatures.png')
+			);
+
+		# add mutation_signatures plot
+		write("\\begin{figure}[h!]", file = tex.file, append = TRUE);
+		write("\\begin{center}", file = tex.file, append = TRUE);
+		write(paste0(
+			"\\includegraphics[height=0.3\\textheight]{",
+			paste0(arguments$report, '/', 'mutation_signatures.png'), '}'
+			), file = tex.file, append = TRUE);
+		write("\\end{center}", file = tex.file, append = TRUE);
+		write(paste0(
+			"\\caption{COSMIC mutation signatures were applied to the current dataset using deconstructSig. Heatmap shows weights attributed to each signature for each sample.}"
+			), file = tex.file, append = TRUE);
+		write("\\end{figure}\n", file = tex.file, append = TRUE);
+
+		# add table summary
+		caption <- 'Summary of top 10 recurrent signatures across the cohort. Table shows number of samples with signature weight $>$ 0.05.';
+		print(
+			xtable(
+				sig.summary,
+				caption = caption 
+				),
+			file = tex.file,
+			include.rownames = FALSE,
+			append = TRUE
+			);
+		}
 	}
 
 ### SAVE SESSION INFO ##############################################################################
 save.session.profile(generate.filename('ApplyMutSigs','SessionProfile','txt'));
-
-

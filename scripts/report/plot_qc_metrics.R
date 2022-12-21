@@ -401,7 +401,7 @@ if (is.dna) {
 			target_coverage, "x coverage)."
 			);
 		}
-	colnames(poor.coverage) <- c('Sample','Total','Mean','Median');
+	colnames(poor.coverage) <- c('Sample','TotalBasesSequenced','Mean Coverage','Median Coverage');
 
 	# plot contamination estimates
 	contest.plot <- create.segplot(

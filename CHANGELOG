@@ -1,3 +1,20 @@
+2022-12-21: PughLab pipeline-suite (version 0.8.0)
+- MAJOR CHANGE (pughlab_pipeline_auto_report.pl): complete overhaul of summarize/report steps (complete reorganization [split summarize/report]; extra error checking; incorporated all new tools)
+  - NEW: plot_ascat_summary.R for summary plots for ASCAT output
+  - NEW: get_chord_signatures.R and get_hrdetect_signatures.R for HRD signatures (CHORD and HRDetect)
+  - NEW: calculate_tmb.R to calculate tumour mutation burden
+  - MINOR CHANGE: format_ensemble_mutations.R: added basic coverage/VAF filter to ensemble output
+  - MINOR CHANGE: apply_oncokb_filter_and_summarize.R: added set_tumour_only option to treat variants with low n_depth as tumour-only
+  - MINOR CHANGE: split plot_snv_summary.R into summarize_mutation_data.R (mutation-type frequency) and plot_recurrent_mutations.R (recurrence heatmap)
+  - MINOR CHANGE: plot_sv_summary.R: added better SV filters and circos plots
+- annotate_germline: fixed a bug; now checks for final output prior to running intermediate steps
+- ascat: added/fixed output for purity/ploidy estimates
+- delly: added n_cpus option; removed delete intermediates step and added automatic re-run when new samples are added
+- gatk_cnv: removed delete intermediates step and added automatic re-run when new samples are added to the PoN
+- ichor_cna: added error checks to prevent previously complete steps from re-running
+- collect_sequenza_output.R: added new output file useful for HRDetect
+- minor other updates/bug fixes
+
 2022-11-09: PughLab pipeline-suite (version 0.7.3)
 - NEW: ascat.pl; run ASCAT on tumour/normal pairs
 - QC: added Picard CollectInsertSizeMetrics

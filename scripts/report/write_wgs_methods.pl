@@ -36,7 +36,7 @@ sub main {
 
 	my ($bwa, $gatk, $gatk4);
 	my ($mutect, $mutect2, $strelka, $pindel, $varscan, $vardict, $somaticsniper);
-	my ($delly, $manta, $mavis, $novobreak, $msi, $ichor_cna);
+	my ($delly, $manta, $mavis, $novobreak, $msi, $ichor_cna, $ascat);
 	my ($ref_type, $samtools, $picard, $bedtools, $vcftools, $bcftools);
 	my ($k1000g, $mills, $kindels, $dbsnp, $hapmap, $omni, $cosmic, $pon, $gnomad);
 	my ($vep, $vcf2maf);
@@ -58,6 +58,7 @@ sub main {
 		'novobreak'	=> defined($tool_data->{novobreak}->{run}) ? $tool_data->{novobreak}->{run} : 'N',
 		'delly'		=> defined($tool_data->{delly}->{run}) ? $tool_data->{delly}->{run} : 'N',
 		'svict'		=> 'N', 
+		'ascat'		=> defined($tool_data->{ascat}->{run}) ? $tool_data->{ascat}->{run} : 'N',
 		'ichor_cna'	=> defined($tool_data->{ichor_cna}->{run}) ? $tool_data->{ichor_cna}->{run} : 'N',
 		'mavis'	=> defined($tool_data->{mavis}->{run}) ? $tool_data->{mavis}->{run} : 'N',
 		'msi'	=> defined($tool_data->{msi_sensor}->{run}) ? $tool_data->{msi_sensor}->{run} : 'N'
@@ -503,6 +504,11 @@ sub main {
 		push @cna_tools, "IchorCNA (v$ichor_cna)";
 		}
 
+	if ('Y' eq $tool_set{'ascat'}) {
+		$ascat = '3.1.0'; # $tool_data->{ascat_version};
+		push @cna_tools, "ASCAT (v$ascat)";
+		}
+
 	if (scalar(@cna_tools) > 0) {
 		$methods .= "Somatic copy-number aberrations (SCNAs) were identified using the following methods: " . join(', ', @cna_tools) . "\\newline\n\\newline\n";
 		} else {
@@ -522,6 +528,11 @@ sub main {
 	# for ichorCNA
 	if ('Y' eq $tool_set{'ichor_cna'}) {
 		$methods .= "For IchorCNA, readcounts were first collected using hmmcopy\_utils readCounter, using a window size of 1M and quality threshold of 20. The resulting WIG was fed into IchorCNA (v$ichor_cna) using default parameters and the appropriate reference type.\\newline\n";
+		}
+
+	# for ASCAT
+	if ('Y' eq $tool_set{'ascat'}) {
+		$methods .= "For ASCAT, allele frequencies for SNP6 loci were extracted and processed in R (v4.1.0) using the maftools (v2.12.0) and ASCAT (v$ascat) packages using default parameters and gamma = 1 (as recommened for HTS).\\newline\n";
 		}
 
 	# for MSI

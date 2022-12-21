@@ -242,20 +242,21 @@ sub main{
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n---";
 
+	# get user-specified tool parameters
+	my $parameters = $tool_data->{haplotype_caller}->{parameters};
+
 	# set tools and versions
 	my $gatk	= 'gatk/' . $tool_data->{gatk_version};
 	my $picard	= 'picard/' . $tool_data->{picard_version};
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $r_version	= 'R/' . $tool_data->{r_version};
 
+	# only used for RNA-seq
 	my $vcf2maf = undef;
 	if (defined($tool_data->{vcf2maf_version})) {
 		$vcf2maf = 'vcf2maf/' . $tool_data->{vcf2maf_version};
-		$tool_data->{annotate}->{vcf2maf_path} = undef;
+		$parameters->{annotate}->{vcf2maf_path} = undef;
 		}
-
-	# get user-specified tool parameters
-	my $parameters = $tool_data->{haplotype_caller}->{parameters};
 
 	# get optional HPC group
 	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;

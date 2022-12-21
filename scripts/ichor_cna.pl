@@ -274,7 +274,7 @@ sub main {
 			if ('Y' eq missing_file($normal_wig)) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for readCounter...\n";
+				print $log "  >>Submitting job for readCounter...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -298,7 +298,7 @@ sub main {
 				push @patient_jobs, $normal_wig_jobid;
 				push @all_jobs, $normal_wig_jobid;
 				} else {
-				print $log "Skipping readCounter because this has already been completed!\n";
+				print $log "  >>Skipping readCounter because this has already been completed!\n";
 				}
 			}
 
@@ -308,7 +308,7 @@ sub main {
 			# if there are any samples to run, we will run the final combine job
 			$should_run_final = 1;
 
-			print $log "  SAMPLE: $sample\n\n";
+			print $log "  SAMPLE: $sample\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
@@ -322,6 +322,9 @@ sub main {
 			# indicate output stem
 			my $tumour_wig = join('/', $tmp_directory, $sample . '.wig');
 
+			# indicate final IchorCNA output file
+			my $final_file = join('/', $sample_directory, $sample . '_final_metrics.txt');
+
 			# create readCounter command
 			$run_id = '';
 
@@ -332,10 +335,10 @@ sub main {
 				);
 
 			# check if this should be run
-			if ('Y' eq missing_file($tumour_wig)) {
+			if ( ('Y' eq missing_file($tumour_wig)) && ('Y' eq missing_file($final_file)) ) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for readCounter...\n";
+				print $log "  >>Submitting job for readCounter...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -359,12 +362,10 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping readCounter because this has already been completed!\n";
+				print $log "  >>Skipping readCounter because this has already been completed!\n";
 				}
 
 			# run IchorCNA on provided WIG files
-			my $final_file = join('/', $sample_directory, $sample . '_final_metrics.txt');
-
 			my $ichor_command = get_ichor_cna_command(
 				tumour_id	=> $sample,
 				tumour_wig	=> $tumour_wig,
@@ -377,7 +378,7 @@ sub main {
 			if ('Y' eq missing_file($final_file)) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for ichorCNA...\n";
+				print $log "  >>Submitting job for ichorCNA...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -402,7 +403,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping ichorCNA step because this has already been completed!\n";
+				print $log "  >>Skipping ichorCNA step because this has already been completed!\n";
 				}
 
 			push @final_outputs, $final_file;

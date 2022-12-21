@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-### pughlab_pipeline_auto_report.pl ################################################################
+### pughlab_pipeline_summarize_output.pl ###########################################################
 use AutoLoader 'AUTOLOAD';
 use strict;
 use warnings;
@@ -32,8 +32,9 @@ sub main {
 		@_
 		);
 
+	### PREAMBLE ######################################################################################
 	unless($args{dry_run}) {
-		print "Initiating REPORT pipeline...\n";
+		print "Initiating SUMMARIZE pipeline...\n";
 		}
 
 	my $tool_data = LoadFile($args{config});
@@ -44,20 +45,14 @@ sub main {
 	my $output_directory = $tool_data->{output_dir};
 	$output_directory =~ s/\/$//;
 
-	my $report_directory = join('/', $output_directory, 'Report');
-	unless(-e $report_directory) { make_path($report_directory); }
+	my $summary_directory = join('/', $output_directory, 'SUMMARY_RESULTS');
+	unless(-e $summary_directory) { make_path($summary_directory); }
 
-	my $log_directory = join('/', $report_directory, 'logs');
+	my $log_directory = join('/', $summary_directory, 'logs');
 	unless(-e $log_directory) { make_path($log_directory); }
 
-	my $data_directory = join('/', $report_directory, 'data');
-	unless(-e $data_directory) { make_path($data_directory); }
-
-	my $plot_directory = join('/', $report_directory, 'plots');
-	unless(-e $plot_directory) { make_path($plot_directory); }
-
 	# Initiate logging
-	my $log_file = join('/', $log_directory, 'run_Report_pipeline.log');
+	my $log_file = join('/', $log_directory, 'run_SUMMARIZE_pipeline.log');
 
 	# create a file to hold job metrics
 	my (@files, $run_count, $outfile, $touch_exit_status);
@@ -73,7 +68,7 @@ sub main {
 		$touch_exit_status = system("touch $outfile");
 		if (0 != $touch_exit_status) { Carp::croak("Cannot touch file $outfile"); }
 
-		$log_file = join('/', $log_directory, 'run_Report_pipeline_' . $run_count . '.log');
+		$log_file = join('/', $log_directory, 'run_SUMMARIZE_pipeline_' . $run_count . '.log');
 		}
 
 	# start logging
@@ -81,15 +76,35 @@ sub main {
 	$log->autoflush;
 
 	print $log "---\n";
-	print $log "Running Report Pipeline...\n";
+	print $log "Running Summarize Results Pipeline...\n";
+	print $log "\n  Tool config used: $args{config}";
+	print $log "\n  Output directory: $output_directory";
+	print $log "\n---\n";
 
 	# get tool versions
-	my $r_version = 'R/' . $tool_data->{r_version};
+	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
+	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
+	my $r_version	= 'R/' . $tool_data->{r_version};
+	my $vcf2maf	= undef;
+	if (defined($tool_data->{vcf2maf_version})) {
+		$vcf2maf = 'vcf2maf/' . $tool_data->{vcf2maf_version};
+		$tool_data->{annotate}->{vcf2maf_path} = undef;
+		}
 
 	# get optional HPC group
 	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
 
 	### RUN ####################################################################################
+	# set up directory structure
+	my $data_directory = join('/', $summary_directory, 'data');
+	unless(-e $data_directory) { make_path($data_directory); }
+
+	my $report_directory = join('/', $summary_directory, 'Report');
+	unless(-e $report_directory) { make_path($report_directory); }
+
+	my $plot_directory = join('/', $report_directory, 'plots');
+	unless(-e $plot_directory) { make_path($plot_directory); }
+
 	# check which tools have been requested
 	my %tool_set = (
 		'bwa'	=> defined($tool_data->{bwa}->{run}) ? $tool_data->{bwa}->{run} : 'N',
@@ -104,18 +119,26 @@ sub main {
 		'vardict'	=> defined($tool_data->{vardict}->{run}) ? $tool_data->{vardict}->{run} : 'N',
 		'pindel'	=> defined($tool_data->{pindel}->{run}) ? $tool_data->{pindel}->{run} : 'N',
 		'gatk_cnv'	=> defined($tool_data->{gatk_cnv}->{run}) ? $tool_data->{gatk_cnv}->{run} : 'N',
-		'novobreak'	=> defined($tool_data->{novobreak}->{run}) ? $tool_data->{novobreak}->{run} : 'N',
-		'delly'	=> defined($tool_data->{delly}->{run}) ? $tool_data->{delly}->{run} : 'N',
-		'svict'	=> defined($tool_data->{svict}->{run}) ? $tool_data->{svict}->{run} : 'N',
+		'cnvkit'	=> defined($tool_data->{cnvkit}->{run}) ? $tool_data->{cnvkit}->{run} : 'N',
+		'gatk_gcnv'	=> defined($tool_data->{gatk_gcnv}->{run}) ? $tool_data->{gatk_gcnv}->{run} : 'N',
+		'erds_gcnv'	=> defined($tool_data->{erds_gcnv}->{run}) ? $tool_data->{erds_gcnv}->{run} : 'N',
 		'ichor_cna'	=> defined($tool_data->{ichor_cna}->{run}) ? $tool_data->{ichor_cna}->{run} : 'N',
-		'mops'  => defined($tool_data->{panelcn_mops}->{run}) ? $tool_data->{panelcn_mops}->{run} : 'N',
-		'mavis'	=> defined($tool_data->{mavis}->{run}) ? $tool_data->{mavis}->{run} : 'N',
-		'msi'	=> defined($tool_data->{other_tools}->{run_msi}) ? $tool_data->{other_tools}->{run_msi} : 'N',
-		'mutsig'	=> defined($tool_data->{other_tools}->{run_mutsig}) ? $tool_data->{other_tools}->{run_mutsig} : 'N',
-		'star'	=> defined($tool_data->{star}->{run}) ? $tool_data->{star}->{run} : 'N',
-		'rsem'	=> defined($tool_data->{rsem}->{run}) ? $tool_data->{rsem}->{run} : 'N',
+		'mops'		=> defined($tool_data->{panelcn_mops}->{run}) ? $tool_data->{panelcn_mops}->{run} : 'N',
+		'ascat'		=> defined($tool_data->{ascat}->{run}) ? $tool_data->{ascat}->{run} : 'N',
+		'novobreak'	=> defined($tool_data->{novobreak}->{run}) ? $tool_data->{novobreak}->{run} : 'N',
+		'delly'		=> defined($tool_data->{delly}->{run}) ? $tool_data->{delly}->{run} : 'N',
+		'svict'		=> defined($tool_data->{svict}->{run}) ? $tool_data->{svict}->{run} : 'N',
+		'mavis'		=> defined($tool_data->{mavis}->{run}) ? $tool_data->{mavis}->{run} : 'N',
+		'msi'		=> defined($tool_data->{msi_sensor}->{run}) ? $tool_data->{msi_sensor}->{run} : 'N',
+		'star'		=> defined($tool_data->{star}->{run}) ? $tool_data->{star}->{run} : 'N',
+		'rsem'		=> defined($tool_data->{rsem}->{run}) ? $tool_data->{rsem}->{run} : 'N',
+		'arriba'	=> defined($tool_data->{arriba}->{run}) ? $tool_data->{arriba}->{run} : 'N',
 		'star_fusion'	=> defined($tool_data->{star_fusion}->{run}) ? $tool_data->{star_fusion}->{run} : 'N',
-		'fusioncatcher'	=> defined($tool_data->{fusioncatcher}->{run}) ? $tool_data->{fusioncatcher}->{run} : 'N'
+		'fusioncatcher'	=> defined($tool_data->{fusioncatcher}->{run}) ? $tool_data->{fusioncatcher}->{run} : 'N',
+		'cosmic_sbs'	=> defined($tool_data->{summarize_steps}->{run_cosmic_sbs}) ? $tool_data->{summarize_steps}->{run_cosmic_sbs} : 'N',
+		'chord'		=> defined($tool_data->{summarize_steps}->{run_chord}) ? $tool_data->{summarize_steps}->{run_chord} : 'N',
+		'hrdetect'	=> defined($tool_data->{summarize_steps}->{run_hrdetect}) ? $tool_data->{summarize_steps}->{run_hrdetect} : 'N',
+		'mutsig'	=> defined($tool_data->{summarize_steps}->{run_mutsig}) ? $tool_data->{summarize_steps}->{run_mutsig} : 'N'
 		);
 
 	# initiate objects
@@ -161,6 +184,7 @@ sub main {
 			'-p', $tool_data->{project_name},
 			'-t', $tool_data->{seq_type}
 			);
+
 		# run command
 		print $log "Submitting job to create QC plots...\n";
 		$run_script = write_script(
@@ -539,6 +563,22 @@ sub main {
 			push @job_ids, $qc_run_id;
 			}
 
+		# make mutation-type directories
+		my $snv_directory = join('/', $summary_directory, 'MutationSummary');
+		unless(-e $snv_directory) { make_path($snv_directory); }
+
+		my $cnv_directory = join('/', $summary_directory, 'CNA_Summary');
+		unless(-e $cnv_directory) { make_path($cnv_directory); }
+
+		my $sv_directory = join('/', $summary_directory, 'SV_Summary');
+		unless(-e $sv_directory) { make_path($sv_directory); }
+
+		my $sig_directory = join('/', $summary_directory, 'MutationSignatures');
+		if ( ('Y' eq $tool_set{'cosmic_sbs'}) || ('Y' eq $tool_set{'chord'}) ||
+			('Y' eq $tool_set{'hrdetect'}) ) {
+			unless(-e $sig_directory) { make_path($sig_directory); }
+			}
+
 		# significant germline variants
 		if (-e $cpsr_dir) {
 			opendir(CPSR, $cpsr_dir) or die "Cannot open '$cpsr_dir' !";
@@ -555,12 +595,12 @@ sub main {
 			symlink($cpsr_calls, join('/', $data_directory, 'cpsr_germline_variants.tsv'));
 
 			# summarize/plot CPSR output
-			my $plot_command = "cd $output_directory\n";
-			$plot_command .= "Rscript $cwd/report/plot_germline_snv_summary.R";
-			$plot_command .= " " . join(' ',
-				'-m', $cpsr_calls,
-				'-o', $plot_directory,
-				'-p', $tool_data->{project_name}
+			my $plot_command = join(' ',
+				"Rscript $cwd/report/plot_germline_snv_summary.R",
+				'-p', $tool_data->{project_name},
+				'-m', join('/', $data_directory, 'cpsr_germline_variants.tsv'),
+				'-o', $snv_directory,
+				'--report', $plot_directory
 				);
 
 			# run command
@@ -588,13 +628,15 @@ sub main {
 
 		# somatic variants
 		my ($mutect_data, $mutect2_data, $strelka_data, $varscan_data, $sniper_data, $vardict_data);
-		my ($pindel_data, $sequenza_data, $ploidy_data, $gatk_cnv, $gatk_pga, $mops_cnv, $msi_data);
+		my ($pindel_data, $sequenza_data, $segments, $ploidy_data, $gatk_cnv, $gatk_pga, $msi_data);
+		my ($gatk_gcnv, $cnvkit, $erds_gcnv, $mops_cnv, $ascat, $ichor_cnv);
 
 		# find ENSEMBLE mutations
 		my $ensemble_command .= join(' ',
 			"Rscript $cwd/report/format_ensemble_mutations.R",
 			'-p', $tool_data->{project_name},
-			'-o', $plot_directory
+			'-o', join('/', $data_directory, 'ENSEMBLE'),
+			'-t', $tool_data->{seq_type}
 			);
 
 		# get mutation calls from MuTect
@@ -613,7 +655,7 @@ sub main {
 
 			symlink($mutect_data, join('/', $data_directory, 'mutect_somatic_variants.tsv'));
 
-			$ensemble_command .= " --mutect $mutect_data";
+			$ensemble_command .= ' --mutect ' . join('/', $data_directory, 'mutect_somatic_variants.tsv');
 			}
 
 		# get mutation calls from MuTect2
@@ -632,7 +674,7 @@ sub main {
 
 			symlink($mutect2_data, join('/', $data_directory, 'mutect2_somatic_variants.tsv'));
 
-			$ensemble_command .= " --mutect2 $mutect2_data";
+			$ensemble_command .= " --mutect2 " . join('/', $data_directory, 'mutect2_somatic_variants.tsv');
 			}
 
 		# get mutation calls from Pindel
@@ -651,7 +693,7 @@ sub main {
 
 			symlink($pindel_data, join('/', $data_directory, 'pindel_somatic_variants.tsv'));
 
-			$ensemble_command .= " --pindel $pindel_data";
+			$ensemble_command .= " --pindel " . join('/', $data_directory, 'pindel_somatic_variants.tsv');
 			}
 
 		# get mutation calls from Strelka
@@ -670,7 +712,7 @@ sub main {
 
 			symlink($strelka_data, join('/', $data_directory, 'strelka_somatic_variants.tsv'));
 
-			$ensemble_command .= " --strelka $strelka_data";
+			$ensemble_command .= " --strelka " . join('/', $data_directory, 'strelka_somatic_variants.tsv');
 			}
 
 		# get mutation calls from SomaticSniper
@@ -689,7 +731,7 @@ sub main {
 
 			symlink($sniper_data, join('/', $data_directory, 'somaticsniper_somatic_variants.tsv'));
 
-			$ensemble_command .= " --somaticsniper $sniper_data";
+			$ensemble_command .= " --somaticsniper " . join('/', $data_directory, 'somaticsniper_somatic_variants.tsv');
 			}
 
 		# get mutation calls from VarDict
@@ -708,12 +750,12 @@ sub main {
 
 			symlink($vardict_data, join('/', $data_directory, 'vardict_somatic_variants.tsv'));
 
-			$ensemble_command .= " --vardict $vardict_data";
+			$ensemble_command .= " --vardict " . join('/', $data_directory, 'vardict_somatic_variants.tsv');
 			}
 
-
 		# get mutation calls from VarScan
-		my (@cna_calls, @ploidy);
+		my (@cna_calls, @seg_calls, @ploidy);
+
 		if ('Y' eq $tool_set{'varscan'}) {
 			my $varscan_dir = join('/', $output_directory, 'VarScan');
 
@@ -725,6 +767,9 @@ sub main {
 
 			@cna_calls = grep { /Sequenza_ratio_gene_matrix.tsv/ } @varscan_files;
 			@cna_calls = sort @cna_calls;
+
+			@seg_calls = grep { /Sequenza_segments.tsv/ } @varscan_files;
+			@seg_calls = sort @seg_calls;
 
 			@ploidy = grep { /Sequenza_ploidy_purity.tsv/ } @varscan_files;
 			@ploidy = sort @ploidy;
@@ -739,12 +784,13 @@ sub main {
 
 			symlink($varscan_data, join('/', $data_directory, 'varscan_somatic_variants.tsv'));
 
-			$ensemble_command .= " --varscan $varscan_data";
+			$ensemble_command .= " --varscan " . join('/', $data_directory, 'varscan_somatic_variants.tsv');
 
 			# get cna calls from sequenza
 			unless (scalar(@cna_calls) == 0) {
 
 				$sequenza_data = join('/', $varscan_dir, $cna_calls[-1]);
+				$segments = join('/', $varscan_dir, $seg_calls[-1]);
 				$ploidy_data = join('/', $varscan_dir, $ploidy[-1]);
 
 				if ( -l join('/', $data_directory, 'sequenza_ratio_matrix.tsv')) {
@@ -761,9 +807,10 @@ sub main {
 				my $cna_plot_command = join(' ',
 					"Rscript $cwd/report/plot_seqz_cna_summary.R",
 					'-p', $tool_data->{project_name},
-					'-o', $plot_directory,
-					'-c', $sequenza_data,
-					'-m', $ploidy_data,
+					'-o', $cnv_directory,
+					'--report', $plot_directory,
+					'-c', join('/', $data_directory, 'sequenza_ratio_matrix.tsv'),
+					'-m', join('/', $data_directory, 'sequenza_cna_metrics.tsv'),
 					'-s', 'ratio'
 					);
 
@@ -775,7 +822,7 @@ sub main {
 					cmd		=> $cna_plot_command,
 					modules		=> [$r_version],
 					max_time	=> '04:00:00',
-					mem		=> '2G',
+					mem		=> ('wgs' eq $tool_data->{seq_type}) ? '4G' : '2G',
 					hpc_driver	=> $args{cluster},
 					extra_args	=> [$hpc_group]
 					);
@@ -822,9 +869,10 @@ sub main {
 			my $cnv_plot_command = join(' ',
 				"Rscript $cwd/report/plot_gatk_cna_summary.R",
 				'-p', $tool_data->{project_name},
-				'-o', $plot_directory,
-				'-c', $cnv_data,
-				'-m', $pga_data,
+				'-o', $cnv_directory,
+				'--report', $plot_directory,
+				'-c', join('/', $data_directory, 'gatk_cnv_ratio_matrix.tsv'),
+				'-m', join('/', $data_directory, 'gatk_cnv_pga_estimates.tsv'),
 				'-s', 'ratio'
 				);
 
@@ -836,13 +884,74 @@ sub main {
 				cmd		=> $cnv_plot_command,
 				modules		=> [$r_version],
 				max_time	=> '04:00:00',
-				mem		=> '2G',
+				mem		=> ('wgs' eq $tool_data->{seq_type}) ? '4G' : '2G',
 				hpc_driver	=> $args{cluster},
 				extra_args	=> [$hpc_group]
 				);
 
 			$run_id = submit_job(
 				jobname		=> 'plot_gatk_cnv_summary',
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @job_ids, $run_id;
+			}
+
+		# get CNAs calls from ASCAT
+		if ('Y' eq $tool_set{'ascat'}) {
+			my $ascat_dir = join('/', $output_directory, 'ASCAT');
+
+			opendir(ASCATCNV, $ascat_dir) or die "Cannot open '$ascat_dir' !";
+			my @ascat_files = readdir(ASCATCNV);
+			my @cnv_files = grep { /ratio_gene_matrix.tsv/ } @ascat_files;
+			@cnv_files = sort @cnv_files;
+			my @pga_files = grep { /purity_ploidy.tsv/ } @ascat_files;
+			@pga_files = sort @pga_files;
+			closedir(ASCATCNV);
+
+			my $cnv_data = join('/', $ascat_dir, $cnv_files[-1]);
+			my $pga_data = join('/', $ascat_dir, $pga_files[-1]);
+
+			if ( -l join('/', $data_directory, 'ascat_cnv_ratio_matrix.tsv')) {
+				unlink join('/', $data_directory, 'ascat_cnv_ratio_matrix.tsv');
+				}
+
+			if ( -l join('/', $data_directory, 'ascat_purity_estimates.tsv')) {
+				unlink join('/', $data_directory, 'ascat_purity_estimates.tsv');
+				}
+
+			symlink($cnv_data, join('/', $data_directory, 'ascat_cnv_ratio_matrix.tsv'));
+			symlink($pga_data, join('/', $data_directory, 'ascat_purity_estimates.tsv'));
+
+			# plot CNV summary
+			my $cnv_plot_command = join(' ',
+				"Rscript $cwd/report/plot_ascat_summary.R",
+				'-p', $tool_data->{project_name},
+				'-o', $cnv_directory,
+				'--report', $plot_directory,
+				'-c', join('/', $data_directory, 'ascat_cnv_ratio_matrix.tsv'),
+				'-m', join('/', $data_directory, 'ascat_purity_estimates.tsv'),
+				'-s', 'ratio'
+				);
+
+			# run command
+			print $log "Submitting job to plot ASCAT CNVs...\n";
+			$run_script = write_script(
+				log_dir		=> $log_directory,
+				name		=> 'plot_ascat_summary',
+				cmd		=> $cnv_plot_command,
+				modules		=> [$r_version],
+				max_time	=> '04:00:00',
+				mem		=> ('wgs' eq $tool_data->{seq_type}) ? '4G' : '2G',
+				hpc_driver	=> $args{cluster},
+				extra_args	=> [$hpc_group]
+				);
+
+			$run_id = submit_job(
+				jobname		=> 'plot_ascat_summary',
 				shell_command	=> $run_script,
 				hpc_driver	=> $args{cluster},
 				dry_run		=> $args{dry_run},
@@ -882,9 +991,10 @@ sub main {
 			my $cnv_plot_command = join(' ',
 				"Rscript $cwd/report/plot_ichor_cna_summary.R",
 				'-p', $tool_data->{project_name},
-				'-o', $plot_directory,
-				'-c', $cnv_data,
-				'-m', $metric_data,
+				'-o', $cnv_directory,
+				'--report', $plot_directory,
+				'-c', join('/', $data_directory, 'ichor_cna_output.tsv'),
+				'-m', join('/', $data_directory, 'ichor_cna_estimates.tsv'),
 				'-s', 'ratio'
 				);
 
@@ -896,7 +1006,7 @@ sub main {
 				cmd		=> $cnv_plot_command,
 				modules		=> [$r_version],
 				max_time	=> '04:00:00',
-				mem		=> '2G',
+				mem		=> ('wgs' eq $tool_data->{seq_type}) ? '4G' : '2G',
 				hpc_driver	=> $args{cluster},
 				extra_args	=> [$hpc_group]
 				);
@@ -934,8 +1044,9 @@ sub main {
 			my $cnv_plot_command = join(' ',
 				"Rscript $cwd/report/plot_cn_mops_summary.R",
 				'-p', $tool_data->{project_name},
-				'-o', $plot_directory,
-				'-c', $cnv_data,
+				'-o', $cnv_directory,
+				'--report', $plot_directory,
+				'-c', join('/', $data_directory, 'mops_combined_output.tsv'),
 				'-s', 'ratio'
 				);
 
@@ -989,8 +1100,10 @@ sub main {
 			my $sv_plot_command = join(' ',
 				"Rscript $cwd/report/plot_sv_summary.R",
 				'-p', $tool_data->{project_name},
-				'-o', $plot_directory,
-				'-m', $sv_data
+				'-o', $sv_directory,
+				'-r', $tool_data->{ref_type},
+				'--report', $plot_directory,
+				'-m', join('/', $data_directory, 'mavis_sv_data.tsv')
 				);
 
 			# run command
@@ -1001,7 +1114,7 @@ sub main {
 				cmd		=> $sv_plot_command,
 				modules		=> [$r_version],
 				max_time	=> '04:00:00',
-				mem		=> '2G',
+				mem		=> ('wgs' eq $tool_data->{seq_type}) ? '4G' : '2G',
 				hpc_driver	=> $args{cluster},
 				extra_args	=> [$hpc_group]
 				);
@@ -1043,7 +1156,7 @@ sub main {
 			cmd		=> $ensemble_command,
 			modules		=> [$r_version],
 			max_time	=> '48:00:00',
-			mem		=> '4G',
+			mem		=> ('wgs' eq $tool_data->{seq_type}) ? '48G' : '8G',
 			hpc_driver	=> $args{cluster},
 			extra_args	=> [$hpc_group]
 			);
@@ -1058,12 +1171,62 @@ sub main {
 
 		push @job_ids, $ensemble_run_id;
 
+		# split ensemble calls to produce ensemble VCFs
+		my $maf2vcf_command = 'maf2vcf.pl';
+		if (defined($tool_data->{annotate}->{vcf2maf_path})) {
+			$maf2vcf_command = "perl $tool_data->{annotate}->{vcf2maf_path}";
+			$maf2vcf_command =~ s/vcf2maf.pl/maf2vcf.pl/;
+			}
+
+		$maf2vcf_command .= ' ' . join(' ',
+			'--input-maf', join('/', $data_directory, 'ENSEMBLE', 'ensemble_mutation_data.tsv'),
+			'--output-dir', join('/', $data_directory, 'ENSEMBLE', 'vcfs'),
+			'--ref-fasta', $tool_data->{reference},
+			'--per-tn-vcfs'
+			);
+
+		$maf2vcf_command .= "\n\ncd " . join('/', $data_directory, 'ENSEMBLE', 'vcfs');
+		$maf2vcf_command .= "\n" . 'for VCF in *vcf; do';
+		$maf2vcf_command .= "\n" . join("\n",
+			'  vcf-sort -c $VCF | bgzip -f > $VCF.gz',
+			'  tabix $VCF.gz',
+			'done'
+			);
+
+		# run command
+		print $log "Submitting job to run maf2vcf on ENSEMBLE calls...\n";
+		$run_script = write_script(
+			log_dir		=> $log_directory,
+			name		=> 'produce_ensemble_vcfs',
+			cmd		=> $maf2vcf_command,
+			modules		=> ['perl',$vcf2maf,$vcftools,$samtools,'tabix'],
+			dependencies	=> $ensemble_run_id,
+			max_time	=> '08:00:00',
+			mem		=> ('wgs' eq $tool_data->{seq_type}) ? '4G' : '2G',
+			hpc_driver	=> $args{cluster},
+			extra_args	=> [$hpc_group]
+			);
+
+		my $maf2vcf_run_id = submit_job(
+			jobname		=> 'produce_ensemble_vcfs',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{cluster},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @job_ids, $maf2vcf_run_id;
+
+		my ($toolsummary_run_id, $tmb_run_id, $mutsig_run_id) = '';
+		my ($cosmicsbs_run_id, $chord_run_id, $hrdetect_run_id) = '';
+
 		# plot mutation overlap (by tool)
 		my $snv_overlap_command = join(' ',
 			"Rscript $cwd/report/plot_snv_tool_summary.R",
 			'-p', $tool_data->{project_name},
-			'-o', $plot_directory,
-			'-i', join('/', $plot_directory, 'CombinedMutationData.RData')
+			'-o', $snv_directory,
+			'--report', $plot_directory,
+			'-i', join('/', $data_directory, 'ENSEMBLE', 'CombinedMutationData.RData')
 			);
 
 		# run command
@@ -1074,13 +1237,13 @@ sub main {
 			cmd		=> $snv_overlap_command,
 			modules		=> [$r_version],
 			dependencies	=> $ensemble_run_id,
-			max_time	=> '04:00:00',
-			mem		=> '2G',
+			max_time	=> '24:00:00',
+			mem		=> ('wgs' eq $tool_data->{seq_type}) ? '8G' : '2G',
 			hpc_driver	=> $args{cluster},
 			extra_args	=> [$hpc_group]
 			);
 
-		my $plot1_run_id = submit_job(
+		$toolsummary_run_id = submit_job(
 			jobname		=> 'plot_snv_tool_summary',
 			shell_command	=> $run_script,
 			hpc_driver	=> $args{cluster},
@@ -1088,13 +1251,50 @@ sub main {
 			log_file	=> $log
 			);
 
-		push @job_ids, $plot1_run_id;
+		push @job_ids, $toolsummary_run_id;
+
+		# calculate TMB
+		my $tmb_command = join(' ',
+			"Rscript $cwd/report/calculate_tmb.R",
+			'-p', $tool_data->{project_name},
+			'-o', $snv_directory,
+			'-r', $tool_data->{ref_type},
+			'--maf', join('/', $data_directory, 'ENSEMBLE', 'ensemble_mutation_data.tsv'),
+			'--callable', join('/', $data_directory, 'total_bases_covered.tsv'),
+			'--method both'
+			);
+
+		my $tmb_data = join('/', $snv_directory, 'tumour_mutation_burden.tsv');
+
+		# run command
+		print $log "Submitting job to calculate tumour mutation burden...\n";
+		$run_script = write_script(
+			log_dir		=> $log_directory,
+			name		=> 'calculate_tmb',
+			cmd		=> $tmb_command,
+			modules		=> [$r_version],
+			dependencies	=> $ensemble_run_id,
+			max_time	=> '24:00:00',
+			mem		=> ('wgs' eq $tool_data->{seq_type}) ? '4G' : '2G',
+			hpc_driver	=> $args{cluster},
+			extra_args	=> [$hpc_group]
+			);
+
+		$tmb_run_id = submit_job(
+			jobname		=> 'calculate_tmb',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{cluster},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @job_ids, $tmb_run_id;
 
 		# run MutSigCV
 		my $mutsig_command = join(' ',
 			'sh /cluster/tools/software/MutSigCV/1.4/run_MutSigCV.sh',
 			'/cluster/tools/software/MCR/8.1/v81',
-			join('/', $plot_directory, 'ensemble_mutation_data.tsv'),
+			join('/', $data_directory, 'ENSEMBLE', 'ensemble_mutation_data.tsv'),
 			'/cluster/projects/pughlab/references/MutSigCV/exome_full192.coverage.txt',
 			'/cluster/projects/pughlab/references/MutSigCV/gene.covariates.txt',
 			join('/', $plot_directory, $tool_data->{project_name} . '_MutSigCV'),
@@ -1110,7 +1310,6 @@ sub main {
 			$tool_set{'mutsig'} = 'N';
 			}
 
-		my $mutsig_run_id = '';
 		my $significance_data = join('/',
 			$plot_directory,
 			$tool_data->{project_name} . '_MutSigCV.sig_genes.txt'
@@ -1144,77 +1343,186 @@ sub main {
 			}
 
 		# plot mutation signatures
-		my $sig_plot_command = join(' ',
-			"Rscript $cwd/report/apply_cosmic_mutation_signatures.R",
-			'-p', $tool_data->{project_name},
-			'-o', $plot_directory,
-			'-i', join('/', $plot_directory, 'ensemble_mutation_data.tsv'),
-			'-r', $tool_data->{ref_type},
-			'-t', $tool_data->{seq_type}
-			);
+		if ('Y' eq $tool_set{'cosmic_sbs'}) {
 
-		if (defined($tool_data->{mutation_signatures})) {
-			$sig_plot_command .= " -s $tool_data->{mutation_signatures}";
+			my $sbs_directory = join('/', $sig_directory, 'COSMIC_SBS');
+			unless(-e $sbs_directory) { make_path($sbs_directory); }
+
+			my $sig_plot_command = join(' ',
+				"Rscript $cwd/report/apply_cosmic_mutation_signatures.R",
+				'-p', $tool_data->{project_name},
+				'-o', $sbs_directory,
+				'--report', $plot_directory,
+				'--maf', join('/', $data_directory, 'ENSEMBLE', 'ensemble_mutation_data.tsv'),
+				'-r', $tool_data->{ref_type},
+				'-t', $tool_data->{seq_type}
+				);
+
+			if (defined($tool_data->{mutation_signatures})) {
+				$sig_plot_command .= " -s $tool_data->{mutation_signatures}";
+				}
+
+			# run command
+			print $log "Submitting job to check mutation signatures...\n";
+			$run_script = write_script(
+				log_dir		=> $log_directory,
+				name		=> 'plot_snv_mutation_signatures',
+				cmd		=> $sig_plot_command,
+				modules		=> [$r_version],
+				dependencies	=> $ensemble_run_id,
+				max_time	=> '12:00:00',
+				mem		=> ('wgs' eq $tool_data->{seq_type}) ? '8G' : '4G',
+				hpc_driver	=> $args{cluster},
+				extra_args	=> [$hpc_group]
+				);
+
+			$cosmicsbs_run_id = submit_job(
+				jobname		=> 'plot_snv_mutation_signatures',
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @job_ids, $cosmicsbs_run_id;
 			}
 
-		# run command
-		print $log "Submitting job to check mutation signatures...\n";
-		$run_script = write_script(
-			log_dir		=> $log_directory,
-			name		=> 'plot_snv_mutation_signatures',
-			cmd		=> $sig_plot_command,
-			modules		=> [$r_version],
-			dependencies	=> $ensemble_run_id,
-			max_time	=> '04:00:00',
-			mem		=> '2G',
-			hpc_driver	=> $args{cluster},
-			extra_args	=> [$hpc_group]
-			);
+		# plot HRD signatures
+		my ($chord_data, $hrdetect_data) = '';
+		if ('Y' eq $tool_set{'chord'}) {
 
-		my $plot2_run_id = submit_job(
-			jobname		=> 'plot_snv_mutation_signatures',
-			shell_command	=> $run_script,
-			hpc_driver	=> $args{cluster},
-			dry_run		=> $args{dry_run},
-			log_file	=> $log
-			);
+			my $chord_directory = join('/', $sig_directory, 'CHORD');
+			unless(-e $chord_directory) { make_path($chord_directory); }
 
-		push @job_ids, $plot2_run_id;
+			$chord_data = join('/', $chord_directory, 'CHORD_predictions.tsv');
+
+			my $sig_plot_command = join(' ',
+				"Rscript $cwd/report/get_chord_signatures.R",
+				'-p', $tool_data->{project_name},
+				'-o', $chord_directory,
+				'--report', $plot_directory,
+				'-m', join('/', $data_directory, 'ENSEMBLE', 'ensemble_mutation_data.tsv'),
+				'-s', join('/', $data_directory, 'mavis_sv_data.tsv'), 
+				'-r', $tool_data->{ref_type}
+				);
+
+			if (defined($tool_data->{summarize_steps}->{lib_path})) {
+				$sig_plot_command .= ' -l ' . $tool_data->{summarize_steps}->{lib_path};
+				}
+
+			# run command
+			print $log "Submitting job to check CHORD signatures...\n";
+			$run_script = write_script(
+				log_dir		=> $log_directory,
+				name		=> 'plot_chord_signatures',
+				cmd		=> $sig_plot_command,
+				modules		=> [$r_version],
+				dependencies	=> $ensemble_run_id,
+				max_time	=> '12:00:00',
+				mem		=> ('wgs' eq $tool_data->{seq_type}) ? '4G' : '2G',
+				hpc_driver	=> $args{cluster},
+				extra_args	=> [$hpc_group]
+				);
+
+			$chord_run_id = submit_job(
+				jobname		=> 'plot_chord_signatures',
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @job_ids, $chord_run_id;
+			}
+
+		if ('Y' eq $tool_set{'hrdetect'}) {
+
+			my $hrdetect_directory = join('/', $sig_directory, 'HRDetect');
+			unless(-e $hrdetect_directory) { make_path($hrdetect_directory); }
+
+			$hrdetect_data = join('/', $hrdetect_directory, 'HRDetect_scores.tsv');
+
+			my $sig_plot_command = join(' ',
+				"Rscript $cwd/report/get_hrdetect_signatures.R",
+				'-p', $tool_data->{project_name},
+				'-o', $hrdetect_directory,
+				'--report', $plot_directory,
+				'--vcf_dir', join('/', $data_directory, 'ENSEMBLE', 'vcfs'),
+				'-s', join('/', $data_directory, 'mavis_sv_data.tsv'),
+				'-c', $segments,
+				'-r', $tool_data->{ref_type}
+				);
+
+			if (defined($tool_data->{summarize_steps}->{lib_path})) {
+				$sig_plot_command .= ' -l ' . $tool_data->{summarize_steps}->{lib_path};
+				}
+
+			# run command
+			print $log "Submitting job to check HRDetect signatures...\n";
+			$run_script = write_script(
+				log_dir		=> $log_directory,
+				name		=> 'plot_hrdetect_signatures',
+				cmd		=> $sig_plot_command,
+				modules		=> [$r_version],
+				dependencies	=> join(':', $ensemble_run_id, $maf2vcf_run_id),
+				max_time	=> '12:00:00',
+				mem		=> ('wgs' eq $tool_data->{seq_type}) ? '4G' : '2G',
+				hpc_driver	=> $args{cluster},
+				extra_args	=> [$hpc_group]
+				);
+
+			$hrdetect_run_id = submit_job(
+				jobname		=> 'plot_hrdetect_signatures',
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @job_ids, $hrdetect_run_id;
+			}
 
 		# plot mutation summary
+		my @snv_dependencies = ( $ensemble_run_id );
+
 		my $snv_plot_command = join(' ',
-			"Rscript $cwd/report/plot_snv_summary.R",
+			"Rscript $cwd/report/summarize_mutation_data.R",
 			'-p', $tool_data->{project_name},
-			'-o', $plot_directory,
-			'-i', join('/', $plot_directory, 'ensemble_mutation_data.tsv'),
-			'-c', $cb_data,
-			'-t', $tool_data->{seq_type}
+			'-o', $snv_directory,
+			'--report', $plot_directory,
+			'--maf', join('/', $data_directory, 'ENSEMBLE', 'ensemble_mutation_data.tsv')
 			);
 
 		if ('Y' eq $tool_set{'msi'}) {
-			$snv_plot_command .= " -m $msi_data";
+			$snv_plot_command .= " --msi " . join('/', $data_directory, 'msi_estimates.tsv');
 			}
 
-		if ('Y' eq $tool_set{'mutsig'}) {
-			$snv_plot_command .= " -s $significance_data";
+		if ('Y' eq $tool_set{'chord'}) {
+			$snv_plot_command .= " --chord $chord_data";
+			push @snv_dependencies, $chord_run_id;
+			}
+
+		if ('Y' eq $tool_set{'hrdetect'}) {
+			$snv_plot_command .= " --hrdetect $hrdetect_data";
+			push @snv_dependencies, $hrdetect_run_id;
 			}
 
 		# run command
-		print $log "Submitting job to plot (short) somatic variants...\n";
+		print $log "Submitting job to summarize (short) somatic variants...\n";
 		$run_script = write_script(
 			log_dir		=> $log_directory,
-			name		=> 'plot_snv_summary',
+			name		=> 'summarize_mutations',
 			cmd		=> $snv_plot_command,
 			modules		=> [$r_version],
-			dependencies	=> join(':', $plot1_run_id, $plot2_run_id, $mutsig_run_id),
-			max_time	=> '04:00:00',
-			mem		=> '2G',
+			dependencies	=> join(':', @snv_dependencies),
+			max_time	=> '12:00:00',
+			mem		=> ('wgs' eq $tool_data->{seq_type}) ? '4G' : '2G',
 			hpc_driver	=> $args{cluster},
 			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
-			jobname		=> 'plot_snv_summary',
+			jobname		=> 'summarize_mutations',
 			shell_command	=> $run_script,
 			hpc_driver	=> $args{cluster},
 			dry_run		=> $args{dry_run},
@@ -1222,6 +1530,49 @@ sub main {
 			);
 
 		push @job_ids, $run_id;
+
+		# plot recurrently mutated geneset
+		@snv_dependencies = ( $ensemble_run_id, $tmb_run_id );
+
+		$snv_plot_command = join(' ',
+			"Rscript $cwd/report/plot_snv_summary.R",
+			'-p', $tool_data->{project_name},
+			'-o', $snv_directory,
+			'--report', $plot_directory,
+			'--maf', join('/', $data_directory, 'ENSEMBLE', 'ensemble_mutation_data.tsv'),
+			'--tmb', $tmb_data,
+			'-t', $tool_data->{seq_type}
+			);
+
+		if ('Y' eq $tool_set{'mutsig'}) {
+			$snv_plot_command .= " --mutsig $significance_data";
+			push @snv_dependencies, $mutsig_run_id;
+			}
+
+		# run command
+		print $log "Submitting job to plot (short) somatic variants...\n";
+		$run_script = write_script(
+			log_dir		=> $log_directory,
+			name		=> 'plot_recurrent_geneset',
+			cmd		=> $snv_plot_command,
+			modules		=> [$r_version],
+			dependencies	=> join(':', @snv_dependencies),
+			max_time	=> '12:00:00',
+			mem		=> ('wgs' eq $tool_data->{seq_type}) ? '4G' : '2G',
+			hpc_driver	=> $args{cluster},
+			extra_args	=> [$hpc_group]
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'plot_recurrent_geneset',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{cluster},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @job_ids, $run_id;
+
 		}
 
 	# write some methods
@@ -1263,7 +1614,7 @@ sub main {
 	$report_command .= join(' ',
 		"perl $cwd/report/generate_report.pl",
 		'-o', $report_directory,
-		'-i', './plots',
+		'-i', $plot_directory,
 		'-t', $tool_data->{project_name},
 		'-d', $run_date
 		);
@@ -1313,7 +1664,7 @@ sub main {
 		my $collect_metrics = collect_job_stats(
 			job_ids		=> join(',', @job_ids),
 			outfile		=> $outfile,
-			hpc_driver	=> $args{hpc_driver}
+			hpc_driver	=> $args{cluster}
 			);
 
 		$run_script = write_script(
