@@ -37,21 +37,6 @@ save.session.profile <- function(file.name) {
 
 	}
 
-### PREPARE SESSION ################################################################################
-# import libraries
-library(xtable);
-library(BoutrosLab.plotting.general);
-library(argparse);
-
-# import command line arguments
-parser <- ArgumentParser();
-
-parser$add_argument('-p', '--project', type = 'character', help = 'PROJECT name');
-parser$add_argument('-o', '--output', type = 'character', help = 'path to output directory');
-parser$add_argument('-m', '--maf', type = 'character', help = 'mutation calls in MAF format');
-
-arguments <- parser$parse_args();
-
 ### VARIANT CODING
 # 1 = missense, 2 = stop gain, 3 = stop loss, 4 = splicing, 5 = frameshift, 6 = in frame indel, 7 = tss
 # 8 = RNA, 9 = other (up/downstream, UTR, intergenic, silent, intron), 10 = ITD
@@ -66,7 +51,52 @@ variant.codes <- data.frame(
 	Code = c(9, 9, 9, 8, 9, 9, 9, 9, 1, 4, 4, 6, 6, 5, 5, 2, 3, 7, 10)
 	);
 
-#variant.colours <- c('#673AB7','#2196F3','#F44336','#00BCD4','#E91E63','#8BC34A','#FFC107','#03A9F4','grey50');
+### PREPARE SESSION ################################################################################
+# import command line arguments
+library(argparse);
+
+parser <- ArgumentParser();
+
+parser$add_argument('-p', '--project', type = 'character', help = 'PROJECT name');
+parser$add_argument('-o', '--output', type = 'character', help = 'path to output directory');
+parser$add_argument('-m', '--maf', type = 'character', help = 'mutation calls in MAF format');
+parser$add_argument('-z', '--report', type = 'character', help = 'path to report directory',
+	default = NULL);
+
+arguments <- parser$parse_args();
+
+# import libraries
+library(BoutrosLab.plotting.general);
+library(xtable);
+
+### READ DATA ######################################################################################
+# if there happens to only be 'T' within any allele field (ie, Reference_Allele, Tumor_Seq_Allele),
+# R will interpret this as 'TRUE' - set the field classes to character to avoid this
+
+# edit: unfortunately, this sometimes causes errors when trying to read in the table...
+# since we don't actually use allele information here, just ignore the problem for now
+
+#maf.classes <- rep('character',132);
+#maf.classes[c(2,6,7,40:45,58,60,77:85,100:107,112:122,124:132)] <- 'numeric';
+
+# get data
+if (is.null(arguments$maf)) {
+	stop('ERROR: No input MAF provided, please provide path to SNV calls in MAF format.');
+	} else {
+	input.data <- read.delim(arguments$maf, stringsAsFactors = FALSE, comment.char = '#');
+	}
+
+# collect list of all samples
+all.samples <- sort(as.character(unique(input.data$Tumor_Sample_Barcode)));
+
+# create (if necessary) and move to output directory
+if (!dir.exists(arguments$output)) {
+	dir.create(arguments$output);
+	}
+
+setwd(arguments$output);
+
+### FORMAT DATA ####################################################################################
 variant.colours <- c('darkseagreen4','darkorchid4','#9AA3F2','yellow','darkorange3','#F9B38E','turquoise1','plum','grey50')
 names(variant.colours) <- c('missense','nonsense','nonstop','splicing','frameshift_indel','in_frame_indel','tss','RNA','other');
 
@@ -85,29 +115,6 @@ functional.legend <- legend.grob(
 	label.cex = 0.7,
 	size = 1
 	);
-
-
-### READ DATA ######################################################################################
-# if there happens to only be 'T' within any allele field (ie, Reference_Allele, Tumor_Seq_Allele),
-# R will interpret this as 'TRUE' - set the field classes to character to avoid this
-
-# edit: unfortunately, this sometimes causes errors when trying to read in the table...
-# since we don't actually use allele information here, just ignore the problem for now
-
-#maf.classes <- rep('character',132);
-#maf.classes[c(2,6,7,40:45,58,60,77:85,100:107,112:122,124:132)] <- 'numeric';
-
-# get data
-input.data <- read.delim(arguments$maf, stringsAsFactors = FALSE);
-#read.delim(arguments$maf, colClasses = maf.classes);
-
-# collect list of all samples
-all.samples <- sort(as.character(unique(input.data$Tumor_Sample_Barcode)));
-
-# move to output directory
-setwd(arguments$output);
-
-### FORMAT DATA ####################################################################################
 
 ### manually update annotation ###
 # vcf2maf mis-annotates a common downstream/regulartory_region TERC mutation (rs2293607) 
@@ -166,6 +173,7 @@ if (nrow(mutation.data) == 0) {
 	colnames(plot.data) <- gsub('Code.','',colnames(plot.data));
 	}
 
+### MAKE PLOTS #####################################################################################
 if (nrow(plot.data) > 1) {
 
 	vaf.data <- reshape(
@@ -278,42 +286,60 @@ save(
 	file = generate.filename(arguments$project, 'germline_mutation_summary', 'RData')
 	);
 
-# write some captions
-recurrence.caption <- "Summary of pathogenic germline variants (SNVs and INDELs). Figure shows most frequently mutated genes; background colours indicate predicted functional consequence (white = no mutation detected) while circles indicate the variant was detected in the tumour (such that absence suggests the germline mutation may have reverted); black indicates VAF $>=$ 0.5. For T/N pairs, germline variants are detected in the normal sample. For tumour-only samples, variants are those detected in any tumour for a given patient (ie, for patients with multiple tumours, the variant may be in any them).";
+### LATEX ##########################################################################################
+# if making output for a report
+if (!is.null(arguments$report)) {
 
-# write for latex
-write("\\section{Germline SNV Summary}", file = 'germline_snv_summary.tex');
-
-# first, check for mutation_overlap plot
-if (nrow(mutation.data) == 0) {
-	write("No potentially pathogenic germline mutations were detected in the cohort.", file = 'germline_snv_summary.tex', append = TRUE);
-	} else if (nrow(plot.data) == 0) {
-	write("No genes were recurrently mutated across the cohort.", file = 'germline_snv_summary.tex', append = TRUE);
-	} else if (nrow(input.data) < 5) {
-
-	print(
-		xtable(
-			show.germline,
-			caption = 'List of high-confidence germline mutations across the cohort.'
-			),
-		file = 'germline_snv_summary.tex',
-		include.rownames = FALSE,
-		append = TRUE
+	tex.file <- paste0(
+		arguments$report,
+		'/germline_snv_summary.tex'
 		);
-	
-	} else {
-	write("\\begin{figure}[h!]", file = 'germline_snv_summary.tex', append = TRUE);
-	write("\\begin{center}", file = 'germline_snv_summary.tex', append = TRUE);
-	write(paste0(
-		"\\includegraphics[width=0.9\\textwidth]{",
-		getwd(), '/',
-		generate.filename(arguments$project, 'germline_snvs','png'), '}'
-		), file = 'germline_snv_summary.tex', append = TRUE);
-	write("\\end{center}", file = 'germline_snv_summary.tex', append = TRUE);
-	write(paste0(
-		"\\caption{", recurrence.caption, "}"
-		), file = 'germline_snv_summary.tex', append = TRUE);
-	write("\\end{figure}\n", file = 'germline_snv_summary.tex', append = TRUE);
+
+	# write some captions
+	recurrence.caption <- "Summary of pathogenic germline variants (SNVs and INDELs). Figure shows most frequently mutated genes; background colours indicate predicted functional consequence (white = no mutation detected) while circles indicate the variant was detected in the tumour (such that absence suggests the germline mutation may have reverted); black indicates VAF $>=$ 0.5. For T/N pairs, germline variants are detected in the normal sample. For tumour-only samples, variants are those detected in any tumour for a given patient (ie, for patients with multiple tumours, the variant may be in any them).";
+
+	# write for latex
+	write("\\section{Germline SNV Summary}", file = tex.file);
+
+	# first, check for mutation_overlap plot
+	if (nrow(mutation.data) == 0) {
+		write("No potentially pathogenic germline mutations were detected in the cohort.", file = tex.file, append = TRUE);
+		} else if (nrow(plot.data) == 0) {
+		write("No genes were recurrently mutated across the cohort.", file = tex.file, append = TRUE);
+		} else if (nrow(input.data) < 5) {
+
+		print(
+			xtable(
+				show.germline,
+				caption = 'List of high-confidence germline mutations across the cohort.'
+				),
+			file = tex.file,
+			include.rownames = FALSE,
+			append = TRUE
+			);
+		
+		} else {
+
+		# create symlinks for plots
+		unlink(paste0(arguments$report,'/germline_snvs.png'));
+		file.symlink(
+			paste0(arguments$output,'/',
+				generate.filename(arguments$project, 'germline_snvs','png')),
+			paste0(arguments$report,'/germline_snvs.png')
+			);		
+
+		write("\\begin{figure}[h!]", file = tex.file, append = TRUE);
+		write("\\begin{center}", file = tex.file, append = TRUE);
+		write(paste0(
+			"\\includegraphics[width=0.9\\textwidth]{",
+			paste0(arguments$report, '/', 'germline_snvs.png'), '}'
+			), file = tex.file, append = TRUE);
+		write("\\end{center}", file = tex.file, append = TRUE);
+		write(paste0(
+			"\\caption{", recurrence.caption, "}"
+			), file = tex.file, append = TRUE);
+		write("\\end{figure}\n", file = tex.file, append = TRUE);
+		}
 	}
 
 ### SAVE SESSION INFO ##############################################################################
