@@ -23,9 +23,15 @@ save.session.profile <- function(file.name) {
 	# open the file
 	sink(file = file.name, split = FALSE);
 
-	# write memory usage to file
+	# write iemory usage to file
 	cat('### MEMORY USAGE ###############################################################');
 	print(proc.time());
+
+	# write key variables to file
+	cat("\n### VARIABLES #################################################################\n");
+	cat(paste0('Input: ', arguments$input));
+	cat(paste0('Treat low coverage as tumour-only: ', arguments$set_tumour_only));
+	cat(paste0('Target coverage: ', arguments$coverage));
 
 	# write sessionInfo to file
 	cat("\n### SESSION INFO ###############################################################");
@@ -37,23 +43,34 @@ save.session.profile <- function(file.name) {
 	}
 
 ### PREPARE SESSION ################################################################################
-# import libraries
-library(xtable);
-library(BoutrosLab.plotting.general);
+# import command line arguments
 library(argparse);
 
-# import command line arguments
 parser <- ArgumentParser();
 
 parser$add_argument('-p', '--project', type = 'character', help = 'PROJECT name');
 parser$add_argument('-o', '--output', type = 'character', help = 'path to output directory');
 parser$add_argument('-i', '--input', type = 'character', help = 'mutation calls in MAF format');
+parser$add_argument('-c', '--coverage', type = 'character', default = '20,15',
+	help = 'minimum depth for tumour and normal to be considered callable; length 1 or 2 (default: 20,15)');
+parser$add_argument('-t', '--set_tumour_only', type = 'logical', default = FALSE,
+	help = 'should somatic mutations with low coverage in matched normal be processed as tumour-only?');
+parser$add_argument('-z', '--report', type = 'character', help = 'path to report directory',
+	default = NULL);
 
 arguments <- parser$parse_args();
 
+# import libraries
+library(BoutrosLab.plotting.general);
+library(xtable);
+
 ### READ DATA #####################################################################################
 # get data
-input.data <- read.delim(arguments$input);
+if (is.null(arguments$input)) {
+	stop('ERROR: No input file provided, please provide path to SNV/INDELs calls in MAF format.');
+	} else {
+	input.data <- read.delim(arguments$input, stringsAsFactors = FALSE, comment.char = '#');
+	}
 
 # stop if no OncoKB annotations available
 if (! 'GENE_IN_ONCOKB' %in% colnames(input.data)) {
@@ -63,7 +80,11 @@ if (! 'GENE_IN_ONCOKB' %in% colnames(input.data)) {
 # collect list of all samples
 all.samples <- sort(as.character(unique(input.data$Tumor_Sample_Barcode)));
 
-# move to output directory
+# create (if necessary) and move to output directory
+if (!dir.exists(arguments$output)) {
+	dir.create(arguments$output);
+	}
+
 setwd(arguments$output);
 
 ### FILTER DATA ####################################################################################
@@ -74,6 +95,19 @@ oncokb.columns <- c(grep('GENE_IN_ONCOKB', colnames(input.data)):ncol(input.data
 known.bugs <- which(input.data$Hugo_Symbol %in% c('PRMT9','RAD1','TEP1','FAH'));
 if (length(known.bugs) > 0) {
 	input.data[known.bugs,oncokb.columns] <- NA;
+	}
+
+# should somatic mutations with low coverage in matched normal be processed as tumour-only?
+if (arguments$set_tumour_only) {
+
+	target.cov.normal <- if (grepl(',', arguments$coverage)) {
+		as.numeric(unlist(strsplit(arguments$coverage,','))[2]);
+		} else if (!is.null(arguments$coverage)) {
+		as.numeric(arguments$coverage);
+		} else { 20; }
+
+	low.n <- which(input.data$n_depth < target.cov.normal);
+	input.data[low.n,]$FLAG.tumour_only <- TRUE;
 	}
 
 # find probable false positives to remove
@@ -88,7 +122,10 @@ keep.these <- grep('Oncogenic', input.data$ONCOGENIC);
 
 # apply filter
 if (length(setdiff(unique(c(remove.these,also.remove.these)), keep.these)) > 0) {
-	input.data <- input.data[-setdiff(unique(c(remove.these,also.remove.these)), keep.these),];
+	remove.idx <- setdiff(unique(c(remove.these,also.remove.these)), keep.these);
+	print(paste('Removing', length(remove.idx), 'variants as they are low confidence calls and not deemed oncogenic by oncoKB.'));
+
+	input.data <- input.data[-remove.idx,];
 	}
 
 write.table(
@@ -183,51 +220,75 @@ if (length(significant.hits) > 0) {
 		height = 4,
 		width = 8
 		);
+	}
 
-	### LATEX ##########################################################################################
+### LATEX ##########################################################################################
+# if making output for a report
+if (!is.null(arguments$report)) {
+
+	tex.file <- paste0(
+		arguments$report,
+		'/oncokb_summary.tex'
+		);
+
 	# write for latex
-	write("\\section{OncoKB Results}", file = 'oncokb_summary.tex');
+	write("\\section{OncoKB Results}", file = tex.file);
 
 	# summarize key OncoKB findings
 	oncokb.caption <- paste0(
 		'OncoKB was used to annotate known/suspected oncogenic variants; this identified ',
-		nlevels(droplevels(oncokb.hits$Hugo_Symbol)),
+		length(unique(as.character(oncokb.hits$Hugo_Symbol))),
 		' genes (', nrow(oncokb.hits), ' total mutations) across the cohort.'
 		);
 
-	if (nrow(gene.counts) > 5) {
-		write("\\begin{figure}[h!]", file = 'oncokb_summary.tex', append = TRUE);
-		write("\\begin{center}", file = 'oncokb_summary.tex', append = TRUE);
-		write(paste0(
-			"\\includegraphics[width=0.85\\textwidth]{",
-			getwd(), '/',
-			generate.filename(arguments$project, 'oncoKB_hits', 'png'), '}'
-			), file = 'oncokb_summary.tex', append = TRUE);
-		write("\\end{center}", file = 'oncokb_summary.tex', append = TRUE);
-		write(paste0(
-			"\\caption{", paste0(oncokb.caption, " Top hits are shown, sorted by recurrence and median VAF."), "}"
-			), file = 'oncokb_summary.tex', append = TRUE);
-		write("\\end{figure}\n", file = 'oncokb_summary.tex', append = TRUE);
-		write("\\vspace{1.0cm}\n", file = 'oncokb_summary.tex', append = TRUE);
+	if (length(significant.hits) ==  0) {
+
+		write(
+			'No significant mutations found by OncoKB.',
+			file = tex.file, append = TRUE
+			);
+
+		} else {
+		# create symlinks for plots
+		unlink(paste0(arguments$report,'/oncoKB_hits.png'));
+		file.symlink(
+			paste0(arguments$output,'/',
+				generate.filename(arguments$project, 'oncoKB_hits','png')),
+			paste0(arguments$report,'/oncoKB_hits.png')
+			);
+
+		if (nrow(gene.counts) > 5) {
+			write("\\begin{figure}[h!]", file = tex.file, append = TRUE);
+			write("\\begin{center}", file = tex.file, append = TRUE);
+			write(paste0(
+				"\\includegraphics[width=0.85\\textwidth]{",
+				paste0(arguments$report, '/', 'oncoKB_hits.png'), '}'
+				), file = tex.file, append = TRUE);
+			write("\\end{center}", file = tex.file, append = TRUE);
+			write(paste0(
+				"\\caption{", paste0(oncokb.caption, " Top hits are shown, sorted by recurrence and median VAF."), "}"
+				), file = tex.file, append = TRUE);
+			write("\\end{figure}\n", file = tex.file, append = TRUE);
+			write("\\vspace{1.0cm}\n", file = tex.file, append = TRUE);
+			}
+
+		oncokb.to.print <- oncokb.to.print[order(oncokb.to.print$Gene, -oncokb.to.print$VAF),];
+		idx <- if (nrow(oncokb.to.print) <= 15) { idx <- 1:nrow(oncokb.to.print); } else {
+			idx <- which(oncokb.to.print$VARIANT_IN_ONCOKB == TRUE);
+			idx <- idx[1:min(length(idx),15)];
+			}
+
+		print(
+			xtable(
+				oncokb.to.print[idx,],
+				caption = oncokb.caption
+				),
+			file = tex.file,
+			include.rownames = FALSE,
+			size = 'scriptsize',
+			append = TRUE
+			);
 		}
-
-
-	oncokb.to.print <- oncokb.to.print[order(oncokb.to.print$Gene, -oncokb.to.print$VAF),];
-	idx <- if (nrow(oncokb.to.print) <= 15) { idx <- 1:nrow(oncokb.to.print); } else {
-		idx <- which(oncokb.to.print$VARIANT_IN_ONCOKB == TRUE);
-		idx <- idx[1:min(length(idx),15)];
-		}
-
-	print(
-		xtable(
-			oncokb.to.print[idx,],
-			caption = oncokb.caption
-			),
-		file = 'oncokb_summary.tex',
-		include.rownames = FALSE,
-		size = 'scriptsize',
-		append = TRUE
-		);
 	}
 
 ### SAVE SESSION INFO ##############################################################################
