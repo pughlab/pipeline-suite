@@ -247,6 +247,15 @@ segment.data$Sample <- sapply(rownames(segment.data), function(i) { unlist(strsp
 segment.data$Seg.CN <- (log2(2*segment.data$depth.ratio)-1); # same as log2(depth.ratio)
 
 write.table(
+	segment.data[,c(14,1:13)],
+	file = generate.filename(arguments$project, 'Sequenza_segments', 'tsv'),
+	row.names = FALSE,
+	col.names = TRUE,
+	sep = '\t',
+	quote = FALSE
+	);
+
+write.table(
 	segment.data[,c('Sample','chromosome','start.pos','end.pos','N.BAF','Seg.CN')],
 	file = generate.filename(arguments$project, 'segments_for_gistic', 'seg'),
 	row.names = FALSE,
