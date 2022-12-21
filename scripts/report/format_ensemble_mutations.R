@@ -7,42 +7,46 @@
 # function to generate a standardized filename
 generate.filename <- function(project.stem, file.core, extension, include.date = TRUE) {
 
-        # build up the filename
-        file.name <- paste(project.stem, file.core, sep = '_');
-        file.name <- paste(file.name, extension, sep = '.');
+	# build up the filename
+	file.name <- paste(project.stem, file.core, sep = '_');
+	file.name <- paste(file.name, extension, sep = '.');
 
-        if (include.date) {
-                file.name <- paste(Sys.Date(), file.name, sep = '_');
-                }
+	if (include.date) {
+		file.name <- paste(Sys.Date(), file.name, sep = '_');
+		}
 
-        return(file.name);
-        }
+	return(file.name);
+	}
 
 # function to write session profile to file
 save.session.profile <- function(file.name) {
 
-        # open the file
-        sink(file = file.name, split = FALSE);
+	# open the file
+	sink(file = file.name, split = FALSE);
 
-        # write memory usage to file
-        cat('### MEMORY USAGE ###############################################################');
-        print(proc.time());
+	# write memory usage to file
+	cat('### MEMORY USAGE ###############################################################');
+	print(proc.time());
 
-        # write sessionInfo to file
-        cat("\n### SESSION INFO ###############################################################");
-        print(sessionInfo());
+	# write key variables to file
+	cat("\n### VARIABLES #################################################################\n");
+	cat(paste0('Experiment type: ', arguments$seq_type));
+	cat(paste0('Target coverage: ', arguments$coverage));
+	cat(paste0('VAF threshold for final filter: ', vaf.threshold));
 
-        # close the file
-        sink();
+	# write sessionInfo to file
+	cat("\n### SESSION INFO ###############################################################");
+	print(sessionInfo());
 
-        }
+	# close the file
+	sink();
+
+	}
 
 ### PREPARE SESSION ################################################################################
-# import libraries
-library(BoutrosLab.plotting.general);
+# import command line arguments
 library(argparse);
 
-# import command line arguments
 parser <- ArgumentParser();
 
 parser$add_argument('-p', '--project', type = 'character', help = 'PROJECT name');
@@ -54,9 +58,13 @@ parser$add_argument('--strelka', type = 'character', help = 'path to combined st
 parser$add_argument('--somaticsniper', type = 'character', help = 'path to combined somaticsniper output');
 parser$add_argument('--varscan', type = 'character', help = 'path to combined varscan output');
 parser$add_argument('--vardict', type = 'character', help = 'path to combined vardict output');
+parser$add_argument('-t', '--seq_type', type = 'character', help = 'type of sequencing experiment');
 parser$add_argument('-c', '--coverage', type = 'character', help = 'minimum depth for tumour and normal to be considered callable; length 1 or 2 (comma separated)', default = '20,15');
 
 arguments <- parser$parse_args();
+
+# import libraries
+library(BoutrosLab.plotting.general);
 
 # do some quick error checks
 run.mutect <- !is.null(arguments$mutect);
@@ -117,9 +125,10 @@ if (!is.null(arguments$pindel)) {
 	}
 
 # create (if necessary) and move to output directory
-if (!exists(arguments$output)) {
+if (!dir.exists(arguments$output)) {
 	dir.create(arguments$output);
 	}
+
 setwd(arguments$output);
 
 ### FORMAT DATA ####################################################################################
@@ -330,17 +339,33 @@ write.table(
 	);
 
 # apply some basic filters
+# higher depth = lower VAF threshold
+vaf.threshold <- if ('targeted' == arguments$seq_type) { 0.005;
+	} else if ('exome' == arguments$seq_type) { 0.01
+	} else { 0.05; }
+
+for (field in c('t_depth','t_ref_count','t_alt_count','n_depth','n_ref_count','n_alt_count')) {
+	annotated.data[,field] <- as.numeric(annotated.data[,field]);
+	}
+
 tumour.keep <- which(
-	annotated.data$t_depth > 5 & 
-	(annotated.data$t_alt_count / annotated.data$t_depth) > 0.005
+	annotated.data$t_depth > 10 & 
+	(annotated.data$t_alt_count / annotated.data$t_depth) > vaf.threshold
 	);
 
 normal.keep <- which(
 	annotated.data$FLAG.tumour_only |
-	(annotated.data$n_depth > 5 & (annotated.data$n_alt_count / annotated.data$n_depth) < 0.2)
+	(annotated.data$n_depth > 10 & (1 - ( annotated.data$n_ref_count / annotated.data$n_depth ) < 0.1) )
 	);
 
 annotated.filtered <- annotated.data[intersect(tumour.keep, normal.keep),];
+
+# do some minor formatting for cbioportal (might already be done)
+for (field in c('t_depth','t_ref_count','t_alt_count','n_depth','n_ref_count','n_alt_count')) {
+	if (any(is.na(annotated.filtered[,field]))) {
+		annotated.filtered[is.na(annotated.filtered[,field]),field] <- '';
+		}
+	}
 
 # save to file
 write('# ENSEMBLE MAF', file = generate.filename(arguments$project, 'ensemble_mutation_data_filtered', 'tsv'));
