@@ -269,7 +269,7 @@ sub main {
 			# if there are any samples to run, we will run the final combine job
 			$should_run_final = 1;
 
-			print $log "  SAMPLE: $sample\n\n";
+			print $log "  SAMPLE: $sample\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
@@ -289,13 +289,16 @@ sub main {
 				n_cpus		=> $parameters->{ascat}->{n_cpus}
 				);
 
-			my $ascat_output = '';
+			my $ascat_output = join('/',
+				$sample_directory,
+				$sample . '_ASCAT_purity_ploidy.txt'
+				);
 
 			# check if this should be run
 			if ('Y' eq missing_file($ascat_output)) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for ASCAT...\n";
+				print $log "  >>Submitting job for ASCAT...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -321,7 +324,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping ASCAT step because this has already been completed!\n";
+				print $log "  >>Skipping ASCAT step because this has already been completed!\n";
 				}
 
 			push @final_outputs, $ascat_output;
