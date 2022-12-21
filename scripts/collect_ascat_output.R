@@ -246,7 +246,7 @@ for (smp in names(cn.list)) {
 write.table(
 	metric.data,
 	file = generate.filename(arguments$project, 'ascat_purity_ploidy','tsv'),
-	row.names = TRUE,
+	row.names = FALSE,
 	col.names = TRUE,
 	sep = '\t'
 	);
