@@ -36,7 +36,7 @@ sub main {
 
 	my ($bwa, $gatk, $gatk4);
 	my ($mutect, $mutect2, $strelka, $pindel, $varscan, $somaticsniper, $vardict);
-	my ($delly, $manta, $mavis, $novobreak, $msi);
+	my ($delly, $manta, $mavis, $novobreak, $msi, $ascat);
 	my ($ref_type, $samtools, $picard, $intervals, $bedtools, $vcftools, $bcftools);
 	my ($k1000g, $mills, $kindels, $dbsnp, $hapmap, $omni, $cosmic, $pon, $gnomad);
 	my ($vep, $vcf2maf);
@@ -57,6 +57,7 @@ sub main {
 		'gatk_cnv'	=> defined($tool_data->{gatk_cnv}->{run}) ? $tool_data->{gatk_cnv}->{run} : 'N',
 		'novobreak'	=> defined($tool_data->{novobreak}->{run}) ? $tool_data->{novobreak}->{run} : 'N',
 		'delly'		=> defined($tool_data->{delly}->{run}) ? $tool_data->{delly}->{run} : 'N',
+		'ascat'		=> defined($tool_data->{ascat}->{run}) ? $tool_data->{ascat}->{run} : 'N',
 		'svict'		=> 'N', 
 		'ichor_cna'	=> 'N', 
 		'mavis'	=> defined($tool_data->{mavis}->{run}) ? $tool_data->{mavis}->{run} : 'N',
@@ -497,6 +498,11 @@ sub main {
 		push @cna_tools, "GATK's CNV pipeline (v$gatk4)";
 		}
 
+	if ('Y' eq $tool_set{'ascat'}) {
+		$ascat = '3.1.0'; #$tool_data->{ascat_version};
+		push @cna_tools, "ASCAT (v$ascat)";
+		}
+
 	if ('Y' eq $tool_set{'varscan'}) {
 		push @cna_tools, "VarScan and Sequenza (v$varscan)";
 		}
@@ -515,6 +521,11 @@ sub main {
 	# for GATK:CNV
 	if ('Y' eq $tool_set{'gatk_cnv'}) {
 		$methods .= "GATK's CNV pipeline (v$gatk4) was run using best practice guidelines. Pipeline was run with default parameters except model step which was run using number of smoothing iterations = 1.\\newline";
+		}
+
+	# for ASCAT
+	if ('Y' eq $tool_set{'ascat'}) {
+		$methods .= "For ASCAT, allele frequencies for SNP6 loci were extracted and processed in R (v4.1.0) using the maftools (v2.12.0) and ASCAT (v$ascat) packages using default parameters and gamma = 1 (as recommened for HTS).\\newline\n";
 		}
 
 	# for MSI
