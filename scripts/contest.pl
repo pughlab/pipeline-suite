@@ -168,7 +168,7 @@ sub main {
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		# find bams
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
@@ -213,7 +213,7 @@ sub main {
 			# if there are any T/N pairs, we will run the final combine job
 			$should_run_final = 1;
 
-			print $log "  SAMPLE: $sample\n\n";
+			print $log "\n  SAMPLE: $sample\n";
 
 			# run ContEst on per-bam and per-lane settings
 			my @lane_types = qw(META READGROUP);
@@ -245,7 +245,7 @@ sub main {
 				if ('Y' eq missing_file($output_file . '.md5')) {
 
 					# record command (in log directory) and then run job
-					print $log "Submitting job for ContEst ($lane_type)...\n";
+					print $log "  >>Submitting job for ContEst ($lane_type)...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
@@ -268,13 +268,14 @@ sub main {
 
 					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
-					}
-				else {
-					print $log "Skipping ContEst: $lane_type as this has already been completed!\n";
+					} else {
+					print $log "  >>Skipping ContEst: $lane_type as this has already been completed!\n";
 					}
 
 				push @final_outputs, $output_file;
 				}
+
+			print $log "  >>Processing SAMPLE: $sample complete!\n";
 			}
 
 		# should intermediate files be removed
@@ -285,7 +286,7 @@ sub main {
 				`rm -rf $tmp_directory`;
 				} else {
 
-				print $log "Submitting job to clean up temporary/intermediate files...\n";
+				print $log "\n>>Submitting job to clean up temporary/intermediate files...\n";
 
 				# make sure final output exists before removing intermediate files!
 				my @files_to_check;
@@ -322,7 +323,7 @@ sub main {
 				}
 			}
 
-		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
+		print $log "\nFINAL OUTPUT for $patient:\n" . join("\n  ", @final_outputs) . "\n";
 		print $log "---\n";
 		}
 

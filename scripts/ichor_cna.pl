@@ -210,7 +210,7 @@ sub main {
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		# find bams
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
@@ -256,11 +256,15 @@ sub main {
 		my ($normal_wig, $normal_wig_jobid);
 		if (scalar(@normal_ids) > 0) {
 
+			$normal_wig_jobid = '';
+			my $normal = $normal_ids[0];
+
+			print $log "\n  Collecting readcounts for NORMAL: $normal\n";
+
 			# find input bam
 			# because readCounter needs an index with the suffix .bam.bai (rather
 			# than the .bai I have generated, we need to use the renamed symlinks
 			# for this step)
-			my $normal = $normal_ids[0];
 			my $normal_bam = basename($smp_data->{$patient}->{normal}->{$normal});
 			$normal_wig = join('/', $tmp_directory, $normal . '.wig');
 
@@ -274,7 +278,7 @@ sub main {
 			if ('Y' eq missing_file($normal_wig)) {
 
 				# record command (in log directory) and then run job
-				print $log "  >>Submitting job for readCounter...\n";
+				print $log "  >> Submitting job for readCounter...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -298,7 +302,7 @@ sub main {
 				push @patient_jobs, $normal_wig_jobid;
 				push @all_jobs, $normal_wig_jobid;
 				} else {
-				print $log "  >>Skipping readCounter because this has already been completed!\n";
+				print $log "  >> Skipping readCounter because this has already been completed!\n";
 				}
 			}
 
@@ -308,7 +312,7 @@ sub main {
 			# if there are any samples to run, we will run the final combine job
 			$should_run_final = 1;
 
-			print $log "  SAMPLE: $sample\n";
+			print $log "\n  Collecting readcounts for SAMPLE: $sample\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
@@ -338,7 +342,7 @@ sub main {
 			if ( ('Y' eq missing_file($tumour_wig)) && ('Y' eq missing_file($final_file)) ) {
 
 				# record command (in log directory) and then run job
-				print $log "  >>Submitting job for readCounter...\n";
+				print $log "  >> Submitting job for readCounter...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -362,7 +366,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "  >>Skipping readCounter because this has already been completed!\n";
+				print $log "  >> Skipping readCounter because this has already been completed!\n";
 				}
 
 			# run IchorCNA on provided WIG files
@@ -378,7 +382,7 @@ sub main {
 			if ('Y' eq missing_file($final_file)) {
 
 				# record command (in log directory) and then run job
-				print $log "  >>Submitting job for ichorCNA...\n";
+				print $log "  >> Submitting job for ichorCNA...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -403,7 +407,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "  >>Skipping ichorCNA step because this has already been completed!\n";
+				print $log "  >> Skipping ichorCNA step because this has already been completed!\n";
 				}
 
 			push @final_outputs, $final_file;
@@ -417,7 +421,7 @@ sub main {
 				`rm -rf $tmp_directory`;
 				} else {
 
-				print $log "Submitting job to clean up temporary/intermediate files...\n";
+				print $log ">> Submitting job to clean up temporary/intermediate files...\n";
 
 				# make sure final output exists before removing intermediate files!
 				$cleanup_cmd = join("\n",

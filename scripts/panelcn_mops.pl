@@ -306,7 +306,7 @@ sub main {
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		# create an array to hold final outputs and all patient job ids
 		my (@final_outputs, @patient_jobs);

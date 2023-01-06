@@ -330,6 +330,8 @@ sub pon {
 
 	foreach my $patient (sort keys %{$smp_data}) {
 
+		print $log "\nInitiating process for PATIENT: $patient";
+
 		# find bams
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
 		my @tumour_ids = keys %{$smp_data->{$patient}->{'tumour'}};
@@ -358,7 +360,7 @@ sub pon {
 		# for germline variants
 		foreach my $norm (@normal_ids) {
 
-			print $log "\n>>NORMAL: $norm\n";
+			print $log "\n  NORMAL: $norm\n";
 
 			my $germline_directory = join('/', $patient_directory, $norm);
 			unless(-e $germline_directory) { make_path($germline_directory); }
@@ -398,7 +400,7 @@ sub pon {
 				) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for Strelka (germline)...\n";
+				print $log "  >> Submitting job for Strelka (germline)...\n";
 
 				# if this has been run once before and failed, we need to clean up the previous attempt
 				# before initiating a new one
@@ -428,7 +430,7 @@ sub pon {
 				push @{$patient_jobs{$patient}}, $run_id;
 				push @all_pon_jobs, $run_id;
 				} else {
-				print $log "Skipping Strelka (germline) because this has already been completed!\n";
+				print $log "  >> Skipping Strelka (germline) because this has already been completed!\n";
 				}
 
 			# filter results to keep only confident (PASS) calls
@@ -451,7 +453,7 @@ sub pon {
 			if ('Y' eq missing_file($filtered_germline_output . '.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for VCF-Filter (germline)...\n";
+				print $log "  >> Submitting job for VCF-Filter (germline)...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -477,7 +479,7 @@ sub pon {
 				push @all_pon_jobs, $run_id;
 
 				} else {
-				print $log "Skipping VCF-Filter (germline) because this has already been completed!\n";
+				print $log "  >> Skipping VCF-Filter (germline) because this has already been completed!\n";
 				}
 
 			push @{$final_outputs{$patient}}, $filtered_germline_output;
@@ -492,7 +494,7 @@ sub pon {
 
 				} else {
 
-				print $log "\nSubmitting job to clean up temporary/intermediate files...\n";
+				print $log "\n>> Submitting job to clean up temporary/intermediate files...\n";
 
 				# make sure final output exists before removing intermediate files!
 				my @files_to_check;
@@ -533,7 +535,7 @@ sub pon {
 	# combine germline variants and create panel of normals
 	my $pon_run_id = '';
 
-	print $log "\nCreating panel of normals...\n";
+	print $log "\n---\nCreating panel of normals...\n";
 
 	# let's create a command and write script to combine variants for a PoN
 	my $pon_tmp	= join('/', $pon_directory, $date . "_merged_panelOfNormals.vcf");
@@ -749,10 +751,9 @@ sub main {
 	# create an array to hold final outputs and all patient job ids
 	my (%final_outputs, %patient_jobs, %cleanup);
 
-	# loop over all samples again, this time to run somatic callers
-	print $log "\nRunning manta and somatic variant caller...\n\n";
-
 	foreach my $patient (sort keys %{$smp_data}) {
+
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		# find bams
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
@@ -792,7 +793,7 @@ sub main {
 			# if there are any samples to run, we will run the final combine job
 			$should_run_final = 1;
 
-			print $log ">>TUMOUR: $sample\n";
+			print $log "\n  TUMOUR: $sample\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
@@ -838,7 +839,7 @@ sub main {
 			if ('Y' eq missing_file($manta_output)) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for Manta...\n";
+				print $log "  >> Submitting job for Manta...\n";
 
 				# if this has been run once before and failed, we need to clean up the previous attempt
 				# before initiating a new one
@@ -867,7 +868,7 @@ sub main {
 
 				push @{$patient_jobs{$patient}}, $manta_run_id;
 				} else {
-				print $log "Skipping MANTA because this has already been completed!\n";
+				print $log "  >> Skipping MANTA because this has already been completed!\n";
 				}
 
 			push @{$final_outputs{$patient}}, $manta_output;
@@ -963,7 +964,7 @@ sub main {
 				) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for Strelka (somatic)...\n";
+				print $log "  >> Submitting job for Strelka (somatic)...\n";
 
 				# if this has been run once before and failed, we need to clean up the previous attempt
 				# before initiating a new one
@@ -996,7 +997,7 @@ sub main {
 
 				push @{$patient_jobs{$patient}}, $strelka_run_id;
 				} else {
-				print $log "Skipping Strelka (somatic) because this has already been completed!\n";
+				print $log "  >> Skipping Strelka (somatic) because this has already been completed!\n";
 				}
 
 			my $filter_run_id = '';
@@ -1005,7 +1006,7 @@ sub main {
 			if ('Y' eq missing_file("$filtered_output.md5")) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for VCF-Filter (somatic)...\n";
+				print $log "  >> Submitting job for VCF-Filter (somatic)...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -1029,7 +1030,7 @@ sub main {
 
 				push @{$patient_jobs{$patient}}, $filter_run_id;
 				} else {
-				print $log "Skipping VCF-Filter (somatic) because this has already been completed!\n";
+				print $log "  >> Skipping VCF-Filter (somatic) because this has already been completed!\n";
 				}
 
 			### Run variant annotation (VEP + vcf2maf)
@@ -1086,7 +1087,7 @@ sub main {
 					);
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for VEP + vcf2maf...\n";
+				print $log "  >> Submitting job for VEP + vcf2maf...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -1111,7 +1112,7 @@ sub main {
 
 				push @{$patient_jobs{$patient}}, $annotate_run_id;
 				} else {
-				print $log "Skipping vcf2maf because this has already been completed!\n";
+				print $log "  >> Skipping vcf2maf because this has already been completed!\n";
 				}
 
 			push @{$final_outputs{$patient}}, $final_maf;
@@ -1128,7 +1129,7 @@ sub main {
 				`rm -rf $tmp_directory`;
 				} else {
 
-				print $log "\nSubmitting job to clean up temporary/intermediate files...\n";
+				print $log "\n>> Submitting job to clean up temporary/intermediate files...\n";
 
 				# make sure final output exists before removing intermediate files!
 				my $cleanup_cmd = join("\n",

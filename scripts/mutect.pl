@@ -327,7 +327,7 @@ sub pon {
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		# find bams
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
@@ -350,7 +350,7 @@ sub pon {
 			$link = join('/', $link_directory, $tmp[-1]);
 			symlink($smp_data->{$patient}->{normal}->{$sample}, $link);
 
-			print $log "  SAMPLE: $sample\n\n";
+			print $log "\n  SAMPLE: $sample\n";
 
 			# run MuTect
 			my $output_stem = join('/', $intermediate_directory, $sample . '_MuTect');
@@ -375,7 +375,7 @@ sub pon {
 			if ('Y' eq missing_file($output_stem . '.vcf.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for MuTect in artifact_detection_mode...\n";
+				print $log "  >> Submitting job for MuTect in artifact_detection_mode...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -398,7 +398,7 @@ sub pon {
 
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping MuTect (artifact_detection) because this has already been completed!\n";
+				print $log "  >> Skipping MuTect (artifact_detection) because this has already been completed!\n";
 				}
 
 			# filter results
@@ -417,7 +417,7 @@ sub pon {
 			if ('Y' eq missing_file($output_stem . '_filtered.vcf.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for VCF-filter...\n";
+				print $log "  >> Submitting job for VCF-filter...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -441,7 +441,7 @@ sub pon {
 
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping VCF-filter because this has already been completed!\n";
+				print $log "  >> Skipping VCF-filter because this has already been completed!\n";
 				}
 
 			push @pon_vcfs, join(' ', "-V:$sample", $output_stem . "_filtered.vcf");
@@ -484,7 +484,7 @@ sub pon {
 	if ('Y' eq missing_file($pon . ".md5")) {
 
 		# record command (in log directory) and then run job
-		print $log "Submitting job for Generate PanelOfNormals...\n";
+		print $log ">> Submitting job for Generate PanelOfNormals...\n";
 		$run_script = write_script(
 			log_dir	=> $log_directory,
 			name	=> 'run_combine_vcfs_and_trim',
@@ -507,13 +507,13 @@ sub pon {
 
 		push @all_jobs, $run_id;
 		} else {
-		print $log "Skipping Generate PanelOfNormals because this has already been completed!\n";
+		print $log ">> Skipping Generate PanelOfNormals because this has already been completed!\n";
 		}
 
 	# should intermediate files be removed
 	if ($args{del_intermediates}) {
 
-		print $log "Submitting job to clean up temporary/intermediate files...\n";
+		print $log ">> Submitting job to clean up temporary/intermediate files...\n";
 
 		# make sure final output exists before removing intermediate files!
 		$cleanup_cmd = join("\n",
@@ -725,7 +725,7 @@ sub main {
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		# find bams
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
@@ -765,7 +765,7 @@ sub main {
 			# if there are any samples to run, we will run the final combine job
 			$should_run_final = 1;
 
-			print $log "  SAMPLE: $sample\n\n";
+			print $log "\n  SAMPLE: $sample\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
@@ -816,7 +816,7 @@ sub main {
 			if ('Y' eq missing_file($output_stem . '.vcf.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for MuTect...\n";
+				print $log "  >> Submitting job for MuTect...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -840,7 +840,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping MuTect because this has already been completed!\n";
+				print $log "  >> Skipping MuTect because this has already been completed!\n";
 				}
 
 			# filter results
@@ -861,7 +861,7 @@ sub main {
 			if ('Y' eq missing_file($output_stem . '_filtered.vcf.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for VCF-filter...\n";
+				print $log "  >> Submitting job for VCF-filter...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -886,7 +886,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping VCF-filter because this has already been completed!\n";
+				print $log "  >> Skipping VCF-filter because this has already been completed!\n";
 				}
 
 			### Run variant annotation (VEP + vcf2maf)
@@ -944,7 +944,7 @@ sub main {
 					);
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for vcf2maf...\n";
+				print $log "  >> Submitting job for vcf2maf...\n";
 
 				$run_script = write_script(
 					log_dir => $log_directory,
@@ -970,7 +970,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping vcf2maf because this has already been completed!\n";
+				print $log "  >> Skipping vcf2maf because this has already been completed!\n";
 				}
 
 			push @final_outputs, $final_maf;
@@ -985,7 +985,7 @@ sub main {
 
 				} else {
 
-				print $log "Submitting job to clean up temporary/intermediate files...\n";
+				print $log ">> Submitting job to clean up temporary/intermediate files...\n";
 
 				# make sure final output exists before removing intermediate files!
 				my @files_to_check;

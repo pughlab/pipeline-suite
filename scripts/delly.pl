@@ -393,7 +393,7 @@ sub pon {
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		# find bams
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
@@ -408,7 +408,7 @@ sub pon {
 		# for germline variants
 		foreach my $norm (@normal_ids) {
 
-			print $log "  NORMAL: $norm\n";
+			print $log "\n  NORMAL: $norm\n";
 
 			# create some symlinks
 			my @tmp = split /\//, $smp_data->{$patient}->{normal}->{$norm};
@@ -431,7 +431,7 @@ sub pon {
 			if ('Y' eq missing_file($germline_output . ".md5")) {
 
 				# record command (in log directory) and then run job
-				print $log "  >>Submitting job for Delly (germline)...\n";
+				print $log "  >> Submitting job for Delly (germline)...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -454,7 +454,7 @@ sub pon {
 
 				push @part1_jobs, $run_id;
 				} else {
-				print $log "  >>Skipping Delly (germline) because this has already been completed!\n";
+				print $log "  >> Skipping Delly (germline) because this has already been completed!\n";
 				}
 
 			push @pon_bcfs, $germline_output;
@@ -466,7 +466,7 @@ sub pon {
 	# should the panel of normals be created?
 	my $pon_run_id = '';
 
-	print $log "\n\nMerging called sites...\n";
+	print $log "\n---\nMerging called sites...\n";
 
 	# let's create a command and write script to combine variants for a PoN
 	my $pon_sites = join('/', $output_directory, $date . "_merged_panelOfNormals.bcf");
@@ -488,6 +488,9 @@ sub pon {
 		);
 
 	if ('Y' eq missing_file($pon_sites)) {
+
+		# record command (in log directory) and then run job
+		print $log ">> Submitting job for Delly merge...\n";
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
@@ -512,6 +515,8 @@ sub pon {
 		push @all_jobs, $pon_run_id;
 		}
 
+	print $log "\n---\n";
+
 	# genotype these sites for each sample
 	foreach my $patient (sort keys %{$smp_data}) {
 
@@ -522,7 +527,7 @@ sub pon {
 		# for germline variants
 		foreach my $norm (@normal_ids) {
 
-			print $log "  NORMAL: $norm\n";
+			print $log "Genotyping candidate somatic SVs for NORMAL: $norm\n";
 
 			$run_id = '';
 
@@ -541,7 +546,7 @@ sub pon {
 			if ('Y' eq missing_file($genotype_output . ".md5")) {
 
 				# record command (in log directory) and then run job
-				print $log "  >>Submitting job for Delly Genotype (germline)...\n";
+				print $log "  >> Submitting job for Delly Genotype (germline)...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -565,7 +570,7 @@ sub pon {
 
 				push @part2_jobs, $run_id;
 				} else {
-				print $log "  >>Skipping Delly Genotype (germline) because this has already been completed!\n";
+				print $log "  >> Skipping Delly Genotype (germline) because this has already been completed!\n";
 				}
 
 			push @genotyped_bcfs, $genotype_output;
@@ -574,6 +579,8 @@ sub pon {
 		}
 
 	push @all_jobs, @part2_jobs;
+
+	print $log "\n---\nCreating panel of normals...\n";
 
 	# merge these genotyped results and filter only germline
 	$pon_command = generate_delly_pon(
@@ -586,6 +593,9 @@ sub pon {
 	$pon_command .= "\n\n" . "md5sum $pon_genotyped > $pon_genotyped.md5";
 
 	if ('Y' eq missing_file($pon_genotyped . ".md5")) {
+
+		# record command (in log directory) and then run job
+		print $log ">> Submitting job for Create PoN...\n";
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
@@ -651,7 +661,7 @@ sub pon {
 	# should intermediate files be removed
 	if ($args{del_intermediates}) {
 
-		print $log "\nSubmitting job to clean up temporary/intermediate files...\n";
+		print $log "Submitting job to clean up temporary/intermediate files...\n";
 
 		# make sure final output exists before removing intermediate files!
 		my $cleanup_cmd = join("\n",
@@ -950,7 +960,7 @@ sub main {
 		if ('Y' eq missing_file($delly_output . ".md5")) {
 
 			# record command (in log directory) and then run job
-			print $log "Submitting job for Delly Call SV...\n";
+			print $log ">> Submitting job for Delly Call SV...\n";
 
 			$run_script = write_script(
 				log_dir	=> $log_directory,
@@ -975,7 +985,7 @@ sub main {
 			push @part1_jobs, $run_id;
 			push @{$patient_jobs{$patient}}, $run_id;
 			} else {
-			print $log "Skipping Delly (somatic) because this has already been completed!\n";
+			print $log ">> Skipping Delly (somatic) because this has already been completed!\n";
 			}
 
 		# filter calls (only possible if a normal was provided)
@@ -998,7 +1008,7 @@ sub main {
 			if ('Y' eq missing_file($filter_output . ".md5")) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for Delly filter...\n";
+				print $log ">> Submitting job for Delly filter...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -1023,7 +1033,7 @@ sub main {
 				push @part1_jobs, $run_id;
 				push @{$patient_jobs{$patient}}, $run_id;
 				} else {
-				print $log "Skipping Delly filter (somatic) because this has already been completed!\n";
+				print $log ">> Skipping Delly filter (somatic) because this has already been completed!\n";
 				}
 
 			push @filtered_bcfs, $filter_output;
@@ -1032,7 +1042,7 @@ sub main {
 
 	push @all_jobs, @part1_jobs;
 
-	print $log "\nMerging candidate somatic SVs across all samples...\n\n";
+	print $log "\n---\nMerging candidate somatic SVs across all samples...\n";
 
 	# merge filtered output to get a somatic SV site list
 	my $merged_output = join('/', $output_directory, 'candidateSVs_merged.bcf');
@@ -1051,7 +1061,7 @@ sub main {
 	if (scalar(@part1_jobs) > 0) {
 
 		# record command (in log directory) and then run job
-		print $log "Submitting job for Delly merge...\n";
+		print $log ">> Submitting job for Delly merge...\n";
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
@@ -1075,10 +1085,10 @@ sub main {
 
 		push @all_jobs, $merge_run_id;
 		} else {
-		print $log "Skipping Delly merge (somatic) because this has already been completed!\n";
+		print $log ">> Skipping Delly merge (somatic) because this has already been completed!\n";
 		}
 
-	print $log "\nGenotyping candidate somatic SVs across all samples...\n\n";
+	print $log "\n---\n";
 
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
@@ -1097,7 +1107,7 @@ sub main {
 		# for each tumour sample
 		foreach my $sample (@sample_ids) {
 
-			print $log "  SAMPLE: $sample\n";
+			print $log "\nGenotyping candidate somatic SVs for SAMPLE: $sample\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
@@ -1139,7 +1149,7 @@ sub main {
 			if ('' ne $merge_run_id) {
 
 				# record command (in log directory) and then run job
-				print $log "  >>Submitting job for Delly Genotype (somatic)...\n";
+				print $log "  >> Submitting job for Delly Genotype (somatic)...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -1164,7 +1174,7 @@ sub main {
 				push @part2_jobs, $run_id;
 				push @{$patient_jobs{$patient}}, $run_id;
 				} else {
-				print $log "  >>Skipping Delly Genotype (somatic) because this has already been completed!\n";
+				print $log "  >> Skipping Delly Genotype (somatic) because this has already been completed!\n";
 				}
 
 			push @genotyped_bcfs, $genotype_output;
@@ -1173,7 +1183,7 @@ sub main {
 
 	push @all_jobs, @part2_jobs;
 
-	print $log "\nMerging genotyped somatic SVs across all samples...\n\n";
+	print $log "\n---\nMerging genotyped somatic SVs across all samples...\n";
 
 	# merge these genotyped results and filter only somatic
 	my $merged_somatic_output = join('/', $output_directory, 'somatic_genotyped_SVs_merged.bcf');
@@ -1186,6 +1196,9 @@ sub main {
 	$merge_somatic_svs .= "\n\n" . "md5sum $merged_somatic_output > $merged_somatic_output.md5";
 
 	if (scalar(@part2_jobs) > 0) {
+
+		# record command (in log directory) and then run job
+		print $log ">> Submitting job for Delly merge...\n";
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
@@ -1212,7 +1225,7 @@ sub main {
 		print $log "Skipping final merge because this has already been completed!\n";
 		}
 
-	print $log "\nFinalizing somatic SVs for each sample...\n\n";
+	print $log "\n---\n";
 
 	my @finalize_jobs;
 
@@ -1229,7 +1242,7 @@ sub main {
 		# for each tumour sample
 		foreach my $sample (@tumour_ids) {
 
-			print $log "  TUMOUR: $sample\n";
+			print $log "\nFinalizing somatic SVs for TUMOUR: $sample\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 			my $sample_sheet = join('/', $sample_directory, 'sample_sheet.tsv');
@@ -1269,7 +1282,7 @@ sub main {
 
 			if ('' ne $merge_run_id) {
 
-				print $log "  >>Submitting job for finalize (filter) step...\n";
+				print $log "  >> Submitting job for finalize (filter) step...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -1295,14 +1308,13 @@ sub main {
 				push @all_jobs, $run_id;
 				push @{$patient_jobs{$patient}}, $run_id;
 				} else {
-				print $log "  >>Skipping finalize step because this has already been completed!\n";
+				print $log "  >> Skipping finalize step because this has already been completed!\n";
 				}
 
 			push @{$final_outputs{$patient}}, $final_output;
 			}
 
-		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @{$final_outputs{$patient}}) . "\n";
-		print $log "---\n";
+		print $log "\nFINAL OUTPUT for $patient:\n" . join("\n  ", @{$final_outputs{$patient}}) . "\n";
 		}
 
 	# collate results

@@ -379,12 +379,12 @@ sub main {
 				my $bam = $rna_data->{$patient}->{'tumour'}->{$id};
 				$smp_data->{$patient}->{'rna'}->{$id} = $bam;
 				}
-			my @rna_normals = sort keys %{$rna_data->{$patient}->{'normal'}};
-			foreach my $id ( @rna_normals ) {
-				my $bam = $rna_data->{$patient}->{'normals'}->{$id};
-				$smp_data->{$patient}->{'rna'}->{$id} = $bam;
-				push @rna_ids, $id;
-				}
+	#		my @rna_normals = sort keys %{$rna_data->{$patient}->{'normal'}};
+	#		foreach my $id ( @rna_normals ) {
+	#			my $bam = $rna_data->{$patient}->{'normals'}->{$id};
+	#			$smp_data->{$patient}->{'rna'}->{$id} = $bam;
+	#			push @rna_ids, $id;
+	#			}
 			}
 		}
 
@@ -434,7 +434,7 @@ sub main {
 
 		$run_id = '';
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		# find bams
 		my @normal_ids = sort keys %{$smp_data->{$patient}->{'normal_dna'}};

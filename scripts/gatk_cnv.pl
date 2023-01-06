@@ -729,7 +729,7 @@ sub main {
 			if ('Y' eq missing_file($norm_readcounts)) {
 
 				# record command (in log directory) and then run job
-				print $log "  >>Submitting job for CollectReadCounts...\n";
+				print $log "  >> Submitting job for CollectReadCounts...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -754,7 +754,7 @@ sub main {
 				push @{$patient_jobs{$patient}}, $run_id;
 				push @normal_jobs, $run_id;
 				} else {
-				print $log "  >>Skipping CollectReadCounts as this has already been completed!\n";
+				print $log "  >> Skipping CollectReadCounts as this has already been completed!\n";
 				}
 			}
 		}
@@ -778,7 +778,7 @@ sub main {
 	if (scalar(@normal_jobs) > 0) {
 
 		# record command (in log directory) and then run job
-		print $log "Submitting job for CreateReadCountPanelOfNormals...\n";
+		print $log "\n>> Submitting job for CreateReadCountPanelOfNormals...\n";
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
@@ -810,7 +810,7 @@ sub main {
 
 		$cleanup_cmd = '';
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		# find sample IDs
 		my @tumour_ids = keys %{$smp_data->{$patient}->{'tumour'}};
@@ -829,7 +829,7 @@ sub main {
 
 			$sample = $normal_ids[0];
 
-			print $log "  SAMPLE: $sample\n";
+			print $log "\n  SAMPLE: $sample\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
@@ -849,7 +849,7 @@ sub main {
 			if ('Y' eq missing_file($norm_allelic_counts)) {
 
 				# record command (in log directory) and then run job
-				print $log "  >>Submitting job for CollectAllelicCounts...\n";
+				print $log "  >> Submitting job for CollectAllelicCounts...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -873,7 +873,7 @@ sub main {
 
 				push @{$patient_jobs{$patient}}, $run_id;
 				} else {
-				print $log "  >>Skipping CollectAllelicCounts as this has already been completed!\n";
+				print $log "  >> Skipping CollectAllelicCounts as this has already been completed!\n";
 				}
 			}
 
@@ -906,7 +906,7 @@ sub main {
 			if ('Y' eq missing_file($readcounts)) {
 
 				# record command (in log directory) and then run job
-				print $log "  >>Submitting job for CollectReadCounts...\n";
+				print $log "  >> Submitting job for CollectReadCounts...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -931,7 +931,7 @@ sub main {
 				push @sample_jobs, $run_id;
 				push @{$patient_jobs{$patient}}, $run_id;
 				} else {
-				print $log "  >>Skipping CollectReadCounts as this has already been completed!\n";
+				print $log "  >> Skipping CollectReadCounts as this has already been completed!\n";
 				}
 
 			# run command to get copy-number ratios
@@ -948,7 +948,7 @@ sub main {
 			if ('Y' eq missing_file($denoised_cr)) {
 
 				# record command (in log directory) and then run job
-				print $log "  >>Submitting job for DenoiseReadCounts...\n";
+				print $log "  >> Submitting job for DenoiseReadCounts...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -973,7 +973,7 @@ sub main {
 				push @sample_jobs, $run_id;
 				push @{$patient_jobs{$patient}}, $run_id;
 				} else {
-				print $log "  >>Skipping DenoiseReadCounts as this has already been completed!\n";
+				print $log "  >> Skipping DenoiseReadCounts as this has already been completed!\n";
 				}
 
 			# plot the denoised copy number ratios
@@ -989,7 +989,7 @@ sub main {
 			if ('Y' eq missing_file($denoised_plot)) {
 
 				# record command (in log directory) and then run job
-				print $log "  >>Submitting job for PlotDenoisedCopyRatios...\n";
+				print $log "  >> Submitting job for PlotDenoisedCopyRatios...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -1013,7 +1013,7 @@ sub main {
 
 				push @{$patient_jobs{$patient}}, $tmp_run_id;
 				} else {
-				print $log "  >>Skipping PlotDenoisedCopyRatios as this has already been completed!\n";
+				print $log "  >> Skipping PlotDenoisedCopyRatios as this has already been completed!\n";
 				}
 
 			# run collect allelic counts
@@ -1032,7 +1032,7 @@ sub main {
 			if ('Y' eq missing_file($tumour_allelic_counts)) {
 
 				# record command (in log directory) and then run job
-				print $log "  >>Submitting job for CollectAllelicCounts...\n";
+				print $log "  >> Submitting job for CollectAllelicCounts...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -1057,7 +1057,7 @@ sub main {
 				push @sample_jobs, $run_id;
 				push @{$patient_jobs{$patient}}, $run_id;
 				} else {
-				print $log "  >>Skipping CollectAllelicCounts as this has already been completed!\n";
+				print $log "  >> Skipping CollectAllelicCounts as this has already been completed!\n";
 				}
 
 			# run Model Segments
@@ -1076,7 +1076,7 @@ sub main {
 			if ('Y' eq missing_file($modelled_segments)) {
 
 				# record command (in log directory) and then run job
-				print $log "  >>Submitting job for ModelSegments...\n";
+				print $log "  >> Submitting job for ModelSegments...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -1101,7 +1101,7 @@ sub main {
 				push @sample_jobs, $run_id;
 				push @{$patient_jobs{$patient}}, $run_id;
 				} else {
-				print $log "  >>Skipping ModelSegments as this has already been completed!\n";
+				print $log "  >> Skipping ModelSegments as this has already been completed!\n";
 				}
 
 			push @{$final_outputs{$patient}}, $modelled_segments;
@@ -1119,7 +1119,7 @@ sub main {
 			if ('Y' eq missing_file($modeled_plot)) {
 
 				# record command (in log directory) and then run job
-				print $log "  >>Submitting job for PlotModeledSegments...\n";
+				print $log "  >> Submitting job for PlotModeledSegments...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -1143,7 +1143,7 @@ sub main {
 
 				push @{$patient_jobs{$patient}}, $tmp_run_id;
 				} else {
-				print $log "  >>Skipping PlotModeledSegments as this has already been completed!\n";
+				print $log "  >> Skipping PlotModeledSegments as this has already been completed!\n";
 				}
 			}
 

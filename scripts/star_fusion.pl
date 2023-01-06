@@ -175,7 +175,7 @@ sub main {
 	# process each patient in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		my $patient_directory = join('/', $output_directory, $patient);
 		unless(-e $patient_directory) { make_path($patient_directory); }

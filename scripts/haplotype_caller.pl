@@ -291,7 +291,7 @@ sub main{
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		my $patient_directory = join('/', $output_directory, $patient);
 		unless(-e $patient_directory) { make_path($patient_directory); }
@@ -330,7 +330,7 @@ sub main{
 
 		foreach my $sample (@sample_ids) {
 
-			print $log "  SAMPLE: $sample\n\n";
+			print $log "\n  SAMPLE: $sample\n";
 
 			my $type;
 			if ( (any { $_ =~ m/$sample/ } @normal_ids) ) {
@@ -405,7 +405,7 @@ sub main{
 			if ('Y' eq missing_file($hc_vcf . '.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for HaplotypeCaller...\n";
+				print $log "  >> Submitting job for HaplotypeCaller...\n";
 
 				if ( (scalar(@chroms) > 1) && ('slurm' eq $args{hpc_driver}) && ($is_wgs) ) {
 					$run_script = write_script(
@@ -442,7 +442,7 @@ sub main{
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping HaplotypeCaller because this has already been completed!\n";
+				print $log "  >> Skipping HaplotypeCaller because this has already been completed!\n";
 				}
 
 			# special case if multiple chromosomes and SLURM HPC driver
@@ -476,7 +476,7 @@ sub main{
 				if ('Y' eq missing_file($hc_vcf . '.md5')) {
 
 					# record command (in log directory) and then run job
-					print $log "Submitting job for MERGE (per-chrom)...\n";
+					print $log "  >> Submitting job for MERGE (per-chrom)...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
@@ -501,7 +501,7 @@ sub main{
 					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
 					} else {
-					print $log "Skipping MERGE because this has already been completed!\n";
+					print $log "  >> Skipping MERGE because this has already been completed!\n";
 					}
 				}
 
@@ -534,7 +534,7 @@ sub main{
 				if ('Y' eq missing_file($filtered_vcf . '.md5')) {
 
 					# record command (in log directory) and then run job
-					print $log "Submitting job for Variant Filtration...\n";
+					print $log "  >> Submitting job for Variant Filtration...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
@@ -559,7 +559,7 @@ sub main{
 					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
 					} else {
-					print $log "Skipping Variant Filtration because this has already been completed!\n";
+					print $log "  >> Skipping Variant Filtration because this has already been completed!\n";
 					}
 
 				### Run variant annotation (VEP + vcf2maf)
@@ -600,7 +600,7 @@ sub main{
 						);
 
 					# record command (in log directory) and then run job
-					print $log "Submitting job for vcf2maf...\n";
+					print $log "  >> Submitting job for vcf2maf...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
@@ -626,7 +626,7 @@ sub main{
 					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
 					} else {
-					print $log "Skipping vcf2maf because this has already been completed!\n";
+					print $log "  >> Skipping vcf2maf because this has already been completed!\n";
 					}
 
 				push @final_outputs, $final_maf;
@@ -641,7 +641,7 @@ sub main{
 				`rm -rf $tmp_directory`;
 				} else {
 
-				print $log "Submitting job to clean up temporary/intermediate files...\n";
+				print $log ">> Submitting job to clean up temporary/intermediate files...\n";
 
 				# make sure final output exists before removing intermediate files!
 				my @files_to_check;
@@ -738,7 +738,7 @@ sub main{
 			if ('Y' eq missing_file($combined_gvcf . '.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for CombineGVCFs...\n";
+				print $log ">> Submitting job for CombineGVCFs...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -771,7 +771,7 @@ sub main{
 		# should intermediate files be removed
 		if ($args{del_intermediates}) {
 
-			print $log "Submitting job to clean up temporary/intermediate files...\n";
+			print $log ">> Submitting job to clean up temporary/intermediate files...\n";
 
 			# make sure final output exists before removing intermediate files!
 			$cleanup_cmd_dna = join("\n",

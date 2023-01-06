@@ -344,7 +344,7 @@ sub main {
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		# find bams
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
@@ -387,7 +387,7 @@ sub main {
 			# if there are any samples to run, we will run the final combine job
 			$should_run_final = 1;
 
-			print $log "  SAMPLE: $sample\n\n";
+			print $log "\n  SAMPLE: $sample\n";
 
 			my $type;
 			if ( (any { $_ =~ m/$sample/ } @normal_ids) ) {
@@ -420,7 +420,7 @@ sub main {
 			if ('Y' eq missing_file($output_stem . '.COMPLETE')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for CollectSequenceArtefacts...\n";
+				print $log "  >> Submitting job for CollectSequenceArtefacts...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -444,7 +444,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping CollectSequenceArtefacts because this has already been completed!\n";
+				print $log "  >> Skipping CollectSequenceArtefacts because this has already been completed!\n";
 				}
 
 			push @final_outputs, $output_stem . '.bait_bias_summary_metrics';
@@ -464,7 +464,7 @@ sub main {
 			if ('Y' eq missing_file($output_stem . '.COMPLETE')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for CollectInsertSizeMetrics...\n";
+				print $log "  >> Submitting job for CollectInsertSizeMetrics...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -488,7 +488,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping CollectInsertSizeMetrics because this has already been completed!\n";
+				print $log "  >> Skipping CollectInsertSizeMetrics because this has already been completed!\n";
 				}
 
 			push @final_outputs, $output_stem . '.txt';
@@ -507,7 +507,7 @@ sub main {
 			if ('Y' eq missing_file($output_stem . '.COMPLETE')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for CollectAlignmentMetrics...\n";
+				print $log "  >> Submitting job for CollectAlignmentMetrics...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -531,7 +531,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping CollectAlignmentMetrics because this has already been completed!\n";
+				print $log "  >> Skipping CollectAlignmentMetrics because this has already been completed!\n";
 				}
 
 			push @final_outputs, $output_stem . '.txt';
@@ -552,7 +552,7 @@ sub main {
 				if ('Y' eq missing_file($output_stem . '.COMPLETE')) {
 
 					# record command (in log directory) and then run job
-					print $log "Submitting job for CollectWgsMetrics...\n";
+					print $log "  >> Submitting job for CollectWgsMetrics...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
@@ -576,7 +576,7 @@ sub main {
 					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
 					} else {
-					print $log "Skipping CollectWgsMetrics because this has already been completed!\n";
+					print $log "  >> Skipping CollectWgsMetrics because this has already been completed!\n";
 					}
 
 				push @final_outputs, $output_stem . '.txt';
@@ -598,7 +598,7 @@ sub main {
 			if ('Y' eq missing_file($pileup_out . '.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for GetPileupSummaries...\n";
+				print $log "  >> Submitting job for GetPileupSummaries...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -623,7 +623,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping GetPileupSummaries because this has already been completed!\n";
+				print $log "  >> Skipping GetPileupSummaries because this has already been completed!\n";
 				}
 
 			# find contamination
@@ -651,7 +651,7 @@ sub main {
 			if ('Y' eq missing_file($contest_output . '.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for CalculateContamination...\n";
+				print $log "  >> Submitting job for CalculateContamination...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -676,11 +676,11 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping CalculateContamination because this has already been completed!\n";
+				print $log "  >> Skipping CalculateContamination because this has already been completed!\n";
 				}
 
 			push @final_outputs, $contest_output;
-
+			print $log "  >> Processing SAMPLE: $sample complete!\n";
 			}
 
 		# should intermediate files be removed
@@ -691,7 +691,7 @@ sub main {
 				`rm -rf $tmp_directory`;
 				} else {
 
-				print $log "Submitting job to clean up temporary/intermediate files...\n";
+				print $log "\n>> Submitting job to clean up temporary/intermediate files...\n";
 
 				# make sure final output exists before removing intermediate files!
 				$cleanup_cmd = join("\n",
@@ -723,7 +723,7 @@ sub main {
 				}
 			}
 
-		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
+		print $log "\nFINAL OUTPUT for $patient:\n" . join("\n  ", @final_outputs) . "\n";
 		print $log "---\n";
 		}
 
