@@ -61,7 +61,10 @@ sub main {
 		'ascat'		=> defined($tool_data->{ascat}->{run}) ? $tool_data->{ascat}->{run} : 'N',
 		'ichor_cna'	=> defined($tool_data->{ichor_cna}->{run}) ? $tool_data->{ichor_cna}->{run} : 'N',
 		'mavis'	=> defined($tool_data->{mavis}->{run}) ? $tool_data->{mavis}->{run} : 'N',
-		'msi'	=> defined($tool_data->{msi_sensor}->{run}) ? $tool_data->{msi_sensor}->{run} : 'N'
+		'msi'	=> defined($tool_data->{msi_sensor}->{run}) ? $tool_data->{msi_sensor}->{run} : 'N',
+		'cosmic_sbs'	=> defined($tool_data->{summarize_steps}->{run_cosmic_sbs}) ? $tool_data->{summarize_steps}->{run_cosmic_sbs} : 'N',
+		'chord'		=> defined($tool_data->{summarize_steps}->{run_chord}) ? $tool_data->{summarize_steps}->{run_chord} : 'N',
+		'hrdetect'	=> defined($tool_data->{summarize_steps}->{run_hrdetect}) ? $tool_data->{summarize_steps}->{run_hrdetect} : 'N'
 		);
 
 	# how was BWA run?
@@ -535,16 +538,33 @@ sub main {
 		$methods .= "For ASCAT, allele frequencies for SNP6 loci were extracted and processed in R (v4.1.0) using the maftools (v2.12.0) and ASCAT (v$ascat) packages using default parameters and gamma = 1 (as recommened for HTS).\\newline\n";
 		}
 
-	# for MSI
-	$methods .= "\\subsection{MSI}\n";
+	# for mutation signatures
+	$methods .= "\\subsection{Mutation signatures}\n";
+
+	$msi = defined($tool_data->{msi_sensor_version}) ? $tool_data->{msi_sensor_version} : undef;
+	$msi = basename($msi);
+
 	if ('Y' eq $tool_set{'msi'}) {
 
-		my $msi	= 'msisensor-pro/1.2.0';
-
 		# fill in methods
-		$methods .= "MSI-Sensor pro (v1.2.0) was run using recommended best practices with coverage threshold of 15x (as recommended).\\newline\n";
+		$methods .= "MSI-Sensor pro (v$msi) was run using recommended best practices with coverage threshold of 15x (as recommended).\\newline\n\\newline\n";
 		} else {
-		$methods .= "MSI-Sensor was not run.\\newline\n";
+		$methods .= "MSI-Sensor was not run.\newline\n\\newline\n";
+		}
+
+	if ('Y' eq $tool_set{'cosmic_sbs'}) {
+		# fill in methods
+		$methods .= "COSMIC SBS mutation signatures were applied to the ENSEMBLE somatic mutation calls using the deconstructSigs pacakge for R. A default VAF threshold of 10\\% was applied and samples with fewer than 50 SNVs were not processed.\\newline\n\\newline\n";
+		}
+
+	if ('Y' eq $tool_set{'chord'}) {
+		# fill in methods
+		$methods .= "HRD mutation signatures were applied to the ENSEMBLE somatic mutation calls and MAVIS validated structural variants using the CHORD (Classifier of HOmologous Recombination Deficiency) pacakge for R. A default VAF threshold of 10\\% was applied to SNVs/INDELs and SVs were filtered to those with breakpoints in genic regions and length \$>\$ 100bp (or translocations).\\newline\n\\newline\n";
+		}
+
+	if ('Y' eq $tool_set{'hrdetect'}) {
+		# fill in methods
+		$methods .= "HRD mutation signatures were applied to the ENSEMBLE somatic mutation, copy-number and structural variants using the HRDetect algorithm in R (using the signature.tools.lib package). SVs were filtered to those with breakpoints in genic regions and length \$>\$ 200bp (or translocations).\\newline\n\\newline\n";
 		}
 
 	# clean up special characters
