@@ -315,7 +315,7 @@ sub main {
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 		print $yaml "$patient:\n";
 
 		# make a sample-specific directory

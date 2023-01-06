@@ -356,7 +356,7 @@ sub main {
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		# find bams
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
@@ -396,6 +396,7 @@ sub main {
 		my (@final_outputs, @patient_jobs);
 
 		# get normal pileup
+		print $log "\n  NORMAL: $normal_ids[0]\n";
 		my $norm_pileup = join('/', $patient_directory, $normal_ids[0] . '_indel.pileup');
 		my $norm_pileup_cmd = get_pileup_command(
 			bam		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
@@ -412,7 +413,7 @@ sub main {
 		if ('Y' eq missing_file("$norm_pileup.md5")) {
 
 			# record command (in log directory) and then run job
-			print $log "Submitting job for INDEL pileup (normal)...\n";
+			print $log "  >> Submitting job for INDEL pileup (normal)...\n";
 
 			$run_script = write_script(
 				log_dir	=> $log_directory,
@@ -436,7 +437,7 @@ sub main {
 			push @patient_jobs, $norm_pile_id;
 			push @all_jobs, $norm_pile_id;
 			} else {
-			print $log "Skipping pileup (normal) because this has already been completed!\n";
+			print $log "  >> Skipping pileup (normal) because this has already been completed!\n";
 			}
 
 		# for each tumour sample
@@ -445,7 +446,7 @@ sub main {
 			# if there are any samples to run, we will run the final combine job
 			$should_run_final = 1;
 
-			print $log "  SAMPLE: $sample\n\n";
+			print $log "\n  SAMPLE: $sample\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
@@ -470,7 +471,7 @@ sub main {
 			if ('Y' eq missing_file($output_stem . '.vcf.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for SomaticSniper...\n";
+				print $log "  >> Submitting job for SomaticSniper...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -494,7 +495,7 @@ sub main {
 				push @patient_jobs, $sniper_id;
 				push @all_jobs, $sniper_id;
 				} else {
-				print $log "Skipping SomaticSniper because this has already been completed!\n";
+				print $log "  >> Skipping SomaticSniper because this has already been completed!\n";
 				}
 
 			# collect indel pileup (necessary for filtering)
@@ -512,7 +513,7 @@ sub main {
 			if ('Y' eq missing_file("$tumour_pileup.md5")) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for INDEL pileup (tumour)...\n";
+				print $log "  >> Submitting job for INDEL pileup (tumour)...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -536,7 +537,7 @@ sub main {
 				push @patient_jobs, $tum_pile_id;
 				push @all_jobs, $tum_pile_id;
 				} else {
-				print $log "Skipping pileup (tumour) because this has already been completed!\n";
+				print $log "  >> Skipping pileup (tumour) because this has already been completed!\n";
 				}
 
 			# apply somaticsniper snpfilter to initial results
@@ -559,7 +560,7 @@ sub main {
 				) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for snpFilter...\n";
+				print $log "  >> Submitting job for snpFilter...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -583,7 +584,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping snpfilter because this has already been completed!\n";
+				print $log "  >> Skipping snpfilter because this has already been completed!\n";
 				}
 
 			# get readcounts
@@ -605,7 +606,7 @@ sub main {
 			if ('Y' eq missing_file("$bam_readcounts.md5")) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for bam-readcount...\n";
+				print $log "  >> Submitting job for bam-readcount...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -630,7 +631,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping bam-readcount because this has already been completed!\n";
+				print $log "  >> Skipping bam-readcount because this has already been completed!\n";
 				}
 
 			# apply somaticsnipers false positive filter
@@ -678,7 +679,7 @@ sub main {
 			if ('Y' eq missing_file("$filtered_vcf.md5")) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for final filters...\n";
+				print $log "  >> Submitting job for final filters...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -703,7 +704,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping final filter because this has already been completed!\n";
+				print $log "  >> Skipping final filter because this has already been completed!\n";
 				}
 
 			### Run variant annotation (VEP + vcf2maf)
@@ -742,7 +743,7 @@ sub main {
 					);
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for vcf2maf...\n";
+				print $log "  >> Submitting job for vcf2maf...\n";
 
 				$run_script = write_script(
 					log_dir => $log_directory,
@@ -768,7 +769,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping vcf2maf because this has already been completed!\n";
+				print $log "  >> Skipping vcf2maf because this has already been completed!\n";
 				}
 
 			push @final_outputs, $final_maf;
@@ -783,7 +784,7 @@ sub main {
 
 				} else {
 
-				print $log "Submitting job to clean up temporary/intermediate files...\n";
+				print $log ">> Submitting job to clean up temporary/intermediate files...\n";
 
 				# make sure final output exists before removing intermediate files!
 				my @files_to_check;

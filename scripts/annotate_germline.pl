@@ -254,7 +254,7 @@ sub main{
 	# process each patient in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		# make some directories
 		my $patient_directory = join('/', $annotate_directory, $patient);
@@ -289,7 +289,7 @@ sub main{
 
 			$run_id = '';
 
-			print $log "\n>> Preparing input for SAMPLE: $sample\n\n";
+			print $log "\n  Preparing input for SAMPLE: $sample\n";
 
 			# make some directories
 			my $sample_directory = join('/', $patient_directory, $sample);
@@ -319,7 +319,7 @@ sub main{
 			if ( ('Y' eq missing_file("$subset_vcf.idx")) && ('Y' eq missing_file($annotate_final)) ) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for SelectVariants...\n";
+				print $log "  >> Submitting job for SelectVariants...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -341,7 +341,7 @@ sub main{
 				push @all_jobs, $run_id;
 				push @patient_jobs, $run_id;
 				} else {
-				print $log "Skipping SelectVariants because this is already done!\n";
+				print $log "  >> Skipping SelectVariants because this is already done!\n";
 				}
 
 			# run CPSR annotation
@@ -355,7 +355,7 @@ sub main{
 			if ('Y' eq missing_file($annotate_final)) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for CPSR...\n";
+				print $log "  >> Submitting job for CPSR...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -380,12 +380,12 @@ sub main{
 				push @all_jobs, $run_id;
 				push @patient_jobs, $run_id;
 				} else {
-				print $log "Skipping CPSR because this is already done!\n";
+				print $log "  >> Skipping CPSR because this is already done!\n";
 				}
 			}
 
 		# extract 
-		print $log "\n>> Combining and extracting significant variants.\n\n";
+		print $log "\n>> Combining and extracting significant variants...\n";
 
 		my $filtered_vcf = join('/',
 			$patient_directory,
@@ -404,7 +404,7 @@ sub main{
 		if ('Y' eq missing_file($filtered_vcf)) {
 
 			# record command (in log directory) and then run job
-			print $log "Submitting job for filter step...\n";
+			print $log ">> Submitting job for filter step...\n";
 
 			$run_script = write_script(
 				log_dir	=> $log_directory,
@@ -427,7 +427,7 @@ sub main{
 			push @all_jobs, $run_id;
 			push @patient_jobs, $run_id;
 			} else {
-			print $log "Skipping filter step because this is already done!\n";
+			print $log ">> Skipping filter step because this is already done!\n";
 			}
 
 		my $previous_job_id = $run_id;
@@ -435,7 +435,7 @@ sub main{
 		# loop over each tumour sample
 		foreach my $sample ( @tumour_ids ) {
 
-			print $log "\n>> Annotating significant variants for SAMPLE: $sample\n\n";
+			print $log "\n  >> Annotating significant variants for SAMPLE: $sample\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 
@@ -485,7 +485,7 @@ sub main{
 					);
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for vcf2maf...\n";
+				print $log "  >> Submitting job for vcf2maf...\n";
 
 				$run_script = write_script(
 					log_dir => $log_directory,
@@ -508,7 +508,7 @@ sub main{
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping vcf2maf because this has already been completed!\n";
+				print $log "  >> Skipping vcf2maf because this has already been completed!\n";
 				}
 
 			push @final_outputs, $final_maf;
@@ -518,6 +518,7 @@ sub main{
 		if (scalar(@tumour_ids) == 0) {
 
 			my $sample = $normal_ids[0];
+			print $log "\n  >> Annotating significant variants for SAMPLE: $sample\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 
@@ -566,7 +567,7 @@ sub main{
 					);
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for vcf2maf...\n";
+				print $log "  >> Submitting job for vcf2maf...\n";
 
 				$run_script = write_script(
 					log_dir => $log_directory,
@@ -588,15 +589,16 @@ sub main{
 
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
-				}
-			else {
-				print $log "Skipping vcf2maf because this has already been completed!\n";
+				} else {
+				print $log "  >> Skipping vcf2maf because this has already been completed!\n";
 				}
 
 			push @final_outputs, $final_maf;
 			}
 
-		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
+		print $log ">> Processing PATIENT: $patient complete!\n";
+
+		print $log "\nFINAL OUTPUT for $patient:\n" . join("\n  ", @final_outputs) . "\n";
 		print $log "---\n";
 		}
 
@@ -635,7 +637,7 @@ sub main{
 	# should intermediate files be removed?
 	if ($args{del_intermediates}) {
 
-		print $log "Submitting job to clean up temporary/intermediate files...\n";
+		print $log ">> Submitting job to clean up temporary/intermediate files...\n";
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,

@@ -141,6 +141,13 @@ sub main {
 \\usepackage{url}
 \\usepackage[margin=1in]{geometry}
 
+\\usepackage{hyperref}
+\\hypersetup{
+        colorlinks=true,
+        linktoc=all,
+        linkcolor=black
+        }
+
 \\pagestyle{fancy}
 \\lfoot{PughLab Pipeline-Suite}
 \\rfoot{Run Date: \\today}
@@ -158,6 +165,10 @@ sub main {
 
 \\maketitle
 \\thispagestyle{fancy}
+
+\\pagebreak
+
+\\tableofcontents
 
 \\pagebreak
 

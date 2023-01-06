@@ -157,7 +157,7 @@ sub main {
 	# process each patient in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		my $patient_directory = join('/', $output_directory, $patient);
 		unless(-e $patient_directory) { make_path($patient_directory); }
@@ -176,7 +176,7 @@ sub main {
 			# if there are any samples to run, we will run the final combine job
 			$should_run_final = 1;
 
-			print $log "  SAMPLE: $sample\n";
+			print $log "\n  SAMPLE: $sample\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
@@ -234,7 +234,7 @@ sub main {
 			if ('Y' eq missing_file($fusion_output)) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job to run FusionCatcher...\n";
+				print $log "  >> Submitting job to run FusionCatcher...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -259,7 +259,7 @@ sub main {
 				push @all_jobs, $run_id;
 
 				} else {
-				print $log "Skipping FusionCatcher because output already exists...\n";
+				print $log "  >> Skipping FusionCatcher because output already exists...\n";
 				}
 
 			# add output from STAR-Fusion to final_outputs

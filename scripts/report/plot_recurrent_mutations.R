@@ -601,7 +601,7 @@ if (!is.null(arguments$report)) {
 		'/somatic_snv_summary.tex'
 		);
 
-	write("\\section{SNV Summary}", file = tex.file);
+	write("\\section{Somatic Mutation Summary}", file = tex.file);
 
 	# first, check for mutation_overlap plot
 	if (any('SNV_tool_overlap.png' %in% names(all.plots))) {

@@ -168,7 +168,7 @@ sub main {
 	# organize directory structure
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		# find bams
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};

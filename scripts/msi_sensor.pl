@@ -346,10 +346,12 @@ sub main {
 			}
 		}
 
+	print $log "\n---";
+
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		my $patient_directory = join('/', $output_directory, $patient);
 
@@ -362,7 +364,7 @@ sub main {
 
 		foreach my $sample (@tumour_ids) {
 
-			print $log " SAMPLE: $sample\n\n";
+			print $log "\n  SAMPLE: $sample\n";
 
 			my $output_stem = join('/', $patient_directory, $sample . '_msi_output');
 			$cleanup_cmd .= "\nrm $output_stem\_dis;";
@@ -395,7 +397,7 @@ sub main {
 			if ('Y' eq missing_file($output_stem . '.COMPLETE')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for msi-sensor...\n";
+				print $log "  >> Submitting job for msi-sensor...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -420,7 +422,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping msi-sensor because this has already been completed!\n";
+				print $log "  >> Skipping msi-sensor because this has already been completed!\n";
 				}
 
 			push @final_outputs, $output_stem;
@@ -435,7 +437,7 @@ sub main {
 
 			unless (scalar(@patient_jobs) == 0) {
 
-				print $log "Submitting job to clean up temporary/intermediate files...\n";
+				print $log ">> Submitting job to clean up temporary/intermediate files...\n";
 
 				# make sure final output exists before removing intermediate files!
 				$cleanup_cmd = join("\n",

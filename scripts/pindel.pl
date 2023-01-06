@@ -437,17 +437,19 @@ sub main {
 	# insert sizes are collected as part of pipeline-suite QC step, so let's use that
 	my $bam_metrics_file;
 	my $qc_directory = $output_directory . '/../BAMQC/SequenceMetrics';
-	my @qc_files = _get_files($qc_directory, 'InsertSizes.tsv');
-	if (scalar(@qc_files) > 0) {
-		@qc_files = sort(@qc_files);
-		$bam_metrics_file = $qc_files[-1];
-		print $log "\n>> Extracting insert sizes from: $bam_metrics_file\n";
+	if (-e $qc_directory) {
+		my @qc_files = _get_files($qc_directory, 'InsertSizes.tsv');
+		if (scalar(@qc_files) > 0) {
+			@qc_files = sort(@qc_files);
+			$bam_metrics_file = $qc_files[-1];
+			print $log "\n>> Extracting insert sizes from: $bam_metrics_file\n";
+			}
 		}
 
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		# find bams
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
@@ -502,7 +504,7 @@ sub main {
 			# if there are any samples to run, we will run the final combine job
 			$should_run_final = 1;
 
-			print $log "  SAMPLE: $sample\n\n";
+			print $log "\n  SAMPLE: $sample\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
@@ -572,7 +574,7 @@ sub main {
 				if ('Y' eq missing_file($merged_vcf . '.md5')) {
 
 					# record command (in log directory) and then run job
-					print $log "Submitting job for Pindel...\n";
+					print $log "  >> Submitting job for Pindel...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
@@ -598,7 +600,7 @@ sub main {
 					push @sample_jobs, $run_id;
 					push @all_jobs, $run_id;
 					} else {
-					print $log "Skipping Pindel because this has already been completed!\n";
+					print $log "  >> Skipping Pindel because this has already been completed!\n";
 					}
 
 				} else {
@@ -619,7 +621,7 @@ sub main {
 						('Y' eq missing_file($output_stem . '_' . $chr . '.COMPLETE'))) {
 
 						# record command (in log directory) and then run job
-						print $log "Submitting job for Pindel ($chr)...\n";
+						print $log "  >> Submitting job for Pindel ($chr)...\n";
 
 						$run_script = write_script(
 							log_dir	=> $log_directory,
@@ -645,7 +647,7 @@ sub main {
 						push @sample_jobs, $run_id;
 						push @all_jobs, $run_id;
 						} else {
-						print $log "Skipping Pindel ($chr) because this has already been completed!\n";
+						print $log "  >> Skipping Pindel ($chr) because this has already been completed!\n";
 						}
 					}
 				}
@@ -664,7 +666,7 @@ sub main {
 				if ('Y' eq missing_file($merged_file . '.md5')) {
 
 					# record command (in log directory) and then run job
-					print $log "Submitting job for merge step...\n";
+					print $log "  >> Submitting job for merge step...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
@@ -688,7 +690,7 @@ sub main {
 					push @sample_jobs, $run_id;
 					push @all_jobs, $run_id;
 					} else {
-					print $log "Skipping merge step because this has already been completed!\n";
+					print $log "  >> Skipping merge step because this has already been completed!\n";
 					}
 				}
 
@@ -704,7 +706,7 @@ sub main {
 			if ('Y' eq missing_file($merged_vcf . '.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for Pindel2VCF...\n";
+				print $log "  >> Submitting job for Pindel2VCF...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -729,7 +731,7 @@ sub main {
 				push @sample_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping Pindel2VCF because this has already been completed!\n";
+				print $log "  >> Skipping Pindel2VCF because this has already been completed!\n";
 				}
 
 			### Run variant annotation (VEP + vcf2maf)
@@ -768,7 +770,7 @@ sub main {
 					);
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for vcf2maf...\n";
+				print $log "  >> Submitting job for vcf2maf...\n";
 
 				$run_script = write_script(
 					log_dir => $log_directory,
@@ -794,7 +796,7 @@ sub main {
 				push @sample_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping vcf2maf because this has already been completed!\n";
+				print $log "  >> Skipping vcf2maf because this has already been completed!\n";
 				}
 
 			push @final_outputs, $final_maf;
@@ -810,7 +812,7 @@ sub main {
 
 			unless (scalar(@patient_jobs) == 0) {
 
-				print $log "Submitting job to clean up temporary/intermediate files...\n";
+				print $log ">> Submitting job to clean up temporary/intermediate files...\n";
 
 				# make sure final output exists before removing intermediate files!
 				$cleanup_cmd = join("\n",

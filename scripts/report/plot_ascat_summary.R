@@ -111,7 +111,7 @@ ploidy.estimates <- ploidy.estimates[order(ploidy.estimates$PGA),];
 ploidy.estimates$Order <- 1:nrow(ploidy.estimates);
 
 # collect list of all (ordered) samples
-all.samples <- ploidy.estimates$Sample;
+all.samples <- rownames(ploidy.estimates);
 
 # makes sure input.data is sorted
 input.data$Chromosome <- factor(input.data$Chromosome, levels = paste0('chr',c(1:22,'X','Y')));
@@ -209,7 +209,7 @@ create.heatmap(
 pga.plot <- create.barplot(
 	Order ~ PGA,
 	ploidy.estimates,
-	yaxis.lab = rev(ploidy.estimates$Sample),
+	yaxis.lab = simplify.ids(rev(rownames(ploidy.estimates))),
 	ylimits = c(0.5, length(all.samples)+0.5),
 	yat = seq(1,length(all.samples)),
 	xaxis.tck = c(0.5,0),

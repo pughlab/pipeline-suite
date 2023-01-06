@@ -1,3 +1,7 @@
+2023-01-06: PughLab pipeline-suite (version 0.8.1)
+- improved readability of pipeline-suite output logs
+- minor other updates/bug fixes to report functions
+
 2022-12-21: PughLab pipeline-suite (version 0.8.0)
 - MAJOR CHANGE (pughlab_pipeline_auto_report.pl): complete overhaul of summarize/report steps (complete reorganization [split summarize/report]; extra error checking; incorporated all new tools)
   - NEW: plot_ascat_summary.R for summary plots for ASCAT output

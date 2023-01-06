@@ -752,7 +752,7 @@ sub main{
 	# check if we should annotate these variants
 	my $should_run_vcf2maf = 0;
 	my $annotated_directory = join('/', $cohort_directory, 'VCF2MAF');
-	if ('Y' eq $parameters->{run_vcf2maf}) {
+	if ( (defined($parameters->{run_vcf2maf})) && ('Y' eq $parameters->{run_vcf2maf}) ) {
 		$should_run_vcf2maf = 1;
 		unless (-e $annotated_directory) { make_path($annotated_directory); }
 		}
@@ -762,7 +762,7 @@ sub main{
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		my @tumour_ids = keys %{$smp_data->{$patient}->{tumour}};
 		my @normal_ids = keys %{$smp_data->{$patient}->{normal}};
@@ -794,7 +794,7 @@ sub main{
 		if ('Y' eq missing_file("$filtered_output.md5")) {
 
 			# record command (in log directory) and then run job
-			print $log "Submitting job for FILTER HC VARIANTS...\n";
+			print $log ">>Submitting job for FILTER HC VARIANTS...\n";
 
 			$run_script = write_script(
 				log_dir	=> $log_directory,
@@ -819,7 +819,7 @@ sub main{
 			push @germline_jobs, $filter_run_id;
 			push @all_jobs, $filter_run_id;
 			} else {
-			print $log "Skipping extract-germline because this has already been completed!\n";
+			print $log ">>Skipping extract-germline because this has already been completed!\n";
 			}
 
 		push @final_outputs, $filtered_output . '.gz';
@@ -829,7 +829,7 @@ sub main{
 		# for each sample, extract and annotate variants
 		foreach my $sample ( @samples ) {
 
-			print $log "\n>> Running SAMPLE: $sample\n";
+			print $log "\n  Running SAMPLE: $sample\n";
 
 			my ($list, $normal) = undef;
 			if ( (any { $_ =~ m/$sample/ } @normal_ids) ) {
@@ -872,7 +872,7 @@ sub main{
 				) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for subset step...\n";
+				print $log "  >>Submitting job for subset step...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -895,7 +895,7 @@ sub main{
 
 				push @all_jobs, $subset_run_id;
 				} else {
-				print $log "Skipping subset step because this has already been completed!\n";
+				print $log "  >>Skipping subset step because this has already been completed!\n";
 				}
 
 			### Run variant annotation (VEP + vcf2maf)
@@ -929,7 +929,7 @@ sub main{
 					);
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for vcf2maf...\n";
+				print $log "  >>Submitting job for vcf2maf...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -955,7 +955,7 @@ sub main{
 				push @annotate_jobs, $annotate_run_id;
 				push @all_jobs, $annotate_run_id;
 				} else {
-				print $log "Skipping vcf2maf because this has already been completed!\n";
+				print $log "  >>Skipping vcf2maf because this has already been completed!\n";
 				}
 
 			push @final_outputs, $final_maf;

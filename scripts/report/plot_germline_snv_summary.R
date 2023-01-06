@@ -299,7 +299,7 @@ if (!is.null(arguments$report)) {
 	recurrence.caption <- "Summary of pathogenic germline variants (SNVs and INDELs). Figure shows most frequently mutated genes; background colours indicate predicted functional consequence (white = no mutation detected) while circles indicate the variant was detected in the tumour (such that absence suggests the germline mutation may have reverted); black indicates VAF $>=$ 0.5. For T/N pairs, germline variants are detected in the normal sample. For tumour-only samples, variants are those detected in any tumour for a given patient (ie, for patients with multiple tumours, the variant may be in any them).";
 
 	# write for latex
-	write("\\section{Germline SNV Summary}", file = tex.file);
+	write("\\section{Germline Mutation Summary}", file = tex.file);
 
 	# first, check for mutation_overlap plot
 	if (nrow(mutation.data) == 0) {

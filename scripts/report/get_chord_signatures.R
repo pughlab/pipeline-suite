@@ -380,7 +380,7 @@ if (!is.null(arguments$report)) {
 		), file = tex.file, append = TRUE);
 	write("\\end{center}", file = tex.file, append = TRUE);
 	write(paste0(
-		"\\caption{CHORD signature predictions; signature probabilities with 5-95\% confidence intervals are shown for each signature for each sample.}"
+		"\\caption{CHORD signature predictions; signature probabilities with 5-95\\% confidence intervals are shown for each signature for each sample.}"
 		), file = tex.file, append = TRUE);
 	write("\\end{figure}\n", file = tex.file, append = TRUE);
 

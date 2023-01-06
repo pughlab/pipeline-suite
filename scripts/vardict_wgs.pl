@@ -488,7 +488,7 @@ sub main {
 			if ('Y' eq missing_file($is_split_complete)) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for SplitBam...\n";
+				print $log ">> Submitting job for SplitBam ($normal)...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -512,7 +512,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping SplitBAM because this has already been completed!\n";
+				print $log ">> Skipping SplitBAM ($normal) because this has already been completed!\n";
 				}
 			}
 
@@ -531,7 +531,7 @@ sub main {
 			if ('Y' eq missing_file($is_split_complete)) {
 		
 				# record command (in log directory) and then run job
-				print $log "Submitting job for SplitBam...\n";
+				print $log ">> Submitting job for SplitBam ($tumour)...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -557,7 +557,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping SplitBAM because this has already been completed!\n";
+				print $log ">> Skipping SplitBAM ($tumour) because this has already been completed!\n";
 				}
 
 			# if there are any samples to run, we will run the final combine job
@@ -571,7 +571,7 @@ sub main {
 		if ('Y' eq missing_file($is_split_complete)) {
 		
 			# record command (in log directory) and then run job
-			print $log "Submitting job for check SplitBAMs...\n";
+			print $log ">> Submitting job for check SplitBAMs...\n";
 
 			$run_script = write_script(
 				log_dir	=> $log_directory,
@@ -596,7 +596,7 @@ sub main {
 		# check if this patient ONLY has a normal
 		if ( (scalar(@tumour_ids) == 0) & (scalar(@normal_ids) > 0)) {
 
-			print $log "  SAMPLE: $normal_ids[0]\n\n";
+			print $log "\n  SAMPLE: $normal_ids[0]\n";
 
 			my $sample_directory = join('/', $patient_directory, $normal_ids[0]);
 			unless(-e $sample_directory) { make_path($sample_directory); }
@@ -630,7 +630,7 @@ sub main {
 				if ('Y' eq missing_file($merged_stem . ".vcf.md5")) {
 
 					# record command (in log directory) and then run job
-					print $log "Submitting job for VarDict WGS ($task_array_modifier)...\n";
+					print $log "  >> Submitting job for VarDict WGS ($task_array_modifier)...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
@@ -658,7 +658,7 @@ sub main {
 					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
 					} else {
-					print $log "Skipping VarDict because this has already been completed!\n";
+					print $log "  >> Skipping VarDict because this has already been completed!\n";
 					}
 
 				$task_array_modifier += 1000;
@@ -676,7 +676,7 @@ sub main {
 			if ('Y' eq missing_file($merged_stem . '.vcf.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for VarDict testSomatic...\n";
+				print $log "  >> Submitting job for VarDict testSomatic...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -704,7 +704,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping VarDict testSomatic because this has already been completed!\n";
+				print $log "  >> Skipping VarDict testSomatic because this has already been completed!\n";
 				}
 
 			# merge per-chromosome output
@@ -745,7 +745,7 @@ sub main {
 			if ('Y' eq missing_file($new_germline . '.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for VCF-Filter...\n";
+				print $log "  >> Submitting job for VCF-Filter...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -772,7 +772,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping VCF-Filter because this has already been completed!\n";
+				print $log "  >> Skipping VCF-Filter because this has already been completed!\n";
 				push @germline_jobs, '';
 				}
 
@@ -782,7 +782,7 @@ sub main {
 		# for each tumour sample
 		foreach my $sample (@tumour_ids) {
 
-			print $log "  SAMPLE: $sample\n\n";
+			print $log "\n  SAMPLE: $sample\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
@@ -817,7 +817,7 @@ sub main {
 				if ('Y' eq missing_file($merged_stem . ".vcf.md5")) {
 
 					# record command (in log directory) and then run job
-					print $log "Submitting job for VarDict WGS ($task_array_modifier)...\n";
+					print $log "  >> Submitting job for VarDict WGS ($task_array_modifier)...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
@@ -843,7 +843,7 @@ sub main {
 					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
 					} else {
-					print $log "Skipping VarDict because this has already been completed!\n";
+					print $log "  >> Skipping VarDict because this has already been completed!\n";
 					}
 
 				$task_array_modifier += 1000;
@@ -862,7 +862,7 @@ sub main {
 			if ('Y' eq missing_file($merged_stem . '.vcf.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for VarDict testSomatic...\n";
+				print $log "  >> Submitting job for VarDict testSomatic...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -888,7 +888,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping VarDict testSomatic because this has already been completed!\n";
+				print $log "  >> Skipping VarDict testSomatic because this has already been completed!\n";
 				}
 
 			# merge per-chromosome output
@@ -937,7 +937,7 @@ sub main {
 			if ('Y' eq missing_file($merged_stem . '_somatic_hc.vcf.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for VCF-Filter...\n";
+				print $log "  >> Submitting job for VCF-Filter...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -964,7 +964,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping VCF-Filter because this has already been completed!\n";
+				print $log "  >> Skipping VCF-Filter because this has already been completed!\n";
 				push @germline_jobs, '';
 				}
 
@@ -1002,7 +1002,7 @@ sub main {
 					);
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for T/N vcf2maf...\n";
+				print $log "  >> Submitting job for T/N vcf2maf...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -1029,7 +1029,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping vcf2maf because this has already been completed!\n";
+				print $log "  >> Skipping vcf2maf because this has already been completed!\n";
 				}
 
 			if (scalar(@sample_jobs) == 0) { `rm -rf $tmp_directory`; }
@@ -1074,7 +1074,7 @@ sub main {
 				if ('Y' eq missing_file($merged_germline . '.md5')) {
 
 					# record command (in log directory) and then run job
-					print $log "Submitting job for PoN prep...\n";
+					print $log ">> Submitting job for PoN prep...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
@@ -1108,7 +1108,7 @@ sub main {
 
 			unless (scalar(@patient_jobs) == 0) {
 
-				print $log "Submitting job to clean up temporary/intermediate files...\n";
+				print $log ">> Submitting job to clean up temporary/intermediate files...\n";
 
 				# make sure final output exists before removing intermediate files!
 				my @files_to_check;
@@ -1177,6 +1177,9 @@ sub main {
 
 		$pon_command .= "\nmd5sum $pon > $pon.md5";
 
+		# record command (in log directory) and then run job
+		print $log "\n---\nSubmitting job for Create PoN...\n";
+
 		$run_script = write_script(
 			log_dir	=> $log_directory,
 			name	=> 'create_sitesOnly_trimmed_panel_of_normals',
@@ -1199,6 +1202,8 @@ sub main {
 
 		$pon = $final_pon_link;
 		}
+
+	print $log "\n---\n";
 
 	# now that we have a PoN, resume processing tumour-only samples
 	foreach my $patient (sort keys %{$smp_data}) {
@@ -1224,7 +1229,7 @@ sub main {
 		# for each tumour sample
 		foreach my $sample (@tumour_ids) {
 
-			print $log "  SAMPLE: $sample\n\n";
+			print $log "\n  SAMPLE: $sample\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
@@ -1258,7 +1263,7 @@ sub main {
 			if ('Y' eq missing_file($is_split_complete)) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for SplitBam...\n";
+				print $log "  >> Submitting job for SplitBam...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -1283,7 +1288,7 @@ sub main {
 				push @all_jobs, $run_id;
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for check SplitBAMs...\n";
+				print $log "  >> Submitting job for check SplitBAMs...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -1304,7 +1309,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping SplitBAM because this has already been completed!\n";
+				print $log "  >> Skipping SplitBAM because this has already been completed!\n";
 				}
 
 			# create output stem
@@ -1333,7 +1338,7 @@ sub main {
 				if ('Y' eq missing_file($merged_stem . ".vcf.md5")) {
 
 					# record command (in log directory) and then run job
-					print $log "Submitting job for VarDict WGS ($task_array_modifier)...\n";
+					print $log "  >> Submitting job for VarDict WGS ($task_array_modifier)...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
@@ -1359,7 +1364,7 @@ sub main {
 					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
 					} else {
-					print $log "Skipping VarDict because this has already been completed!\n";
+					print $log "  >> Skipping VarDict because this has already been completed!\n";
 					}
 
 				$task_array_modifier += 1000;
@@ -1377,7 +1382,7 @@ sub main {
 			if ('Y' eq missing_file($merged_stem . '.vcf.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for VarDict testSomatic...\n";
+				print $log "  >> Submitting job for VarDict testSomatic...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -1403,7 +1408,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping VarDict testSomatic because this has already been completed!\n";
+				print $log "  >> Skipping VarDict testSomatic because this has already been completed!\n";
 				}
 
 			# merge per-chromosome output
@@ -1431,7 +1436,7 @@ sub main {
 			if ('Y' eq missing_file($merged_stem . '_filtered.vcf.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for VCF-Filter...\n";
+				print $log "  >> Submitting job for VCF-Filter...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -1457,7 +1462,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping VCF-Filter because this has already been completed!\n";
+				print $log "  >> Skipping VCF-Filter because this has already been completed!\n";
 				}
 
 			### Run variant annotation (VEP + vcf2maf)
@@ -1491,7 +1496,7 @@ sub main {
 					);
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for tumour-only vcf2maf...\n";
+				print $log "  >> Submitting job for tumour-only vcf2maf...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -1518,7 +1523,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping vcf2maf because this has already been completed!\n";
+				print $log "  >> Skipping vcf2maf because this has already been completed!\n";
 				}
 
 			if (scalar(@sample_jobs) == 0) { `rm -rf $tmp_directory`; }
@@ -1532,7 +1537,7 @@ sub main {
 
 			unless (scalar(@patient_jobs) == 0) {
 
-				print $log "Submitting job to clean up temporary/intermediate files...\n";
+				print $log ">> Submitting job to clean up temporary/intermediate files...\n";
 
 				# make sure final output exists before removing intermediate files!
 				my @files_to_check;

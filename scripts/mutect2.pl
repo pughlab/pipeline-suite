@@ -477,7 +477,7 @@ sub pon {
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		# find bams
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
@@ -499,7 +499,7 @@ sub pon {
 			$link = join('/', $link_directory, $tmp[-1]);
 			symlink($smp_data->{$patient}->{normal}->{$sample}, $link);
 
-			print $log "  SAMPLE: $sample\n\n";
+			print $log "\n  SAMPLE: $sample\n";
 
 			# run MuTect
 			my $mutect_vcf = join('/', $intermediate_directory, $sample . '_MuTect2.vcf');
@@ -539,7 +539,7 @@ sub pon {
 				if ('Y' eq missing_file("$mutect_vcf.md5")) {
 
 					# record command (in log directory) and then run job
-					print $log "Submitting job for MuTect2 artifact_detection_mode...\n";
+					print $log "  >> Submitting job for MuTect2 artifact_detection_mode...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
@@ -563,7 +563,7 @@ sub pon {
 					push @chr_jobs, $run_id;
 					push @all_jobs, $run_id;
 					} else {
-					print $log "Skipping MuTect2 artifact_detection because this has already been completed!\n";
+					print $log "  >> Skipping MuTect2 artifact_detection because this has already been completed!\n";
 					}
 
 				# if not SLURM HPC driver, but multiple chroms
@@ -598,7 +598,7 @@ sub pon {
 				if ('Y' eq missing_file("$mutect_vcf.md5")) {
 
 					# record command (in log directory) and then run job
-					print $log "Submitting job for MuTect2 artifact_detection_mode...\n";
+					print $log "  >> Submitting job for MuTect2 artifact_detection_mode...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
@@ -622,7 +622,7 @@ sub pon {
 					push @chr_jobs, $run_id;
 					push @all_jobs, $run_id;
 					} else {
-					print $log "Skipping MuTect2 artifact_detection because this has already been completed!\n";
+					print $log "  >> Skipping MuTect2 artifact_detection because this has already been completed!\n";
 					}
 
 				# otherwise, for a single chrom/panel:
@@ -642,7 +642,7 @@ sub pon {
 				if ('Y' eq missing_file("$mutect_vcf.md5")) {
 
 					# record command (in log directory) and then run job
-					print $log "Submitting job for MuTect2 artifact_detection_mode...\n";
+					print $log "  >> Submitting job for MuTect2 artifact_detection_mode...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
@@ -665,7 +665,7 @@ sub pon {
 
 					push @all_jobs, $run_id;
 					} else {
-					print $log "Skipping MuTect2 artifact_detection because this has already been completed!\n";
+					print $log "  >> Skipping MuTect2 artifact_detection because this has already been completed!\n";
 					}
 				}
 
@@ -684,7 +684,7 @@ sub pon {
 				if ('Y' eq missing_file("$mutect_vcf.md5")) {
 
 					# record command (in log directory) and then run job
-					print $log "Submitting job for Merge step...\n";
+					print $log "  >> Submitting job for Merge step...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
@@ -708,7 +708,7 @@ sub pon {
 
 					push @all_jobs, $run_id;
 					} else {
-					print $log "Skipping Merge chromosomes because this has already been completed!\n";
+					print $log "  >> Skipping Merge chromosomes because this has already been completed!\n";
 					}
 				}
 
@@ -729,7 +729,7 @@ sub pon {
 			if ('Y' eq missing_file("$filtered_stem.vcf.md5")) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for VCF-filter...\n";
+				print $log "  >> Submitting job for VCF-filter...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -753,7 +753,7 @@ sub pon {
 
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping VCF-filter because this has already been completed!\n";
+				print $log "  >> Skipping VCF-filter because this has already been completed!\n";
 				}
 
 			push @pon_vcfs, join(' ', "-V:$sample", $filtered_stem . ".vcf");
@@ -790,7 +790,7 @@ sub pon {
 	if ('Y' eq missing_file($pon . ".md5")) {
 
 		# record command (in log directory) and then run job
-		print $log "Submitting job for Generate PanelOfNormals...\n";
+		print $log ">> Submitting job for Generate PanelOfNormals...\n";
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
@@ -814,13 +814,13 @@ sub pon {
 
 		push @all_jobs, $run_id;
 		} else {
-		print $log "Skipping Generate PanelOfNormals because this has already been completed!\n";
+		print $log ">> Skipping Generate PanelOfNormals because this has already been completed!\n";
 		}
 
 	# should intermediate files be removed
 	if ($args{del_intermediates}) {
 
-		print $log "Submitting job to clean up temporary/intermediate files...\n";
+		print $log ">> Submitting job to clean up temporary/intermediate files...\n";
 
 		# make sure final output exists before removing intermediate files!
 		$cleanup_cmd = join("\n",
@@ -1068,7 +1068,7 @@ sub main {
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		# find bams
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
@@ -1108,7 +1108,7 @@ sub main {
 			# if there are any samples to run, we will run the final combine job
 			$should_run_final = 1;
 
-			print $log "  SAMPLE: $sample\n\n";
+			print $log "\n  SAMPLE: $sample\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
@@ -1135,17 +1135,17 @@ sub main {
 			# Tumour only, with a panel of normals
 			if ( (defined($pon)) && (scalar(@normal_ids) == 0) ) {
 
-				print $log "PON defined and no normals detected, so running tumour-only...\n";
+				print $log "  >> PON defined and no normals detected, so running tumour-only...\n";
 
 				# paired tumour/normal
 				} elsif (scalar(@normal_ids) > 0) {
 
-				print $log "T/N pair detected, running paired mode...\n";
+				print $log "  >> T/N pair detected, running paired mode...\n";
 				$normal_bam = $smp_data->{$patient}->{normal}->{$normal_ids[0]};
 
 				# else, skip this sample
 				} else {
-					print $log "no PON or normal detected...skipping this sample...\n";
+					print $log "  >> no PON or normal detected...skipping this sample...\n";
 					next;
 				}
 
@@ -1211,7 +1211,7 @@ sub main {
 					) {
 
 					# record command (in log directory) and then run job
-					print $log "Submitting job for MuTect2 (split by chromosome)...\n";
+					print $log "  >> Submitting job for MuTect2 (split by chromosome)...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
@@ -1236,7 +1236,7 @@ sub main {
 					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
 					} else {
-					print $log "Skipping MuTect2 (split by chromosome) because this has already been completed!\n";
+					print $log "  >> Skipping MuTect2 (split by chromosome) because this has already been completed!\n";
 					}
 
 				# otherwise, submit one job for each chromosome
@@ -1264,7 +1264,7 @@ sub main {
 					if ('Y' eq missing_file(@required)) {
 
 						# record command (in log directory) and then run job
-						print $log "Submitting job for MuTect2 ($chr)...\n";
+						print $log "  >> Submitting job for MuTect2 ($chr)...\n";
 
 						$run_script = write_script(
 							log_dir	=> $log_directory,
@@ -1289,7 +1289,7 @@ sub main {
 						push @patient_jobs, $run_id;
 						push @all_jobs, $run_id;
 						} else {
-						print $log "Skipping MuTect2 ($chr) because this has already been completed!\n";
+						print $log "  >> Skipping MuTect2 ($chr) because this has already been completed!\n";
 						}
 					}
 				}
@@ -1312,7 +1312,7 @@ sub main {
 				if ('Y' eq missing_file("$merged_output.md5")) {
 
 					# record command (in log directory) and then run job
-					print $log "Submitting job for Merge step...\n";
+					print $log "  >> Submitting job for Merge step...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
@@ -1338,7 +1338,7 @@ sub main {
 					push @all_jobs, $run_id;
 
 					} else {
-					print $log "Skipping Merge chromosomes because this has already been completed!\n";
+					print $log "  >> Skipping Merge chromosomes because this has already been completed!\n";
 					}
 				}
 
@@ -1365,7 +1365,7 @@ sub main {
 			if ('Y' eq missing_file($filtered_stem . '.vcf.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for VCF-filter...\n";
+				print $log "  >> Submitting job for VCF-filter...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -1390,7 +1390,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping VCF-filter because this has already been completed!\n";
+				print $log "  >> Skipping VCF-filter because this has already been completed!\n";
 				}
 
 			### Run variant annotation (VEP + vcf2maf)
@@ -1464,7 +1464,7 @@ sub main {
 					);
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for vcf2maf...\n";
+				print $log "  >> Submitting job for vcf2maf...\n";
 
 				$run_script = write_script(
 					log_dir => $log_directory,
@@ -1490,7 +1490,7 @@ sub main {
 				push @patient_jobs, $maf_run_id;
 				push @all_jobs, $maf_run_id;
 				} else {
-				print $log "Skipping vcf2maf because this has already been completed!\n";
+				print $log "  >> Skipping vcf2maf because this has already been completed!\n";
 				}
 
 			push @final_outputs, $final_maf;
@@ -1504,7 +1504,7 @@ sub main {
 				`rm -rf $tmp_directory`;
 				} else {
 
-				print $log "Submitting job to clean up temporary/intermediate files...\n";
+				print $log ">> Submitting job to clean up temporary/intermediate files...\n";
 
 				# make sure final output exists before removing intermediate files!
 				my @files_to_check;

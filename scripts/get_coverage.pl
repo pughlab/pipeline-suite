@@ -259,12 +259,12 @@ sub main {
 		}
 
 	my ($run_script, $run_id, $link, $cleanup_cmd, $should_run_final);
-	my @all_jobs;
+	my (@all_jobs, @coverage_jobs, @callable_base_jobs);
 
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		# find bams
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
@@ -307,7 +307,7 @@ sub main {
 			# if there are any samples to run, we will run the final combine job
 			$should_run_final = 1;
 
-			print $log "  SAMPLE: $sample\n\n";
+			print $log "\n  SAMPLE: $sample\n";
 
 			my $type;
 			if ( (any { $_ =~ m/$sample/ } @normal_ids) ) {
@@ -343,7 +343,7 @@ sub main {
 			if ('Y' eq missing_file($coverage_out . '.sample_summary.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for DepthOfCoverage...\n";
+				print $log "  >> Submitting job for DepthOfCoverage...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -366,9 +366,9 @@ sub main {
 					);
 
 				push @patient_jobs, $run_id;
-				push @all_jobs, $run_id;
+				push @coverage_jobs, $run_id;
 				} else {
-				print $log "Skipping DepthOfCoverage because this has already been completed!\n";
+				print $log "  >> Skipping DepthOfCoverage because this has already been completed!\n";
 				}
 
 			push @final_outputs, $coverage_out . ".read_group_statistics";
@@ -392,7 +392,7 @@ sub main {
 				) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for Callable Bases...\n";
+				print $log "  >> Submitting job for Callable Bases...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -415,9 +415,9 @@ sub main {
 
 				push @cb_jobs, $run_id;
 				push @patient_jobs, $run_id;
-				push @all_jobs, $run_id;
+				push @callable_base_jobs, $run_id;
 				} else {
-				print $log "Skipping Get Callable Bases because this has already been completed!\n";
+				print $log "  >> Skipping Get Callable Bases because this has already been completed!\n";
 				}
 			}
 
@@ -444,7 +444,7 @@ sub main {
 
 			if ('Y' eq missing_file($cb_intersect . '.md5')) {
 
-				print $log "Submitting job for CallableBases Intersect...\n";
+				print $log ">> Submitting job for CallableBases Intersect...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -467,9 +467,9 @@ sub main {
 					);
 
 				push @patient_jobs, $run_id;
-				push @all_jobs, $run_id;
+				push @callable_base_jobs, $run_id;
 				} else {
-				print $log "Skipping CallableBases Intersect because this has already been completed!\n";
+				print $log ">> Skipping CallableBases Intersect because this has already been completed!\n";
 				}
 
 			push @final_outputs, $cb_intersect;
@@ -484,7 +484,7 @@ sub main {
 				`rm -rf $tmp_directory`;
 				} else {
 
-				print $log "Submitting job to clean up temporary/intermediate files...\n";
+				print $log ">> Submitting job to clean up temporary/intermediate files...\n";
 
 				# make sure final output exists before removing intermediate files!
 				my @files_to_check;
@@ -527,6 +527,9 @@ sub main {
 		print $log "---\n";
 		}
 
+	push @all_jobs, @coverage_jobs;
+	push @all_jobs, @callable_base_jobs;
+
 	# collate results
 	if ($should_run_final) {
 
@@ -536,12 +539,15 @@ sub main {
 			'-p', $tool_data->{project_name}
 			);
 
+		# record command (in log directory) and then run job
+		print $log ">> Submitting job to collect coverage output...\n";
+
 		$run_script = write_script(
 			log_dir	=> $log_directory,
 			name	=> 'combine_coverage_output',
 			cmd	=> $collect_coverage_output,
 			modules	=> [$r_version],
-			dependencies	=> join(':', @all_jobs),
+			dependencies	=> join(':', @coverage_jobs),
 			mem		=> '4G',
 			max_time	=> '12:00:00',
 			hpc_driver	=> $args{hpc_driver},
@@ -564,12 +570,15 @@ sub main {
 			'-p', $tool_data->{project_name}
 			);
 
+		# record command (in log directory) and then run job
+		print $log ">> Submitting job to collect callable bases...\n";
+
 		$run_script = write_script(
 			log_dir	=> $log_directory,
 			name	=> 'combine_callable_base_output',
 			cmd	=> $collect_cb_output,
 			modules	=> [$r_version],
-			dependencies	=> join(':', @all_jobs),
+			dependencies	=> join(':', @callable_base_jobs),
 			mem		=> '4G',
 			max_time	=> '12:00:00',
 			hpc_driver	=> $args{hpc_driver},

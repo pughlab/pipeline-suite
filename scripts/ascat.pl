@@ -226,10 +226,12 @@ sub main {
 		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
 		}
 
+	print $log "\n---";
+
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		# find bams
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};	
@@ -269,7 +271,7 @@ sub main {
 			# if there are any samples to run, we will run the final combine job
 			$should_run_final = 1;
 
-			print $log "  SAMPLE: $sample\n";
+			print $log "\n  SAMPLE: $sample\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
@@ -298,7 +300,7 @@ sub main {
 			if ('Y' eq missing_file($ascat_output)) {
 
 				# record command (in log directory) and then run job
-				print $log "  >>Submitting job for ASCAT...\n";
+				print $log "  >> Submitting job for ASCAT...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -324,7 +326,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "  >>Skipping ASCAT step because this has already been completed!\n";
+				print $log "  >> Skipping ASCAT step because this has already been completed!\n";
 				}
 
 			push @final_outputs, $ascat_output;
@@ -336,7 +338,7 @@ sub main {
 
 			if (scalar(@patient_jobs) > 0) {
 
-				print $log "Submitting job to clean up temporary/intermediate files...\n";
+				print $log ">> Submitting job to clean up temporary/intermediate files...\n";
 
 				# make sure final output exists before removing intermediate files!
 				$cleanup_cmd = join("\n",

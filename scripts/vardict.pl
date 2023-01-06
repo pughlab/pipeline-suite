@@ -302,7 +302,7 @@ sub main {
 		unless(-e $pon_directory) { make_path($pon_directory); }
 		unless(-e $pon_intermediates) { make_path($pon_intermediates); }
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		# create some directories
 		my $patient_directory = join('/', $output_directory, $patient);

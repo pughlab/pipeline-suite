@@ -35,8 +35,19 @@ save.session.profile <- function(file.name) {
 
 	}
 
+# add entrez gene ID based on symbol
+annotate.by.symbol <- function(symbols) {
+	mapIds(org.Hs.eg.db,
+		keys = symbols,
+		keytype = 'SYMBOL',
+		column = 'ENTREZID',
+		multiVals = 'first'
+		);
+	}
+
 ### PREPARE SESSION ################################################################################
 # import libraries
+library(org.Hs.eg.db);
 library(argparse);
 library(plyr);
 
@@ -94,6 +105,8 @@ refGene$Chromosome <- factor(refGene$Chromosome, levels = paste0('chr', c(1:22,'
 refGene <- refGene[order(refGene$Chromosome, refGene$Start, refGene$End),];
 refGene$GeneID <- factor(refGene$GeneID, levels = as.character(refGene$GeneID));
 
+refGene$Entrez_Gene_ID <- annotate.by.symbol(refGene$Symbol);
+
 ### MAIN ###########################################################################################
 # find results files
 genes.files <- list.files(pattern = 'genes.results', recursive = TRUE);
@@ -143,7 +156,7 @@ isoforms.tmp <- join_all(
 
 # for gene data, clean up annotations
 genes.tmp <- merge(
-	refGene[,c('GeneID','Symbol','Type')],
+	refGene[,c('GeneID','Symbol','Entrez_Gene_ID','Type')],
 	genes.tmp,
 	by.x = 'GeneID',
 	by.y = 'gene_id'
@@ -152,17 +165,17 @@ genes.tmp <- merge(
 genes.tmp$GeneID <- factor(genes.tmp$GeneID, levels = levels(refGene$GeneID));
 genes.tmp <- genes.tmp[order(genes.tmp$GeneID),];
 
-genes.formatted$fpkm <- genes.tmp[,c(1,2, grep('FPKM', colnames(genes.tmp)))];
-genes.formatted$tpm  <- genes.tmp[,c(1,2, grep('TPM', colnames(genes.tmp)))];
-genes.formatted$expected_count  <- genes.tmp[,c(1,2, grep('expected_count', colnames(genes.tmp)))];
+genes.formatted$fpkm <- genes.tmp[,c(1:3, grep('FPKM', colnames(genes.tmp)))];
+genes.formatted$tpm  <- genes.tmp[,c(1:3, grep('TPM', colnames(genes.tmp)))];
+genes.formatted$expected_count  <- genes.tmp[,c(1:3, grep('expected_count', colnames(genes.tmp)))];
 
 colnames(genes.formatted$fpkm) <- gsub('.FPKM', '', colnames(genes.formatted$fpkm));
 colnames(genes.formatted$tpm)  <- gsub('.TPM', '', colnames(genes.formatted$tpm));
 colnames(genes.formatted$expected_count)  <- gsub('.expected_count', '', colnames(genes.formatted$expected_count));
 
-isoforms.formatted$fpkm <- isoforms.tmp[,c(1,2, grep('FPKM', colnames(isoforms.tmp)))];
-isoforms.formatted$tpm  <- isoforms.tmp[,c(1,2, grep('TPM', colnames(isoforms.tmp)))];
-isoforms.formatted$expected_count  <- isoforms.tmp[,c(1,2, grep('expected_count', colnames(isoforms.tmp)))];
+isoforms.formatted$fpkm <- isoforms.tmp[,c(1:3, grep('FPKM', colnames(isoforms.tmp)))];
+isoforms.formatted$tpm  <- isoforms.tmp[,c(1:3, grep('TPM', colnames(isoforms.tmp)))];
+isoforms.formatted$expected_count  <- isoforms.tmp[,c(1:3, grep('expected_count', colnames(isoforms.tmp)))];
 
 colnames(isoforms.formatted$fpkm) <- gsub('.FPKM', '', colnames(isoforms.formatted$fpkm));
 colnames(isoforms.formatted$tpm)  <- gsub('.TPM', '', colnames(isoforms.formatted$tpm));
@@ -177,6 +190,14 @@ write.table(
 	sep = '\t'
 	);
 
+write.table(
+	genes.formatted$expected_count,
+	file = generate.filename(arguments$project, 'rsem_expected_counts','tsv'),
+	row.names = FALSE,
+	col.names = TRUE,
+	sep = '\t'
+	);
+
 save(
 	genes.formatted,
 	isoforms.formatted,
@@ -184,31 +205,86 @@ save(
 	);
 
 # prep or cBioportal
-cbio <- genes.tmp[which(genes.tmp$Type == 'protein_coding'), c(1,2, grep('TPM', colnames(genes.tmp)))];
-colnames(cbio) <- gsub('.TPM', '', colnames(cbio));
+cbio <- cbio <- genes.formatted$tpm;
 
-#if (any(duplicated(cbio$Symbol))) {
-
-#	cbio$Symbol <- as.character(cbio$Symbol);
-
-#	dup.idx <- unique(cbio$Symbol[which(duplicated(cbio$Symbol))]);
-#	for (gene in dup.idx) {
-#		gene.idx <- which(cbio$Symbol == gene);
-#		cbio[gene.idx,]$Symbol <- apply(cbio[gene.idx,c('Symbol','GeneID')],1,paste,collapse = '_');
-#		}
-#	}
-
-#rownames(cbio) <- cbio$Symbol;
-#cbio <- cbio[,-c(1:2)];
-
-all.zero <- apply(cbio[,3:ncol(cbio)],1,sum);
+all.zero <- apply(cbio[,4:ncol(cbio)],1,sum);
 cbio <- cbio[which(all.zero > 0),];
 
+cbio <- cbio[!grepl("PAR_Y", cbio$GeneID),];
+
+# remove 'misc_RNA' without entrez gene ID
+remove.ids <- unique(refGene[which(refGene$Type == 'misc_RNA'),]$GeneID);
+cbio <- cbio[-which(cbio$GeneID %in% remove.ids & is.na(cbio$Entrez_Gene_ID)),];
+
+if (any(duplicated(cbio$Symbol))) {
+
+	dup.genes <- unique(cbio[duplicated(cbio$Symbol),]$Symbol);
+
+	if ('ZNF883' %in% dup.genes) {
+		cbio <- cbio[-which(cbio$Symbol == 'ZNF883' & !grepl('ENSG00000228623', cbio$GeneID)),];
+		}
+	if ('GGT1' %in% dup.genes) {
+		cbio <- cbio[-which(cbio$Symbol == 'GGT1' & !grepl('ENSG00000100031', cbio$GeneID)),];
+		}
+	if ('LINC01238' %in% dup.genes) {
+		cbio <- cbio[-which(cbio$Symbol == 'LINC01238' & !grepl('ENSG00000237940', cbio$GeneID)),];
+		}
+	if ('TMSB15B' %in% dup.genes) {
+		cbio <- cbio[-which(cbio$Symbol == 'TMSB15B' & !grepl('ENSG00000269226', cbio$GeneID)),];
+		}
+	if ('C2orf27A' %in% dup.genes) {
+		cbio <- cbio[-which(cbio$Symbol == 'C2orf27A' & !grepl('ENSG00000287151', cbio$GeneID)),];
+		}
+	if ('ARMCX5-GPRASP2' %in% dup.genes) {
+		cbio <- cbio[-which(cbio$Symbol == 'ARMCX5-GPRASP2' & !grepl('ENSG00000286237', cbio$GeneID)),];
+		}
+	if ('DIABLO' %in% dup.genes) {
+		cbio <- cbio[-which(cbio$Symbol == 'DIABLO' & !grepl('ENSG00000184047', cbio$GeneID)),];
+		}
+	if ('TBCE' %in% dup.genes) {
+		cbio <- cbio[-which(cbio$Symbol == 'TBCE' & !grepl('ENSG00000284770', cbio$GeneID)),];
+		}
+	if ('GOLGA8M' %in% dup.genes) {
+		cbio <- cbio[-which(cbio$Symbol == 'GOLGA8M' & !grepl('ENSG00000188626', cbio$GeneID)),];
+		}
+	if ('HSPA14' %in% dup.genes) {
+		cbio <- cbio[-which(cbio$Symbol == 'HSPA14' & !grepl('ENSG00000187522', cbio$GeneID)),];
+		}
+
+	dup.genes <- unique(cbio[duplicated(cbio$Symbol),]$Symbol);
+
+	cbio <- cbio[-which(cbio$Symbol %in% dup.genes & is.na(cbio$Entrez_Gene_ID)),];
+
+	dup.genes <- unique(cbio[duplicated(cbio$Symbol),]$Symbol);
+	if (length(dup.genes) > 0) {
+		cbio$var <- apply(cbio[,4:ncol(cbio)],1,var);
+		cbio <- cbio[order(cbio$Symbol, -cbio$var),];
+		cbio <- cbio[!duplicated(cbio$Symbol),];
+		}
+	}
+
+# format for TIMER
+timer.data <- cbio[,c(2,4:ncol(cbio))]; 
+rownames(timer.data) <- cbio$Symbol;
+timer.data <- timer.data[,-1];
+
+write.table(
+	timer.data,
+	file = generate.filename(arguments$project, 'mRNA_expression_TPM_for_TIMER','tsv'),
+	row.names = TRUE,
+	col.names = NA,
+	quote = FALSE,
+	sep = '\t'
+	);
+
+# set 0's to NA and log2 transform
 cbio[which(cbio == 0, arr.ind = TRUE)] <- NA;
 cbio <- cbind(
-	cbio[,1:2],
-	log2(cbio[,3:ncol(cbio)])
+	cbio[,2:3],
+	log2(cbio[,4:ncol(cbio)])
 	);
+colnames(cbio)[1] <- 'Hugo_Symbol';
+colnames(cbio)[2] <- 'Entrez_Gene_Id';
 
 write.table(
 	cbio,
