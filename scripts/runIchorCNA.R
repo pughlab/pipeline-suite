@@ -191,6 +191,10 @@ if (!is.null(normal_copy)) {
 
 message("Gender: ", gender$gender);
 
+if ('female' == gender$gender) {
+	chrs <- setdiff(chrs,'chrY');
+	}
+
 ## NORMALIZE GENOME-WIDE BY MATCHED NORMAL OR NORMAL PANEL (MEDIAN) ##
 tumour_copy[[id]] <- normalizeByPanelOrMatchedNormal(tumour_copy[[id]], chrs = chrs, 
 	normal_panel = normal_panel, normal_copy = normal_copy, 
