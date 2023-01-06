@@ -152,7 +152,8 @@ if (length(significant.hits) > 0) {
 	oncokb.to.print <- data.frame(
 		ID = oncokb.hits$Tumor_Sample_Barcode,
 		Gene = oncokb.hits$Hugo_Symbol,
-		Position = oncokb.hits$Start_Position,
+#		Position = oncokb.hits$Start_Position,
+		HGVSp = oncokb.hits$HGVSp_Short,
 		VAF = round(oncokb.hits$t_alt_count / oncokb.hits$t_depth,4),
 		VARIANT_IN_ONCOKB = as.logical(oncokb.hits$VARIANT_IN_ONCOKB),
 		Effect = oncokb.hits$MUTATION_EFFECT
