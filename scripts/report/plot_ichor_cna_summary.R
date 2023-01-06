@@ -183,8 +183,8 @@ create.heatmap(
 	covariates.top.grid.col = list(col = 'black', lwd = 1),
 	covariates.top.col.lines = chr.breaks,
 	inside.legend = list(fun = covariate.legends, x = 1.02, y = 1),
-	yaxis.lab = NA, #if (length(all.samples) == 1) { all.samples } else {
-#		gsub('\\.','-', simplify.ids(colnames(cna.data))) },
+	yaxis.lab = if (length(all.samples) == 1) { all.samples } else {
+		gsub('\\.','-', simplify.ids(colnames(cna.data))) },
 	yat = if (length(all.samples) == 1) { 1.5 } else { TRUE },
 	xaxis.lab = rep('',nrow(cna.data)),
 	yaxis.cex = axis.cex,

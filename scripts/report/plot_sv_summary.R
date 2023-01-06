@@ -380,43 +380,48 @@ plot.data <- data.frame(
 plot.data <- plot.data[!grepl('None', event.counts$Fusion),];
 plot.data <- plot.data[which(plot.data$Chromosome != 'chrY' & plot.data$Chromosome.1 != 'chrY'),];
 
-geneset <- intersect(driver.genes$Hugo_Symbol,
-	unique(unlist(sapply(event.counts$Fusion, function(i) { setdiff(unlist(strsplit(i,'--')),'None') } )))
+geneset <- intersect(
+	driver.genes$Hugo_Symbol,
+	unique(unlist(sapply(event.counts$Fusion,
+		function(i) { setdiff(unlist(strsplit(i,'--')),'None') } )))
 	);
 
 gene.data <- anno.data[which(anno.data$Gene %in% geneset),c(3,4,5,2)];
 
-# set-up circos environment
-RCircos.Set.Core.Components(cyto.info, chr.exclude = 'chrY', tracks.inside = 2, tracks.outside = 0);
+# plot results (if any)
+if (nrow(plot.data) > 0) {
 
-rcircos.params <- RCircos.Get.Plot.Parameters();
-rcircos.params$text.size <- 0.5;
-RCircos.Reset.Plot.Parameters(rcircos.params);
+	# set-up circos environment
+	RCircos.Set.Core.Components(cyto.info, chr.exclude = 'chrY', tracks.inside = 2, tracks.outside = 0);
 
-# initialize image
-png(filename = generate.filename(arguments$project, 'recurrent_SV_circos','png'),
-	res = 200, units = 'in', height = 6, width = 5);
+	rcircos.params <- RCircos.Get.Plot.Parameters();
+	rcircos.params$text.size <- 0.5;
+	RCircos.Reset.Plot.Parameters(rcircos.params);
 
-RCircos.Set.Plot.Area(margin = 0.01);
+	# initialize image
+	png(filename = generate.filename(arguments$project, 'recurrent_SV_circos','png'),
+		res = 200, units = 'in', height = 6, width = 5);
 
-par(mai=c(1.1, 0.1, 0.1, 0.1));
-plot.new();
-plot.window(c(-1.4, 1.4), c(-1.4, 1.4));
+	RCircos.Set.Plot.Area(margin = 0.01);
 
-RCircos.Draw.Chromosome.Ideogram();
-RCircos.Label.Chromosome.Names();
+	par(mai=c(1.1, 0.1, 0.1, 0.1));
+	plot.new();
+	plot.window(c(-1.4, 1.4), c(-1.4, 1.4));
 
-RCircos.Gene.Connector.Plot(gene.data, track.num = 1, side = 'in');
-RCircos.Gene.Name.Plot(gene.data, name.col = 4, track.num = 2, side = 'in');
+	RCircos.Draw.Chromosome.Ideogram();
+	RCircos.Label.Chromosome.Names();
 
-# ensure ordering
-x <- RCircos.Get.Paired.Points.Positions(plot.data, genomic.columns = 3, plot.type = "link");
-RCircos.Link.Plot(plot.data, track.num = 4, by.chromosome = FALSE, lineWidth = x$Count);
+	RCircos.Gene.Connector.Plot(gene.data, track.num = 1, side = 'in');
+	RCircos.Gene.Name.Plot(gene.data, name.col = 4, track.num = 2, side = 'in');
 
-grid.draw(functional.legend);
+	# ensure ordering
+	x <- RCircos.Get.Paired.Points.Positions(plot.data, genomic.columns = 3, plot.type = "link");
+	RCircos.Link.Plot(plot.data, track.num = 4, by.chromosome = FALSE, lineWidth = x$Count);
 
-dev.off();
+	grid.draw(functional.legend);
 
+	dev.off();
+	}
 
 # for each sample
 for (smp in tumour.samples) {
@@ -468,34 +473,38 @@ for (smp in tumour.samples) {
 			}
 		}
 
-	# set-up circos environment
-	RCircos.Set.Core.Components(cyto.info, chr.exclude = NULL, tracks.inside = 2, tracks.outside = 0);
+	# plot results (if any)
+	if (nrow(plot.data) > 0) {
 
-	rcircos.params <- RCircos.Get.Plot.Parameters();
-	rcircos.params$text.size <- 0.5;
-	RCircos.Reset.Plot.Parameters(rcircos.params);
+		# set-up circos environment
+		RCircos.Set.Core.Components(cyto.info, chr.exclude = NULL, tracks.inside = 2, tracks.outside = 0);
 
-	# initialize image
-	png(filename = generate.filename(smp, 'hc_SV_circos','png'),
-		res = 200, units = 'in', height = 6, width = 6);
+		rcircos.params <- RCircos.Get.Plot.Parameters();
+		rcircos.params$text.size <- 0.5;
+		RCircos.Reset.Plot.Parameters(rcircos.params);
 
-	RCircos.Set.Plot.Area(margin = 0.01);
+		# initialize image
+		png(filename = generate.filename(smp, 'hc_SV_circos','png'),
+			res = 200, units = 'in', height = 6, width = 6);
 
-	par(mai=c(0.1, 0.1, 0.1, 0.1));
-	plot.new();
-	plot.window(c(-1.4, 1.4), c(-1.4, 1.4));
+		RCircos.Set.Plot.Area(margin = 0.01);
 
-	RCircos.Draw.Chromosome.Ideogram();
-	RCircos.Label.Chromosome.Names();
+		par(mai=c(0.1, 0.1, 0.1, 0.1));
+		plot.new();
+		plot.window(c(-1.4, 1.4), c(-1.4, 1.4));
 
-	RCircos.Gene.Connector.Plot(gene.data, track.num = 1, side = 'in');
-	RCircos.Gene.Name.Plot(gene.data, name.col = 4, track.num = 2, side = 'in');
+		RCircos.Draw.Chromosome.Ideogram();
+		RCircos.Label.Chromosome.Names();
 
-	# ensure ordering
-	x <- RCircos.Get.Paired.Points.Positions(plot.data, genomic.columns = 3, plot.type = "link");
-	RCircos.Link.Plot(plot.data, track.num = 4, by.chromosome = FALSE, lineWidth = x$Evidence);
+		RCircos.Gene.Connector.Plot(gene.data, track.num = 1, side = 'in');
+		RCircos.Gene.Name.Plot(gene.data, name.col = 4, track.num = 2, side = 'in');
 
-	dev.off();
+		# ensure ordering
+		x <- RCircos.Get.Paired.Points.Positions(plot.data, genomic.columns = 3, plot.type = "link");
+		RCircos.Link.Plot(plot.data, track.num = 4, by.chromosome = FALSE, lineWidth = x$Evidence);
+
+		dev.off();
+		}
 
 	setwd(arguments$output);
 	}
