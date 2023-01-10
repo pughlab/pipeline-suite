@@ -477,9 +477,15 @@ for (smp in all.samples) {
 
 	functional.data <- functional.summary$per_vaf;
 	functional.data <- functional.data[which(functional.data$Tumor_Sample_Barcode == smp),];
+	if (any(is.na(functional.data$Proportion))) {
+		functional.data[is.na(functional.data$Proportion),]$Proportion <- 0;
+		}
 
 	basechange.data <- basechange.summary$per_vaf;
 	basechange.data <- basechange.data[which(basechange.data$Tumor_Sample_Barcode == smp),];
+	if (any(is.na(basechange.data$Proportion))) {
+		basechange.data[is.na(basechange.data$Proportion),]$Proportion <- 0;
+		}
 
 	# create plot for mutaiton counts
 	mutation.count.plot <- create.barplot(
@@ -591,6 +597,7 @@ msi.plot <- create.dotmap(
 	yaxis.fontface = 'plain',
 	yaxis.cex = 0.8,
 	colour.scheme = c('white','grey50','black'),
+	at = seq(0,2,1),
 	bg.alpha = 1,
 	lwd = 1, row.lwd = 1, col.lwd = 1,
 	row.colour = 'white',
@@ -634,6 +641,9 @@ if (min.noncoding > 0.995) { # typical for WGS
 	} else if (min.noncoding > 0.98) {
 	ylimits <- c(0.98, 1);
 	yat <- seq(0.98, 1, 0.005);
+	} else if (min.noncoding > 0.95) {
+	ylimits <- c(0.95, 1);
+	yat <- seq(0.95, 1, 0.01);
 	} else if (min.noncoding > 0.9) {
 	ylimits <- c(0.9, 1);
 	yat <- seq(0.9, 1, 0.02);
