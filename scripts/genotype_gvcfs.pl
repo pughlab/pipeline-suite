@@ -464,7 +464,7 @@ sub main{
 	if ('Y' eq missing_file("$combined_gvcf.md5")) {
 
 		# record command (in log directory) and then run job
-		print $log "Submitting job for GenotypeGVCFs...\n";
+		print $log ">> Submitting job for GenotypeGVCFs...\n";
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
@@ -487,14 +487,14 @@ sub main{
 
 		push @all_jobs, $genotype_run_id;
 		} else {
-		print $log "Skipping GenotypeGVCFs because this has already been completed!\n";
+		print $log ">> Skipping GenotypeGVCFs because this has already been completed!\n";
 		}
 
 	my $processed_vcf;
 	# should we perform hard filtering or VQSR?
 	if ('Y' eq $parameters->{hard_filtering}->{run}) {
 
-		print $log "Running with hard threshold filtering...\n";
+		print $log "\n---\nRunning with hard threshold filtering...\n";
 
 		my $hard_filter_run_id = '';
 		my $hard_filter_vcf = join('/',
@@ -518,7 +518,7 @@ sub main{
 		if ('Y' eq missing_file("$hard_filter_vcf.md5")) {
 
 			# record command (in log directory) and then run job
-			print $log "Submitting job for hard threshold filtering...\n";
+			print $log ">> Submitting job for hard threshold filtering...\n";
 
 			$run_script = write_script(
 				log_dir	=> $log_directory,
@@ -542,7 +542,7 @@ sub main{
 
 			push @all_jobs, $hard_filter_run_id
 			} else {
-			print $log "Skipping hard filtering because this has already been completed!\n";
+			print $log ">> Skipping hard filtering because this has already been completed!\n";
 			}
 
 		# indicate final filtered/recalibrated vcf and final job ID
@@ -551,7 +551,7 @@ sub main{
 
 		} else {
 
-		print $log "Running VQSR...\n";
+		print $log "\n---\nRunning VQSR...\n";
 
 		# Now run VQSR on INDELs
 		my $indel_vqsr_vcf = join('/', $cohort_directory, 'haplotype_caller_indel_recalibrated.vcf');
@@ -578,7 +578,7 @@ sub main{
 			) {
 
 			# record command (in log directory) and then run job
-			print $log "Submitting job for VQSR (INDELs)...\n";
+			print $log ">> Submitting job for VQSR (INDELs)...\n";
 
 			$run_script = write_script(
 				log_dir	=> $log_directory,
@@ -602,7 +602,7 @@ sub main{
 
 			push @all_jobs, $vqsr_indel_run_id;
 			} else {
-			print $log "Skipping VQSR (INDELs) because this has already been completed!\n";
+			print $log ">> Skipping VQSR (INDELs) because this has already been completed!\n";
 			}
 
 		# And finally, apply these recalibrations
@@ -625,7 +625,7 @@ sub main{
 			('Y' eq missing_file("$indel_vqsr_vcf.md5"))) {
 
 			# record command (in log directory) and then run job
-			print $log "Submitting job for INDEL recalibration...\n";
+			print $log ">> Submitting job for INDEL recalibration...\n";
 
 			$run_script = write_script(
 				log_dir	=> $log_directory,
@@ -649,7 +649,7 @@ sub main{
 
 			push @all_jobs, $apply_indel_recal_run_id;
 			} else {
-			print $log "Skipping apply VQSR (INDELs) because this has already been completed!\n";
+			print $log ">> Skipping apply VQSR (INDELs) because this has already been completed!\n";
 			}
 
 		# Now run VQSR on SNPs
@@ -669,7 +669,7 @@ sub main{
 			('Y' eq missing_file($output_stem . "_snp.recal")) ) {
 
 			# record command (in log directory) and then run job
-			print $log "Submitting job for VQSR (SNPs)...\n";
+			print $log ">> Submitting job for VQSR (SNPs)...\n";
 
 			$run_script = write_script(
 				log_dir	=> $log_directory,
@@ -693,7 +693,7 @@ sub main{
 
 			push @all_jobs, $vqsr_snp_run_id;
 			} else {
-			print $log "Skipping VQSR (SNPs) because this has already been completed!\n";
+			print $log ">> Skipping VQSR (SNPs) because this has already been completed!\n";
 			}
 
 		# And finally, apply these recalibrations
@@ -717,7 +717,7 @@ sub main{
 		if ('Y' eq missing_file("$final_vqsr_vcf.md5")) {
 
 			# record command (in log directory) and then run job
-			print $log "Submitting job for SNP recalibration...\n";
+			print $log ">> Submitting job for SNP recalibration...\n";
 
 			$run_script = write_script(
 				log_dir	=> $log_directory,
@@ -741,7 +741,7 @@ sub main{
 
 			push @all_jobs, $apply_snp_recal_run_id;
 			} else {
-			print $log "Skipping apply VQSR (SNPs) because this has already been completed!\n";
+			print $log ">> Skipping apply VQSR (SNPs) because this has already been completed!\n";
 			}
 
 		# indicate final filtered/recalibrated vcf and final job ID
@@ -759,10 +759,12 @@ sub main{
 
 	my (@germline_jobs, @annotate_jobs);
 
+	print $log "\n---";
+
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient";
+		print $log "\nInitiating process for PATIENT: $patient\n";
 
 		my @tumour_ids = keys %{$smp_data->{$patient}->{tumour}};
 		my @normal_ids = keys %{$smp_data->{$patient}->{normal}};
@@ -794,7 +796,7 @@ sub main{
 		if ('Y' eq missing_file("$filtered_output.md5")) {
 
 			# record command (in log directory) and then run job
-			print $log ">>Submitting job for FILTER HC VARIANTS...\n";
+			print $log ">> Submitting job for FILTER HC VARIANTS...\n";
 
 			$run_script = write_script(
 				log_dir	=> $log_directory,
@@ -819,7 +821,7 @@ sub main{
 			push @germline_jobs, $filter_run_id;
 			push @all_jobs, $filter_run_id;
 			} else {
-			print $log ">>Skipping extract-germline because this has already been completed!\n";
+			print $log ">> Skipping extract-germline because this has already been completed!\n";
 			}
 
 		push @final_outputs, $filtered_output . '.gz';
@@ -872,7 +874,7 @@ sub main{
 				) {
 
 				# record command (in log directory) and then run job
-				print $log "  >>Submitting job for subset step...\n";
+				print $log "  >> Submitting job for subset step...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -895,7 +897,7 @@ sub main{
 
 				push @all_jobs, $subset_run_id;
 				} else {
-				print $log "  >>Skipping subset step because this has already been completed!\n";
+				print $log "  >> Skipping subset step because this has already been completed!\n";
 				}
 
 			### Run variant annotation (VEP + vcf2maf)
@@ -929,7 +931,7 @@ sub main{
 					);
 
 				# record command (in log directory) and then run job
-				print $log "  >>Submitting job for vcf2maf...\n";
+				print $log "  >> Submitting job for vcf2maf...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -955,14 +957,14 @@ sub main{
 				push @annotate_jobs, $annotate_run_id;
 				push @all_jobs, $annotate_run_id;
 				} else {
-				print $log "  >>Skipping vcf2maf because this has already been completed!\n";
+				print $log "  >> Skipping vcf2maf because this has already been completed!\n";
 				}
 
 			push @final_outputs, $final_maf;
 			}
 
-		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
-		print $log "---\n";
+		print $log "\nFINAL OUTPUT:\n  " . join("\n  ", @final_outputs) . "\n";
+		print $log "\n---";
 		}
 
 	# collate results
@@ -1025,7 +1027,7 @@ sub main{
 	# should intermediate files be removed?
 	if ($args{del_intermediates}) {
 
-		print $log "Submitting job to clean up temporary/intermediate files...\n";
+		print $log ">> Submitting job to clean up temporary/intermediate files...\n";
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
