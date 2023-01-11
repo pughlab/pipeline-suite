@@ -364,6 +364,7 @@ sub pon {
 	# set tools and versions
 	my $delly	= 'delly/' . $tool_data->{delly_version};
 	my $samtools 	= 'samtools/' . $tool_data->{samtools_version};
+	my $r_version	= 'R/' . $tool_data->{r_version};
 
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{delly}->{parameters};
@@ -639,7 +640,7 @@ sub pon {
 			log_dir	=> $log_directory,
 			name	=> 'combine_delly_output',
 			cmd	=> $collect_output,
-			modules	=> ['R'],
+			modules	=> [$r_version],
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '4G',
 			max_time	=> '12:00:00',
@@ -823,6 +824,7 @@ sub main {
 	# set tools and versions
 	my $delly	= 'delly/' . $tool_data->{delly_version};
 	my $samtools 	= 'samtools/' . $tool_data->{samtools_version};
+	my $r_version	= 'R/' . $tool_data->{r_version};
 
 	# is this version of delly multi-thread capable?
 	$delly_multi = 0;
@@ -1335,7 +1337,7 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'combine_delly_output',
 			cmd	=> $collect_output,
-			modules	=> ['R'],
+			modules	=> [$r_version],
 			dependencies	=> join(':', @finalize_jobs),
 			mem		=> '4G',
 			max_time	=> '12:00:00',
