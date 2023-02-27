@@ -144,7 +144,8 @@ cds.gr <- GRanges(transcript_table[!is.na(transcript_table$CDSCHROM),]);
 
 
 # find results files
-cov.files <- list.files(pattern = '^CallableBases.tsv$', recursive = TRUE);
+cov.files <- list.files(pattern = '^CallableBases.tsv', recursive = TRUE);
+cov.files <- cov.files[!grepl('md5$',cov.files)];
 
 # read them in
 cov.list <- list();
@@ -153,8 +154,17 @@ sample.list <- c();
 for (file in cov.files) {
 	# extract sample ID
 	smp <- unlist(strsplit(file, '\\/'))[1];
+	# read in data
+	data <- read.delim(file);
+	if (ncol(data) == 3) {
+		data <- read.delim(file, header = FALSE);
+		colnames(data) <- c('chrom','start','end');
+		data$num <- 1;
+		data$list <- smp;
+		data[,smp] <- 1;
+		}
 	# store data in list
-	cov.list[[smp]] <- read.delim(file);
+	cov.list[[smp]] <- data;
 
 	these.smps <- setdiff(colnames(cov.list[[smp]])[6:ncol(cov.list[[smp]])],'TargetRegions');
 	sample.list <- c(sample.list, these.smps);
