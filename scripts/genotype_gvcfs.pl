@@ -283,6 +283,34 @@ sub get_hard_filter_command {
 	return($gatk_command);
 	}
 
+# format command to extract Agena SNPs
+sub extract_agena_command {
+	my %args = (
+		input	=> undef,
+		output	=> undef,
+		project	=> undef,
+		@_
+		);
+
+	my $cmd = join(' ',
+		'bcftools filter',
+		'-T', "$cwd/../data/agena_snps.bed",
+		$args{input},
+		'>', $args{output}
+		);
+
+	$cmd .= "\n\n" . join(' ',
+		'Rscript', "$cwd/collect_agena_output.R",
+		'-a', "$cwd/../agena_snps.txt",
+		'-i', $args{output},
+		'-p', $args{project}
+		);
+
+	$cmd .= "\n\n" . "md5sum $args{output} > $args{output}.md5";
+
+	return($cmd);
+	}
+
 ### MAIN ###########################################################################################
 sub main{
 	my %args = (
@@ -747,6 +775,44 @@ sub main{
 		# indicate final filtered/recalibrated vcf and final job ID
 		$run_id = $apply_snp_recal_run_id;
 		$processed_vcf = $final_vqsr_vcf . '.gz';
+		}
+
+	# let's trim this down to only Agena SNPs for contamination analyses
+	my $agena_output = join('/', $germline_directory, 'haplotype_caller_genotypes_recalibrated__agenaOnly.vcf');
+	my $agena_cmd = extract_agena_command(
+		input	=> $processed_vcf,
+		output	=> $agena_output,
+		project	=> $tool_data->{project_name}
+		);
+
+	if ('Y' eq missing_file("$agena_output.md5")) {
+
+		# record command (in log directory) and then run job
+		print $log ">> Submitting job for EXTRACT AGENA VARIANTS...\n";
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'run_extract_agena_snps',
+			cmd	=> $agena_cmd,
+			modules	=> ['samtools', 'tabix', $r_version],
+			dependencies	=> $run_id,
+			max_time	=> $parameters->{filter_recalibrated}->{time},
+			mem		=> $parameters->{filter_recalibrated}->{mem},
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
+			);
+
+		my $agena_run_id = submit_job(
+			jobname		=> 'run_extract_agena_snps',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @all_jobs, $agena_run_id;
+		} else {
+		print $log ">> Skipping extract Agena SNPs because this has already been completed!\n";
 		}
 
 	# check if we should annotate these variants
