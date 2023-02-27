@@ -1,3 +1,15 @@
+2023-02-27: PughLab pipeline-suite (version 0.8.2);
+- NEW: data folder containing example intervals files (for WGS:VarDict) and Agena SNP positions (for genotype_gvcfs)
+- pindel: skip patients without tumour samples (ie, normal-only); in merge step (for WGS or other split runs), skip/delete empty files as this creates issues downstream; for WGS (or other split runs), skip searching for tandem duplications (this step is VERY slow)
+- delly: forces merge and subsequent steps to run if additional sample(s) added
+- genotype_gvcfs: added function to look at Agena SNPs (will compare VAFs across the cohort)
+- get_coverage and count_callable_bases: fixed an issue for callable bases that excluded patients with a single sample (ie, tumour only)
+- improved readability of pipeline-suite output logs for genotype_gvcfs.pl
+- fixed file called by pughlab_pipeline_auto_report.pl to plot recurrent snvs
+- fixed typo for escaped characters in apply_cosmic_mutation_signatures.R
+- minor update to handle missing data in summarize_mutation_data.R
+- minor other updates/bug fixes to report functions
+
 2023-01-06: PughLab pipeline-suite (version 0.8.1)
 - improved readability of pipeline-suite output logs
 - minor other updates/bug fixes to report functions

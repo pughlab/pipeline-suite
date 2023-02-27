@@ -331,7 +331,11 @@ if (!is.null(chord)) {
 	chord$CHORD <- 0;
 	if (any(grepl('deficient', chord$hr_status))) {
 		chord[which(chord$hr_status == 'HR_deficient'),]$CHORD <- 2; }
-	chord.smps <- rownames(chord);
+	if (all(grepl('cannot_be_determined', chord$hr_status))) {
+		chord.smps <- NULL;
+		} else { 
+		chord.smps <- rownames(chord[which(chord$hr_status != 'cannot_be_determined'),]);
+		}
 	} else {
 	chord <- data.frame(
 		matrix(data = 0, nrow = length(all.samples), ncol = 2,
@@ -369,7 +373,7 @@ sig.data$bg <- merge(
 rownames(sig.data$bg) <- sig.data$bg[,1];
 sig.data$bg <- sig.data$bg[,c('MSI','CHORD','HRDetect')];
 
-sig.data$call <- data.frame(matrix(nrow = length(all.samples), ncol = 3,
+sig.data$call <- data.frame(matrix(data = 1, nrow = length(all.samples), ncol = 3,
 	dimnames = list(all.samples, c('MSI','CHORD','HRDetect'))));
 
 if (!is.null(msi.smps)) { sig.data$call[msi.smps,]$MSI <- 0; }
@@ -454,8 +458,8 @@ sig.legend <- legend.grob(
 			labels = c('MSS','MSI-L','MSI-H')
 			),
 		legend = list(
-			colours = c('white','black'),
-			labels = c('HR-proficient','HR-deficient')
+			colours = c('white','black','white'),
+			labels = c('HR-proficient','HR-deficient','(X) undetermined')
 			)
 		),
 	label.cex = 0.7,
@@ -477,9 +481,15 @@ for (smp in all.samples) {
 
 	functional.data <- functional.summary$per_vaf;
 	functional.data <- functional.data[which(functional.data$Tumor_Sample_Barcode == smp),];
+	if (any(is.na(functional.data$Proportion))) {
+		functional.data[is.na(functional.data$Proportion),]$Proportion <- 0;
+		}
 
 	basechange.data <- basechange.summary$per_vaf;
 	basechange.data <- basechange.data[which(basechange.data$Tumor_Sample_Barcode == smp),];
+	if (any(is.na(basechange.data$Proportion))) {
+		basechange.data[is.na(basechange.data$Proportion),]$Proportion <- 0;
+		}
 
 	# create plot for mutaiton counts
 	mutation.count.plot <- create.barplot(
@@ -582,19 +592,20 @@ axis.cex <- if (length(all.samples) <= 30) { 1
 msi.plot <- create.dotmap(
 	x = t(sig.data$call),
 	bg.data = t(sig.data$bg),
-	spot.size.function = function(x) { 0 },
-	spot.colour.function = function(x) { 'transparent' },
-	na.spot.size = 1,
+	pch = 4,
+	spot.size.function = function(x) { x },
+	spot.colour.function = function(x) { c('black','transparent')[match(x, c(1,0))] },
 	xaxis.lab = rep('',nrow(sig.data$call)),
 	xaxis.tck = 0,
 	yaxis.tck = c(0.5,0),
 	yaxis.fontface = 'plain',
 	yaxis.cex = 0.8,
 	colour.scheme = c('white','grey50','black'),
+	at = seq(0,2,1),
 	bg.alpha = 1,
 	lwd = 1, row.lwd = 1, col.lwd = 1,
-	row.colour = 'white',
-	col.colour = 'white', 
+	row.colour = 'grey90',
+	col.colour = 'grey90', 
 	legend = list(
 		right = list(fun = sig.legend)
 		)
@@ -634,6 +645,9 @@ if (min.noncoding > 0.995) { # typical for WGS
 	} else if (min.noncoding > 0.98) {
 	ylimits <- c(0.98, 1);
 	yat <- seq(0.98, 1, 0.005);
+	} else if (min.noncoding > 0.95) {
+	ylimits <- c(0.95, 1);
+	yat <- seq(0.95, 1, 0.01);
 	} else if (min.noncoding > 0.9) {
 	ylimits <- c(0.9, 1);
 	yat <- seq(0.9, 1, 0.02);
@@ -702,7 +716,8 @@ combined.plot <- create.multipanelplot(
 		inside = list(
 			fun = functional.legend,
 			y = 0.65,
-			x = if (length(all.samples) <= 10) { 0.856 } else { 0.893 }
+			x = if (length(all.samples) <= 10) { 0.815 } else { 0.893 }
+#			x = if (length(all.samples) <= 10) { 0.856 } else { 0.893 }
 			)
 		),
 	style = 'Nature'

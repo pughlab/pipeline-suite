@@ -673,8 +673,8 @@ sub pon {
 			if (scalar(@chroms) > 1) {
 
 				my $merge_chr_command = join(' ',
-					'vcf-concat',
-					$chr_stem . '*.vcf',
+					'vcf-concat', $chr_stem . '*.vcf',
+					'| vcf-sort -c -t', $tmp_directory,
 					'>', $mutect_vcf
 					);
 
@@ -1298,8 +1298,8 @@ sub main {
 			if (scalar(@chroms) > 1) {
 
 				my $merge_chr_command = join(' ',
-					'vcf-concat',
-					@chr_parts,
+					'vcf-concat', @chr_parts,
+					'| vcf-sort -c -t', $tmp_directory,
 					'>', $merged_output
 					);
 

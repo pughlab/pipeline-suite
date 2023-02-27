@@ -363,7 +363,12 @@ sub main {
 		my @tumour_ids = keys %{$smp_data->{$patient}->{'tumour'}};
 
 		if (scalar(@normal_ids) == 0) {
-			print $log "\n>>No normal BAM provided. Skipping somatic variant calling in $patient...\n";
+			print $log "\n>> No normal BAM provided. Skipping somatic variant calling in $patient...\n";
+			next;
+			}
+
+		if (scalar(@tumour_ids) == 0) {
+			print $log "\n>> No tumour BAM provided. Skipping somatic variant calling in $patient...\n";
 			next;
 			}
 

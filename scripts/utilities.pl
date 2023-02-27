@@ -324,7 +324,7 @@ sub write_script {
 	my $script = join('/', $cmd_log_dir, 'script.sh');
 	open (my $fh_script, '>', $script) or Carp::croak("Cannot open file $script: $!");
 
-	 my $job_params;
+	my $job_params;
 
 	# add in SBATCH parameters
 	if ('slurm' eq $args{hpc_driver}) {
@@ -393,8 +393,8 @@ sub write_script {
 			}
 		}
 
-		# add in PBS parameters
-		} elsif ('pbs' eq $args{hpc_driver}) {
+	# add in PBS parameters
+	} elsif ('pbs' eq $args{hpc_driver}) {
 
 		$job_params = "#PBS " . join("\n#PBS ",
 			'-S /bin/bash',
@@ -464,6 +464,11 @@ sub write_script {
 	}
 
 	print $fh_script $job_params . "\n\n";
+
+	print $fh_script 'echo HOSTNAME: $HOSTNAME' . "\n";
+	if ('slurm' eq $args{hpc_driver}) {
+		print $fh_script 'echo SLURM NODE: $SLURMD_NODENAME' . "\n\n";
+		}
 
 	if ($args{kill_on_error}) {
 		print $fh_script "set -e\n\n";

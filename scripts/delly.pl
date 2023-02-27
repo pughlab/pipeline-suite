@@ -364,6 +364,7 @@ sub pon {
 	# set tools and versions
 	my $delly	= 'delly/' . $tool_data->{delly_version};
 	my $samtools 	= 'samtools/' . $tool_data->{samtools_version};
+	my $r_version	= 'R/' . $tool_data->{r_version};
 
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{delly}->{parameters};
@@ -487,7 +488,7 @@ sub pon {
 		type	=> 'germline'
 		);
 
-	if ('Y' eq missing_file($pon_sites)) {
+	if ( (scalar(@part1_jobs) > 0) || ('Y' eq missing_file($pon_sites)) ) {
 
 		# record command (in log directory) and then run job
 		print $log ">> Submitting job for Delly merge...\n";
@@ -543,7 +544,7 @@ sub pon {
 			$genotype_command .= "\n\n" . "md5sum $genotype_output > $genotype_output.md5";
 
 			# check if this should be run
-			if ('Y' eq missing_file($genotype_output . ".md5")) {
+			if ( (scalar(@part1_jobs) > 0) || ('Y' eq missing_file($genotype_output . ".md5")) ) {
 
 				# record command (in log directory) and then run job
 				print $log "  >> Submitting job for Delly Genotype (germline)...\n";
@@ -592,7 +593,7 @@ sub pon {
 	$pon_command .= "\n\n" . "md5sum $pon_merged > $pon_merged.md5";
 	$pon_command .= "\n\n" . "md5sum $pon_genotyped > $pon_genotyped.md5";
 
-	if ('Y' eq missing_file($pon_genotyped . ".md5")) {
+	if ( (scalar(@part2_jobs) > 0) || ('Y' eq missing_file($pon_genotyped . ".md5")) ) {
 
 		# record command (in log directory) and then run job
 		print $log ">> Submitting job for Create PoN...\n";
@@ -639,7 +640,7 @@ sub pon {
 			log_dir	=> $log_directory,
 			name	=> 'combine_delly_output',
 			cmd	=> $collect_output,
-			modules	=> ['R'],
+			modules	=> [$r_version],
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '4G',
 			max_time	=> '12:00:00',
@@ -823,6 +824,7 @@ sub main {
 	# set tools and versions
 	my $delly	= 'delly/' . $tool_data->{delly_version};
 	my $samtools 	= 'samtools/' . $tool_data->{samtools_version};
+	my $r_version	= 'R/' . $tool_data->{r_version};
 
 	# is this version of delly multi-thread capable?
 	$delly_multi = 0;
@@ -1058,7 +1060,7 @@ sub main {
 	# check if this should be run
 	my $merge_run_id = '';
 
-	if (scalar(@part1_jobs) > 0) {
+	if ( (scalar(@part1_jobs) > 0) || ('Y' eq missing_file("$merged_output.md5")) ) {
 
 		# record command (in log directory) and then run job
 		print $log ">> Submitting job for Delly merge...\n";
@@ -1146,7 +1148,7 @@ sub main {
 			$cleanup{$patient} .= "rm $genotype_output\n";
 
 			# check if this should be run
-			if ('' ne $merge_run_id) {
+			if ( ('' ne $merge_run_id) || ('Y' eq missing_file("$genotype_output.md5")) ) {
 
 				# record command (in log directory) and then run job
 				print $log "  >> Submitting job for Delly Genotype (somatic)...\n";
@@ -1195,7 +1197,7 @@ sub main {
 
 	$merge_somatic_svs .= "\n\n" . "md5sum $merged_somatic_output > $merged_somatic_output.md5";
 
-	if (scalar(@part2_jobs) > 0) {
+	if ( (scalar(@part2_jobs) > 0) || ('Y' eq missing_file("$merged_somatic_output.md5")) ) {
 
 		# record command (in log directory) and then run job
 		print $log ">> Submitting job for Delly merge...\n";
@@ -1280,7 +1282,7 @@ sub main {
 
 			$cleanup{$patient} .= "rm $filter_output\n";
 
-			if ('' ne $merge_run_id) {
+			if ( ('' ne $merge_run_id) || ('Y' eq missing_file("$final_output.md5")) ) {
 
 				print $log "  >> Submitting job for finalize (filter) step...\n";
 
@@ -1335,7 +1337,7 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'combine_delly_output',
 			cmd	=> $collect_output,
-			modules	=> ['R'],
+			modules	=> [$r_version],
 			dependencies	=> join(':', @finalize_jobs),
 			mem		=> '4G',
 			max_time	=> '12:00:00',

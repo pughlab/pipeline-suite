@@ -58,31 +58,49 @@ meta.files <- list.files(pattern = 'META.tsv$', recursive = TRUE);
 lane.files <- list.files(pattern = 'READGROUP.tsv$', recursive = TRUE);
 
 # read them in
+all.samples <- c();
 meta.list <- list();
 lane.list <- list();
 
 for (file in meta.files) {
 	# extract sample ID
 	smp <- sub('_ContEst_META.tsv','',basename(file));
+	all.samples <- c(all.samples, smp);
+	# attempt to read in results
+	data <- tryCatch(expr = read.delim(file, stringsAsFactors = FALSE), error = function(e) { return(NULL) });
 	# store data in list
-	meta.list[[smp]] <- read.delim(file, stringsAsFactors = FALSE);
+	if (!is.null(data)) { meta.list[[smp]] <- data; }
 	}
 
 for (file in lane.files) {
 	# extract sample ID
 	smp <- sub('_ContEst_READGROUP.tsv','',basename(file));
+	# attempt to read in results
+	data <- tryCatch(expr = read.delim(file, stringsAsFactors = FALSE), error = function(e) { return(NULL) });
 	# store data in list
-	lane.list[[smp]] <- read.delim(file, stringsAsFactors = FALSE);
+	if (!is.null(data)) { lane.list[[smp]] <- data; }
 	}
 
 # reshape/format data
 meta.data <- do.call(rbind, meta.list);
 lane.data <- do.call(rbind, lane.list);
 
+# add in any missing samples
+missing.smps <- setdiff(all.samples, rownames(meta.data));
+if (length(missing.smps) > 0) {
+	meta.data[missing.smps,] <- NA;
+	meta.data[is.na(meta.data$name),]$name <- 'META';
+	}
+
+missing.smps <- setdiff(all.samples, sapply(rownames(lane.data), function(i) { unlist(strsplit(i, '\\.'))[1] }));
+if (length(missing.smps) > 0) {
+	lane.data[missing.smps,] <- NA;
+	lane.data[is.na(lane.data$name),]$name <- 'LANE';
+	}
+
 # format data
 meta.data$Sample <- rownames(meta.data);
 lane.data$Sample <- sapply(rownames(lane.data), function(i) { unlist(strsplit(as.character(i),'\\.'))[1] } );
-#lane.data$name <- sapply(lane.data$name, function(i) { unlist(strsplit(as.character(i),'\\.'))[2] } );
 
 # combine for writing
 formatted.data <- rbind(meta.data, lane.data);

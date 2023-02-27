@@ -228,7 +228,7 @@ sub main {
 	$varscan        = defined($tool_data->{varscan_version}) ? $tool_data->{varscan_version} : undef;
 	$gatk		= defined($tool_data->{gatk_version}) ? $tool_data->{gatk_version} : undef;
 	$vcftools	= defined($tool_data->{vcftools_version}) ? $tool_data->{vcftools_version} : undef;
-	$vcf2maf	= defined($tool_data->{vcftools_version}) ? $tool_data->{vcf2maf_version} : undef;
+	$vcf2maf	= defined($tool_data->{vcf2maf_version}) ? $tool_data->{vcf2maf_version} : undef;
 	$samtools	= defined($tool_data->{samtools_version}) ? $tool_data->{samtools_version} : undef;
 	$bcftools	= $samtools;
 	

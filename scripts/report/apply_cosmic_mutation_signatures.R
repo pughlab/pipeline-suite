@@ -297,11 +297,11 @@ if (!is.null(arguments$report)) {
 
 		} else {
 		sig.version <- if (is.null(arguments$signatures)) {
-			'v2; \\url{https://cancer.sanger.ac.uk/signatures/signatures\_v2/}'
+			'v2; \\url{https://cancer.sanger.ac.uk/signatures/signatures\\_v2/}'
 			} else if (grepl('3.2', basename(arguments$signatures))) {
 			'v3.2; \\url{https://cancer.sanger.ac.uk/signatures/sbs/}';
 			} else {
-			paste0(gsub('_','\_',basename(arguments$signatures)));
+			paste0(gsub('_','\\_',basename(arguments$signatures)));
 			}
 
 		write(

@@ -253,7 +253,7 @@ sub main {
 		my (@final_outputs, @patient_jobs);
 
 		# if a normal is provided, create a WIG
-		my ($normal_wig, $normal_wig_jobid);
+		my ($normal_wig, $normal_wig_jobid) = '';
 		if (scalar(@normal_ids) > 0) {
 
 			$normal_wig_jobid = '';

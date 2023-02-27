@@ -1535,7 +1535,7 @@ sub main {
 		@snv_dependencies = ( $ensemble_run_id, $tmb_run_id );
 
 		$snv_plot_command = join(' ',
-			"Rscript $cwd/report/plot_snv_summary.R",
+			"Rscript $cwd/report/plot_recurrent_mutations.R",
 			'-p', $tool_data->{project_name},
 			'-o', $snv_directory,
 			'--report', $plot_directory,

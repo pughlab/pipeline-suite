@@ -310,8 +310,6 @@ sub main {
 		print $log "\n  Filtering final output to target intervals: $intervals_bed";
 		}
 
-	print $log "\n---";
-
 	# set tools and versions
 	my $mavis	= 'mavis/' . $tool_data->{mavis_version};
 	my $bwa		= 'bwa/' . $tool_data->{bwa_version};
@@ -434,7 +432,7 @@ sub main {
 
 		$run_id = '';
 
-		print $log "\nInitiating process for PATIENT: $patient";
+		print $log "\n---\nInitiating process for PATIENT: $patient\n";
 
 		# find bams
 		my @normal_ids = sort keys %{$smp_data->{$patient}->{'normal_dna'}};

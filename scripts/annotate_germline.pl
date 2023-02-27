@@ -199,7 +199,7 @@ sub main{
 		} elsif ('hg38' eq $tool_data->{ref_type}) { $ref_type = 'grch38'; }
 
 	my $known_positions = $tool_data->{haplotype_caller}->{parameters}->{cpsr}->{known_positions};
-	print $log "\n   Using known variants: $known_positions";
+	print $log "\n    Using known variants: $known_positions";
 
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";

@@ -810,7 +810,7 @@ sub main {
 				next;
 				}
 
-			$mutect_command .= "\nmd5sum $output_stem.vcf > $output_stem.vcf.md5";
+			$mutect_command .= "\n\nmd5sum $output_stem.vcf > $output_stem.vcf.md5";
 
 			# check if this should be run
 			if ('Y' eq missing_file($output_stem . '.vcf.md5')) {

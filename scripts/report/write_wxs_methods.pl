@@ -234,6 +234,7 @@ sub main {
 	$varscan        = defined($tool_data->{varscan_version}) ? $tool_data->{varscan_version} : undef;
 	$gatk		= defined($tool_data->{gatk_version}) ? $tool_data->{gatk_version} : undef;
 	$vcftools	= defined($tool_data->{vcftools_version}) ? $tool_data->{vcftools_version} : undef;
+	$vcf2maf	= defined($tool_data->{vcf2maf_version}) ? $tool_data->{vcf2maf_version} : undef;
 	$samtools	= defined($tool_data->{samtools_version}) ? $tool_data->{samtools_version} : undef;
 	$bcftools	= $samtools;
 	
@@ -245,8 +246,6 @@ sub main {
 	if (defined($tool_data->{annotate}->{vep_path})) {
 		my @parts = split('\\/', $tool_data->{annotate}->{vep_path});
 		$vep = $parts[-1];
-		@parts = split('\\/', $tool_data->{annotate}->{vcf2maf_path});
-		$vcf2maf = $parts[-2];
 		}
 
 	my @snv_tools;
