@@ -1400,7 +1400,7 @@ sub main {
 
 			my $ascat_command = join(' ',
 				"perl $cwd/scripts/ascat.pl",
-				"-o", $ichor_directory,
+				"-o", $ascat_directory,
 				"-t", $tool_config,
 				"-d", $gatk_output_yaml,
 				"-c", $args{cluster}
@@ -1566,6 +1566,8 @@ sub main {
 			}
 
 		## VarDict pipeline
+		$vardict_run_id = '';
+
 		if ('Y' eq $tool_set{'vardict'}) {
 
 			unless(-e $vardict_directory) { make_path($vardict_directory); }
@@ -1725,6 +1727,11 @@ sub main {
 				$mavis_command .= " --svict $svict_directory";
 				push @depends, $svict_run_id;
 				}
+
+			# if VarDict was run, add it as a dependency to avoid overwhelming the cluster
+		#	if (defined($vardict_run_id)) {
+		#		push @depends, $vardict_run_id;
+		#		}
 
 			# record command (in log directory) and then run job
 			print $log "Submitting job for mavis.pl\n";
