@@ -179,6 +179,11 @@ sub main {
 			next;
 			}
 
+		if (scalar(@tumour_ids) == 0) {
+			print $log "\n>> No tumour BAM provided, skipping patient.\n";
+			next;
+			}
+
 		# create some directories
 		my $patient_directory = join('/', $output_directory, $patient);
 		unless(-e $patient_directory) { make_path($patient_directory); }
@@ -245,7 +250,7 @@ sub main {
 				if ('Y' eq missing_file($output_file . '.md5')) {
 
 					# record command (in log directory) and then run job
-					print $log "  >>Submitting job for ContEst ($lane_type)...\n";
+					print $log "  >> Submitting job for ContEst ($lane_type)...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
@@ -269,13 +274,13 @@ sub main {
 					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
 					} else {
-					print $log "  >>Skipping ContEst: $lane_type as this has already been completed!\n";
+					print $log "  >> Skipping ContEst: $lane_type as this has already been completed!\n";
 					}
 
 				push @final_outputs, $output_file;
 				}
 
-			print $log "  >>Processing SAMPLE: $sample complete!\n";
+			print $log "  >> Processing SAMPLE: $sample complete!\n";
 			}
 
 		# should intermediate files be removed
@@ -286,7 +291,7 @@ sub main {
 				`rm -rf $tmp_directory`;
 				} else {
 
-				print $log "\n>>Submitting job to clean up temporary/intermediate files...\n";
+				print $log "\n>> Submitting job to clean up temporary/intermediate files...\n";
 
 				# make sure final output exists before removing intermediate files!
 				my @files_to_check;
