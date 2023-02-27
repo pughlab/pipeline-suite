@@ -178,6 +178,7 @@ sub get_split_pindel_command {
 		'-o', $args{output_stem} . '_$CHROM',
 		'-T', $args{n_cpus},
 		'-J', $exclude_regions,
+		'--report_duplications false',
 		'-w 1 -A 20',
 		'-c $CHROM'
 		);
@@ -280,7 +281,13 @@ sub get_pindel2vcf_command {
 		'-v', '$STEM.vcf'
 		);
 
-	$pindel_command .= "\ndone;";
+	$pindel_command .= "\n\n  " . 'MD5=$(md5sum $STEM.vcf | cut -f1 -d\' \')';
+	$pindel_command .= "\n  " . 'if [ $MD5 == "71ea4d4c63ba1b747f43d8e946d67565" ]; then';
+	$pindel_command .= "\n    " . 'echo $STEM.vcf is empty, probably no useful variants found here?';
+	$pindel_command .= "\n    " . 'rm $STEM.vcf';
+	$pindel_command .= "\n  " . 'fi';
+
+	$pindel_command .= "\n\ndone;";
 
 	$pindel_command .= "\n\n" . join(' ',
 		'vcf-concat',
@@ -454,6 +461,11 @@ sub main {
 		# find bams
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
 		my @tumour_ids = keys %{$smp_data->{$patient}->{'tumour'}};
+
+		if (scalar(@tumour_ids) == 0) {
+			print $log "\n>> No tumour BAM provided. Skipping $patient...\n";
+			next;
+			}
 
 		# create some directories
 		my $patient_directory = join('/', $output_directory, $patient);
