@@ -17,7 +17,7 @@ my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
 # define some global variables
-our ($reference, $known_1000g, $hapmap, $omni, $known_mills, $dbsnp, $use_new_gatk);
+our ($reference, $ref_type, $known_1000g, $hapmap, $omni, $known_mills, $dbsnp, $use_new_gatk);
 
 ####################################################################################################
 # version	author		comment
@@ -294,14 +294,14 @@ sub extract_agena_command {
 
 	my $cmd = join(' ',
 		'bcftools filter',
-		'-T', "$cwd/../data/agena_snps.bed",
+		'-T', "$cwd/../data/agena_snps__$ref_type.bed",
 		$args{input},
 		'>', $args{output}
 		);
 
 	$cmd .= "\n\n" . join(' ',
 		'Rscript', "$cwd/collect_agena_output.R",
-		'-a', "$cwd/../agena_snps.txt",
+		'-a', "$cwd/../data/agena_snps_annotated__$ref_type.txt",
 		'-i', $args{output},
 		'-p', $args{project}
 		);
@@ -372,6 +372,7 @@ sub main{
 	print $log "\n    Reference: $tool_data->{reference}";
 
 	$reference = $tool_data->{reference};
+	$ref_type = $tool_data->{ref_type};
 
 	if ('GRCh38' eq $tool_data->{ref_type}) {
 		die("No GATK resources available for reference GRCh38");
