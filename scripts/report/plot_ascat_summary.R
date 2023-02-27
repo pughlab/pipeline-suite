@@ -130,6 +130,10 @@ if (!any(all.samples %in% colnames(input.data))) {
 	if (!any(alt.sample.names %in% colnames(input.data))) {
 		stop('Correlation sample names do not match names from other tables');
 		}
+	if (any(!alt.sample.names %in% colnames(input.data))) {
+		missing.samples <- setdiff(alt.sample.names, colnames(input.data));
+		input.data[,missing.samples] <- NA;
+		}
 	cna.data <- input.data[,alt.sample.names];
 	} else {
 	cna.data <- input.data[,all.samples];
@@ -265,8 +269,8 @@ ploidy.plot <- create.barplot(
 	xlab.label = "Ploidy\nEstimate",
 	xlab.cex = 1,
 	ylab.label = NULL,
-	xlimits = c(0,max(ceiling(ploidy.estimates$ploidy))+0.1),
-	xat = seq(0,max(ceiling(ploidy.estimates$ploidy)), 1),
+	xlimits = c(0,max(ceiling(ploidy.estimates$ploidy), na.rm = TRUE)+0.1),
+	xat = seq(0,max(ceiling(ploidy.estimates$ploidy), na.rm = TRUE), 1),
 	xaxis.cex = 1,
 	yaxis.cex = axis.cex,
 	axes.lwd = 1,
@@ -332,7 +336,7 @@ if (!is.null(arguments$report)) {
 
 	# write for latex
 	write("\\section{SCNA Summary}", file = tex.file);
-	write("Copy number variation calls from ASCAT (v3.1.0) with optimized gamma parameter:",
+	write("Copy number variation calls from ASCAT (v3.1.0):",
 		file = tex.file, append = TRUE);
 
 	# CNA landscape plot

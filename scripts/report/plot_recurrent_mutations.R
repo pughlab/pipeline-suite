@@ -499,7 +499,7 @@ if (!exists('mutsig.plot')) {
 		y.spacing = -1,
 		right.padding = if (length(all.samples) < 12) { 8 } else { 0 },
 		legend = if (length(all.samples) < 12) { 
-			list(inside = list(fun = functional.legend, x = 0.88, y = 0.7))
+			list(inside = list(fun = functional.legend, x = 0.89, y = 0.7))
 			} else { NULL },
 		height = 8,
 		width = if (length(all.samples) < 12) { 8 } else { 10 },
@@ -524,7 +524,7 @@ if (!exists('mutsig.plot')) {
 		x.spacing = -1,
 		#right.padding = if (length(all.samples) < 12) { 8 } else { 0 },
 		legend = if (length(all.samples) < 12) { 
-			list(inside = list(fun = functional.legend, x = 0.88, y = 1))
+			list(inside = list(fun = functional.legend, x = 0.89, y = 1))
 			} else { NULL },
 		height = 8,
 		width = if (length(all.samples) < 12) { 8 } else { 10 },
@@ -652,11 +652,13 @@ if (!is.null(arguments$report)) {
 
 	# add per-sample summary (proportion basechange/functional, msi, ...)
 	if (any('mutation_summary.png' %in% names(all.plots))) {
+		graphic.height <- if (length(all.samples) <= 10) { 1.2 } else { 0.7 }
+
 		signature.plot <- all.plots['mutation_summary.png'];
 		write("\\begin{figure}[h!]", file = tex.file, append = TRUE);
 		write("\\begin{center}", file = tex.file, append = TRUE);
 		write(paste0(
-			"\\includegraphics[height=1.2\\textheight]{",
+			"\\includegraphics[height=", graphic.height, "\\textheight]{",
 			signature.plot, '}'
 			), file = tex.file, append = TRUE);
 		write("\\end{center}", file = tex.file, append = TRUE);

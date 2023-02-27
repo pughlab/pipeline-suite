@@ -331,7 +331,11 @@ if (!is.null(chord)) {
 	chord$CHORD <- 0;
 	if (any(grepl('deficient', chord$hr_status))) {
 		chord[which(chord$hr_status == 'HR_deficient'),]$CHORD <- 2; }
-	chord.smps <- rownames(chord);
+	if (all(grepl('cannot_be_determined', chord$hr_status))) {
+		chord.smps <- NULL;
+		} else { 
+		chord.smps <- rownames(chord[which(chord$hr_status != 'cannot_be_determined'),]);
+		}
 	} else {
 	chord <- data.frame(
 		matrix(data = 0, nrow = length(all.samples), ncol = 2,
@@ -369,7 +373,7 @@ sig.data$bg <- merge(
 rownames(sig.data$bg) <- sig.data$bg[,1];
 sig.data$bg <- sig.data$bg[,c('MSI','CHORD','HRDetect')];
 
-sig.data$call <- data.frame(matrix(nrow = length(all.samples), ncol = 3,
+sig.data$call <- data.frame(matrix(data = 1, nrow = length(all.samples), ncol = 3,
 	dimnames = list(all.samples, c('MSI','CHORD','HRDetect'))));
 
 if (!is.null(msi.smps)) { sig.data$call[msi.smps,]$MSI <- 0; }
@@ -454,8 +458,8 @@ sig.legend <- legend.grob(
 			labels = c('MSS','MSI-L','MSI-H')
 			),
 		legend = list(
-			colours = c('white','black'),
-			labels = c('HR-proficient','HR-deficient')
+			colours = c('white','black','white'),
+			labels = c('HR-proficient','HR-deficient','(X) undetermined')
 			)
 		),
 	label.cex = 0.7,
@@ -588,9 +592,9 @@ axis.cex <- if (length(all.samples) <= 30) { 1
 msi.plot <- create.dotmap(
 	x = t(sig.data$call),
 	bg.data = t(sig.data$bg),
-	spot.size.function = function(x) { 0 },
-	spot.colour.function = function(x) { 'transparent' },
-	na.spot.size = 1,
+	pch = 4,
+	spot.size.function = function(x) { x },
+	spot.colour.function = function(x) { c('black','transparent')[match(x, c(1,0))] },
 	xaxis.lab = rep('',nrow(sig.data$call)),
 	xaxis.tck = 0,
 	yaxis.tck = c(0.5,0),
@@ -600,8 +604,8 @@ msi.plot <- create.dotmap(
 	at = seq(0,2,1),
 	bg.alpha = 1,
 	lwd = 1, row.lwd = 1, col.lwd = 1,
-	row.colour = 'white',
-	col.colour = 'white', 
+	row.colour = 'grey90',
+	col.colour = 'grey90', 
 	legend = list(
 		right = list(fun = sig.legend)
 		)
@@ -712,7 +716,8 @@ combined.plot <- create.multipanelplot(
 		inside = list(
 			fun = functional.legend,
 			y = 0.65,
-			x = if (length(all.samples) <= 10) { 0.856 } else { 0.893 }
+			x = if (length(all.samples) <= 10) { 0.815 } else { 0.893 }
+#			x = if (length(all.samples) <= 10) { 0.856 } else { 0.893 }
 			)
 		),
 	style = 'Nature'

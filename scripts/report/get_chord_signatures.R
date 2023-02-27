@@ -324,7 +324,7 @@ create.scatterplot(
 	yaxis.tck = c(0.5,0),
 	xaxis.fontface = 'plain',
 	yaxis.fontface = 'plain',
-	add.rectangle = TRUE,
+	add.rectangle = any(predictions$hr_status == 'HR_deficient'),
 	xleft.rectangle = which(predictions$hr_status != 'HR_proficient')-0.5,
 	xright.rectangle = which(predictions$hr_status != 'HR_proficient')+0.5,
 	ytop.rectangle = 1.1,

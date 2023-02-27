@@ -447,6 +447,7 @@ for (smp in tumour.samples) {
 		);
 
 	plot.data[which(plot.data$Evidence == 1),]$Evidence <- 0.5;
+	plot.data[which(smp.data$Fusion == 'None--None'),]$Evidence <- 0.5;
 
 	geneset <- setdiff(unique(c(smp.data$gene1_aliases, smp.data$gene2_aliases)),'None');
 	if (!is.null(driver.genes) & (length(geneset) > 20)) {
