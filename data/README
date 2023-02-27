@@ -1,0 +1,1 @@
+This directory contains interval files for use with sprokopec's WGS pipeline-suite:vardict. Padding has been added to provide overlap between adjacent regions (as recommemded by VarDict).
