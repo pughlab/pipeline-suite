@@ -334,7 +334,11 @@ sub pon {
 
 		# find bams
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
-		my @tumour_ids = keys %{$smp_data->{$patient}->{'tumour'}};
+
+		if (scalar(@normal_ids) == 0) {
+			print $log "\n>> No normal BAM provided. Skipping $patient...\n";
+			next;
+			}
 
 		# create some directories
 		my $patient_directory = join('/', $output_directory, $patient);
@@ -759,7 +763,10 @@ sub main {
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
 		my @tumour_ids = keys %{$smp_data->{$patient}->{'tumour'}};
 
-		next if (scalar(@tumour_ids) == 0);
+		if (scalar(@tumour_ids) == 0) {
+			print $log "\n>> No tumour BAM provided. Skipping $patient...\n";
+			next;
+			}
 
 		# create some directories
 		my $patient_directory = join('/', $output_directory, $patient);
