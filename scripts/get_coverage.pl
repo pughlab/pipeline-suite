@@ -423,13 +423,15 @@ sub main {
 
 		# run callable bases per patient (intersect) ONLY IF there are multiple samples for this patient
 		my $cb_intersect = join('/', $patient_directory, 'CallableBases.tsv');
+		my $cb_command2 = "\ncd $tmp_directory\n\n";
 
 		if ( (scalar(@sample_ids) == 1) && (!defined($tool_data->{intervals_bed})) ) {
-			`mv $patient_cb_files[0] $cb_intersect`;
-			`mv $patient_cb_files[0].md5 $cb_intersect.md5`;
+
+			$cb_command2 .= "mv $patient_cb_files[0] $cb_intersect\n";
+			$cb_command2 .= "mv $patient_cb_files[0].md5 $cb_intersect.md5\n";
+	
 			} elsif ( (scalar(@sample_ids) > 1) || (defined($tool_data->{intervals_bed})) ) {
 
-			my $cb_command2 = "\ncd $tmp_directory\n\n";
 			$cb_command2 .= find_callable_bases_step2(
 				input_files	=> \@patient_cb_files,
 				sample_names	=> \@sample_ids,
@@ -441,40 +443,39 @@ sub main {
 				"tar -czf $patient_directory/callable_bases.tar.gz",
 				"*_mincov_collapsed_sorted.bed*"
 				);
-
-			if ('Y' eq missing_file($cb_intersect . '.md5')) {
-
-				print $log ">> Submitting job for CallableBases Intersect...\n";
-
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_callable_bases_intersect_' . $patient,
-					cmd	=> $cb_command2,
-					modules	=> [$samtools, $bedtools],
-					dependencies	=> join(':', @cb_jobs),
-					max_time	=> $parameters->{callable_bases}->{time},
-					mem		=> $parameters->{callable_bases}->{mem},
-					hpc_driver	=> $args{hpc_driver},
-					extra_args	=> [$hpc_group]
-					);
-
-				$run_id = submit_job(
-					jobname		=> 'run_callable_bases_intersect_' . $patient,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{hpc_driver},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
-					);
-
-				push @patient_jobs, $run_id;
-				push @callable_base_jobs, $run_id;
-				} else {
-				print $log ">> Skipping CallableBases Intersect because this has already been completed!\n";
-				}
-
-			push @final_outputs, $cb_intersect;
-
 			}
+
+		if ('Y' eq missing_file($cb_intersect . '.md5')) {
+
+			print $log ">> Submitting job for CallableBases Intersect...\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'run_callable_bases_intersect_' . $patient,
+				cmd	=> $cb_command2,
+				modules	=> [$samtools, $bedtools],
+				dependencies	=> join(':', @cb_jobs),
+				max_time	=> $parameters->{callable_bases}->{time},
+				mem		=> $parameters->{callable_bases}->{mem},
+				hpc_driver	=> $args{hpc_driver},
+				extra_args	=> [$hpc_group]
+				);
+
+			$run_id = submit_job(
+				jobname		=> 'run_callable_bases_intersect_' . $patient,
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @patient_jobs, $run_id;
+			push @callable_base_jobs, $run_id;
+			} else {
+			print $log ">> Skipping CallableBases Intersect because this has already been completed!\n";
+			}
+
+		push @final_outputs, $cb_intersect;
 
 		# should intermediate files be removed
 		# run per patient
