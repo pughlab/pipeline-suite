@@ -157,6 +157,12 @@ assigned.sigs <- list();
 
 for (smp in all.samples) {
 
+	if (!dir.exists(smp)) {
+		dir.create(smp);
+		}
+
+	setwd(smp);
+
 	if (nrow(snv.data[which(snv.data$Sample == smp),]) < 50) {
 		assigned.sigs[[smp]]$weights <- rep(NA, ncol(signatures.to.apply));
 		next;
@@ -169,6 +175,97 @@ for (smp in all.samples) {
 		contexts.needed = TRUE,
 		tri.counts.method = normalization.method
 		);
+
+	sig.weights.ordered <- sort(assigned.sigs[[smp]]$weights, decreasing = TRUE);
+
+	# organize signature weights (scores) for plotting
+	plot.data <- data.frame(
+		sig = colnames(sig.weights.ordered),
+		score = as.numeric(sig.weights.ordered)
+		);
+
+	plot.data$sig <- factor(plot.data$sig, levels = c(colnames(sig.weights.ordered),'Unknown'));
+	plot.data <- rbind(plot.data, c('Unknown', as.numeric(assigned.sigs[[smp]]$unknown)));
+	plot.data$score <- as.numeric(plot.data$score);
+
+	# organize mutation data (trinucleotide counts) for plotting
+	tnc.data <- data.frame(
+		context = colnames(assigned.sigs[[smp]]$tumor),
+		tumour = as.numeric(assigned.sigs[[smp]]$tumor),
+		reconstructed = as.numeric(assigned.sigs[[smp]]$product)
+		);
+
+	tnc.data$Group <- as.character(
+		sapply(as.character(tnc.data$context), function(i) { substr(i,3,5) } ));
+	tnc.data$Group <- factor(
+		tnc.data$Group, levels = rev(c('T>G','T>C','T>A','C>T','C>G','C>A')));
+	tnc.data <- tnc.data[order(tnc.data$Group, tnc.data$context),];
+	tnc.data$context <- factor(tnc.data$context, levels = as.character(tnc.data$context));
+
+	sse <- sum(assigned.sigs[[smp]]$diff)^2;
+
+	stats <- list(text = list(lab = c(paste0('SSE = ', round(sse,3))),cex = 1));
+
+	sbs.plot <- create.barplot(
+		score ~ sig,
+		plot.data,
+		xlab.label = NULL,
+		ylab.label = 'Weight',
+		ylab.cex = 1,
+		xaxis.cex = 0.6,
+		yaxis.cex = 1,
+		axes.lwd = 1,
+		xaxis.rot = 90,
+		yaxis.fontface = 'plain',
+		xaxis.fontface = 'plain',
+		yaxis.tck = c(0.5,0),
+		xaxis.tck = c(0.5,0)
+		);
+
+	tnc.plot <- create.barplot(
+		reconstructed ~ context,
+		tnc.data,
+		xlab.label = NULL,
+		ylab.label = 'Fraction',
+		ylab.cex = 1,
+		xaxis.cex = 0.6,
+		yaxis.cex = 1,
+		axes.lwd = 1,
+		xaxis.rot = 90,
+		yaxis.fontface = 'plain',
+		xaxis.fontface = 'plain',
+		yaxis.tck = c(0.5,0),
+		xaxis.tck = c(0.5,0),
+		col = rep(rev(default.colours(8,'pastel')[-5])[-1],each = 16),
+		add.rectangle = TRUE,
+		xleft.rectangle = c(0.5,get.line.breaks(tnc.data$Group)),
+		xright.rectangle = c(get.line.breaks(tnc.data$Group),nrow(tnc.data)+0.5),
+		ytop.rectangle = 1,
+		ybottom.rectangle = 0,
+		col.rectangle = rev(default.colours(8,'pastel')[-5])[-1],
+		alpha.rectangle = 0.2
+		);
+
+	create.multipanelplot(
+		plot.objects = list(sbs.plot, tnc.plot),
+		layout.width = 1,
+		layout.height = 2,
+		plot.objects.heights = c(1.8,3),
+		y.spacing = -2.8,
+		left.legend.padding = 0,
+		right.legend.padding = 0,
+		bottom.legend.padding = 0,
+		top.legend.padding = -2,
+		legend = list(
+			inside = list(fun = draw.key, args = list(key = stats),x = 0.13, y = 0.58)
+			),
+		height = 4,
+		width = 13,
+		resolution = 600,
+		filename = generate.filename(smp, 'mutation_counts_per_signature', 'png')
+		);
+
+	setwd(arguments$output);
 	}
 
 # extract weights
@@ -184,6 +281,7 @@ if (all(is.na(sig.weights))) {
 	warning('All signature weights are NA - sample(s) probably have too few mutations.');
 	should.plot <- FALSE;
 	} else {
+
 	save(
 		signatures.to.apply,
 		assigned.sigs,
