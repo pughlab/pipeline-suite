@@ -213,7 +213,7 @@ create.heatmap(
 pga.plot <- create.barplot(
 	Order ~ PGA,
 	ploidy.estimates,
-	yaxis.lab = simplify.ids(rev(rownames(ploidy.estimates))),
+	yaxis.lab = simplify.ids(rownames(ploidy.estimates)),
 	ylimits = c(0.5, length(all.samples)+0.5),
 	yat = seq(1,length(all.samples)),
 	xaxis.tck = c(0.5,0),
