@@ -183,11 +183,15 @@ sub generate_delly_pon {
 		$args{intermediate}
 		);
 
+	$pon_command .= "\n\n" . "md5sum $args{intermediate} > $args{intermediate}.md5";
+
 	$pon_command .= "\n\n" . get_delly_filter_command(
 		output	=> $args{output},
 		input	=> $args{intermediate},
 		type	=> 'germline'
 		);
+
+	$pon_command .= "\n\n" . "md5sum $args{output} > $args{output}.md5";
 
 	return($pon_command);
 	}
@@ -470,16 +474,9 @@ sub pon {
 	print $log "\n---\nMerging called sites...\n";
 
 	# let's create a command and write script to combine variants for a PoN
-	my $pon_sites = join('/', $output_directory, $date . "_merged_panelOfNormals.bcf");
-	my $pon_merged = join('/', $output_directory, $date . "_merged_genotyped_PoN.bcf");
-	my $pon_genotyped = join('/', $output_directory, $date . "_merged_genotyped_filtered_PoN.bcf");
-	my $final_pon_link = join('/', $output_directory, '..', 'panelOfNormals.bcf');
-
-	if (-l $final_pon_link) {
-		unlink $final_pon_link or die "Failed to remove previous symlink: $final_pon_link";
-		}
-
-	symlink($pon_genotyped, $final_pon_link);
+	my $pon_sites = join('/', $output_directory, "merged_candidate_SV_sites.bcf");
+	my $pon_merged = join('/', $output_directory, "candidate_SVs_genotyped.bcf");
+	my $pon_genotyped = join('/', $output_directory, $date . "_merged_genotyped_filtered_SVs.bcf");
 
 	# merge all sites across all samples
 	my $pon_command = get_delly_merge_command(
@@ -495,7 +492,7 @@ sub pon {
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
-			name	=> 'merge_called_sites_PoN',
+			name	=> 'merge_called_sites',
 			cmd	=> $pon_command,
 			modules	=> [$delly],
 			dependencies	=> join(':', @part1_jobs),
@@ -506,7 +503,7 @@ sub pon {
 			);
 
 		$pon_run_id = submit_job(
-			jobname		=> 'merge_called_sites_PoN',
+			jobname		=> 'merge_called_sites',
 			shell_command	=> $run_script,
 			hpc_driver	=> $args{hpc_driver},
 			dry_run		=> $args{dry_run},
@@ -581,7 +578,7 @@ sub pon {
 
 	push @all_jobs, @part2_jobs;
 
-	print $log "\n---\nCreating panel of normals...\n";
+	print $log "\n---\nMerge and filter germline SVs...\n";
 
 	# merge these genotyped results and filter only germline
 	$pon_command = generate_delly_pon(
@@ -590,17 +587,14 @@ sub pon {
 		output		=> $pon_genotyped
 		);
 
-	$pon_command .= "\n\n" . "md5sum $pon_merged > $pon_merged.md5";
-	$pon_command .= "\n\n" . "md5sum $pon_genotyped > $pon_genotyped.md5";
-
 	if ( (scalar(@part2_jobs) > 0) || ('Y' eq missing_file($pon_genotyped . ".md5")) ) {
 
 		# record command (in log directory) and then run job
-		print $log ">> Submitting job for Create PoN...\n";
+		print $log ">> Submitting job for Merge and Filter...\n";
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
-			name	=> 'create_panel_of_normals',
+			name	=> 'merge_and_filter_germline_SVs',
 			cmd	=> $pon_command,
 			dependencies	=> join(':', @part2_jobs),
 			modules		=> [$delly, $samtools],
@@ -611,7 +605,7 @@ sub pon {
 			);
 
 		$run_id = submit_job(
-			jobname		=> 'create_panel_of_normals',
+			jobname		=> 'merge_and_filter_germline_SVs',
 			shell_command	=> $run_script,
 			hpc_driver	=> $args{hpc_driver},
 			dry_run		=> $args{dry_run},
@@ -625,11 +619,16 @@ sub pon {
 	if ($should_run_final) {
 
 		my $collect_output = join(' ',
-			"Rscript $cwd/collect_delly_output.R",
+			'cd', $output_directory,
+			"\n\nbcftools view",
+			$pon_genotyped,
+			'> filtered_germline_SVs.vcf',
+			"\n\nRscript $cwd/collect_delly_output.R",
 			'-d', $output_directory,
 			'-p', $tool_data->{project_name},
 			'-r', $tool_data->{ref_type},
-			'--germline TRUE'
+			'--germline TRUE',
+			"\n\nrm filtered_germline_SVs.vcf"
 			);
 
 		if (defined($intervals_bed)) {
@@ -640,7 +639,7 @@ sub pon {
 			log_dir	=> $log_directory,
 			name	=> 'combine_delly_output',
 			cmd	=> $collect_output,
-			modules	=> [$r_version],
+			modules	=> [$samtools, $r_version],
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '4G',
 			max_time	=> '12:00:00',
