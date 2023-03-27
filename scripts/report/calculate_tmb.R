@@ -261,14 +261,14 @@ for (smp in all.samples) {
 			anno.method <- 'VEP';
 
 			# split by region
-			genic <- smp.data[which(smp.data$Variant_Classification != 'IGR'),];
-			genic.snp  <- which(genic$Variant_Type == 'SNP');
-			genic.indel  <- which(genic$Variant_Type != 'SNP');
+			genic.full <- smp.data[which(smp.data$Variant_Classification != 'IGR'),];
+			genic.snp  <- which(genic.full$Variant_Type == 'SNP');
+			genic.indel  <- which(genic.full$Variant_Type != 'SNP');
 
 			coding.classes <- c('Missense_Mutation','Nonsense_Mutation','Splice_Site','Splice_Region','Translation_Start_Site','Frame_Shift_Del','Frame_Shift_Ins','In_Frame_Del','In_Frame_Ins');
 
-			coding <- genic[which(genic$Variant_Classification %in% coding.classes |
-				(genic$HGVSp_Short != '' & !grepl('=$',genic$HGVSp_Short))),];
+			coding.full <- genic.full[which(genic.full$Variant_Classification %in% coding.classes |
+				(genic.full$HGVSp_Short != '' & !grepl('=$',genic.full$HGVSp_Short))),];
 
 			coding.snp  <- which(coding$Variant_Type == 'SNP');
 			coding.indel  <- which(coding$Variant_Type != 'SNP');
