@@ -70,7 +70,6 @@ sub get_coverage_command {
 			'-Djava.io.tmpdir=' . $args{tmp_dir},
 			'-jar $gatk_dir/GenomeAnalysisTK.jar -T DepthOfCoverage',
 			'-o', $args{output},
-			'-nt 2',
 			'-ct', $target_depth
 			);
 
