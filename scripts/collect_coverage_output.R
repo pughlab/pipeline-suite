@@ -56,10 +56,12 @@ setwd(arguments$directory);
 # find results files
 cov.files <- list.files(pattern = 'DepthOfCoverage.sample_statistics$', recursive = TRUE);
 summary.files <- list.files(pattern = 'DepthOfCoverage.sample_summary$', recursive = TRUE);
+interval.files <- list.files(pattern = 'DepthOfCoverage.sample_interval_summary$', recursive = TRUE);
 
 # read them in
 cov.list <- list();
 summary.list <- list();
+interval.list <- list();
 
 for (file in cov.files) {
 	# extract sample ID
@@ -73,6 +75,15 @@ for (file in summary.files) {
 	smp <- sub('_DepthOfCoverage.sample_summary','',basename(file)); 
 	# store data in list
 	summary.list[[smp]] <- read.delim(file)[1,];
+	}
+
+for (file in interval.files) {
+	# extract sample ID
+	smp <- sub('_DepthOfCoverage.sample_interval_summary','',basename(file)); 
+	# store data in list
+	tmp <- read.delim(file)[,c('Target','average_coverage')];
+	tmp$Sample <- smp;
+	interval.list[[smp]] <- tmp;
 	}
 
 # reshape/format data
@@ -99,6 +110,24 @@ write.table(
 	col.names = NA,
 	sep = '\t'
 	);
+
+if (length(interval.files) > 0) {
+	interval.data <- reshape(
+		do.call(rbind, interval.list),
+		direction = 'wide',
+		idvar = 'Target',
+		timevar = 'Sample'
+		);
+	colnames(interval.data) <- gsub('average_coverage.','',colnames(interval.data));
+
+	write.table(
+		interval.data,
+		file = generate.filename(arguments$project, 'interval_coverage','tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+	}
 
 ### SAVE SESSION INFO ##############################################################################
 save.session.profile(generate.filename('CollectCoverage','SessionProfile','txt'));

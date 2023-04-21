@@ -70,9 +70,15 @@ sub get_coverage_command {
 			'-Djava.io.tmpdir=' . $args{tmp_dir},
 			'-jar $gatk_dir/GenomeAnalysisTK.jar -T DepthOfCoverage',
 			'-o', $args{output},
-			'-omitBaseOutput -omitIntervals -omitLocusTable -nt 2',
+			'-nt 2',
 			'-ct', $target_depth
 			);
+
+		if ('targeted' eq $args{seq_type}) {
+			$coverage_command .= ' -omitBaseOutput -omitLocusTable';
+			} else {
+			$coverage_command .= ' -omitBaseOutput -omitIntervals -omitLocusTable';
+			}
 		}
 
 	$coverage_command .= ' ' . join(' ',
