@@ -16,6 +16,7 @@ rsem_reference: /cluster/projects/pughlab/references/RSEM/GRCh38/v31/grch38.v31
 fusioncatcher_reference_dir: /cluster/tools/software/centos7/fusioncatcher/1.20/fusioncatcher/data/current/
 # tool versions
 star_version: 2.7.2b
+vcftools_version: 0.1.15
 samtools_version: 1.9
 picard_version: 2.6.0
 rna_seqc_version: 1.1.8
