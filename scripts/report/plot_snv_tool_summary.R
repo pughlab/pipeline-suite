@@ -219,7 +219,7 @@ plot.objects[['overlap']] <- create.barplot(
 # combine them!
 create.multipanelplot(
 	plot.objects = plot.objects,
-	height = 10,
+	height = 11,
 	width = 8,
 	resolution = 200,
 	filename = generate.filename(arguments$project, 'mutation_overlap','png'),
