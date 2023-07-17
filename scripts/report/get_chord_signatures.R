@@ -343,7 +343,21 @@ create.scatterplot(
 	filename = generate.filename(arguments$project, 'chord_predictions', 'png')
 	);
 
-to.write <- predictions[1:min(c(nrow(predictions),12)),c('sample','hr_status','p_BRCA1','p_BRCA2','p_hrd')];
+predictions$hr_status <- factor(predictions$hr_status,
+	levels = c('HR_deficient','HR_proficient','cannot_be_determined')
+	);
+predictions <- predictions[order(predictions$hr_status),];
+
+successful.predictions <- which(predictions$hr_status != 'cannot_be_determined');
+
+if (length(successful.predictions) >= 5) {
+	to.write <- predictions[successful.predictions,];
+	to.write <- to.write[1:min(c(nrow(to.write),12)),];
+	} else {
+	to.write <- predictions[1:min(c(nrow(predictions),12)),];
+	}
+
+to.write <- to.write[,c('sample','hr_status','p_BRCA1','p_BRCA2','p_hrd')];
 
 # if making output for a report
 if (!is.null(arguments$report)) {

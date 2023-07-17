@@ -36,7 +36,7 @@ save.session.profile <- function(file.name) {
 	}
 
 # function to annotate entrez gene ids by symbol
-annotate.by.symbol <- function(hugo_symbols) {
+annotate.with.entrez <- function(hugo_symbols) {
 	mapIds(org.Hs.eg.db,
 		keys = hugo_symbols,
 		column = "ENTREZID",
@@ -45,15 +45,20 @@ annotate.by.symbol <- function(hugo_symbols) {
 		);
 	}
 
-### PREPARE SESSION ################################################################################
-# import libraries
-library(GenomicRanges);
-library(argparse);
-library(plyr);
-library(AnnotationDbi);
-library(org.Hs.eg.db);
+# function to annotate entrez gene ids by symbol
+annotate.with.contig <- function(hugo_symbols) {
+	mapIds(org.Hs.eg.db,
+		keys = hugo_symbols,
+		column = "MAP",
+		keytype = "SYMBOL",
+		multiVals = "first"
+		);
+	}
 
+### PREPARE SESSION ################################################################################
 # import command line arguments
+library(argparse);
+
 parser <- ArgumentParser();
 
 parser$add_argument('-d', '--directory', type = 'character', help = 'path to data directory');
@@ -69,6 +74,13 @@ arguments <- parser$parse_args();
 date <- Sys.Date();
 
 setwd(arguments$directory);
+
+# import libraries
+library(GenomicRanges);
+library(plyr);
+library(AnnotationDbi);
+library(org.Hs.eg.db);
+
 
 ### COLLECT KEY DRAWINGS ###########################################################################
 if (arguments$find_drawings) {
@@ -224,7 +236,13 @@ if (arguments$find_drawings) {
 
 		# only keep entries for which both breakpoints are within target regions
 		to.remove <- which(is.na(overlap.data$subjectHits.1) | is.na(overlap.data$subjectHits.2));
-		keep.idx <- unique(overlap.data[-to.remove,]$queryHits);
+		keep.idx <- c(
+			intersect(
+				unique(overlap.data[-to.remove,]$queryHits),
+				which(sv.data$protocol == 'genome')
+				),
+			which(sv.data$protocol == 'transcriptome')
+			);
 
 		# filter initial input
 		sv.data.filtered <- sv.data[keep.idx,];
@@ -265,19 +283,19 @@ if (arguments$find_drawings) {
 		}
 
 	# get type of evidence (DNA or RNA)
-	tmp[,c('DNA_Support','RNA_Support')] <- 'no';
+	tmp[,c('DNA_Support','RNA_Support')] <- 'No';
 	if (any(tmp$protocol == 'genome')) {
-		tmp[which(tmp$protocol == 'genome'),]$DNA_Support <- 'yes';
+		tmp[which(tmp$protocol == 'genome'),]$DNA_Support <- 'Yes';
 		}
 
 	if (length(rna.smps) > 0) {
-		tmp[which(tmp$protocol == 'transcriptome'),]$RNA_Support <- 'yes';
+		tmp[which(tmp$protocol == 'transcriptome'),]$RNA_Support <- 'Yes';
 		rna.idx <- which(apply(
 			tmp[,names(rna.smps)],1,function(i) { any(i == 'expressed', na.rm = TRUE) } ));
-		if (length(rna.idx) > 0) { tmp[rna.idx,]$RNA_Support <- 'yes'; }
+		if (length(rna.idx) > 0) { tmp[rna.idx,]$RNA_Support <- 'Yes'; }
 		dna.idx <- which(apply(
 			tmp[,names(tumour.smps)],1,function(i) { any(i == 'genomic support', na.rm = TRUE) } ));
-		if (length(dna.idx) > 0) { tmp[dna.idx,]$DNA_Support <- 'yes'; }
+		if (length(dna.idx) > 0) { tmp[dna.idx,]$DNA_Support <- 'Yes'; }
 		}
 
 	# is this an inframe or frameshift variant?
@@ -333,9 +351,9 @@ if (arguments$find_drawings) {
 		}
 
 	# define thresholds
-	germline.threshold <- length(normal.smps)*0.9;
-	somatic.threshold <- length(tumour.smps)*0.9;
-	rna.threshold <- length(rna.smps)*0.9;
+	germline.threshold <- length(normal.smps)*0.5;
+	somatic.threshold <- length(tumour.smps)*0.8;
+	rna.threshold <- length(rna.smps)*0.8;
 
 	tmp2 <- merge(tmp, recurrence.data, all.x = TRUE);
 	to.remove <- c(
@@ -354,98 +372,181 @@ if (arguments$find_drawings) {
 		}
 
 	### SIZE FILTER ####################################################################################
-	# remove short INDELs (< 100bp)
+	# remove short INDELs (< 100bp) and inversions
 	filtered.svs$Length <- abs(filtered.svs$break2_position_start - filtered.svs$break1_position_start);
 	inter.chrom <- which(filtered.svs$break1_chromosome != filtered.svs$break2_chromosome);
 	if (length(inter.chrom) > 0) { filtered.svs[inter.chrom,]$Length <- NA; }
 
-	indel.idx <- which(
-		filtered.svs$event_type %in% c('deletion','insertion','duplication') &
+	short.idx <- which(
+		filtered.svs$event_type %in% c('deletion','insertion','duplication','inversion') &
 		filtered.svs$Length < 100
 		);
 
-	if (length(indel.idx) > 0) {
-		print(paste0('Removing ', length(indel.idx), ' (', round(length(indel.idx)/nrow(filtered.svs)*100),
-			'%) short DEL/INS/DUP (<100bp).'));
-		filtered.svs <- filtered.svs[-c(indel.idx),];
+	if (length(short.idx) > 0) {
+		print(paste0('Removing ', length(short.idx), ' (',
+			round(length(short.idx)/nrow(filtered.svs)*100),
+			'%) short DEL/INS/DUP/INV (<100bp).'));
+		filtered.svs <- filtered.svs[-c(short.idx),];
 		}
 
 	# format for cBioportal
 	cbio.svs <- data.frame(
-		Sample_ID = filtered.svs$library,
+		Sample_Id = filtered.svs$library,
+		SV_Status = toupper(filtered.svs$Status),
 		Site1_Hugo_Symbol = filtered.svs$gene1_aliases,
-		Site1_Entrez_Gene_Id = annotate.by.symbol(filtered.svs$gene1_aliases),
+		Site1_Entrez_Gene_Id = annotate.with.entrez(filtered.svs$gene1_aliases),
 		Site1_Ensembl_Transcript_Id = filtered.svs$transcript1,
-		Site1_Exon = filtered.svs$exon_last_5prime,
+		Site1_Region_Number = NA, #filtered.svs$exon_last_5prime,
+		Site1_Region = NA, #(5_Prime_UTR,3_Prime_UTR,Promoter,Exon,Intron)
 		Site1_Chromosome = filtered.svs$break1_chromosome,
+		Site1_Contig = annotate.with.contig(filtered.svs$gene1_aliases),
 		Site1_Position = filtered.svs$break1_position_start,
 		Site1_Description = NA,
 		Site2_Hugo_Symbol = filtered.svs$gene2_aliases,
-		Site2_Entrez_Gene_Id = annotate.by.symbol(filtered.svs$gene2_aliases),
+		Site2_Entrez_Gene_Id = annotate.with.entrez(filtered.svs$gene2_aliases),
 		Site2_Ensembl_Transcript_Id = filtered.svs$transcript2,
-		Site2_Exon = filtered.svs$exon_first_3prime,
+		Site2_Region_Number = NA, #filtered.svs$exon_first_3prime,
+		Site2_Region = NA,
 		Site2_Chromosome = filtered.svs$break2_chromosome,
+		Site2_Contig = annotate.with.contig(filtered.svs$gene2_aliases),
 		Site2_Position = filtered.svs$break2_position_start,
 		Site2_Description = NA,
-		Site2_Effect_On_Frame = c('INFRAME','FRAMESHIFT','FRAMESHIFT','NONE')[match(
-			filtered.svs$fusion_splicing_pattern,c('normal','retained intron','skipped exon','None'))],
+		Site2_Effect_On_Frame = c('In_frame','Frameshift','Frameshift',NA)[match(
+			# in_frame, frameshift, out-of-frame
+			filtered.svs$fusion_splicing_pattern,
+			c('normal','retained intron','skipped exon','None'))],
 		NCBI_Build = rep(arguments$genome,nrow(filtered.svs)),
-		DNA_support = filtered.svs$DNA_Support,
-		RNA_support = filtered.svs$RNA_Support,
+		Class = c('Deletion','Duplication','Insertion','Inversion','Translocation','Translocation')[match(
+			filtered.svs$event_type,
+			c('deletion','duplication','insertion','inversion','translocation','inverted translocation'))],
+		Tumor_Split_Read_Count = NA,
+		Tumor_Paired_End_Read_Count = NA,
+		Event_Info = NA, 
+		Connection_Type = paste0(filtered.svs$gene1_direction,'to',filtered.svs$gene2_direction),
+		Breakpoint_Type = apply(filtered.svs[,c('break1_position_start','break1_position_end','break2_position_start','break2_position_end')],
+			1, function(i) { if (sum(c(i[2] - i[1], i[4]-i[3])) > 0) { 'IMPRECISE' } else { 'PRECISE' } }), 
+		Annotation = NA,
+		DNA_Support = filtered.svs$DNA_Support,
+		RNA_Support = filtered.svs$RNA_Support,
+		SV_Length = filtered.svs$Length,
 		Normal_Read_Count = NA,
 		Tumor_Read_Count = NA,
-		Normal_Variant_Count = NA,
-		Tumor_Variant_Count = NA,
 		Normal_Paired_End_Read_Count = NA,
-		Tumor_Paired_End_Read_Count = NA,
 		Normal_Split_Read_Count = NA,
-		Tumor_Split_Read_Count = NA,
-		Annotation = NA,
-		Breakpoint_Type = NA,
-		Connection_Type = paste0(filtered.svs$gene1_direction,'to',filtered.svs$gene2_direction),
-		Event_Info = NA, 
-		Class = toupper(filtered.svs$event_type),
-		Length = filtered.svs$Length,
 		Comments = NA,
 		Fusion = paste0(filtered.svs$gene1_aliases, '--', filtered.svs$gene2_aliases),
-		Site1_Split_Read_Count = filtered.svs$break1_split_reads,
-		Site2_Split_Read_Count = filtered.svs$break2_split_reads,
-		Linking_Split_Reads = filtered.svs$linking_split_reads,
-		Spanning_Reads = filtered.svs$spanning_reads,
-		Flanking_Read_Pairs = filtered.svs$flanking_pairs,
+		Site1_Split_Read_Count = sapply(filtered.svs$break1_split_reads,
+			function(i) { max(as.numeric(unlist(strsplit(as.character(i),';'))), na.rm = TRUE) } ),
+		Site2_Split_Read_Count = sapply(filtered.svs$break2_split_reads,
+			function(i) { max(as.numeric(unlist(strsplit(as.character(i),';'))), na.rm = TRUE) } ),
+		Linking_Split_Reads = sapply(filtered.svs$linking_split_reads,
+			function(i) { max(as.numeric(unlist(strsplit(as.character(i),';'))), na.rm = TRUE) } ),
+		Spanning_Reads = sapply(filtered.svs$spanning_reads,
+			function(i) { max(as.numeric(unlist(strsplit(as.character(i),';'))), na.rm = TRUE) } ),
+		Flanking_Read_Pairs = sapply(filtered.svs$flanking_pairs,
+			function(i) { max(as.numeric(unlist(strsplit(as.character(i),';'))), na.rm = TRUE) } ),
 		Tools = filtered.svs$tools,
-		Total_Evidence = filtered.svs$Evidence,
-		Status = filtered.svs$Status
+		Total_Evidence = filtered.svs$Evidence
 		);
+
+	# clean up regions
+	if (arguments$genome %in% c('hg19','GRCh37')) {
+		library('TxDb.Hsapiens.UCSC.hg19.knownGene');
+		txdb <- TxDb.Hsapiens.UCSC.hg19.knownGene;
+
+		} else if (arguments$genome %in% c('hg38','GRCh38')) {
+		library('TxDb.Hsapiens.UCSC.hg38.knownGene');
+		txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene;
+
+		} else {
+		stop('Unknown reference provided; must be one of hg19 or hg38.');
+		}
+
+	gene.gr <- transcriptsBy(txdb, by = 'gene');
+
+	gene.ids <- names(gene.gr);
+	exon.data <- select(txdb,
+		keys = gene.ids,
+		keytype = 'GENEID',
+		columns = c('TXNAME','TXCHROM','TXSTRAND','TXSTART','TXEND','EXONRANK','EXONSTART','EXONEND')
+		);
+
+	exon.data$REGION <- 'EXON';
+
+	# estimate promoter region
+	tss.data <- aggregate(TXSTART ~ TXNAME + TXCHROM + TXSTRAND, exon.data[which(exon.data$TXSTRAND == '+'),], min);
+	colnames(tss.data)[4] <- 'TSS';
+	tss.data$PROMOTER <- tss.data$TSS - 1000;
+	tmp <- aggregate(TXEND ~ TXNAME + TXCHROM + TXSTRAND, exon.data[which(exon.data$TXSTRAND == '-'),], max);
+	colnames(tmp)[4] <- 'TSS';
+	tmp$PROMOTER <- tmp$TSS + 1000;
+	tss.data <- rbind(tss.data, tmp);
+	rm(tmp);
+
+	tss.data$EXONSTART <- apply(tss.data[,c('TSS','PROMOTER')],1,min);
+	tss.data$EXONEND <- apply(tss.data[,c('TSS','PROMOTER')],1,max);
+	tss.data$REGION <- 'PROMOTER';
+
+	gene.data <- merge(exon.data, tss.data[,c('TXNAME','TXCHROM','TXSTRAND','EXONSTART','EXONEND','REGION')], all = TRUE);
+	gene.data <- gene.data[order(gene.data$TXCHROM, gene.data$EXONSTART, gene.data$EXONEND),];
+
+	rm(txdb, gene.gr, gene.ids, exon.data, tss.data);
+
+	# annotate breakpoints
+	site1_bp <- data.frame(
+		Chromosome = paste0('chr',cbio.svs$Site1_Chromosome),
+		Start = cbio.svs$Site1_Position,
+		End = cbio.svs$Site1_Position
+		);
+	site2_bp <- data.frame(
+		Chromosome = paste0('chr',cbio.svs$Site2_Chromosome),
+		Start = cbio.svs$Site2_Position,
+		End = cbio.svs$Site2_Position
+		);
+
+	bp1.gr <- makeGRangesFromDataFrame(site1_bp, starts.in.df.are.0based = FALSE);
+	bp2.gr <- makeGRangesFromDataFrame(site2_bp, starts.in.df.are.0based = FALSE);
+
+	gene.gr <- makeGRangesFromDataFrame(gene.data,
+		seqnames.field = 'TXCHROM',
+		start.field = 'EXONSTART',
+		end.field = 'EXONEND',
+		strand.field = 'TXSTRAND'
+		);
+
+	# find overlaps
+	overlap.bp1 <- as.data.frame(findOverlaps(bp1.gr, gene.gr));
+	overlap.bp2 <- as.data.frame(findOverlaps(bp2.gr, gene.gr));
+
+	# fill in results (EXON or PROMOTER hits)
+	for (i in unique(overlap.bp1$queryHits)) {
+		anno.data <- gene.data[overlap.bp1[which(overlap.bp1$queryHits == i),]$subjectHits,];
+		anno.data <- anno.data[grep(cbio.svs[i,]$Site1_Ensembl_Transcript_Id, anno.data$TXNAME),];
+		if (nrow(anno.data) == 1) {
+			cbio.svs[i,]$Site1_Region <- anno.data$REGION;
+			cbio.svs[i,]$Site1_Region_Number <- anno.data$EXONRANK;
+			}
+		}
+
+	for (i in unique(overlap.bp2$queryHits)) {
+		anno.data <- gene.data[overlap.bp2[which(overlap.bp2$queryHits == i),]$subjectHits,];
+		anno.data <- anno.data[grep(cbio.svs[i,]$Site2_Ensembl_Transcript_Id, anno.data$TXNAME),];
+		if (nrow(anno.data) == 1) {
+			cbio.svs[i,]$Site2_Region <- anno.data$REGION;
+			cbio.svs[i,]$Site2_Region_Number <- anno.data$EXONRANK;
+			}
+		}
+
+	# fill in intronic regions (assuming if breakpoint is within a gene, but not in the promoter/exon region)
+	cbio.svs[which(grepl('ENST', cbio.svs$Site1_Ensembl_Transcript_Id) & is.na(cbio.svs$Site1_Region)),]$Site1_Region <- 'INTRON';
+	cbio.svs[which(grepl('ENST', cbio.svs$Site2_Ensembl_Transcript_Id) & is.na(cbio.svs$Site2_Region)),]$Site2_Region <- 'INTRON';
 
 	# clean up connection type
 	cbio.svs$Connection_Type <- factor(cbio.svs$Connection_Type,
 		levels = c('5to3','3to5','5to5','3to3')
 		);
 
-	# clean up Frame status
-	cbio.svs$Site2_Effect_On_Frame <- factor(cbio.svs$Site2_Effect_On_Frame,
-		levels = c('INFRAME','FRAMESHIFT')
-		);
-
-	to.remove <- unique(c(
-		which(cbio.svs$Status == 'germline'),
-		which( grepl('None', cbio.svs$Fusion) ),
-		which( !grepl(';', cbio.svs$Tools) & cbio.svs$Total_Evidence < 20)
-		));
-
-	for.cbio <- cbio.svs[-to.remove,1:35];
-
 	# save to file
-	write.table(
-		for.cbio,
-		file = generate.filename(arguments$project, 'sv_data_for_cbioportal','tsv'),
-		row.names = FALSE,
-		col.names = TRUE,
-		quote = FALSE,
-		sep = '\t'
-		);
-
 	write.table(
 		cbio.svs,
 		file = generate.filename(arguments$project, 'sv_data_formatted','tsv'),
@@ -455,36 +556,32 @@ if (arguments$find_drawings) {
 		sep = '\t'
 		);
 
-	gc();
+	# do some extra filtering for cBioportal
+	to.remove <- unique(c(
+		# remove germline
+		which(cbio.svs$SV_Status == 'GERMLINE'),
+		# remove low evidence calls
+		which( !grepl(';', cbio.svs$Tools) & cbio.svs$Total_Evidence < 20)
+		));
 
-	### OLD VERSION ###
-	# format for cbioportal (fusion_data.txt > DEPRECATED in cbioportal)
-	fusion.data <- data.frame(
-		Hugo_Symbol = c(
-			as.character(for.cbio$Site1_Hugo_Symbol),
-			as.character(for.cbio$Site2_Hugo_Symbol)
-			),
-		Entrez_Gene_Id = c(
-			as.character(for.cbio$Site1_Entrez_Gene_Id), 
-			as.character(for.cbio$Site2_Entrez_Gene_Id)
-			),
-		Center = rep(arguments$center, nrow(for.cbio)*2),
-		Tumor_Sample_Barcode = rep(for.cbio$Sample_ID, times = 2),
-		Fusion = rep(for.cbio$Fusion, times = 2),
-		DNA_support = rep(for.cbio$DNA_support, times = 2),
-		RNA_support = rep(for.cbio$RNA_support, times = 2),
-		Method = rep(gsub(';', ',', cbio.svs[-to.remove,]$Tools), times = 2),
-		Frame = tolower(rep(for.cbio$Site2_Effect_On_Frame, times = 2)),
-		Fusion_Status = rep(for.cbio$Comments, times = 2)
-		);
+	for.cbio <- cbio.svs[-to.remove,];
 
-	fusion.data <- fusion.data[order(fusion.data$Tumor_Sample_Barcode, fusion.data$Fusion, fusion.data$Method, fusion.data$Frame, na.last = FALSE),];
-	fusion.data <- fusion.data[!duplicated(fusion.data[,1:5]),];
+	# remove duplicates
+	for.cbio$BP1 <- round(for.cbio$Site1_Position/1000,0);
+	for.cbio$BP2 <- round(for.cbio$Site2_Position/1000,0);
+
+	for.cbio <- for.cbio[order(for.cbio$Sample_Id, for.cbio$Fusion, -for.cbio$Total_Evidence),];
+	for.cbio <- for.cbio[!duplicated(for.cbio[,c('Sample_Id','Site1_Chromosome','BP1','Site2_Chromosome','BP2','Class','Fusion')]),];	
+
+	if (any(grepl('rna', for.cbio$Sample_Id))) {
+		for.cbio$ID <- gsub('-rna','',for.cbio$Sample_Id);
+		for.cbio <- for.cbio[order(for.cbio$ID, for.cbio$Fusion, for.cbio$Class),];
+		}
 
 	# save to file
 	write.table(
-		fusion.data,
-		file = generate.filename(arguments$project, 'fusion_data_for_cbioportal','tsv'),
+		for.cbio[,1:37],
+		file = generate.filename(arguments$project, 'sv_data_for_cbioportal','tsv'),
 		row.names = FALSE,
 		col.names = TRUE,
 		quote = FALSE,

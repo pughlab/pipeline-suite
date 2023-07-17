@@ -42,6 +42,7 @@ sub get_star_command {
 		r1		=> undef,
 		r2		=> undef,
 		reference_dir	=> undef,
+		n_cpus		=> 1,
 		@_
 		);
 
@@ -50,7 +51,7 @@ sub get_star_command {
 		# basic options
 		'--genomeDir', $args{reference_dir},
 		'--genomeLoad NoSharedMemory',
-		'--runThreadN 1',
+		'--runThreadN', $args{n_cpus},
 		'--readFilesCommand zcat',
 		'--readFilesIn', $args{r1}, $args{r2},
 		# output options
@@ -329,7 +330,8 @@ sub main {
 			$star_cmd .= get_star_command(
 				r1		=> join(',', @r1_fastqs),
 				r2		=> join(',', @r2_fastqs),
-				reference_dir	=> $arriba_ref
+				reference_dir	=> $arriba_ref,
+				n_cpus		=> $parameters->{star}->{n_cpus}
 				);
 
 			# check if this should be run
@@ -345,6 +347,7 @@ sub main {
 					modules => [$star],
 					max_time	=> $parameters->{star}->{time},
 					mem		=> $parameters->{star}->{mem},
+					cpus_per_task	=> $parameters->{star}->{n_cpus},
 					hpc_driver	=> $args{hpc_driver},
 					extra_args	=> [$hpc_group]
 					);
@@ -380,7 +383,7 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> 'run_arriba_quantify_viral_expression_' . $sample,
 					cmd	=> $virus_cmd,
-					modules => [$star, $arriba],
+					modules => [$samtools, $star, $arriba],
 					dependencies	=> $star_run_id,
 					max_time	=> $parameters->{quantify_virus}->{time},
 					mem		=> $parameters->{quantify_virus}->{mem},

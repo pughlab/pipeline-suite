@@ -70,9 +70,14 @@ sub get_coverage_command {
 			'-Djava.io.tmpdir=' . $args{tmp_dir},
 			'-jar $gatk_dir/GenomeAnalysisTK.jar -T DepthOfCoverage',
 			'-o', $args{output},
-			'-omitBaseOutput -omitIntervals -omitLocusTable -nt 2',
 			'-ct', $target_depth
 			);
+
+		if ('targeted' eq $args{seq_type}) {
+			$coverage_command .= ' -omitBaseOutput -omitLocusTable';
+			} else {
+			$coverage_command .= ' -omitBaseOutput -omitIntervals -omitLocusTable';
+			}
 		}
 
 	$coverage_command .= ' ' . join(' ',
@@ -587,7 +592,7 @@ sub main {
 			);
 
 		$run_id = submit_job(
-			jobname		=> 'combine_coverage_output',
+			jobname		=> 'combine_callable_base_output',
 			shell_command	=> $run_script,
 			hpc_driver	=> $args{hpc_driver},
 			dry_run		=> $args{dry_run},

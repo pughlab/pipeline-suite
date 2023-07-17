@@ -52,7 +52,7 @@ arguments <- parser$parse_args();
 # what's the date?
 date <- Sys.Date();
 
-data.directory <- sub(basename(arguments$input),'', (arguments$input));
+data.directory <- sub(basename(arguments$input), '', arguments$input);
 setwd(data.directory);
 
 ### MAIN ###########################################################################################
@@ -60,7 +60,7 @@ agena <- read.delim(arguments$agena);
 
 header <- read.delim(arguments$input, nrow = 1000, header = FALSE);
 header <- header[grepl('##', header[,1]),];
-smp.data <- read.delim(arguments$input, skip = length(header));
+smp.data <- read.delim(arguments$input, skip = length(header), stringsAsFactors = FALSE);
 if (! colnames(smp.data)[1] == 'X.CHROM') {
 	stop('Could not read input VCF');
 	} else {
@@ -78,6 +78,8 @@ for (snp.idx in 1:nrow(agena)) {
 	chr <- agena[snp.idx,]$Chromosome;
 	pos <- agena[snp.idx,]$Position;
 	vcf.idx <- which(smp.data$CHROM == chr & smp.data$POS == pos);
+
+	if (length(vcf.idx) == 0) { next; }
 
 	# identify index for genotype and allele depth (ref,alt)
 	tmp <- unlist(strsplit(smp.data[vcf.idx,]$FORMAT,':'));

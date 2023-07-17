@@ -67,7 +67,7 @@ date <- Sys.Date();
 setwd(arguments$directory);
 
 ### FORMAT ANNOTATION
-refGene <- read.delim(arguments$gtf, header = F, comment.char = '#');
+refGene <- read.delim(arguments$gtf, header = FALSE, comment.char = '#');
 refGene <- refGene[which(refGene$V3 == 'gene'),c(1,4,5,9)];
 colnames(refGene) <- c('Chromosome','Start','End','INFO');
 
@@ -205,7 +205,7 @@ save(
 	);
 
 # prep or cBioportal
-cbio <- cbio <- genes.formatted$tpm;
+cbio <- genes.formatted$tpm;
 
 all.zero <- apply(cbio[,4:ncol(cbio)],1,sum);
 cbio <- cbio[which(all.zero > 0),];

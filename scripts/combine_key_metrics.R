@@ -24,13 +24,13 @@ reshaped$md5sum <- NA;
 for (i in md5_files) {
 
 	tmp <- read.table(i, header = F, col.names = c('MD5','Filename'));
+	if (nrow(tmp) > 0) {
+		filepath <- tmp[1,2];
+		parts <- unlist(strsplit(as.character(filepath),'/'));
+		filename <- parts[length(parts)];
 
-	filepath <- tmp[1,2];
-	parts <- unlist(strsplit(as.character(filepath),'/'));
-	filename <- parts[length(parts)];
-
-	reshaped[which(reshaped$Filename == filename),]$md5sum <- as.character(tmp[1,1]);
-
+		reshaped[which(reshaped$Filename == filename),]$md5sum <- as.character(tmp[1,1]);
+		}
 	}
 
 # write results to file

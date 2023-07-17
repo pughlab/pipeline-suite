@@ -155,7 +155,7 @@ sub get_mavis_command {
 
 		$mavis_cmd .= ' ' . join(' ',
 			'--library', $id, 'genome diseased False', $args{tumour_bams}->{$smp},
-			'--assign', $id, join(' ', @dna_tools)
+			'--assign', $id, join(' ', @dna_tools, @rna_tools)
 			);
 		}
 
@@ -186,7 +186,7 @@ sub get_mavis_command {
 
 			$mavis_cmd .= ' ' . join(' ',
 				'--library', $id, 'transcriptome diseased True', $args{rna_bams}->{$smp},
-				'--assign', $id, join(' ', @rna_tools)
+				'--assign', $id, join(' ', @dna_tools, @rna_tools)
 				);
 			}
 		}
@@ -391,7 +391,7 @@ sub main {
 		}
 
 	# find SV files in each directory
-	my (@manta_files, @delly_files, @starfusion_files, @fusioncatcher_files);
+	my (@manta_files, @delly_germline_files, @delly_files, @starfusion_files, @fusioncatcher_files);
 	my (@novobreak_files, @svict_files, @pindel_files, @arriba_files);
 	my $should_run_final;
 
@@ -402,6 +402,7 @@ sub main {
 		}
 	if (defined($args{delly_dir})) {
 		@delly_files = _get_files($args{delly_dir}, 'Delly_SVs_somatic_hc.bcf');
+		@delly_germline_files = _get_files($args{delly_dir}, 'genotyped_filtered.bcf');
 		}
 	if (defined($args{novobreak_dir})) {
 		@novobreak_files = _get_files($args{novobreak_dir}, 'novoBreak_filtered.tsv');
@@ -443,10 +444,10 @@ sub main {
 		print $log "> Found " . scalar(@tumour_ids) . " tumour BAMs.\n";
 		print $log "> Found " . scalar(@rna_ids_patient) . " RNA-Seq BAMs.\n";
 
-		if ( (scalar(@tumour_ids) == 0) & (scalar(@rna_ids_patient) == 0) ) {
-			print $log "\n>> No tumour BAMs provided, skipping patient.\n";
-			next;
-			}
+#		if ( (scalar(@tumour_ids) == 0) & (scalar(@rna_ids_patient) == 0) ) {
+#			print $log "\n>> No tumour BAMs provided, skipping patient.\n";
+#			next;
+#			}
 
 		# create some directories
 		my $patient_directory = join('/', $output_directory, $patient);
@@ -482,6 +483,46 @@ sub main {
 					$link = join('/', $link_directory, $normal . '_SViCT.vcf');
 					symlink($svict_svs[0], $link);
 					push @svict_svs_patient, $svict_svs[0];
+					}
+				}
+
+			# organize Delly input
+			if (scalar(@delly_germline_files) > 0) {
+				my @delly_svs = grep { /$normal/ } @delly_germline_files;
+
+				unless (scalar(@delly_svs) == 0) {
+					$link = join('/', $link_directory, $normal . '_Delly_SVs.bcf');
+					symlink($delly_svs[0], $link);
+					push @delly_svs_patient, $delly_svs[0];
+					}
+				}
+
+			# organize Manta input
+			if (scalar(@manta_files)) {
+				my @manta_svs = grep { /$normal/ } @manta_files;
+				foreach my $file ( @manta_svs ) {
+					my @tmp = split /\//, $file;
+					$link = join('/', $link_directory, $normal . '_Manta_' . $tmp[-1]);
+					symlink($file, $link);
+
+					my $stem = $tmp[-1];
+					$stem =~ s/.gz//;
+					my $formatted_vcf = join('/',
+						$patient_directory,
+						$normal . '_Manta_formatted_' . $stem
+						);
+
+					# write command to format manta SVs
+					# (older version of Manta required for mavis)
+					$format_command .= "\n\n" . join(' ',
+						'python /cluster/tools/software/centos7/manta/1.6.0/libexec/convertInversion.py',
+						'/cluster/tools/software/centos7/samtools/1.9/bin/samtools',
+						$tool_data->{reference},
+						$file,
+						'>', $formatted_vcf
+						);
+
+					push @manta_svs_formatted, $formatted_vcf;
 					}
 				}
 			}
@@ -845,8 +886,10 @@ sub main {
 			$cleanup_cmd = join("\n",
 				"if [ -s $mavis_output ]; then",
 				"  cd $patient_directory\n",
+				"  find . -name '*.fa' -type f -exec rm {} " . '\;',
 				"  find . -name '*.sam' -type f -exec rm {} " . '\;',
 				"  find . -name '*.bam' -type f -exec rm {} " . '\;',
+				"  find . -name '*.bai' -type f -exec rm {} " . '\;',
 				"  " . $tar,
 				"else",
 				'  echo "FINAL OUTPUT FILE is missing; not removing intermediates"',

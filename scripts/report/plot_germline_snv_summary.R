@@ -143,12 +143,23 @@ if (any(mutation.data$Code > 6)) {
 	mutation.data[which(mutation.data$Code > 6),]$Code <- 9;
 	}
 
+# add some basic filters to remove low coverage variants
+mutation.data <- mutation.data[which(mutation.data$n_depth >= 15 | is.na(mutation.data$n_vaf)),];
+mutation.data <- mutation.data[which(
+	(mutation.data$t_depth >= 15 & is.na(mutation.data$n_vaf)) | 
+	!is.na(mutation.data$n_vaf) ),];
+
+# true germline variants should have VAF of 0.5 or 1, so add a VAF filter
+mutation.data <- mutation.data[which(
+	(is.na(mutation.data$n_vaf) & mutation.data$t_vaf > 0.4) | 
+	(mutation.data$n_vaf > 0.4)),];
+
 # if there are fewer than 5 germline variants here, write a table to output
 show.germline <- mutation.data[,c('Tumor_Sample_Barcode','Hugo_Symbol','Variant_Classification','t_vaf','n_vaf')];
 colnames(show.germline) <- c('Sample','Symbol','Class','TumourVAF','NormalVAF');
 
 if (nrow(mutation.data) == 0) {
-	plot.data <- data.frame(matrix(nrow= 0, ncol = 1));
+	plot.data <- data.frame(matrix(nrow = 0, ncol = 1));
 	} else {
 	# reduce to 1 mutation per gene per sample [taking the higher priority code]
 	mutation.data.trimmed <- aggregate(
@@ -183,6 +194,11 @@ if (nrow(plot.data) > 1) {
 		idvar = c('Chromosome','Hugo_Symbol')
 		);
 	colnames(vaf.data) <- gsub('t_vaf.','',colnames(vaf.data));
+
+	# add in any missing samples (those with no variants)
+	missing.samples <- setdiff(all.samples, colnames(plot.data));
+	plot.data[,missing.samples] <- NA;
+	vaf.data[,missing.samples] <- NA;
 
 	# get per-gene sample counts
 	plot.data <- plot.data[,c('Hugo_Symbol', 'Chromosome', all.samples)];
@@ -263,7 +279,7 @@ if (nrow(plot.data) > 1) {
 		xaxis.tck = 0,
 		yaxis.tck = 0,
 		xaxis.fontface = 'plain',
-		yaxis.fontface = 'plain',
+		yaxis.fontface = 'italic',
 		xaxis.rot = 90,
 		bg.alpha = 1,
 		lwd = 1,

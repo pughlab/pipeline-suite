@@ -367,9 +367,6 @@ sub main {
 			print $log "\n  SAMPLE: $sample\n";
 
 			my $output_stem = join('/', $patient_directory, $sample . '_msi_output');
-			$cleanup_cmd .= "\nrm $output_stem\_dis;";
-			$cleanup_cmd .= "\nrm $output_stem\_germline;";
-
 			my ($msi_command, $depends);
 
 			if (scalar(@normal_ids) > 0) {
@@ -382,6 +379,10 @@ sub main {
 					seq_type	=> $tool_data->{seq_type}
 					);
 				$depends = $intervals_run_id;
+
+				$cleanup_cmd .= "\nrm $output_stem\_dis;";
+				$cleanup_cmd .= "\nrm $output_stem\_germline;";
+
 				} else {
 				$msi_command = get_msi_sensor_command(
 					tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
@@ -391,6 +392,9 @@ sub main {
 					seq_type	=> $tool_data->{seq_type}
 					);
 				$depends = $baseline_run_id;
+
+				$cleanup_cmd .= "\nrm $output_stem\_dis;";
+				$cleanup_cmd .= "\nrm $output_stem\_all;";
 				}
 
 			# check if this should be run

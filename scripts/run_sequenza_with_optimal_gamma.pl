@@ -58,10 +58,17 @@ sub get_gamma_tuning_command {
 		seqz		=> undef,
 		out_dir		=> undef,
 		ref_type	=> undef,
+		is_wgs		=> 0,
 		@_
 		);
 
-	my $sequenza_command = 'for i in {0..20..5} {30..150..10} {200..500..100} {1000..3000..500}; do';
+	my $sequenza_command;
+
+	if ($args{is_wgs}) {
+		$sequenza_command .= 'for i in {0..20..5} {30..150..10} {200..500..100} {1000..3000..500}; do';
+		} else {
+		$sequenza_command .= 'for i in {0..20..5} {30..160..10} {200..450..50} {500..1000..100}; do';
+		}
 
 	$sequenza_command .= "\n  " . join(' ',
 		"Rscript $cwd/sequenza/test_gamma.R",
@@ -239,7 +246,7 @@ sub main {
 			if ('Y' eq missing_file($seqz_file)) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for Sequenza (SEQZ)...\n";
+				print $log "\nSubmitting job for Sequenza (SEQZ)...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -262,13 +269,14 @@ sub main {
 
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping Sequenza (SEQZ) because this has already been completed!\n";
+				print $log "\nSkipping Sequenza (SEQZ) because this has already been completed!\n";
 				}
 
 			my $tuning_cmd = get_gamma_tuning_command(
 				seqz		=> $seqz_file,
 				out_dir		=> $sequenza_directory,
-				ref_type	=> $tool_data->{ref_type}
+				ref_type	=> $tool_data->{ref_type},
+				is_wgs		=> $is_wgs
 				);
 
 			my $tuning_status = join('/', $tuning_directory, 'gamma_tuning_status');

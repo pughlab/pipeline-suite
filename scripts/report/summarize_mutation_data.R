@@ -601,10 +601,11 @@ msi.plot <- create.dotmap(
 	yaxis.fontface = 'plain',
 	yaxis.cex = 0.8,
 	colour.scheme = c('white','grey50','black'),
-	at = seq(0,2,1),
+	total.colours = 4,
+#	at = seq(0,2,1),
 	bg.alpha = 1,
-	lwd = 1, row.lwd = 1, col.lwd = 1,
-	row.colour = 'grey90',
+	lwd = 1, row.lwd = c(1.5,1), col.lwd = 1,
+	row.colour = c('black','grey90'),
 	col.colour = 'grey90', 
 	legend = list(
 		right = list(fun = sig.legend)
@@ -704,20 +705,20 @@ basechange.plot <- create.barplot(
 # combine them!
 combined.plot <- create.multipanelplot(
 	plot.objects = list(msi.plot, function.zoom.plot, function.plot, basechange.plot),
-	plot.objects.heights = c(0.6,1,1,2),
+	plot.objects.heights = if (length(all.samples) <= 10) { c(0.6,1,1,2)
+		 } else { c(0.6,1,1,2) },
 	left.legend.padding = 0,
 	right.legend.padding = 0,
 	top.legend.padding = 0,
 	bottom.legend.padding = 0,
-	y.spacing = c(0.5,-1,0.5),
+	y.spacing =  if (length(all.samples) <= 10) { c(0.5,-1,0.5) } else { c(-1.3,-1.8,-1.8) },
 	ylab.axis.padding = 0.8,
 	right.padding = 3,
 	legend = list(
 		inside = list(
 			fun = functional.legend,
 			y = 0.65,
-			x = if (length(all.samples) <= 10) { 0.815 } else { 0.893 }
-#			x = if (length(all.samples) <= 10) { 0.856 } else { 0.893 }
+			x = if (length(all.samples) <= 10) { 0.815 } else { 0.863 }
 			)
 		),
 	style = 'Nature'

@@ -48,7 +48,7 @@ sub get_rsem_command {
 
 	my $rsem_command = join(' ',
 		'rsem-calculate-expression',
-		'--paired-end --bam --estimate-rspd --output-genome-bam',
+		'--paired-end --bam --estimate-rspd --no-bam-output',
 		'--temporary-folder', $args{tmp_dir},
 		'-p 8'
 		);
@@ -228,9 +228,6 @@ sub main {
 
 			my $genes_file = join('/', $sample_directory, $sample . '.genes.results');
 			my $isoforms_file = join('/', $sample_directory, $sample . '.isoforms.results');
-
-			# add files to cleanup
-			$cleanup_cmd .= "\nrm " . join('/', $sample_directory, '*.bam');
 
 			# check if this should be run
 			if ('Y' eq missing_file($genes_file)) {

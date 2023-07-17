@@ -492,9 +492,12 @@ sub main {
 		if (scalar(@normal_ids) > 0) {
 			$normal = $normal_ids[0];
 			if (defined($bam_metrics_file)) {
-				$normal_insert_size = get_median_insert_size_command(
-					input 	=> $bam_metrics_file,
-					sample	=> $normal
+				$normal_insert_size = max(
+					$normal_insert_size,
+					get_median_insert_size_command(
+						input 	=> $bam_metrics_file,
+						sample	=> $normal
+						)
 					);
 				} else {
 				$normal_insert_size = max(
@@ -535,9 +538,12 @@ sub main {
 
 				my $tumor_insert_size = 152; # expected read length + 1
 				if (defined($bam_metrics_file)) {
-					$tumor_insert_size = get_median_insert_size_command(
-						input 	=> $bam_metrics_file,
-						sample	=> $sample
+					$tumor_insert_size = max(
+						$tumor_insert_size,
+						get_median_insert_size_command(
+							input 	=> $bam_metrics_file,
+							sample	=> $sample
+							)
 						);
 					} else {
 					$tumor_insert_size = max(

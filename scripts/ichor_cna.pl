@@ -266,7 +266,7 @@ sub main {
 			# than the .bai I have generated, we need to use the renamed symlinks
 			# for this step)
 			my $normal_bam = basename($smp_data->{$patient}->{normal}->{$normal});
-			$normal_wig = join('/', $tmp_directory, $normal . '.wig');
+			$normal_wig = join('/', $patient_directory, $normal . '.wig');
 
 			my $make_wig_command = get_readcount_command(
 				chroms	=> join(',', @chroms),
@@ -274,8 +274,12 @@ sub main {
 				wig	=> $normal_wig
 				);
 
+			$make_wig_command .= "\n\necho 'COMPLETE' > $normal_wig.COMPLETE";
+
+			$cleanup_cmd .= "\nrm $normal_wig";
+
 			# check if this should be run
-			if ('Y' eq missing_file($normal_wig)) {
+			if ('Y' eq missing_file($normal_wig . '.COMPLETE')) {
 
 				# record command (in log directory) and then run job
 				print $log "  >> Submitting job for readCounter...\n";

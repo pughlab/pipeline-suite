@@ -236,12 +236,11 @@ for (file in seg.files) {
 	# store data in list
 	if (smp %in% names(seg.list)) { next; }
 	segs <- read.delim(file);
-	segs <- fillgaps(segs[!is.na(segs$CNt),]);
+#	segs <- fillgaps(segs[!is.na(segs$CNt),]);
 	seg.list[[smp]] <- segs;
 	}
 
 # format segments for gistic
-# https://crazyhottommy.blogspot.com/2017/11/run-gistic2-with-sequenza-segmentation.html
 segment.data <- do.call(rbind, seg.list);
 segment.data$Sample <- sapply(rownames(segment.data), function(i) { unlist(strsplit(i,'\\.'))[1] } );
 segment.data$Seg.CN <- (log2(2*segment.data$depth.ratio)-1); # same as log2(depth.ratio)

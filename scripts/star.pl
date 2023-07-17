@@ -3,6 +3,7 @@
 use AutoLoader 'AUTOLOAD';
 use strict;
 use warnings;
+use version;
 use Carp;
 use POSIX qw(strftime);
 use Getopt::Std;
@@ -14,6 +15,9 @@ use IO::Handle;
 
 my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
+
+# define some global variables
+our $tool_version = undef;
 
 ####################################################################################################
 # version       author	  	comment
@@ -37,39 +41,6 @@ require "$cwd/utilities.pl";
 ### SUBROUTINES ####################################################################################
 # format command to run alignment using STAR
 sub get_star_command {
-	my %args = (
-		r1		=> undef,
-		r2		=> undef,
-		reference_dir	=> undef,
-		tmp_dir		=> undef,
-		@_
-		);
-
-	my $star_command = join(' ',
-		'STAR --runMode alignReads',
-		'--genomeDir', $args{reference_dir},
-		'--readFilesCommand zcat',
-		'--readFilesIn', $args{r1}, $args{r2},
-		'--runThreadN 1',
-		'--genomeSAsparseD 2',
-		'--twopassMode Basic',
-		'--outSAMprimaryFlag AllBestScore',
-		'--outFilterIntronMotifs RemoveNoncanonical',
-		'--outSAMtype BAM SortedByCoordinate',
-		'--chimSegmentMin 10',
-		'--chimOutType SeparateSAMold',
-		'--quantMode GeneCounts TranscriptomeSAM',
-		'--limitIObufferSize 250000000',
-		'--limitBAMsortRAM 29000000000',
-		'--outTmpDir', $args{tmp_dir},
-		'--outSAMunmapped Within',
-		'--outBAMsortingThreadN 1'
-		);
-
-	return($star_command);
-	}
-
-sub get_star_command_devel {
 	my %args = (
 		r1		=> undef,
 		r2		=> undef,
@@ -115,9 +86,15 @@ sub get_star_command_devel {
 		# transcript quant mode
 		'--quantMode GeneCounts TranscriptomeSAM',
 		# limit options
-		'--limitIObufferSize 250000000',
+#		'--limitIObufferSize 250000000',
 		'--limitBAMsortRAM 29000000000'
 		);
+
+	if ($tool_version < version->declare('2.7.9')->numify) {
+		$star_command .= " --limitIObufferSize 250000000";
+		} else {
+		$star_command .= " --limitIObufferSize 30000000 50000000";
+		}
 
 	return($star_command);
 	}
@@ -227,7 +204,13 @@ sub main {
 
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
-	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'star');
+	my $tool_data = error_checking(
+		tool_data => $tool_data_orig, pipeline => 'star', data_type => 'rna');
+
+	# check version
+	$tool_version = $tool_data->{star_version};
+	$tool_version =~ s/\D$//;
+	$tool_version = version->declare($tool_version)->numify;
 
 	# organize output and log directories
 	my $output_directory = $args{output_directory};
@@ -384,7 +367,7 @@ sub main {
 				`rm -rf $temp_star`;
 				}
 
-			$star .= get_star_command_devel(
+			$star .= get_star_command(
 				r1		=> join(',', @r1_fastqs),
 				r2		=> join(',', @r2_fastqs),
 				reference_dir	=> $tool_data->{star_reference_dir},

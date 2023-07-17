@@ -103,7 +103,12 @@ if (is.null(arguments$tmb)) {
 		tmb.data <- tmb.data[which(tmb.data$Method == 'VEP'),];
 		}
 	if ('VAF' %in% colnames(tmb.data)) {
-		tmb.data <- tmb.data[which(tmb.data$VAF == 0.05),];
+		if (arguments$seq_type == 'exome') {
+			tmb.data <- tmb.data[which(tmb.data$VAF == 0.05),];
+			}
+		if (arguments$seq_type == 'wgs') {
+			tmb.data <- tmb.data[which(tmb.data$VAF == 0.1),];
+			}
 		}
 	}
 
@@ -147,9 +152,42 @@ print(paste0("Removing ",
 	"] of samples)."
 	));
 
-mutation.data <- tmp[,keep.fields];
+mutation.data <- tmp;
 
 rm(tmp,recurrence.data);
+
+# add a VAF threshold
+mutation.data$t_vaf <- mutation.data$t_alt_count / mutation.data$t_depth;
+vaf.threshold <- 0.01;
+
+remove.idx <- which(mutation.data$t_vaf < vaf.threshold);
+print(paste0(
+	"Removing ", length(remove.idx), " (",
+	round(length(remove.idx) / nrow(mutation.data) * 100, digits = 2), " %)",
+	" variants with VAF < ", vaf.threshold
+	));
+	
+mutation.data <- mutation.data[which(mutation.data$t_vaf >= vaf.threshold),];
+
+# add a read threshold
+remove.idx <- which(mutation.data$t_alt_count < 3);
+print(paste0(
+	"Removing ", length(remove.idx), " (",
+	round(length(remove.idx) / nrow(mutation.data) * 100, digits = 2), " %)",
+	" variants with fewer than 3 alternate allele reads" 
+	));
+
+mutation.data <- mutation.data[which(mutation.data$t_alt_count >= 3),];
+
+# add a coverage threshold
+remove.idx <- which(mutation.data$t_depth < 20);
+print(paste0(
+	"Removing ", length(remove.idx), " (",
+	round(length(remove.idx) / nrow(mutation.data) * 100, digits = 2), " %)",
+	" variants with low coverage" 
+	));
+
+mutation.data <- mutation.data[which(mutation.data$t_depth >= 20),keep.fields];
 
 # apply variant coding
 mutation.data$Code <- variant.codes$Code[match(mutation.data$Variant_Classification, variant.codes$Classification)];
@@ -249,6 +287,7 @@ if (length(all.samples) > 1) {
 
 # remove known problem (passenger) genes
 genes.to.exclude <- c('TTN','MUC17','OBSCN','MUC16','SYNE2','NEB','SYNE1');
+remove.idx <- which(plot.data$Hugo_Symbol %in% genes.to.exclude);
 print(paste0("Removing commonly-mutated genes (likely passenger mutations): ",
 	paste(genes.to.exclude, collapse = ',')
 	));
@@ -304,6 +343,8 @@ plot.data$KEEP <- factor(plot.data$KEEP,
 	levels = c('mutsig_driver','mutsig','recurrent_driver','recurrent','driver')
 	);
 
+plot.data.full <- plot.data;
+
 if (nrow(plot.data[!is.na(plot.data$KEEP),]) <= 20 & nrow(plot.data[!is.na(plot.data$KEEP),]) > 5) {
 	plot.data <- plot.data[!is.na(plot.data$KEEP),];
 	} else {
@@ -356,28 +397,30 @@ axis.cex <- if (length(all.samples) <= 30) { 1
 
 # create plot for mutation rates
 ylim <- c(floor(min(log10(tmb.data$coding))), ceiling(max(log10(tmb.data$coding))));
+if (any(tmb.data$coding == 0)) { ylim[1] <- 0; }
 yat <- seq(ylim[1], ylim[2], 1);
 yaxis.labels <- 10**yat;
 tmb.data$Rate <- log10(tmb.data$coding);
 
 if (ylim[2] == 1) {
 	ylim <- c(0, ceiling(max(tmb.data$coding)));
-	yat <- if (ylim[2] > 5) { seq(0,ylim[2]+1,2); } else { seq(0,ylim[2]+1,1); }
+	yat <- if (ylim[2] > 5) { seq(0,ylim[2]+1,2); } else { seq(0,ylim[2],1); }
 	yaxis.labels <- yat;
 	tmb.data$Rate <- tmb.data$coding;
 	}
 
 tmb.data$ID <- factor(tmb.data$ID, levels = sample.order);
 
-rate.plot <- create.scatterplot(
+rate.plot <- create.barplot(
 	Rate ~ ID,
 	tmb.data,
-	type = if (length(all.samples) <= 20) { c('h','p') } else { 'h' },
 	xaxis.lab = rep('', nrow(tmb.data)+1),
 	yaxis.cex = 1,
 	xaxis.tck = 0,
 	yaxis.tck = c(0.5,0),
 	axes.lwd = 1,
+	origin = ylim[1],
+	box.ratio = if (length(all.samples) > 20) { 1 } else { 2 },
 	ylab.label = 'SNVs/Mbp',
 	ylab.cex = 1.2,
 	ylimits = ylim,
@@ -428,10 +471,10 @@ if (!is.null(arguments$mutsig)) {
 
 	plot.data$Label <- factor(plot.data$Label, levels = rev(as.character(plot.data$Label)));
 
-	if (any(plot.data$p < 10**-20)) {
+	if (min(plot.data$p, na.rm = TRUE) < 10**-20) {
 		plot.data[which(plot.data$p < 10**-20),]$p <- 10**-20;
 		}
-	if (any(plot.data$q < 10**-20)) {
+	if (min(plot.data$q, na.rm = TRUE) < 10**-20) {
 		plot.data[which(plot.data$q < 10**-20),]$q <- 10**-20;
 		}
 
@@ -484,6 +527,35 @@ if (!is.null(arguments$mutsig)) {
 		resolution = 200,
 		filename = generate.filename(arguments$project, 'MutSigCV_pvalues','png')
 		);
+
+	mutsig.plot <- create.barplot(
+		Label ~ -log10(p),
+		plot.data,
+		plot.horizontal = TRUE,
+		ylab.label = NULL,
+		xlab.label = expression('-log'['10']*'(value)'),
+		xlab.cex = 1.5,
+		yaxis.lab = rep('', nrow(plot.data)),
+		xaxis.cex = 1,
+		yaxis.tck = 0,
+		xaxis.tck = c(0.5,0),
+		abline.v = -log10(threshold),
+		abline.col = 'grey50',
+		abline.lty = 2,
+		xlimits = c(0, ceiling(max(-log10(plot.data$p))) + 1),
+		add.text = TRUE,
+		text.labels = '\u2022',
+		text.x = -log10(plot.data[which(plot.data$q < 1),]$q),
+		text.y = nrow(plot.data) - (which(plot.data$q < 1)) + 1,
+		text.col = 'red',
+		legend = list(
+			inside = list(fun = draw.key, args = list(key = key1), x = 0.85, y = 0.5),
+			inside = list(fun = draw.key, args = list(key = key2), x = 0.90, y = 0.45),
+			inside = list(fun = draw.key, args = list(key = key3), x = 0.85, y = 0.4)
+			),
+		right.padding = 6,
+		style = 'Nature'
+		);
 	}
 
 # combine them!
@@ -497,9 +569,9 @@ if (!exists('mutsig.plot')) {
 		top.legend.padding = 0,
 		bottom.legend.padding = 0,
 		y.spacing = -1,
-		right.padding = if (length(all.samples) < 12) { 8 } else { 0 },
-		legend = if (length(all.samples) < 12) { 
-			list(inside = list(fun = functional.legend, x = 0.89, y = 0.7))
+		right.padding = if (length(all.samples) < 20) { 8 } else { 0 },
+		legend = if (length(all.samples) < 20) { 
+			list(inside = list(fun = functional.legend, x = 0.91, y = 0.7))
 			} else { NULL },
 		height = 8,
 		width = if (length(all.samples) < 12) { 8 } else { 10 },
@@ -514,18 +586,20 @@ if (!exists('mutsig.plot')) {
 		layout.width = 2,
 		layout.height = 2,
 		layout.skip = c(FALSE,TRUE,FALSE,FALSE),
-		plot.objects.heights = c(1,4),
+		plot.objects.heights = c(1,5),
 		plot.objects.widths = c(4,1),
 		left.legend.padding = 0,
 		right.legend.padding = 0,
 		top.legend.padding = 0,
 		bottom.legend.padding = 0,
-		y.spacing = -1,
-		x.spacing = -1,
-		#right.padding = if (length(all.samples) < 12) { 8 } else { 0 },
-		legend = if (length(all.samples) < 12) { 
-			list(inside = list(fun = functional.legend, x = 0.89, y = 1))
-			} else { NULL },
+		y.spacing = 5,
+		x.spacing = 0,
+		xlab.axis.padding = -10,
+		right.padding = 4,
+		bottom.padding = 2,
+		legend = list(
+			inside = list(fun = functional.legend, x = 0.88, y = 0.88)
+			),
 		height = 8,
 		width = if (length(all.samples) < 12) { 8 } else { 10 },
 		resolution = 200,
@@ -535,7 +609,7 @@ if (!exists('mutsig.plot')) {
 
 # save key data to file
 save(
-	plot.data,
+	plot.data.full,
 	variant.codes,
 	variant.colours,
 	file = generate.filename(arguments$project, 'snv_recurrence_summary', 'RData')

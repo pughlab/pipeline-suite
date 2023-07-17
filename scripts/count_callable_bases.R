@@ -260,9 +260,7 @@ for (i in 1:length(cov.list)) {
 	if ('TargetRegions' %in% colnames(tmp)) {
 
 		# make a genomic ranges object
-		target.patient.gr <- GRanges(
-			tmp[which(tmp$num > length(these.smps)),c('chrom','start','end')]
-			);
+		target.patient.gr <- intersect(target.gr, patient.gr);
 
 		# get total target + callable
 		callable.bases[patient.idx,]$Patient.targeted <- sum(data.frame(target.patient.gr)$width);

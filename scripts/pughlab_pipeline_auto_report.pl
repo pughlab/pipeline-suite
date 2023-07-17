@@ -144,7 +144,7 @@ sub main {
 	# initiate objects
 	my @job_ids;
 	my ($qc_dir, $germ_dir, $cpsr_dir);
-	my ($correlations, $qc_data, $cb_data, $seqqc_data, $contest_data, $cpsr_calls) = undef;
+	my ($correlations, $qc_data, $cb_data, $seqqc_data, $callability_data, $contest_data, $cpsr_calls) = undef;
 	my ($run_script, $run_id);
 
 	### find the required input files
@@ -466,17 +466,30 @@ sub main {
 		# contamination estimates (all samples)
 		if (-e "$qc_dir/SequenceMetrics") {
 			opendir(QC, $qc_dir . "/SequenceMetrics");
-			my @seqqc_files = grep { /ContaminationEstimates.tsv/ } readdir(QC);
+			my @seqqc_files = grep { /tsv/ } readdir(QC);
 			@seqqc_files = sort @seqqc_files;
+
+			my @qc_files = grep { /ContaminationEstimates.tsv/ } @seqqc_files;
+			my @cov_files = grep { /WGSMetrics.tsv/ } @seqqc_files;
+
 			closedir(QC);
 
-			$seqqc_data = join('/', $qc_dir, 'SequenceMetrics', $seqqc_files[-1]);
+			$seqqc_data = join('/', $qc_dir, 'SequenceMetrics', $qc_files[-1]);
 
 			if ( -l join('/', $data_directory, 'ContaminationEstimates.tsv')) {
 				unlink join('/', $data_directory, 'ContaminationEstimates.tsv');
 				}
 
 			symlink($seqqc_data, join('/', $data_directory, 'ContaminationEstimates.tsv'));
+
+			if ('wgs' eq $tool_data->{seq_type}) {
+				$callability_data = join('/', $qc_dir, 'SequenceMetrics', $cov_files[-1]);
+				if ( -l join('/', $data_directory, 'wgs_callability.tsv')) {
+					unlink join('/', $data_directory, 'wgs_callability.tsv');
+					}
+
+				symlink($callability_data, join('/', $data_directory, 'wgs_callability.tsv'));
+				}
 			}
 
 		# coverage summary metrics

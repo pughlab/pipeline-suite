@@ -73,9 +73,8 @@ sub get_vardict_command_wgs {
 		normal_id	=> undef,
 		tumour_id	=> undef,
 		tmp_dir		=> undef,
-		output_stem	=> undef,
+		chr_file	=> undef,
 		intervals	=> undef,
-		modifier	=> undef,
 		java_mem	=> undef,
 		@_
 		);
@@ -83,15 +82,16 @@ sub get_vardict_command_wgs {
 	my $vardict_command = 'DIRNAME=$(which VarDict | xargs dirname)';
 	$vardict_command .= "\n" . "export JAVA_OPTS='-Xmx" . $args{java_mem} . "'";
 
-	$vardict_command .= "\n" . 'LINE=$(expr $SLURM_ARRAY_TASK_ID + ' . $args{modifier} . ')';
-	$vardict_command .= "\n" . 'REGION=$(sed -n "$LINE"p ' . $args{intervals} . ')';
-	$vardict_command .= "\n" . 'CHR=$(echo $REGION | cut -d: -f1)';
+	$vardict_command .= "\n" . "cd $args{tmp_dir}";
+	$vardict_command .= "\n\n" . 'CHR=$(sed -n "$SLURM_ARRAY_TASK_ID"p ' . $args{chr_file} . ')';
 
-	$vardict_command .= "\n\n" . "if [ -s $args{output_stem}" . '_${REGION}.txt.md5 ]; then';
-	$vardict_command .= "\n  echo $args{output_stem}" . '_${REGION}.txt.md5 already exists.';
-	$vardict_command .= "\nelse";
+	$vardict_command .= "\n\n" . 'for REGION in $(grep "$CHR:" ' . $args{intervals} . '); do';
 
-	$vardict_command .= "\n\n " . join(' ',
+	$vardict_command .= "\n\n" . "  if [ -s $args{tumour_id}" . '_VarDict_${REGION}.txt.md5 ]; then';
+	$vardict_command .= "\n    echo $args{tumour_id}" . '_VarDict_${REGION}.txt.md5 already exists.';
+	$vardict_command .= "\n  else";
+
+	$vardict_command .= "\n\n    " . join(' ',
 		'VarDict',
 		'-G', $reference,
 		'-f 0.01',
@@ -101,26 +101,24 @@ sub get_vardict_command_wgs {
 		'-k 0' # turn off local realignment (GATK realignment already performed!)
 		);
 
-	my $tumour_bam = join('/', $args{tmp_dir}, $args{tumour_id});
 	if (defined($args{normal_id})) {
-		my $normal_bam = join('/', $args{tmp_dir}, $args{normal_id});
 		$vardict_command .= ' -b ' . '"' .
-			$tumour_bam . '_${CHR}.bam|' .
-			$normal_bam . '_${CHR}.bam"';
+			$args{tumour_id} . '_${CHR}.bam|' .
+			$args{normal_id} . '_${CHR}.bam"';
 		} else {
-		$vardict_command .= ' -b ' . $tumour_bam . '_${CHR}.bam';
+		$vardict_command .= ' -b ' . $args{tumour_id} . '_${CHR}.bam';
 		}
 
 	$vardict_command .= ' ' . join(' ',
-		'>', $args{output_stem} . '_${REGION}.txt'
+		'>', $args{tumour_id} . '_VarDict_${REGION}.txt'
 		);
 
 	$vardict_command .= "\n\n " . join(' ',
-		'md5sum', $args{output_stem} . '_${REGION}.txt',
-		'>', $args{output_stem} . '_${REGION}.txt.md5'
+		'md5sum', $args{tumour_id} . '_VarDict_${REGION}.txt',
+		'>', $args{tumour_id} . '_VarDict_${REGION}.txt.md5'
 		);
 
-	$vardict_command .= "\n\nfi";
+	$vardict_command .= "\n\n  fi\n\ndone";
 
 	return($vardict_command);
 	}
@@ -382,7 +380,7 @@ sub main {
 	######################
 	### CHECK REGIONS ####
 	my (@regions, @chroms);
-	my ($region_fh, $chr_fh, $n_regions, $limit, $task_array_modifier);
+	my ($region_fh, $chr_fh, $limit, $task_array_modifier);
 
 	open($region_fh, $intervals_bed) or die "Could not open $intervals_bed\n";
 
@@ -400,8 +398,6 @@ sub main {
 	if ($regions[0] !~ m/(^chr[1-9XY]+:\d+-\d+$)|(^[1-9XY]+:\d+-\d+$)/) {
 		die("Regions are improperly formatted. MUST be chr:start-end");
 		}
-
-	$n_regions = scalar(@regions);
 
 	my $chr_file = join('/', $output_directory, 'chromosome_list.txt');
 	my $format_chr_cmd = "cat $intervals_bed | sed 's/:/ /g' | cut -d ' ' -f1 | sort -V -u > $chr_file";
@@ -608,60 +604,47 @@ sub main {
 			my $output_stem = join('/', $tmp_directory, $normal_ids[0] . '_VarDict');
 			my $merged_stem = join('/', $sample_directory, $normal_ids[0] . '_VarDict');
 
-			my $vardict_command;
+			my $vardict_command = get_vardict_command_wgs(
+				tumour_id	=> $normal_ids[0],
+				tmp_dir		=> $tmp_directory,
+				chr_file	=> $chr_file,
+				intervals	=> $intervals_bed,
+				java_mem	=> $parameters->{vardict}->{java_mem} 
+				);
 
-			$task_array_modifier = 0;
-			while ($task_array_modifier < $n_regions) {
+			# check if this should be run
+			if ('Y' eq missing_file($merged_stem . ".vcf.md5")) {
 
-				if ($n_regions - $task_array_modifier >= 1000) { $limit = 1000;
-					} else { $limit = $n_regions - $task_array_modifier;
-					}
+				# record command (in log directory) and then run job
+				print $log "  >> Submitting job for VarDict WGS...\n";
 
-				$vardict_command = get_vardict_command_wgs(
-					tumour_id	=> $normal_ids[0],
-					tmp_dir		=> $tmp_directory,
-					output_stem	=> $output_stem,
-					intervals	=> $intervals_bed,
-					modifier	=> $task_array_modifier,
-					java_mem	=> $parameters->{vardict}->{java_mem} 
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_vardict_' . $normal_ids[0],
+					cmd	=> $vardict_command,
+					modules	=> ['perl', $vardict, $r_version],
+					dependencies	=> join(':', @split_jobs),
+					max_time	=> $parameters->{vardict}->{time},
+					mem		=> $parameters->{vardict}->{mem},
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group, '--array=1-' . $n_chroms]
 					);
 
-				# check if this should be run
-				if ('Y' eq missing_file($merged_stem . ".vcf.md5")) {
+				$run_id = submit_job(
+					jobname		=> 'run_vardict_' . $normal_ids[0],
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
 
-					# record command (in log directory) and then run job
-					print $log "  >> Submitting job for VarDict WGS ($task_array_modifier)...\n";
+				unless($args{dry_run}) { sleep(10); }
 
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> 'run_vardict_' . $normal_ids[0] . '_part' . $task_array_modifier,
-						cmd	=> $vardict_command,
-						modules	=> ['perl', $vardict, $r_version],
-						dependencies	=> join(':', @split_jobs),
-						max_time	=> $parameters->{vardict}->{time},
-						mem		=> $parameters->{vardict}->{mem},
-						hpc_driver	=> $args{hpc_driver},
-						extra_args	=> [$hpc_group, '--array=1-' . $limit . '%50']
-						);
-
-					$run_id = submit_job(
-						jobname		=> 'run_vardict_' . $normal_ids[0] . '_part' . $task_array_modifier,
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
-						);
-
-					unless($args{dry_run}) { sleep(10); }
-
-					push @sample_jobs, $run_id;
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
-					} else {
-					print $log "  >> Skipping VarDict because this has already been completed!\n";
-					}
-
-				$task_array_modifier += 1000;
+				push @sample_jobs, $run_id;
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
+				} else {
+				print $log "  >> Skipping VarDict because this has already been completed!\n";
 				}
 
 			# test vardict variants and convert to vcf output
@@ -794,59 +777,46 @@ sub main {
 			my $output_stem = join('/', $tmp_directory, $sample . '_VarDict');
 			my $merged_stem = join('/', $sample_directory, $sample . '_VarDict');
 
-			my $vardict_command;
+			my $vardict_command = get_vardict_command_wgs(
+				tumour_id	=> $sample,
+				normal_id	=> $normal_ids[0],
+				tmp_dir		=> $tmp_directory,
+				chr_file	=> $chr_file,
+				intervals	=> $intervals_bed,
+				java_mem	=> $parameters->{vardict}->{java_mem} 
+				);
 
-			$task_array_modifier = 0;
-			while ($task_array_modifier < $n_regions) {
+			# check if this should be run
+			if ('Y' eq missing_file($merged_stem . ".vcf.md5")) {
 
-				if ($n_regions - $task_array_modifier >= 1000) { $limit = 1000;
-					} else { $limit = $n_regions - $task_array_modifier;
-					}
+				# record command (in log directory) and then run job
+				print $log "  >> Submitting job for VarDict WGS...\n";
 
-				$vardict_command = get_vardict_command_wgs(
-					tumour_id	=> $sample,
-					normal_id	=> $normal_ids[0],
-					tmp_dir		=> $tmp_directory,
-					output_stem	=> $output_stem,
-					intervals	=> $intervals_bed,
-					modifier	=> $task_array_modifier,
-					java_mem	=> $parameters->{vardict}->{java_mem} 
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_vardict_' . $sample,
+					cmd	=> $vardict_command,
+					modules	=> ['perl', $vardict, $r_version],
+					dependencies	=> join(':', @split_jobs),
+					max_time	=> $parameters->{vardict}->{time},
+					mem		=> $parameters->{vardict}->{mem},
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group, '--array=1-' . $n_chroms]
 					);
 
-				# check if this should be run
-				if ('Y' eq missing_file($merged_stem . ".vcf.md5")) {
+				$run_id = submit_job(
+					jobname		=> 'run_vardict_' . $sample,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
 
-					# record command (in log directory) and then run job
-					print $log "  >> Submitting job for VarDict WGS ($task_array_modifier)...\n";
-
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> 'run_vardict_' . $sample . '_part' . $task_array_modifier,
-						cmd	=> $vardict_command,
-						modules	=> ['perl', $vardict, $r_version],
-						dependencies	=> join(':', @split_jobs),
-						max_time	=> $parameters->{vardict}->{time},
-						mem		=> $parameters->{vardict}->{mem},
-						hpc_driver	=> $args{hpc_driver},
-						extra_args	=> [$hpc_group, '--array=1-' . $limit . '%100']
-						);
-
-					$run_id = submit_job(
-						jobname		=> 'run_vardict_' . $sample . '_part' . $task_array_modifier,
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
-						);
-
-					push @sample_jobs, $run_id;
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
-					} else {
-					print $log "  >> Skipping VarDict because this has already been completed!\n";
-					}
-
-				$task_array_modifier += 1000;
+				push @sample_jobs, $run_id;
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
+				} else {
+				print $log "  >> Skipping VarDict because this has already been completed!\n";
 				}
 
 			# test vardict variants and convert to vcf output
@@ -1316,58 +1286,47 @@ sub main {
 			my $output_stem = join('/', $tmp_directory, $sample . '_VarDict');
 			my $merged_stem = join('/', $sample_directory, $sample . '_VarDict');
 
-			my $vardict_command;
+			my $vardict_command = get_vardict_command_wgs(
+				tumour_id	=> $sample,
+				tmp_dir		=> $tmp_directory,
+				chr_file	=> $chr_file,
+				intervals	=> $intervals_bed,
+				java_mem	=> $parameters->{vardict}->{java_mem} 
+				);
 
-			$task_array_modifier = 0;
-			while ($task_array_modifier < $n_regions) {
+			# check if this should be run
+			if ('Y' eq missing_file($merged_stem . ".vcf.md5")) {
 
-				if ($n_regions - $task_array_modifier >= 1000) { $limit = 1000;
-					} else { $limit = $n_regions - $task_array_modifier;
-					}
+				# record command (in log directory) and then run job
+				print $log "  >> Submitting job for VarDict WGS...\n";
 
-				$vardict_command = get_vardict_command_wgs(
-					tumour_id	=> $sample,
-					tmp_dir		=> $tmp_directory,
-					output_stem	=> $output_stem,
-					intervals	=> $intervals_bed,
-					modifier	=> $task_array_modifier,
-					java_mem	=> $parameters->{vardict}->{java_mem} 
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_vardict_' . $sample,
+					cmd	=> $vardict_command,
+					modules	=> ['perl', $vardict, $r_version],
+					dependencies	=> $run_id,
+					max_time	=> $parameters->{vardict}->{time},
+					mem		=> $parameters->{vardict}->{mem},
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group, '--array=1-' . $n_chroms]
 					);
 
-				# check if this should be run
-				if ('Y' eq missing_file($merged_stem . ".vcf.md5")) {
+				$run_id = submit_job(
+					jobname		=> 'run_vardict_' . $sample,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
 
-					# record command (in log directory) and then run job
-					print $log "  >> Submitting job for VarDict WGS ($task_array_modifier)...\n";
+				unless($args{dry_run}) { sleep(10); }
 
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> 'run_vardict_' . $sample . '_part' . $task_array_modifier,
-						cmd	=> $vardict_command,
-						modules	=> ['perl', $vardict, $r_version],
-						dependencies	=> $run_id,
-						max_time	=> $parameters->{vardict}->{time},
-						mem		=> $parameters->{vardict}->{mem},
-						hpc_driver	=> $args{hpc_driver},
-						extra_args	=> [$hpc_group, '--array=1-' . $limit . '%100']
-						);
-
-					$run_id = submit_job(
-						jobname		=> 'run_vardict_' . $sample . '_part' . $task_array_modifier,
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
-						);
-
-					push @sample_jobs, $run_id;
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
-					} else {
-					print $log "  >> Skipping VarDict because this has already been completed!\n";
-					}
-
-				$task_array_modifier += 1000;
+				push @sample_jobs, $run_id;
+				push @patient_jobs, $run_id;
+				push @all_jobs, $run_id;
+				} else {
+				print $log "  >> Skipping VarDict because this has already been completed!\n";
 				}
 
 			# test vardict variants and convert to vcf output
