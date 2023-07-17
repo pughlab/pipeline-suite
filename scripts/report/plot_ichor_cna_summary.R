@@ -204,7 +204,7 @@ create.heatmap(
 	colourkey.labels.at = if (arguments$scale == 'CN') { seq(-2,2,1) } else { seq(-2,2,1) },
 	colourkey.labels = if (arguments$scale == 'CN') { seq(-2,2,1) } else { seq(-2,2,1) },
 	colourkey.cex = 1,
-	height = if (length(all.samples) > 12) { 8 } else { 5 },
+	height = if (length(all.samples) > 12) { 7 } else { 5 },
 	width = 12,
 	resolution = 1200,
 	right.padding = 12,
