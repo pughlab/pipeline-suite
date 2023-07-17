@@ -121,6 +121,14 @@ for (i in 1:length(maf.files)) {
 	if (grepl('Pindel', file)) {
 		tmp <- tmp[!grepl('ONP', tmp$Variant_Type),];
 		tmp <- tmp[,setdiff(colnames(tmp),c('Fusion','Method','Frame','CONSENSUS'))];
+
+		# and remove germline hits if present (should only ever provide somatic calls)
+		tmp <- tmp[which(tmp$t_alt_count > 1 & tmp$t_depth >= 5 & (tmp$n_depth >= 5 | is.na(tmp$n_depth))),];
+
+		if (!all(is.na(tmp$n_depth))) {
+			n_vaf <- tmp$n_alt_count / tmp$n_depth;
+			tmp <- tmp[which(n_vaf < 0.1 | is.na(n_vaf)),];
+			}
 		}
 
 	maf.data[[i]] <- tmp;
