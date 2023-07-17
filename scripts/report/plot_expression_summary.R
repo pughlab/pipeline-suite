@@ -73,11 +73,14 @@ setwd(arguments$output);
 all.samples <- colnames(input.data)[3:ncol(input.data)];
 all.samples <- gsub('\\.','-',all.samples);
 
+# do some initial filtering
+input.data <- input.data[!is.na(input.data$Entrez_Gene_Id),];
+
 # split input data
 anno.data <- input.data[,1:2];
 plot.data <- input.data[,3:ncol(input.data)];
 
-rownames(plot.data) <- input.data$GeneID;
+rownames(plot.data) <- input.data$Entrez_Gene_Id;
 colnames(plot.data) <- gsub('\\.','-', colnames(plot.data));
 
 # do some minor filtering to remove genes with no variation across the cohort
@@ -98,6 +101,9 @@ axis.cex <- if (ncol(plot.data) <= 30) { 1
 	} else { 0 };
 
 # create heatmap
+tmp.plot.data <- plot.data;
+tmp.plot.data[which(is.na(tmp.plot.data), arr.ind = TRUE)] <- log2(0.009);
+
 create.heatmap(
 	plot.data,
 	cluster.dimensions = 'rows',
@@ -119,8 +125,10 @@ create.heatmap(
 	filename = generate.filename(arguments$project, 'rna_landscape','png')
 	);
 
+rm(tmp.plot.data);
+
 # filter again to top 90th quantile
-threshold <- quantile(gene.variances, p = 0.99);
+threshold <- quantile(gene.variances, p = 0.99, na.rm = TRUE);
 filtered.plot.data <- plot.data[names(gene.variances[gene.variances >= threshold]),];
 
 if (any(is.na(filtered.plot.data))) {
@@ -129,9 +137,12 @@ if (any(is.na(filtered.plot.data))) {
 	filtered.plot.data <- filtered.plot.data[this.order,];
 	}
 
+tmp.plot.data <- filtered.plot.data;
+tmp.plot.data[which(is.na(tmp.plot.data), arr.ind = TRUE)] <- log2(0.009);
+
 create.heatmap(
-	filtered.plot.data,
-	cluster.dimensions = if (any(is.na(filtered.plot.data))) { 'rows' } else { 'both' },
+	tmp.plot.data,
+	cluster.dimensions = 'both',
 	yaxis.lab = NA,
 	xaxis.lab = rep('', nrow(filtered.plot.data)),
 	yaxis.cex = axis.cex,
@@ -151,6 +162,8 @@ create.heatmap(
 	filename = generate.filename(arguments$project, 'rna_landscape_top','png')
 	);
 
+rm(tmp.plot.data);
+
 save(
 	input.data,
 	gene.variances,
@@ -169,7 +182,7 @@ top.genes <- rownames(tmp)[1:20];
 top.gene.data <- plot.data[top.genes,];
 
 summary.metrics <- merge(
-	anno.data[anno.data$GeneID %in% top.genes,],
+	anno.data[anno.data$Entrez_Gene_Id %in% top.genes,],
 	data.frame(
 		Mean = apply(top.gene.data,1,mean),
 		Median = apply(top.gene.data,1,median),
@@ -177,22 +190,18 @@ summary.metrics <- merge(
 		Upper_75 = apply(top.gene.data,1,quantile, p = 0.75),
 		SD = apply(top.gene.data,1,sd)
 		),
-	by.x = 'GeneID',
+	by.x = 'Entrez_Gene_Id',
 	by.y = 'row.names'
 	);
 
 summary.metrics$CV <- summary.metrics$SD / summary.metrics$Mean;
 
-summary.metrics$GeneID <- factor(summary.metrics$GeneID, levels = top.genes);
-summary.metrics <- summary.metrics[order(summary.metrics$GeneID),];
+summary.metrics$Entrez_Gene_Id <- factor(summary.metrics$Entrez_Gene_Id, levels = top.genes);
+summary.metrics <- summary.metrics[order(summary.metrics$Entrez_Gene_Id),];
 
 # write some captions
 full.caption <- "Gene-wise expession profile; values are log$_2$ TPM.";
 trimmed.caption <- paste0("Expression profile (log$_2$ TPM) for the top 1\\% most variable genes (variance $\\geq$", round(threshold), ").");
-
-if (any(is.na(filtered.plot.data))) {
-	trimmed.caption <- paste(trimmed.caption, 'Genes ordered by median expression.');
-	}
 
 # write for latex
 write("\\section{RNA Expression}", file = 'expression_summary.tex');
@@ -227,7 +236,7 @@ write("\\end{figure}\n\\pagebreak\n", file = 'expression_summary.tex', append = 
 
 print(
 	xtable(
-		summary.metrics[,c('Symbol','Lower_25','Median','Upper_75','CV')],
+		summary.metrics[,c('Hugo_Symbol','Lower_25','Median','Upper_75','CV')],
 		caption = 'Top 20 most variably expressed genes (genes with mean expression $>$ 0, ordered by decreasing variance) across the cohort. Table shows gene symbol, lower 25th percentile, median and upper 25th percentile of expression values.'
 		),
 	file = 'expression_summary.tex',
