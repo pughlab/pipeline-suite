@@ -155,7 +155,7 @@ sub get_mavis_command {
 
 		$mavis_cmd .= ' ' . join(' ',
 			'--library', $id, 'genome diseased False', $args{tumour_bams}->{$smp},
-			'--assign', $id, join(' ', @dna_tools)
+			'--assign', $id, join(' ', @dna_tools, @rna_tools)
 			);
 		}
 
@@ -186,7 +186,7 @@ sub get_mavis_command {
 
 			$mavis_cmd .= ' ' . join(' ',
 				'--library', $id, 'transcriptome diseased True', $args{rna_bams}->{$smp},
-				'--assign', $id, join(' ', @rna_tools)
+				'--assign', $id, join(' ', @dna_tools, @rna_tools)
 				);
 			}
 		}

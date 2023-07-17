@@ -642,7 +642,7 @@ sub pon {
 			modules	=> [$samtools, $r_version],
 			dependencies	=> join(':', @all_jobs),
 			mem		=> '4G',
-			max_time	=> '12:00:00',
+			max_time	=> '24:00:00',
 			hpc_driver	=> $args{hpc_driver},
 			extra_args	=> [$hpc_group]
 			);
@@ -1339,7 +1339,7 @@ sub main {
 			modules	=> [$r_version],
 			dependencies	=> join(':', @finalize_jobs),
 			mem		=> '4G',
-			max_time	=> '12:00:00',
+			max_time	=> '24:00:00',
 			hpc_driver	=> $args{hpc_driver},
 			extra_args	=> [$hpc_group]
 			);

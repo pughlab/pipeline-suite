@@ -592,7 +592,7 @@ sub main {
 			);
 
 		$run_id = submit_job(
-			jobname		=> 'combine_coverage_output',
+			jobname		=> 'combine_callable_base_output',
 			shell_command	=> $run_script,
 			hpc_driver	=> $args{hpc_driver},
 			dry_run		=> $args{dry_run},

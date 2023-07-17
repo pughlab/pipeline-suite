@@ -59,12 +59,12 @@ setwd(arguments$directory);
 # find data files
 if (arguments$germline) {
 
-	input.file <- list.files(pattern = 'merged_genotyped_filtered_PoN.bcf');
+	input.file <- list.files(pattern = 'filtered_germline_SVs.vcf');
 	input.file <- rev(sort(input.file));
 
 	# find VCF header
 	tmp <- read.delim(input.file[1], nrow = 1000, header = FALSE);
-	header <- length(grep('##', tmp$V1));
+	header <- max(grep('^##', tmp$V1));
 	rm(tmp);
 
 	# read callset
@@ -76,7 +76,7 @@ if (arguments$germline) {
 
 	# find VCF header
 	tmp <- read.delim(input.files[1], nrow = 1000, header = FALSE);
-	header <- length(grep('##', tmp$V1));
+	header <- max(grep('##', tmp$V1));
 	rm(tmp);
 
 	# read callset
@@ -92,8 +92,12 @@ all.samples <- colnames(delly.calls)[10:ncol(delly.calls)];
 # write function to extract from INFO field
 extract.info <- function(x, metric) {
 	tmp <- unlist(strsplit(x,';'));
-	tmp2 <- tmp[grepl(metric, tmp)];
-	return(unlist(strsplit(tmp2,'='))[2]);
+	if (any(grepl(metric,tmp))) {
+		tmp2 <- tmp[grepl(metric, tmp)];
+		return(unlist(strsplit(tmp2,'='))[2]);
+		} else {
+		return(NA);
+		}
 	}
 
 # write function to extract from FORMAT field
@@ -114,6 +118,10 @@ sv.data <- data.frame(
 	SV_Type = as.character(sapply(delly.calls$INFO, extract.info, metric = 'SVTYPE')),
 	SV_Conf = as.character(sapply(delly.calls$INFO, function(i) { unlist(strsplit(i,';'))[1] } ))
 	);
+
+if (any(is.na(sv.data$Break2_Chromosome))) {
+	sv.data[is.na(sv.data$Break2_Chromosome),]$Break2_Chromosome <- sv.data[is.na(sv.data$Break2_Chromosome),]$Break1_Chromosome;
+	}
 
 # annotate regions
 if ('hg38' == arguments$ref_type) {
@@ -205,25 +213,16 @@ for (smp in all.samples) {
 		extract.format, metric = 'RV'));
 
 	tmp$Filter <- apply(delly.calls[,c('FORMAT',smp)], 1, extract.format, metric = 'FT');
-	tmp$CN <- if (arguments$germline) {
-		as.integer(apply(delly.calls[,c('FORMAT',smp)], 1, extract.format, metric = 'CN'));
-		} else {
-		as.integer(apply(delly.calls[,c('FORMAT',smp)], 1, extract.format, metric = 'RDCN'));
-		}
+	tmp$CN <- as.integer(apply(delly.calls[,c('FORMAT',smp)], 1, extract.format, metric = 'RDCN'));
 
-	my.data[[smp]] <- tmp;
+	my.data[[smp]] <- tmp[!is.na(tmp$Genotype),];
 	gc();
 	}
 
 combined.data <- do.call(rbind, my.data);
 
-write.table(
-	combined.data,
-	file = generate.filename(arguments$project, 'Delly_output','tsv'),
-	row.names = FALSE,
-	col.names = TRUE,
-	sep = '\t'
-	);
+# remove non-variants
+combined.data <- combined.data[which(! combined.data$Genotype %in% c('./.', '0/0')),];
 
 # if target regions were provided
 if (!is.null(arguments$targets)) {

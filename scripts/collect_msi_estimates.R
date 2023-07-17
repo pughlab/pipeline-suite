@@ -55,7 +55,10 @@ setwd(arguments$directory);
 ### MAIN ###########################################################################################
 # find results files
 msi.files <- list.files(pattern = '_output$', recursive = TRUE);
-somatic.files <- list.files(pattern = '_somatic$', recursive = TRUE);
+somatic.files <- c(
+	list.files(pattern = '_somatic$', recursive = TRUE),
+	list.files(pattern = '_unstable$', recursive = TRUE)
+	);
 
 # read them in
 msi.list <- list();
@@ -70,9 +73,10 @@ for (file in msi.files) {
 
 for (file in somatic.files) {
 	# extract sample ID
-	smp <- sub('_msi_output_somatic','',basename(file));
+	smp <- sub('_msi_output_somatic|_msi_output_unstable','',basename(file));
 	# store data in list
-	tmp <- read.delim(file);
+	tmp <- if (any(grepl('unstable', somatic.files))) { read.delim(file)[,1:6]; 
+		} else { read.delim(file); } 
 	if (nrow(tmp) > 0) {
 		tmp$Sample <- smp;
 		somatic.list[[smp]] <- tmp;

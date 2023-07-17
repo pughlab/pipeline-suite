@@ -56,7 +56,7 @@ setwd(arguments$directory);
 # find results files
 bait.bias.files <- list.files(pattern = 'bait_bias_summary_metrics', recursive = TRUE);
 pre.adapter.files <- list.files(pattern = 'pre_adapter_summary_metrics', recursive = TRUE);
-contamination.files <- list.files(pattern = 'contamination.table', recursive = TRUE);
+contamination.files <- list.files(pattern = 'contamination.table$', recursive = TRUE);
 
 alignment.files <- list.files(pattern = 'alignment_metrics.txt', recursive = TRUE);
 wgs.files <- list.files(pattern = 'wgs_metrics.txt', recursive = TRUE);

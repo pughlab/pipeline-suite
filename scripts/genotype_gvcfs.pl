@@ -780,6 +780,7 @@ sub main{
 
 	# let's trim this down to only Agena SNPs for contamination analyses
 	my $agena_output = join('/', $germline_directory, 'haplotype_caller_genotypes_recalibrated__agenaOnly.vcf');
+
 	my $agena_cmd = extract_agena_command(
 		input	=> $processed_vcf,
 		output	=> $agena_output,

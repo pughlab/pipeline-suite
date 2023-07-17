@@ -59,30 +59,10 @@ setwd(arguments$directory);
 
 ### MAF CODING
 # ensure proper coding of maf columns; this should be consistent, however may change with versions
+# required primarily for germline calls (very small; protects agains all 'T' allele being interpreted
+# as logical TRUE)
 maf.classes <- rep('character',132);
 maf.classes[c(2,6,7,40:45,58,60,77:85,100:107,112:122,124:132)] <- 'numeric';
-
-### VARIANT CODING
-# 1 = missense, 2 = stop gain, 3 = stop loss, 4 = splicing, 5 = frameshift, 6 = in frame indel, 7 = tss
-# 8 = RNA, 9 = other (up/downstream, UTR, intergenic, silent, intron), 10 = ITD
-variant.codes <- data.frame(
-	Classification = c("3'Flank", "5'Flank", "Intron", "RNA", "IGR", "3'UTR", "5'UTR", "Silent", "Missense_Mutation",
-		"Splice_Region", "Splice_Site", "In_Frame_Del", "In_Frame_Ins", "Frame_Shift_Del", "Frame_Shift_Ins",
-		"Nonsense_Mutation", "Nonstop_Mutation", "Translation_Start_Site", "ITD"),
-	Group = c('other','other','other','RNA','other','other','other','other','missense',
-		'splice_site','splice_site','in_frame_indel','in_frame_indel','frameshift_indel','frameshirt_indel',
-		'nonsense', 'nonstop', 'tss', 'itd'),
-	Code = c(9, 9, 9, 8, 9, 9, 9, 9, 1,
-		4, 4, 6, 6, 5, 5,
-		2, 3, 7, 10)
-	);
-
-variant.colours <- c("#F44336", "#E91E63", "grey70", "#673AB7", "#2196F3", "#03A9F4", 
-	"#00BCD4", "#8BC34A", "#CDDC39", "#FFC107"
-	);
-names(variant.colours) <- c("nonstop","frameshift_indel","other", "missense", "nonsense", "RNA",
-	"splicing", "in_frame_indel", "itd", "tss"
-	);
 
 # determine type of experiment that was run
 is.rnaseq <- grepl('RNASeq', arguments$directory);
