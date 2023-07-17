@@ -81,11 +81,13 @@ if (!dir.exists(arguments$output)) {
 setwd(arguments$output);
 
 ### FORMAT DATA ####################################################################################
+# get sample set
+all.samples <- intersect(callable$Sample, unique(maf$Tumor_Sample_Barcode));
+
 # do some minor filtering
 maf$t_vaf <- maf$t_alt_count / maf$t_depth;
 
-# get sample set
-all.samples <- intersect(callable$Sample, unique(maf$Tumor_Sample_Barcode));
+maf <- maf[which(!maf$FLAG.low_coverage),];
 
 # remove unnecessary fields from MAF
 keep.fields <- c('Tumor_Sample_Barcode','Hugo_Symbol','Chromosome','Start_Position','End_Position','Variant_Classification','Variant_Type','HGVSp','HGVSp_Short','t_vaf');
@@ -270,8 +272,8 @@ for (smp in all.samples) {
 			coding.full <- genic.full[which(genic.full$Variant_Classification %in% coding.classes |
 				(genic.full$HGVSp_Short != '' & !grepl('=$',genic.full$HGVSp_Short))),];
 
-			coding.snp  <- which(coding$Variant_Type == 'SNP');
-			coding.indel  <- which(coding$Variant_Type != 'SNP');
+			coding.snp  <- which(coding.full$Variant_Type == 'SNP');
+			coding.indel  <- which(coding.full$Variant_Type != 'SNP');
 
 			# organize results
 			results <- data.frame(
@@ -279,8 +281,8 @@ for (smp in all.samples) {
 				Method = anno.method,
 				VAF = vaf,
 				full = nrow(smp.data) / total,
-				genic = length(genic.full) / gene,
-				coding = length(coding.full) / cds,
+				genic = nrow(genic.full) / gene,
+				coding = nrow(coding.full) / cds,
 				full.snp = nrow(smp.data[snp.idx,]) / total,
 				genic.snp = length(genic.snp) / gene,
 				coding.snp = length(coding.snp) / cds,
