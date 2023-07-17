@@ -1,3 +1,14 @@
+2023-07-17: PughLab pipeline-suite (version 0.8.3);
+- delly: updates to germline SV pipeline (spec. renaming merged files to be more reflective of contents)
+- mavis: added germline SV calls from Delly/Manta to pipeline
+- mavis: updated formatting of output files for cBioportal
+- coverage: added per-interval coverage metrics for targeted-panel sequencing
+- gatk_cnv: bug fix for target intervals in final collection step
+- arriba: added option to increase n_cpus for arriba
+- rsem: removed optional bam output
+- vardict_wgs: intervals now run on a chromosome level to reduce the overall number of jobs submitted
+- summary/report: fixed an error in calculate_tmb; other minor updates throughout
+
 2023-02-27: PughLab pipeline-suite (version 0.8.2);
 - NEW: data folder containing example intervals files (for WGS:VarDict) and Agena SNP positions (for genotype_gvcfs)
 - pindel: skip patients without tumour samples (ie, normal-only); in merge step (for WGS or other split runs), skip/delete empty files as this creates issues downstream; for WGS (or other split runs), skip searching for tandem duplications (this step is VERY slow)
@@ -16,13 +27,13 @@
 
 2022-12-21: PughLab pipeline-suite (version 0.8.0)
 - MAJOR CHANGE (pughlab_pipeline_auto_report.pl): complete overhaul of summarize/report steps (complete reorganization [split summarize/report]; extra error checking; incorporated all new tools)
-  - NEW: plot_ascat_summary.R for summary plots for ASCAT output
-  - NEW: get_chord_signatures.R and get_hrdetect_signatures.R for HRD signatures (CHORD and HRDetect)
-  - NEW: calculate_tmb.R to calculate tumour mutation burden
-  - MINOR CHANGE: format_ensemble_mutations.R: added basic coverage/VAF filter to ensemble output
-  - MINOR CHANGE: apply_oncokb_filter_and_summarize.R: added set_tumour_only option to treat variants with low n_depth as tumour-only
-  - MINOR CHANGE: split plot_snv_summary.R into summarize_mutation_data.R (mutation-type frequency) and plot_recurrent_mutations.R (recurrence heatmap)
-  - MINOR CHANGE: plot_sv_summary.R: added better SV filters and circos plots
+- NEW: plot_ascat_summary.R for summary plots for ASCAT output
+- NEW: get_chord_signatures.R and get_hrdetect_signatures.R for HRD signatures (CHORD and HRDetect)
+- NEW: calculate_tmb.R to calculate tumour mutation burden
+- MINOR CHANGE: format_ensemble_mutations.R: added basic coverage/VAF filter to ensemble output
+- MINOR CHANGE: apply_oncokb_filter_and_summarize.R: added set_tumour_only option to treat variants with low n_depth as tumour-only
+- MINOR CHANGE: split plot_snv_summary.R into summarize_mutation_data.R (mutation-type frequency) and plot_recurrent_mutations.R (recurrence heatmap)
+- MINOR CHANGE: plot_sv_summary.R: added better SV filters and circos plots
 - annotate_germline: fixed a bug; now checks for final output prior to running intermediate steps
 - ascat: added/fixed output for purity/ploidy estimates
 - delly: added n_cpus option; removed delete intermediates step and added automatic re-run when new samples are added
