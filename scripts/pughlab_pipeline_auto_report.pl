@@ -312,6 +312,25 @@ sub main {
 			);
 
 		my $tool_count = 0;
+		if ('Y' eq $tool_set{'arriba'}) {
+			my $arriba_dir = join('/', $output_directory, 'Arriba');
+			opendir(FUSION, $arriba_dir) or die "Cannot open '$arriba_dir' !";
+			my @arriba_calls = grep { /_for_cbioportal.tsv/ } readdir(FUSION);
+			@arriba_calls = sort @arriba_calls;
+			closedir(FUSION);
+
+			my $arriba_data = join('/', $arriba_dir, $arriba_calls[-1]);
+
+			if ( -l join('/', $data_directory, 'arriba_calls.tsv')) {
+				unlink join('/', $data_directory, 'arriba_calls.tsv');
+				}
+
+			symlink($arriba_data, join('/', $data_directory, 'arriba_calls.tsv'));
+
+			$rna_fusion_command .= " -a $arriba_data";
+			$tool_count++;
+			}
+
 		if ('Y' eq $tool_set{'star_fusion'}) {
 			my $starfus_dir = join('/', $output_directory, 'STAR-Fusion');
 			opendir(FUSION, $starfus_dir) or die "Cannot open '$starfus_dir' !";
@@ -1125,7 +1144,7 @@ sub main {
 				log_dir		=> $log_directory,
 				name		=> 'plot_sv_summary',
 				cmd		=> $sv_plot_command,
-				modules		=> [$r_version],
+				modules		=> ['R/4.1.0'],	# required for RCircos
 				max_time	=> '04:00:00',
 				mem		=> ('wgs' eq $tool_data->{seq_type}) ? '4G' : '2G',
 				hpc_driver	=> $args{cluster},
@@ -1203,6 +1222,7 @@ sub main {
 		$maf2vcf_command .= "\n" . join("\n",
 			'  vcf-sort -c $VCF | bgzip -f > $VCF.gz',
 			'  tabix $VCF.gz',
+			'  rm $VCF',
 			'done'
 			);
 
