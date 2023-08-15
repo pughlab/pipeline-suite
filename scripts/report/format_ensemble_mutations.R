@@ -251,7 +251,7 @@ file.symlink(
 filtered.calls <- unique(combined.data[which(combined.data$FILTER == 'PASS'),]);
 
 # order data for easier formatting
-filtered.calls$Chromosome <- factor(filtered.calls$Chromosome, levels = paste0('chr',c(1:22,'X','Y')));
+filtered.calls$Chromosome <- factor(filtered.calls$Chromosome, levels = paste0('chr',c(1:22,'X','Y','M')));
 filtered.calls <- filtered.calls[order(filtered.calls$Chromosome, filtered.calls$Start_Position),];
 
 # add column indicating which tools called it

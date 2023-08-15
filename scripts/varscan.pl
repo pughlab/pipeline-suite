@@ -638,15 +638,11 @@ sub main {
 				my @snp_parts = grep { /snp/ } @chr_parts;
 				my @indel_parts = grep { /indel/ } @chr_parts;
 
-				my $merge_chr_command = join(' ',
-					'cat', @snp_parts,
-					"| awk 'NR <= 1 || !/^chrom/'",
-					'>', "$merged_snp_output.snp;\n",
-					'cat', @indel_parts,
-					"| awk 'NR <= 1 || !/^chrom/'",
-					'>', "$merged_snp_output.indel;\n\n",
-					"md5sum $merged_snp_output.snp > $merged_snp_output.snp.md5\n",
-					"md5sum $merged_snp_output.indel > $merged_snp_output.indel.md5\n"
+				my $merge_chr_command = join("\n",
+					"cat @snp_parts | awk 'NR <= 1 || !/^chrom/' > $merged_snp_output.snp;",
+					"cat @indel_parts | awk 'NR <= 1 || !/^chrom/' > $merged_snp_output.indel;",
+					"md5sum $merged_snp_output.snp > $merged_snp_output.snp.md5",
+					"md5sum $merged_snp_output.indel > $merged_snp_output.indel.md5"
 					);
 
 				$cleanup_cmd .= "\nrm $cnv_stem\__chr*";

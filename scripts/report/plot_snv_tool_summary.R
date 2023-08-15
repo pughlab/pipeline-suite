@@ -114,8 +114,7 @@ plot.data <- list();
 plot.data$per_tool <- aggregate(
 	combined.data[,tool.list],
 	by = list(Tumor_Sample_Barcode = combined.data$Tumor_Sample_Barcode),
-	FUN = sum,
-	na.rm = TRUE
+	FUN = function(i) { length(i[!is.na(i)]) }
 	);
 
 # find overlap
@@ -137,6 +136,7 @@ save(
 # now format data for plotting (UPSET plot)
 tool.data <- combined.data[,tool.list];
 tool.data[is.na(tool.data)] <- 0;
+tool.data <- sign(tool.data);
 
 ### PLOT DATA ######################################################################################
 total.combinations <- 0;
