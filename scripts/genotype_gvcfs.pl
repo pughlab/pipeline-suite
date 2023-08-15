@@ -796,7 +796,7 @@ sub main{
 			log_dir	=> $log_directory,
 			name	=> 'run_extract_agena_snps',
 			cmd	=> $agena_cmd,
-			modules	=> ['samtools', 'tabix', $r_version],
+			modules	=> [$samtools, 'tabix', $r_version],
 			dependencies	=> $run_id,
 			max_time	=> $parameters->{filter_recalibrated}->{time},
 			mem		=> $parameters->{filter_recalibrated}->{mem},
