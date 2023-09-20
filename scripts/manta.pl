@@ -61,19 +61,17 @@ sub get_manta_command {
 			);
 		}
 
+	$manta_cmd .= join(' ',
+		'--referenceFasta', $reference,
+		'--runDir', $args{output_dir}
+		);
+
 	if (defined($args{normal})) {
-		$manta_cmd .= join(' ',
-			'--normalBam', $args{normal},
-			'--tumorBam', $args{tumour},
-			'--referenceFasta', $reference,
-			'--runDir', $args{output_dir}
-			);
-		} else {
-		$manta_cmd .= join(' ',
-			'--tumorBam', $args{tumour},
-			'--referenceFasta', $reference,
-			'--runDir', $args{output_dir}
-			);
+		$manta_cmd .= " --normalBam $args{normal}";
+		}
+
+	if (defined($args{tumour})) {
+		$manta_cmd .= "--tumorBam $args{tumour}";
 		}
 
 	if ('wgs' eq $seq_type) {
@@ -246,7 +244,7 @@ sub pon {
 				);
 
 			$prep_run_id = submit_job(
-				jobname		=> 'run_prepare_callableRegions_bed',,
+				jobname		=> 'run_prepare_callableRegions_bed',
 				shell_command	=> $run_script,
 				hpc_driver	=> $args{hpc_driver},
 				dry_run		=> $args{dry_run},
@@ -303,7 +301,7 @@ sub pon {
 			$run_id = '';
 
 			my $manta_command = get_manta_command(
-				tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
+				normal		=> $smp_data->{$patient}->{normal}->{$sample},
 				output_dir	=> $sample_directory,
 				intervals	=> $intervals
 				);
