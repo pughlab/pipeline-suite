@@ -112,13 +112,16 @@ sv.data$Evidence <- apply(
 	# if call method uses spanning reads
 	if (i[3] >= 20) { return('PASS')
 		# if call method uses split reads
-		} else if (i[1] >= 10 & i[2] >= 10) { return('PASS')
-		} else if (i[4] >= 10) { return('PASS')
+		} else if (i[1] >= 20 & i[2] >= 20) { return('PASS')
+		} else if (i[3] >= 20) { return('PASS')
+		} else if (i[4] >= 20) { return('PASS')
 		} else { return('FAIL');
 		}
 	});
 
-sv.data[grepl(';', sv.data$tools),]$Evidence <- 'PASS';
+if (any(grepl(';', sv.data$tools))) {
+	sv.data[grepl(';', sv.data$tools),]$Evidence <- 'PASS';
+	}
 sv.data <- sv.data[which(sv.data$Evidence == 'PASS'),];
 
 print(paste0('Total SVs after filter: ', nrow(sv.data)));
@@ -182,7 +185,7 @@ anno.data <- anno.data[order(anno.data$Chromosome, anno.data$chromStart),];
 # summarize tool data
 tool.list <- c();
 if (any(somatic.svs$protocol == 'genome')) {
-	tool.list <- c(tool.list, 'Manta','Delly','SViCT','NovoBreak');
+	tool.list <- c(tool.list, 'Manta','Delly','SViCT','NovoBreak','Pindel');
 	}
 if (any(somatic.svs$protocol == 'transcriptome')) {
 	tool.list <- c(tool.list,'Arriba','FusionCatcher','STAR-Fusion');
@@ -317,7 +320,7 @@ plot.height <- if (length(tumour.samples) <= 30) { 6
 	} else { 9 }
 
 legend.pos <- if (plot.height == 6) { 1.55
-	} else { 1.45 }
+	} else { 1.5 }
 
 # create plot for functional summary
 create.barplot(
@@ -400,7 +403,7 @@ if (nrow(plot.data) > 0) {
 
 	# initialize image
 	png(filename = generate.filename(arguments$project, 'recurrent_SV_circos','png'),
-		res = 200, units = 'in', height = 6, width = 5);
+		res = 200, units = 'in', height = 8, width = 7);
 
 	RCircos.Set.Plot.Area(margin = 0.01);
 
@@ -447,30 +450,34 @@ for (smp in tumour.samples) {
 		);
 
 	plot.data[which(plot.data$Evidence == 1),]$Evidence <- 0.5;
-	plot.data[which(smp.data$Fusion == 'None--None'),]$Evidence <- 0.5;
+	if (any(smp.data$Fusion == 'None--None')) {
+		plot.data[which(smp.data$Fusion == 'None--None'),]$Evidence <- 0.5;
+		}
 
-	geneset <- setdiff(unique(c(smp.data$gene1_aliases, smp.data$gene2_aliases)),'None');
+	geneset.orig <- setdiff(c(smp.data$gene1_aliases, smp.data$gene2_aliases),'None');
 	if (!is.null(driver.genes) & (length(geneset) > 20)) {
-		geneset <- intersect(geneset, driver.genes$Hugo_Symbol);
+		geneset <- intersect(geneset.orig, c('NRG1','NRG2',driver.genes$Hugo_Symbol));
 		}
-
-	gene.data <- anno.data[which(anno.data$Gene %in% geneset),c(3,4,5,2)];
-
-	gene.data$Diff <- NA;
-	for (chr in unique(gene.data$Chromosome)) {
-		gene.data[which(gene.data$Chromosome == chr),]$Diff <- c(100,
-			diff(gene.data[which(gene.data$Chromosome == chr),]$chromEnd/10**6))
-		}
-
-	while (any(gene.data$Diff < 20)) {
-
-		idx <- which(gene.data$Diff < 20);
-		gene.data <- gene.data[-idx[1],];
+	if (length(geneset) == 0) { geneset <- geneset.orig; }
+	if (length(geneset) > 0) {
+		gene.data <- anno.data[which(anno.data$Gene %in% geneset),c(3,4,5,2)];
 
 		gene.data$Diff <- NA;
 		for (chr in unique(gene.data$Chromosome)) {
 			gene.data[which(gene.data$Chromosome == chr),]$Diff <- c(100,
 				diff(gene.data[which(gene.data$Chromosome == chr),]$chromEnd/10**6))
+			}
+
+		while (any(gene.data$Diff < 20)) {
+
+			idx <- which(gene.data$Diff < 20);
+			gene.data <- gene.data[-idx[1],];
+
+			gene.data$Diff <- NA;
+			for (chr in unique(gene.data$Chromosome)) {
+				gene.data[which(gene.data$Chromosome == chr),]$Diff <- c(100,
+					diff(gene.data[which(gene.data$Chromosome == chr),]$chromEnd/10**6))
+				}
 			}
 		}
 
@@ -486,7 +493,7 @@ for (smp in tumour.samples) {
 
 		# initialize image
 		png(filename = generate.filename(smp, 'hc_SV_circos','png'),
-			res = 200, units = 'in', height = 6, width = 6);
+			res = 200, units = 'in', height = 8, width = 8);
 
 		RCircos.Set.Plot.Area(margin = 0.01);
 
@@ -497,12 +504,52 @@ for (smp in tumour.samples) {
 		RCircos.Draw.Chromosome.Ideogram();
 		RCircos.Label.Chromosome.Names();
 
-		RCircos.Gene.Connector.Plot(gene.data, track.num = 1, side = 'in');
-		RCircos.Gene.Name.Plot(gene.data, name.col = 4, track.num = 2, side = 'in');
+		if (nrow(gene.data) > 0) {
+			RCircos.Gene.Connector.Plot(gene.data, track.num = 1, side = 'in');
+			RCircos.Gene.Name.Plot(gene.data, name.col = 4, track.num = 2, side = 'in');
+			}
 
 		# ensure ordering
 		x <- RCircos.Get.Paired.Points.Positions(plot.data, genomic.columns = 3, plot.type = "link");
 		RCircos.Link.Plot(plot.data, track.num = 4, by.chromosome = FALSE, lineWidth = x$Evidence);
+
+		dev.off();
+		}
+
+	# plot results (if any)
+	if (nrow(plot.data[which(plot.data$Evidence > 0.5),]) > 0) {
+
+		# set-up circos environment
+		RCircos.Set.Core.Components(cyto.info, chr.exclude = NULL, tracks.inside = 2, tracks.outside = 0);
+
+		rcircos.params <- RCircos.Get.Plot.Parameters();
+		rcircos.params$text.size <- 0.5;
+		RCircos.Reset.Plot.Parameters(rcircos.params);
+
+		# initialize image
+		png(filename = generate.filename(smp, 'hc_SV_circos__filtered','png'),
+			res = 200, units = 'in', height = 8, width = 8);
+
+		RCircos.Set.Plot.Area(margin = 0.01);
+
+		par(mai=c(0.1, 0.1, 0.1, 0.1));
+		plot.new();
+		plot.window(c(-1.4, 1.4), c(-1.4, 1.4));
+
+		RCircos.Draw.Chromosome.Ideogram();
+		RCircos.Label.Chromosome.Names();
+
+		if (nrow(gene.data) > 0) {
+			RCircos.Gene.Connector.Plot(gene.data, track.num = 1, side = 'in');
+			RCircos.Gene.Name.Plot(gene.data, name.col = 4, track.num = 2, side = 'in');
+			}
+
+		# ensure ordering
+		x <- RCircos.Get.Paired.Points.Positions(
+			plot.data[which(plot.data$Evidence > 0.5),],
+			genomic.columns = 3, plot.type = "link");
+		RCircos.Link.Plot(plot.data[which(plot.data$Evidence > 0.5),], 
+			track.num = 4, by.chromosome = FALSE, lineWidth = x$Evidence);
 
 		dev.off();
 		}
