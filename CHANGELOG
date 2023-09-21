@@ -1,3 +1,11 @@
+2023-09-21: PughLab pipeline-suite (version 0.8.4);
+- NEW: added manta.pl to allow for SV calling without subsequent variant calling steps (Strelka)
+- NEW: initial addition of germline-only pipeline
+- pindel: added minimum depth to filter step
+- runIchorCNA: fixed a bug that prevented testing of alternate ploidies
+- collect_snv_output: added germline filter for pindel calls
+- format_ensemble_mutations: add VAF for each tool and clarified filters used (N tools; M2/VAF; within patient evidence)
+
 2023-07-17: PughLab pipeline-suite (version 0.8.3);
 - delly: updates to germline SV pipeline (spec. renaming merged files to be more reflective of contents)
 - mavis: added germline SV calls from Delly/Manta to pipeline
