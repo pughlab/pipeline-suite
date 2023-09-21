@@ -322,6 +322,12 @@ gatk_cnv:
             java_mem: 3g
             mem: 4G
             time: '24:00:00'
+manta:
+    run: N
+    parameters:
+        manta:
+            mem: 8G
+            time: '24:00:00'
 delly:
     run: Y
     parameters:
