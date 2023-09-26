@@ -1,0 +1,7 @@
+PATIENT-001:
+    tumour:
+        PATIENT-001-Pl: /path/to/project/patient_001_plasma.bam
+PATIENT-002:
+    tumour:
+        PATIENT-002-Pl-T1: /path/to/project/patient_002_plasma_t1.bam
+        PATIENT-002-Pl-T2: /path/to/project/patient_002_plasma_t2.bam
