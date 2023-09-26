@@ -1,0 +1,63 @@
+---
+project_name: PROJECTNAME
+output_dir: /path/to/project/directory 
+hpc_group: 
+# reference files
+ref_type: hg38 # currently only tested on hg38 
+reference: /cluster/projects/pughlab/references/TGL/hg38/hg38_random.fa
+nucleosome_peaks: 
+delfi_pon: 
+delfi_filters: 
+delfi_gaps: 
+delfi_vntrs: 
+delfi_tiles: 
+# package directories
+fragmentomics_dir: 
+griffin_dir: /cluster/projects/pughlab/bin/Griffin/v0.2.0
+# tool versions
+samtools_version: 1.10
+picard_version: 2.10.9
+bedtools_version: 2.27.1
+python3_version: 3.7.2
+r_version: 4.0.0
+# tool specific parameters
+parameters:
+    downsample:
+        n_reads: 50000000
+        mem: 2G
+        time: '48:00:00'
+    dedup:
+        java_mem: 1g
+        mem: 2G
+        time: '48:00:00'
+    ratio:
+        mem: 12G
+        time: '24:00:00'
+    score:
+        mem: 2G
+        time: '24:00:00'
+    insertsize:
+        java_mem: 7g
+        mem: 8G
+        time: '24:00:00'
+#    griffin_gc:
+#        n_cpus: 8
+#        time: '12:00:00'
+#        mem: 16G
+#    griffin_tfbs:
+#        n_cpus: 8
+#        time: '12:00:00'
+#        mem: 16G
+    nucleosome_position:
+        mem: 16G
+        time: '12:00:00'
+    end_motifs:
+        mem: 16G
+        time: '12:00:00'
+    breakpoints:
+        mem: 64G
+        time: '12:00:00'
+    dinucleotide:
+        size: both
+        mem: 16G
+        time: '12:00:00'

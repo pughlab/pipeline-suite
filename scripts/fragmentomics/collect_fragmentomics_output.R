@@ -1,0 +1,385 @@
+### collect_fragmentomics_outputs.R ################################################################
+# Collect outputs from pughlab_fragmentomics_pipeline
+
+### FUNCTIONS ######################################################################################
+# function to generate a standardized filename
+generate.filename <- function(project.stem, file.core, extension, include.date = TRUE) {
+
+	# build up the filename
+	file.name <- paste(project.stem, file.core, sep = '_');
+	file.name <- paste(file.name, extension, sep = '.');
+
+	if (include.date) {
+		file.name <- paste(Sys.Date(), file.name, sep = '_');
+		}
+
+	return(file.name);
+	}
+
+# function to write session profile to file
+save.session.profile <- function(file.name) {
+
+	# open the file
+	sink(file = file.name, split = FALSE);
+
+	# write memory usage to file
+	cat('### MEMORY USAGE ###############################################################');
+	print(proc.time());
+
+	# write sessionInfo to file
+	cat("\n### SESSION INFO ###############################################################");
+	print(sessionInfo());
+
+	# close the file
+	sink();
+
+	}
+
+### PREPARE SESSION ################################################################################
+# import libraries
+library(argparse);
+
+# import command line arguments
+parser <- ArgumentParser();
+
+parser$add_argument('-p', '--project', type = 'character', help = 'project name', default = 'PROJECT');
+parser$add_argument('-d', '--directory', type = 'character', help = 'path to data directory',
+	default = getwd());
+
+arguments <- parser$parse_args();
+
+setwd(arguments$directory);
+
+### READ DATA ######################################################################################
+# find data files
+score.files <- list.files(pattern = 'score.txt', recursive = TRUE);
+insertsize.files <- list.files(pattern = 'picard.txt', recursive = TRUE);
+fs.ratio.files <- list.files(pattern = '5Mb_bins.txt', recursive = TRUE);
+nucleosome.files <- list.files(pattern = 'peak_distance.txt', recursive = TRUE);
+# motifs = *_motifs.txt, *_raw.txt
+motif.files <- list.files(pattern = 'motifs.txt', recursive = TRUE);
+# bkpts = *_count.txt, *_frequency.txt, *_ratio.txt
+breakpoint.files <- list.files(pattern = 'frequency.txt', recursive = TRUE);
+# dinus = *_len150_contexts.txt, *_len167_contexts.txt (dinuc x position)
+dinucleotide.long = list.files(pattern = 'len167_contexts.txt', recursive = TRUE);
+dinucleotide.short = list.files(pattern = 'len150_contexts.txt', recursive = TRUE);
+
+# read in fragment scores
+if (length(score.files) > 0) {
+	score.data <- do.call(rbind, lapply(score.files, function(i) { 
+		tmp <- read.delim(i);
+		tmp$Sample <- sub('_score.txt','',basename(i));
+		if (grepl('downsample', basename(i))) {
+			tmp$Sample <- gsub('_downsample','',tmp$Sample);
+			}
+		return(tmp);
+		}));
+
+	colnames(score.data)[1] <- 'FS';
+	}
+
+# read in insert sizes
+if (length(insertsize.files) > 0) {
+	fragment.length.data <- do.call(rbind, lapply(insertsize.files, function(i) { 
+		tmp <- read.delim(i, skip = 6, nrow = 1);
+		tmp$Sample <- sub('_picard.txt','',basename(i));
+		if (grepl('downsample', basename(i))) {
+			tmp$Sample <- gsub('_downsample','',tmp$Sample);
+			}
+		return(tmp);
+		}));
+
+	insertsizes.data <- do.call(rbind, lapply(insertsize.files, function(i) { 
+		tmp <- read.delim(i, skip = 12);
+		tmp$Sample <- sub('_picard.txt','',basename(i));
+		if (grepl('downsample', basename(i))) {
+			tmp$Sample <- gsub('_downsample','',tmp$Sample);
+			}
+		return(tmp);
+		}));
+	}
+
+# read in fragment ratios
+if (length(fs.ratio.files) > 0) {
+	ratio.data <- do.call(rbind, lapply(fs.ratio.files, function(i) { 
+		tmp <- read.delim(i);
+		if (grepl('downsample', basename(i))) {
+			tmp$sample_id <- sub('_downsample','',tmp$sample_id);
+			}
+		return(tmp[,c('sample_id','bin','seqnames','arm','start','end','combined_centered')]);
+		}));
+	}
+
+# read in nucleosome positioning data
+if (length(nucleosome.files) > 0) {
+	nucleosome.data <- do.call(rbind, lapply(nucleosome.files, function(i) { 
+		tmp <- read.delim(i);
+		tmp$Sample <- sub('_peak_distance.txt', '', basename(i));
+		if (grepl('downsample', basename(i))) {
+			tmp$Sample <- sub('_downsample','',tmp$Sample);
+			}
+		return(tmp);
+		}));
+	}
+
+# read in end motif scores
+if (length(motif.files) > 0) {
+	motif.data <- do.call(rbind, lapply(motif.files, function(i) { 
+		tmp <- read.delim(i);
+		tmp$Sample <- sub('_motifs.txt','',basename(i));
+		if (grepl('downsample', basename(i))) {
+			tmp$Sample <- gsub('_downsample','',tmp$Sample);
+			}
+		return(tmp);
+		}));
+	}
+
+# read in breakpoint data
+if (length(breakpoint.files) > 0) {
+	breakpoint.data <- do.call(rbind, lapply(breakpoint.files, function(i) { 
+		tmp <- read.delim(i);
+		tmp$Sample <- sub('_frequency.txt', '', basename(i));
+		if (grepl('downsample', basename(i))) {
+			tmp$Sample <- sub('_downsample','',tmp$Sample);
+			}
+		return(tmp);
+		}));
+	}
+
+# read in dinucleotide data
+if (length(dinucleotide.short) > 0) {
+	dinucleotide.150 <- do.call(rbind, lapply(dinucleotide.short, function(i) { 
+		tmp <- read.delim(i);
+		tmp$Sample <- sub('_len150_contexts.txt', '', basename(i));
+		if (grepl('downsample', basename(i))) {
+			tmp$Sample <- sub('_downsample','',tmp$Sample);
+			}
+		return(tmp);
+		}));
+	}
+
+if (length(dinucleotide.long) > 0) {
+	dinucleotide.167 <- do.call(rbind, lapply(dinucleotide.long, function(i) { 
+		tmp <- read.delim(i);
+		tmp$Sample <- sub('_len167_contexts.txt', '', basename(i));
+		if (grepl('downsample', basename(i))) {
+			tmp$Sample <- sub('_downsample','',tmp$Sample);
+			}
+		return(tmp);
+		}));
+	}
+
+### FORMAT DATA ####################################################################################
+## format insert size data
+if (length(insertsize.files) > 0) {
+
+	# reshape fragment counts
+	histogram.data <- reshape(insertsizes.data[,c('insert_size','All_Reads.fr_count','Sample')],
+		direction = 'wide',
+		idvar = 'insert_size',
+		timevar = 'Sample'
+		);
+	colnames(histogram.data) <- gsub('All_Reads.fr_count.','',colnames(histogram.data));
+
+	# calculate some size metrics
+	short.frags <- apply(
+		histogram.data[which(histogram.data$insert_size > 10 & histogram.data < 150),-1],
+		2, sum, na.rm = TRUE);
+	normal.frags <- apply(
+		histogram.data[which(histogram.data$insert_size >= 150 & histogram.data < 220),-1],
+		2, sum, na.rm = TRUE);
+	long.frags <- apply(
+		histogram.data[which(histogram.data$insert_size >= 220 & histogram.data < 600),-1],
+		2, sum, na.rm = TRUE);
+	total.frags <- apply(
+		histogram.data[which(histogram.data$insert_size > 10 & histogram.data < 600),-1],
+		2, sum, na.rm = TRUE);
+
+	tmp.metrics <- data.frame(
+		Sample = names(short.frags),
+		Total.Fragments = total.frags,
+		Total.Short = short.frags,
+		Total.Normal = normal.frags,
+		Total.Long = long.frags,
+		Proportion.Short = (short.frags / total.frags),
+		Proportion.Long = (long.frags / total.frags),
+		Ratio.Short.Normal = (short.frags / normal.frags)
+		);
+
+	# add metrics to summary data
+	fragment.size.summary <- merge(
+		fragment.length.data[,c('Sample','MEDIAN_INSERT_SIZE','MEDIAN_ABSOLUTE_DEVIATION','MEAN_INSERT_SIZE','STANDARD_DEVIATION','READ_PAIRS')],
+		tmp.metrics,
+		by = 'Sample'
+		);
+	}
+
+## format fragment ratio data
+if (length(fs.ratio.files) > 0) {
+
+	# reshape per-bin ratios
+	ratio.data.wide <- reshape(
+		ratio.data,
+		direction = 'wide',
+		idvar = c('bin','seqnames','arm','start','end'),
+		timevar = 'sample_id'
+		);
+	colnames(ratio.data.wide) <- gsub('combined_centered.','',colnames(ratio.data.wide));
+	}
+
+## format end motif frequencies
+if (length(motif.files) > 0) {
+
+	# reshape frequency data
+	motifs.wide <- reshape(
+		motif.data,
+		direction = 'wide',
+		idvar = 'motif',
+		timevar = 'Sample'
+		);
+	colnames(motifs.wide) <- gsub('frequency.','',colnames(motifs.wide));
+	}
+
+## format breakpoint nucleotide frequencies
+if (length(breakpoint.files) > 0) {
+
+	breakpoint.data <- breakpoint.data[,c('Sample','nucleotide',
+		colnames(breakpoint.data)[grepl('X',colnames(breakpoint.data))])];
+
+	breakpoint.long <- reshape(
+		breakpoint.data,
+		direction = 'long',
+		varying = list(3:ncol(breakpoint.data)),
+		v.names = 'Frequency',
+		timevar = 'Position',
+		times = gsub('X','',gsub('X\\.','-',colnames(breakpoint.data)[3:ncol(breakpoint.data)]))
+		);
+	}
+
+## format dinucleotide frequencies
+if (length(dinucleotide.short) > 0) {
+
+	# reshape short data
+	dinucleotide.data <- reshape(
+		dinucleotide.150,
+		direction = 'long',
+		varying = list(grep('X',colnames(dinucleotide.150))),
+		v.names = 'Frequency',
+		timevar = 'Position'
+		);
+
+	colnames(dinucleotide.data)[5] <- 'Group';
+	dinucleotide.data$Group <- '150bp';
+	}
+
+# reshape long data
+if (length(dinucleotide.long) > 0) {
+
+	dinucleotide.data.tmp <- reshape(
+		dinucleotide.167,
+		direction = 'long',
+		varying = list(grep('X',colnames(dinucleotide.167))),
+		v.names = 'Frequency',
+		timevar = 'Position'
+		);
+
+	colnames(dinucleotide.data.tmp)[5] <- 'Group';
+	dinucleotide.data.tmp$Group <- '167bp';
+	}
+
+# combine
+if ( (length(dinucleotide.short) > 0) & (length(dinucleotide.long) > 0) ) {
+	dinucleotide.data <- rbind(dinucleotide.data,dinucleotide.data.tmp);
+#	} else if (length(dinucleotide.short) > 0) {
+#	dinucleotide.data <- dinucleotide.data;
+	} else if (length(dinucleotide.long) > 0) {
+	dinucleotide.data <- dinucleotide.data.tmp;
+	}
+
+### SAVE DATA ######################################################################################
+# save fragment scores
+if (exists('score.data')) {
+
+	write.table(
+		score.data[,c('Sample','FS')],
+		file = generate.filename(arguments$project, 'fragment_scores', 'tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+	}
+
+# save insert size summary
+if (exists('fragment.size.summary')) {
+
+	write.table(
+		fragment.size.summary,
+		file = generate.filename(arguments$project, 'insert_size_summary', 'tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+	}
+
+# save per-bin fragment ratios
+if (exists('ratio.data.wide')) {
+
+	write.table(
+		ratio.data.wide,
+		file = generate.filename(arguments$project, 'per5Mb_fragment_ratios', 'tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+	}
+
+# save per-chromosome nucleosome position summary
+if (exists('nucleosome.data')) {
+
+	write.table(
+		nucleosome.data[,c('Sample','distance',paste0('chr',1:22))],
+		file = generate.filename(arguments$project, 'nucleosome_peak_distances', 'tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+	}
+
+# save end-motif frequencies
+if (exists('motifs.wide')) {
+
+	write.table(
+		motifs.wide,
+		file = generate.filename(arguments$project, 'endmotif_frequencies', 'tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+	}
+
+# save breakpoint frequencies
+if (exists('breakpoint.long')) {
+
+	write.table(
+		breakpoint.long[,1:4],
+		file = generate.filename(arguments$project, 'breakpoint_frequencies', 'tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+	}
+
+# save dinucleotide frequencies
+if (exists('dinucleotide.data')) {
+
+	write.table(
+		dinucleotide.data[,c('Sample','Group','context','Position','Frequency')],
+		file = generate.filename(arguments$project, 'dinucleotide_frequencies', 'tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+	}
+
+### SAVE SESSION INFO ##############################################################################
+save.session.profile(generate.filename('CollectFragmentomics','SessionProfile','txt'));

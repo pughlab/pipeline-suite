@@ -1,3 +1,6 @@
+2023-09-26: PughLab pipeline-suite (version 0.9.0);
+- NEW: initial addition of pughlab_fragmentomics_pipeline.pl; this pipeline examines fragmentation patterns within plasma WGS BAM files utilizing code developed by Derek Wong
+
 2023-09-21: PughLab pipeline-suite (version 0.8.4);
 - NEW: added manta.pl to allow for SV calling without subsequent variant calling steps (Strelka)
 - NEW: initial addition of germline-only pipeline
