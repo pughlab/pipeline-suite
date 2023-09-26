@@ -409,7 +409,7 @@ if (!is.null(arguments$report)) {
 			);
 
 		# run unlink, in case it exists from a previous run
-		unlink('mutation_signatures.png');
+		unlink(paste0(arguments$report, '/', 'mutation_signatures.png'));
 		file.symlink(
 			paste0(arguments$output, '/', 
 				generate.filename(arguments$project, 'mutation_signatures', 'png')),

@@ -141,15 +141,10 @@ for (tool in names(mutation.data)) {
 
 	tool.data <- mutation.data[[tool]];
 
-	if (tool == 'MuTect2') {
-		tmp <- tool.data[,c(keep.fields,'t_depth','t_alt_count')];
-		tmp$VAF <- tmp$t_alt_count / tmp$t_depth;
-		tmp <- tmp[,c(keep.fields,'VAF')];
-		tmp[,tool] <- 1;
-		} else {
-		tmp <- tool.data[,keep.fields];
-		tmp[,tool] <- 1;
-		}
+	tmp <- tool.data[,c(keep.fields,'t_depth','t_alt_count')];
+	tmp$VAF <- tmp$t_alt_count / tmp$t_depth;
+	tmp <- tmp[,c(keep.fields,'VAF')];
+	colnames(tmp)[which(colnames(tmp) == 'VAF')] <- tool;
 
 	if (nrow(combined.data) == 0) {
 		combined.data <- tmp;
@@ -170,8 +165,7 @@ for (tool in names(mutation.data)) {
 combined.data$Count <- apply(
 	combined.data[,names(mutation.data)],
 	1,
-	sum,
-	na.rm = TRUE
+	function(i) { length(i[which(i > 0)]) }
 	);
 
 ### FILTER VARIANTS ################################################################################
@@ -182,7 +176,7 @@ combined.data$Count <- apply(
 #	3) is called by MuTect2 and VAF is < 0.1
 #	4) keep position if it passes any of the above in any sample AND called by MuTect2
 
-combined.data$FILTER <- NA;
+combined.data[,c('FILTER.n_tools','FILTER.m2_vaf')] <- FALSE;
 
 min.snp.count <- ceiling(snp.tool.count*0.55);
 min.indel.count <- ceiling(indel.tool.count*0.55);
@@ -192,7 +186,7 @@ is.snp <- combined.data$Variant_Type == 'SNP';
 callers.min <- combined.data$Count >= min.snp.count;
 
 if (length(which(is.snp & callers.min)) > 0) {
-	combined.data[which(is.snp & callers.min),]$FILTER <- 'PASS';
+	combined.data[which(is.snp & callers.min),]$FILTER.n_tools <- TRUE;
 	}
 
 # reduce n_tools if tumour_only (due to SomaticSniper) [only required if cohort is mixed T/N and T-only]
@@ -200,7 +194,7 @@ if (run.somaticsniper) {
 	callers.min.mod <- combined.data$Count >= ceiling((snp.tool.count-1)*0.55);
 	t.only.idx <- is.na(combined.data$Matched_Norm_Sample_Barcode);
 	if (length(which(is.snp & callers.min.mod & t.only.idx)) > 0) {
-		combined.data[which(is.snp & callers.min.mod & is.na(combined.data$Matched_Norm_Sample_Barcode)),]$FILTER <- 'PASS';
+		combined.data[which(is.snp & callers.min.mod & is.na(combined.data$Matched_Norm_Sample_Barcode)),]$FILTER.n_tools <- TRUE;
 		}
 	}
 
@@ -209,32 +203,39 @@ is.indel <- combined.data$Variant_Type != 'SNP';
 callers.min <- combined.data$Count >= min.indel.count;
 
 if (length(which(is.indel & callers.min)) > 0) {
-	combined.data[which(is.indel & callers.min),]$FILTER <- 'PASS';
+	combined.data[which(is.indel & callers.min),]$FILTER.n_tools <- TRUE;
 	}
 
 # 3) is called by MuTect2 and VAF is < 0.1 (because many tools don't call low vaf/coverage variants)
 if ('MuTect2' %in% colnames(combined.data)) {
-	low.vaf.idx <- which(combined.data$MuTect2 == 1 & combined.data$VAF < 0.1);
-	if (length(low.vaf.idx) > 0) { combined.data[low.vaf.idx,]$FILTER <- 'PASS'; }
+	low.vaf.idx <- which(combined.data$MuTect2 < 0.1 & combined.data$MuTect2 > 0);
+	if (length(low.vaf.idx) > 0) { combined.data[low.vaf.idx,]$FILTER.m2_vaf <- TRUE; }
 	}
 
-# 4) keep position if it passes any of the above in any sample AND called by MuTect2
+# 4) keep position if it passes any of the above in any sample from this patient
 # this should catch most instances of a variant with low VAF/coverage in 1 part of a multi-region tumour
-passed.variants <- unique(combined.data[which(combined.data$FILTER == 'PASS'),c('Chromosome','Start_Position','End_Position','Reference_Allele','Tumor_Seq_Allele2','Variant_Type','Matched_Norm_Sample_Barcode')]);
+passed.variants <- unique(
+	combined.data[which(combined.data$FILTER.n_tools | combined.data$FILTER.m2_vaf),
+	c('Chromosome','Start_Position','End_Position','Reference_Allele','Tumor_Seq_Allele2','Variant_Type','Matched_Norm_Sample_Barcode')]
+	);
+
 passed.variants <- passed.variants[!is.na(passed.variants$Matched_Norm_Sample_Barcode),];
 
 if (nrow(passed.variants) > 0) {
 
-	passed.variants$C4 <- 1;
+	passed.variants$FILTER.patient_evidence <- TRUE;
 
 	combined.data <- merge(
 		combined.data,
 		passed.variants,
 		all.x = TRUE
 		);
-
-	combined.data[which(combined.data$C4 == 1),]$FILTER <- 'PASS';
 	}
+
+combined.data$FILTER <- NA;
+combined.data[which(combined.data$FILTER.n_tools |
+	combined.data$FILTER.m2_vaf |
+	combined.data$FILTER.patient_evidence),]$FILTER <- 'PASS';
 
 save(combined.data, file = generate.filename(arguments$project, 'CombinedMutationData','RData'));
 
@@ -250,7 +251,7 @@ file.symlink(
 filtered.calls <- unique(combined.data[which(combined.data$FILTER == 'PASS'),]);
 
 # order data for easier formatting
-filtered.calls$Chromosome <- factor(filtered.calls$Chromosome, levels = paste0('chr',c(1:22,'X','Y')));
+filtered.calls$Chromosome <- factor(filtered.calls$Chromosome, levels = paste0('chr',c(1:22,'X','Y','M')));
 filtered.calls <- filtered.calls[order(filtered.calls$Chromosome, filtered.calls$Start_Position),];
 
 # add column indicating which tools called it

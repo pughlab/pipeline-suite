@@ -261,50 +261,51 @@ if (arguments$find_drawings) {
 		}
 
 	### CBIOPORTAL ######################
-	tmp <- sv.data.filtered;
+	svs <- sv.data.filtered;
+	rm(sv.data, sv.data.filtered);
 
 	# sort by evidence
-	tmp$N.tools <- sapply(tmp$tools, function(i) { length(unlist(strsplit(i,';'))) } );
-	tmp$Evidence <- apply(tmp[,grep('reads|pairs', colnames(tmp))],1, function(i) { 
+	svs$N.tools <- sapply(svs$tools, function(i) { length(unlist(strsplit(i,';'))) } );
+	svs$Evidence <- apply(svs[,grep('reads|pairs', colnames(svs))],1, function(i) { 
 		sum(sapply(i[which(i != 'None')],function(y) { max(as.numeric(unlist(strsplit(as.character(y),';')))) } ))
 		} );
 
-	tmp <- tmp[order(tmp$library, tmp$tracking_id, -tmp$N.tools, -tmp$Evidence),];
+	svs <- svs[order(svs$library, svs$tracking_id, -svs$N.tools, -svs$Evidence),];
 
 	# is this a tumour or normal sample?
-	tmp$Status <- 'somatic';
-	if ( (length(normal.smps) > 0) & (any(tmp$library %in% normal.smps)) ) {
-		tmp[which(tmp$library %in% normal.smps),]$Status <- 'germline';
+	svs$Status <- 'somatic';
+	if ( (length(normal.smps) > 0) & (any(svs$library %in% normal.smps)) ) {
+		svs[which(svs$library %in% normal.smps),]$Status <- 'germline';
 		}
 	if (length(normal.smps) > 1) {
 		germ.idx <- which(apply(
-			tmp[,names(normal.smps)],1,function(i) { any(i == 'germline', na.rm = TRUE) } ));
-		tmp[germ.idx,]$Status <- 'germline';
+			svs[,names(normal.smps)],1,function(i) { any(i == 'germline', na.rm = TRUE) } ));
+		svs[germ.idx,]$Status <- 'germline';
 		}
 
 	# get type of evidence (DNA or RNA)
-	tmp[,c('DNA_Support','RNA_Support')] <- 'No';
-	if (any(tmp$protocol == 'genome')) {
-		tmp[which(tmp$protocol == 'genome'),]$DNA_Support <- 'Yes';
+	svs[,c('DNA_Support','RNA_Support')] <- 'No';
+	if (any(svs$protocol == 'genome')) {
+		svs[which(svs$protocol == 'genome'),]$DNA_Support <- 'Yes';
 		}
 
 	if (length(rna.smps) > 0) {
-		tmp[which(tmp$protocol == 'transcriptome'),]$RNA_Support <- 'Yes';
+		svs[which(svs$protocol == 'transcriptome'),]$RNA_Support <- 'Yes';
 		rna.idx <- which(apply(
-			tmp[,names(rna.smps)],1,function(i) { any(i == 'expressed', na.rm = TRUE) } ));
-		if (length(rna.idx) > 0) { tmp[rna.idx,]$RNA_Support <- 'Yes'; }
+			svs[,names(rna.smps)],1,function(i) { any(i == 'expressed', na.rm = TRUE) } ));
+		if (length(rna.idx) > 0) { svs[rna.idx,]$RNA_Support <- 'Yes'; }
 		dna.idx <- which(apply(
-			tmp[,names(tumour.smps)],1,function(i) { any(i == 'genomic support', na.rm = TRUE) } ));
-		if (length(dna.idx) > 0) { tmp[dna.idx,]$DNA_Support <- 'Yes'; }
+			svs[,names(tumour.smps)],1,function(i) { any(i == 'genomic support', na.rm = TRUE) } ));
+		if (length(dna.idx) > 0) { svs[dna.idx,]$DNA_Support <- 'Yes'; }
 		}
 
 	# is this an inframe or frameshift variant?
-	tmp$Frame <- 'unknown';
-	if (any(tmp$fusion_splicing_pattern == 'normal')) {
-		tmp[which(tmp$fusion_splicing_pattern == 'normal'),]$Frame <- 'inframe';
+	svs$Frame <- 'unknown';
+	if (any(svs$fusion_splicing_pattern == 'normal')) {
+		svs[which(svs$fusion_splicing_pattern == 'normal'),]$Frame <- 'inframe';
 		}
-	if (any(!tmp$fusion_splicing_pattern %in% c('normal','None'))) {
-		tmp[which(!tmp$fusion_splicing_pattern %in% c('normal','None')),]$Frame <- 'frameshift';
+	if (any(!svs$fusion_splicing_pattern %in% c('normal','None'))) {
+		svs[which(!svs$fusion_splicing_pattern %in% c('normal','None')),]$Frame <- 'frameshift';
 		}
 
 	### RECURRENCE FILTER ##############################################################################
@@ -312,7 +313,7 @@ if (arguments$find_drawings) {
 	if (length(normal.smps) > 0) {
 		germline.recurrence <- aggregate(
 			library ~ break1_chromosome + break1_position_start + break1_position_end + break2_chromosome + break2_position_start + break2_position_end + event_type + Status,
-			tmp[which(tmp$library %in% normal.smps),],
+			svs[which(svs$library %in% normal.smps),],
 			length
 			);
 		colnames(germline.recurrence)[ncol(germline.recurrence)] <- 'NormalCount';
@@ -323,7 +324,7 @@ if (arguments$find_drawings) {
 	if (length(tumour.smps) > 0) {
 		somatic.recurrence <- aggregate(
 			library ~ break1_chromosome + break1_position_start + break1_position_end + break2_chromosome + break2_position_start + break2_position_end + event_type + Status,
-			tmp[which(tmp$library %in% tumour.smps),],
+			svs[which(svs$library %in% tumour.smps),],
 			length
 			);
 		colnames(somatic.recurrence)[ncol(somatic.recurrence)] <- 'TumourCount';
@@ -338,7 +339,7 @@ if (arguments$find_drawings) {
 	if (length(rna.smps) > 0) {
 		rna.recurrence <- aggregate(
 			library ~ break1_chromosome + break1_position_start + break1_position_end + break2_chromosome + break2_position_start + break2_position_end + event_type + Status,
-			tmp[which(tmp$library %in% rna.smps),],
+			svs[which(svs$library %in% rna.smps),],
 			length
 			);
 		colnames(rna.recurrence)[ncol(rna.recurrence)] <- 'RNACount';
@@ -355,20 +356,20 @@ if (arguments$find_drawings) {
 	somatic.threshold <- length(tumour.smps)*0.8;
 	rna.threshold <- length(rna.smps)*0.8;
 
-	tmp2 <- merge(tmp, recurrence.data, all.x = TRUE);
-	to.remove <- c(
-		which(tmp2$Status == 'germline' & tmp2$NormalCount > germline.threshold),
-		which(tmp2$Status == 'somatic' & tmp2$TumourCount > somatic.threshold),
-		which(tmp2$protocol == 'transcriptome' & tmp2$RNACount > rna.threshold)
-		);
+	tmp <- merge(svs, recurrence.data, all.x = TRUE);
+	to.remove <- unique(c(
+		which(tmp$Status == 'germline' & tmp$NormalCount > germline.threshold),
+		which(tmp$Status == 'somatic' & tmp$TumourCount > somatic.threshold),
+		which(tmp$protocol == 'transcriptome' & tmp$RNACount > rna.threshold)
+		));
 
-	print(paste0('Removing ', length(to.remove), ' (', round(length(to.remove)/nrow(tmp)*100),
+	print(paste0('Removing ', length(to.remove), ' (', round(length(to.remove)/nrow(svs)*100),
 		'%) SVs for high breakpoint recurrence.'));
 
 	if (length(to.remove) > 0) {
-		filtered.svs <- tmp2[-to.remove,colnames(tmp)];
+		filtered.svs <- tmp[-to.remove,colnames(svs)];
 		} else {
-		filtered.svs <- tmp2[,colnames(tmp)];
+		filtered.svs <- tmp[,colnames(svs)];
 		}
 
 	### SIZE FILTER ####################################################################################

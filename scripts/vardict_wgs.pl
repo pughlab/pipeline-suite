@@ -461,7 +461,7 @@ sub main {
 		my (@patient_jobs, @final_outputs, @germline_vcfs, @germline_jobs, @sample_jobs);
 		my @split_jobs;
 
-		my $is_split_complete = join('/', $tmp_directory, 'split_bam.COMPLETE');
+		my $is_split_complete = join('/', $patient_directory, 'split_bam.COMPLETE');
 		my $check_split_command = join(' ',
 			'echo',
 			"'split commands completed successfully' >",

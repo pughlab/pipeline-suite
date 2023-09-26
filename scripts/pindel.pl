@@ -276,7 +276,8 @@ sub get_pindel2vcf_command {
 		'-r', $reference,
 		'-R', $ref_type,
 		'-d', $today,
-		'-G -pr 3 -ir 3 -il 3 -pl 3 -as 100 -e', $args{min_depth},
+		'-G -pr 3 -ir 3 -il 3 -pl 3 -as 100 -e 5',
+		'-mc', $args{min_depth},
 		'-P', '$STEM',
 		'-v', '$STEM.vcf'
 		);

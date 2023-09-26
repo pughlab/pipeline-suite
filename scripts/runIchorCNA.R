@@ -243,128 +243,128 @@ mainName <- rep(NA, length(normal) * length(ploidy));
 for (n in normal) {
 	for (p in ploidy) {
 		if (n == 0.95 & p != 2) { next; }
-		}
 
-	# NEED TO EXCLUDE CHR X #
-	logR <- as.data.frame(lapply(tumour_copy, function(x) { x$copy }));
-	param <- getDefaultParameters(logR[valid & chrInd, , drop=F], maxCN = maxCN,
-			includeHOMD = includeHOMD, ct.sc = scStates, ploidy = floor(p),
-			e = txnE, e.same = 50, strength = txnStrength);
+		# NEED TO EXCLUDE CHR X #
+		logR <- as.data.frame(lapply(tumour_copy, function(x) { x$copy }));
+		param <- getDefaultParameters(logR[valid & chrInd, , drop=F], maxCN = maxCN,
+				includeHOMD = includeHOMD, ct.sc = scStates, ploidy = floor(p),
+				e = txnE, e.same = 50, strength = txnStrength);
 
-	param$phi_0 <- p;
-	param$n_0 <- n;
+		param$phi_0 <- p;
+		param$n_0 <- n;
 
-	############################################
-	######## CUSTOM PARAMETER SETTINGS #########
-	############################################
-	# 0.1x cfDNA #
-	if (is.null(lambda)) {
-		logR.var <- 1 / ((apply(logR, 2, sd, na.rm = TRUE) / sqrt(length(param$ct))) ^ 2);
-		param$lambda <- rep(logR.var, length(param$ct));
-		param$lambda[param$ct %in% c(2)] <- logR.var;
-		param$lambda[param$ct %in% c(1,3)] <- logR.var; 
-		param$lambda[param$ct >= 4] <- logR.var / 5;
-		param$lambda[param$ct == max(param$ct)] <- logR.var / 15;
-		param$lambda[param$ct.sc.status] <- logR.var / 10;
-		} else {
-		param$lambda[param$ct %in% c(2)] <- lambda[2];
-		param$lambda[param$ct %in% c(1)] <- lambda[1];
-		param$lambda[param$ct %in% c(3)] <- lambda[3];
-		param$lambda[param$ct >= 4] <- lambda[4];
-		param$lambda[param$ct == max(param$ct)] <- lambda[2] / 15;
-		param$lambda[param$ct.sc.status] <- lambda[2] / 10;
-		}
+		############################################
+		######## CUSTOM PARAMETER SETTINGS #########
+		############################################
+		# 0.1x cfDNA #
+		if (is.null(lambda)) {
+			logR.var <- 1 / ((apply(logR, 2, sd, na.rm = TRUE) / sqrt(length(param$ct))) ^ 2);
+			param$lambda <- rep(logR.var, length(param$ct));
+			param$lambda[param$ct %in% c(2)] <- logR.var;
+			param$lambda[param$ct %in% c(1,3)] <- logR.var; 
+			param$lambda[param$ct >= 4] <- logR.var / 5;
+			param$lambda[param$ct == max(param$ct)] <- logR.var / 15;
+			param$lambda[param$ct.sc.status] <- logR.var / 10;
+			} else {
+			param$lambda[param$ct %in% c(2)] <- lambda[2];
+			param$lambda[param$ct %in% c(1)] <- lambda[1];
+			param$lambda[param$ct %in% c(3)] <- lambda[3];
+			param$lambda[param$ct >= 4] <- lambda[4];
+			param$lambda[param$ct == max(param$ct)] <- lambda[2] / 15;
+			param$lambda[param$ct.sc.status] <- lambda[2] / 10;
+			}
 
-	param$alphaLambda <- rep(lambdaScaleHyperParam, length(param$ct));
+		param$alphaLambda <- rep(lambdaScaleHyperParam, length(param$ct));
 
-	#############################################
-	################ RUN HMM ####################
-	#############################################
-	hmmResults.cor <- HMMsegment(tumour_copy, valid, dataType = "copy", 
-			param = param, chrTrain = chrTrain, maxiter = 50,
-			estimateNormal = estimateNormal, estimatePloidy = estimatePloidy,
-			estimateSubclone = estimateScPrevalence, verbose = TRUE);
+		#############################################
+		################ RUN HMM ####################
+		#############################################
+		hmmResults.cor <- HMMsegment(tumour_copy, valid, dataType = "copy", 
+				param = param, chrTrain = chrTrain, maxiter = 50,
+				estimateNormal = estimateNormal, estimatePloidy = estimatePloidy,
+				estimateSubclone = estimateScPrevalence, verbose = TRUE);
 
-  	iter <- hmmResults.cor$results$iter;
-  	id <- names(hmmResults.cor$cna)[1];
+		iter <- hmmResults.cor$results$iter;
+		id <- names(hmmResults.cor$cna)[1];
 
-	## convert full diploid solution (of chrs to train) to have 1.0 normal or 0.0 purity
-	## check if there is an altered segment that has at least a minimum # of bins
-	segsS <- hmmResults.cor$results$segs[[1]];
-	segsS <- segsS[segsS$chr %in% chrTrain, ];
-	segAltInd <- which(segsS$event != "NEUT");
-	maxBinLength <- -Inf;
+		## convert full diploid solution (of chrs to train) to have 1.0 normal or 0.0 purity
+		## check if there is an altered segment that has at least a minimum # of bins
+		segsS <- hmmResults.cor$results$segs[[1]];
+		segsS <- segsS[segsS$chr %in% chrTrain, ];
+		segAltInd <- which(segsS$event != "NEUT");
+		maxBinLength <- -Inf;
 
-	if (sum(segAltInd) > 0) {
-		maxInd <- which.max(segsS$end[segAltInd] - segsS$start[segAltInd] + 1);
-		maxSegRD <- GRanges(
-			seqnames = segsS$chr[segAltInd[maxInd]],
-			ranges = IRanges(
-				start = segsS$start[segAltInd[maxInd]],
-				end = segsS$end[segAltInd[maxInd]]
-				)
+		if (sum(segAltInd) > 0) {
+			maxInd <- which.max(segsS$end[segAltInd] - segsS$start[segAltInd] + 1);
+			maxSegRD <- GRanges(
+				seqnames = segsS$chr[segAltInd[maxInd]],
+				ranges = IRanges(
+					start = segsS$start[segAltInd[maxInd]],
+					end = segsS$end[segAltInd[maxInd]]
+					)
+				);
+
+			hits <- findOverlaps(query = maxSegRD, subject = tumour_copy[[id]][valid, ]);
+			maxBinLength <- length(subjectHits(hits));
+			}
+
+		## check if there are proportion of total bins altered 
+		# if segment size smaller than minSegmentBins, but altFrac > altFracThreshold, then still estimate TF
+		cnaS <- hmmResults.cor$cna[[1]];
+		altInd <- cnaS[cnaS$chr %in% chrTrain, "event"] == "NEUT";
+		altFrac <- sum(!altInd, na.rm = TRUE) / length(altInd);
+
+		if ((maxBinLength <= minSegmentBins) & (altFrac <= altFracThreshold)) {
+			hmmResults.cor$results$n[1, iter] <- 1.0;
+			}
+
+		# correct integer copy number based on estimated purity and ploidy
+		correctedResults <- correctIntegerCN(
+			cn = hmmResults.cor$cna[[1]],
+			segs = hmmResults.cor$results$segs[[1]], 
+			purity = 1 - hmmResults.cor$results$n[1, iter],
+			ploidy = hmmResults.cor$results$phi[1, iter],
+			cellPrev = 1 - hmmResults.cor$results$sp[1, iter], 
+			maxCNtoCorrect.autosomes = maxCN,
+			maxCNtoCorrect.X = maxCN,
+			minPurityToCorrect = minTumFracToCorrect, 
+			gender = gender$gender,
+			chrs = chrs,
+			correctHOMD = includeHOMD
 			);
 
-		hits <- findOverlaps(query = maxSegRD, subject = tumour_copy[[id]][valid, ]);
-		maxBinLength <- length(subjectHits(hits));
+		hmmResults.cor$results$segs[[1]] <- correctedResults$segs;
+		hmmResults.cor$cna[[1]] <- correctedResults$cn;
+
+		## plot solution ##
+		outPlotFile <- paste0(outDir, "/", id, "/", id, "_genomeWide_", "n", n, "-p", p);
+		mainName[counter] <- paste0(id, ", n: ", n, ", p: ", p, ", log likelihood: ",
+			signif(hmmResults.cor$results$loglik[hmmResults.cor$results$iter], digits = 4));
+
+		plotGWSolution(hmmResults.cor, s = 1, outPlotFile = outPlotFile, plotFileType = plotFileType, 
+			logR.column = "logR", call.column = "Corrected_Call", plotYLim = plotYLim,
+			estimateScPrevalence = estimateScPrevalence, seqinfo = seqinfo, main = mainName[counter]);
+
+		iter <- hmmResults.cor$results$iter;
+		results[[counter]] <- hmmResults.cor;
+		loglik[counter, "loglik"] <- signif(hmmResults.cor$results$loglik[iter], digits = 4);
+		subClonalBinCount <- unlist(lapply(hmmResults.cor$cna, function(x){ sum(x$subclone.status) }));
+		fracGenomeSub <- subClonalBinCount / unlist(lapply(hmmResults.cor$cna, function(x){ nrow(x) }));
+		fracAltSub <- subClonalBinCount / unlist(lapply(hmmResults.cor$cna,
+			function(x){ sum(x$copy.number != 2) }));
+		fracAltSub <- lapply(fracAltSub, function(x){if (is.na(x)) { 0 } else { x }} );
+		loglik[counter, "Frac_genome_subclonal"] <- paste0(signif(fracGenomeSub, digits = 2),
+			collapse=",");
+		loglik[counter, "Frac_CNA_subclonal"] <- paste0(signif(as.numeric(fracAltSub), digits = 2),
+			collapse=",");
+		loglik[counter, "init"] <- paste0("n", n, "-p", p);
+		loglik[counter, "n_est"] <- paste(signif(hmmResults.cor$results$n[, iter], digits = 2),
+			collapse = ",");
+		loglik[counter, "phi_est"] <- paste(signif(hmmResults.cor$results$phi[, iter], digits = 4),
+			collapse = ",");
+
+		counter <- counter + 1;
 		}
-
-	## check if there are proportion of total bins altered 
-	# if segment size smaller than minSegmentBins, but altFrac > altFracThreshold, then still estimate TF
-	cnaS <- hmmResults.cor$cna[[1]];
-	altInd <- cnaS[cnaS$chr %in% chrTrain, "event"] == "NEUT";
-	altFrac <- sum(!altInd, na.rm = TRUE) / length(altInd);
-
-	if ((maxBinLength <= minSegmentBins) & (altFrac <= altFracThreshold)) {
-		hmmResults.cor$results$n[1, iter] <- 1.0;
-		}
-
-	# correct integer copy number based on estimated purity and ploidy
-	correctedResults <- correctIntegerCN(
-		cn = hmmResults.cor$cna[[1]],
-		segs = hmmResults.cor$results$segs[[1]], 
-		purity = 1 - hmmResults.cor$results$n[1, iter],
-		ploidy = hmmResults.cor$results$phi[1, iter],
-		cellPrev = 1 - hmmResults.cor$results$sp[1, iter], 
-		maxCNtoCorrect.autosomes = maxCN,
-		maxCNtoCorrect.X = maxCN,
-		minPurityToCorrect = minTumFracToCorrect, 
-		gender = gender$gender,
-		chrs = chrs,
-		correctHOMD = includeHOMD
-		);
-
-	hmmResults.cor$results$segs[[1]] <- correctedResults$segs;
-	hmmResults.cor$cna[[1]] <- correctedResults$cn;
-
-      	## plot solution ##
-	outPlotFile <- paste0(outDir, "/", id, "/", id, "_genomeWide_", "n", n, "-p", p);
-	mainName[counter] <- paste0(id, ", n: ", n, ", p: ", p, ", log likelihood: ",
-		signif(hmmResults.cor$results$loglik[hmmResults.cor$results$iter], digits = 4));
-
-	plotGWSolution(hmmResults.cor, s = 1, outPlotFile = outPlotFile, plotFileType = plotFileType, 
-		logR.column = "logR", call.column = "Corrected_Call", plotYLim = plotYLim,
-		estimateScPrevalence = estimateScPrevalence, seqinfo = seqinfo, main = mainName[counter]);
-
-	iter <- hmmResults.cor$results$iter;
-	results[[counter]] <- hmmResults.cor;
-	loglik[counter, "loglik"] <- signif(hmmResults.cor$results$loglik[iter], digits = 4);
-	subClonalBinCount <- unlist(lapply(hmmResults.cor$cna, function(x){ sum(x$subclone.status) }));
-	fracGenomeSub <- subClonalBinCount / unlist(lapply(hmmResults.cor$cna, function(x){ nrow(x) }));
-	fracAltSub <- subClonalBinCount / unlist(lapply(hmmResults.cor$cna,
-		function(x){ sum(x$copy.number != 2) }));
-	fracAltSub <- lapply(fracAltSub, function(x){if (is.na(x)) { 0 } else { x }} );
-	loglik[counter, "Frac_genome_subclonal"] <- paste0(signif(fracGenomeSub, digits = 2),
-		collapse=",");
-	loglik[counter, "Frac_CNA_subclonal"] <- paste0(signif(as.numeric(fracAltSub), digits = 2),
-		collapse=",");
-	loglik[counter, "init"] <- paste0("n", n, "-p", p);
-	loglik[counter, "n_est"] <- paste(signif(hmmResults.cor$results$n[, iter], digits = 2),
-		collapse = ",");
-	loglik[counter, "phi_est"] <- paste(signif(hmmResults.cor$results$phi[, iter], digits = 4),
-		collapse = ",");
-
-	counter <- counter + 1;
 	}
 
 ## get total time for all solutions ##

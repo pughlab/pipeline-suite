@@ -325,7 +325,6 @@ top.count <- setdiff(
 	);
 
 if (length(top.count) > 0) {
-	print("> Selecting genes altered in >20% of samples");
 	plot.data[top.count,]$KEEP <- 'recurrent';
 	}
 
@@ -447,8 +446,6 @@ recurrence.plot <- create.heatmap(
 	yaxis.cex = 1,
 	xaxis.tck = if (axis.cex == 0) { 0 } else { 0.2 },
 	yaxis.tck = 0.2,
-	xaxis.fontface = 'plain',
-	yaxis.fontface = 'plain',
 	axes.lwd = 1,
 	grid.row = TRUE,
 	force.grid.row = TRUE,
@@ -465,6 +462,8 @@ recurrence.plot <- create.heatmap(
 	colour.scheme = variant.colours,
 	style = 'Nature'
 	);
+
+recurrence.plot$y.scales$fontface <- 'italic';
 
 # plot MutSig results (if provided)
 if (!is.null(arguments$mutsig)) {
