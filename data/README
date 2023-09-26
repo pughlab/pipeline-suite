@@ -1,1 +1,4 @@
-This directory contains interval files for use with sprokopec's WGS pipeline-suite:vardict. Padding has been added to provide overlap between adjacent regions (as recommemded by VarDict).
+This directory contains:
+- schematic diagrams for pipeline-suite:dna and pipeline-suite:rna
+- interval files for use with pipeline-suite:vardict for WGS; padding has been added to provide overlap between adjacent regions (as recommemded by VarDict)
+- Agena SNP positions for use by pipeline-suite:genotype_gvcfs (for sample correlations)
