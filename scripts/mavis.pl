@@ -321,11 +321,23 @@ sub main {
 		"export MAVIS_DGV_ANNOTATION=$tool_data->{mavis}->{mavis_dgv_anno}",
 		"export MAVIS_TEMPLATE_METADATA=$tool_data->{mavis}->{mavis_cytoband}",
 		"export MAVIS_REFERENCE_GENOME=$tool_data->{reference}",
-		"export MAVIS_ALIGNER='$tool_data->{mavis}->{mavis_aligner}'",
+		"export MAVIS_ALIGNER=$tool_data->{mavis}->{mavis_aligner}",
 		"export MAVIS_ALIGNER_REFERENCE=$tool_data->{bwa}->{reference}",
 		"export MAVIS_DRAW_FUSIONS_ONLY=$tool_data->{mavis}->{mavis_draw_fusions_only}",
 		"export MAVIS_SCHEDULER=" . uc($args{hpc_driver})
 		);
+
+	if (defined($tool_data->{mavis}->{mavis_time_limit})) {
+		$mavis_export .= "\nexport MAVIS_TIME_LIMIT=$tool_data->{mavis}->{mavis_time_limit}";
+		}
+
+	if (defined($tool_data->{mavis}->{mavis_mem_limit})) {
+		$mavis_export .= "\nexport MAVIS_MEMORY_LIMIT=$tool_data->{mavis}->{mavis_mem_limit}";
+		}
+
+#	if (defined($tool_data->{mavis}->{mavis_queue})) {
+#		$mavis_export .= "\nexport MAVIS_QUEUE=$tool_data->{mavis}->{mavis_queue}";
+#		}
 
 	if (defined($args{pindel_dir})) {
 		$mavis_export .= "\n" . join("\n",
