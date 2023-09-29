@@ -213,7 +213,11 @@ for (smp in all.samples) {
 		extract.format, metric = 'RV'));
 
 	tmp$Filter <- apply(delly.calls[,c('FORMAT',smp)], 1, extract.format, metric = 'FT');
-	tmp$CN <- as.integer(apply(delly.calls[,c('FORMAT',smp)], 1, extract.format, metric = 'RDCN'));
+	tmp$CN <- if ('RDCN' %in% unlist(strsplit(delly.calls$FORMAT[1],':'))) {
+		as.integer(apply(delly.calls[,c('FORMAT',smp)], 1, extract.format, metric = 'RDCN'));
+		} else {
+		as.integer(apply(delly.calls[,c('FORMAT',smp)], 1, extract.format, metric = 'CN'));
+		}
 
 	my.data[[smp]] <- tmp[!is.na(tmp$Genotype),];
 	gc();
