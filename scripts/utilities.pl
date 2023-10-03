@@ -121,7 +121,7 @@ sub error_checking {
 	# SViCT
 	if ('svict' eq $pipeline) {
 		if (!defined($tool_data->{reference})) { die("Must supply path to reference genome!"); }
-		unless ( ('true' eq $tool_data->{is_ctdna}) && ('targeted' eq $tool_data->{seq_type}) ) {
+		unless ( ('ctdna' eq $tool_data->{sample_type}) && ('targeted' eq $tool_data->{seq_type}) ) {
 			die("SViCT should only be run on targeted-panel ctDNA sequencing.");
 		}
 	}
