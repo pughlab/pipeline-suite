@@ -1,8 +1,8 @@
 ---
 project_name: PROJECTNAME
 output_dir: /cluster/projects/pughlab/projects/PROJECTNAME
+sample_type: germline # optional; can be germline or ctdna
 seq_type: wgs # must be one of exome, targeted, rna or wgs
-is_ctdna: false # must be one of true or false
 seq_center: OICR
 platform: Illumina
 hpc_group:
