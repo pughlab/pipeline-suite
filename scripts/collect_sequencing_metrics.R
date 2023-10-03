@@ -96,7 +96,9 @@ for (file in contamination.files) {
 	# extract sample ID
 	smp <- sub('_contamination.table','',basename(file));
 	# store data in list
-	contamination.list[[smp]] <- read.delim(file);
+	tmp <- read.delim(file, comment.char = '#');
+	tmp$ID <- smp;
+	contamination.list[[smp]] <- tmp;
 	}
 
 for (file in insert.files) {
@@ -145,6 +147,8 @@ if (any(grepl('fastq', artefact.data$SAMPLE_ALIAS))) {
 	colnames(artefact.data)[which(colnames(artefact.data) == 'SAMPLE_ALIAS')] <- 'FASTQ';
 	colnames(artefact.data)[which(colnames(artefact.data) == 'ID')] <- 'SAMPLE_ALIAS';
 	artefact.data <- artefact.data[,c('SAMPLE_ALIAS','LIBRARY','REF_BASE','ALT_BASE','TOTAL_QSCORE','ARTIFACT_NAME','TYPE','FASTQ')];
+	} else {
+	artefact.data <- artefact.data[,c('ID','SAMPLE_ALIAS','LIBRARY','REF_BASE','ALT_BASE','TOTAL_QSCORE','ARTIFACT_NAME','TYPE')];
 	}
 
 contest.data <- do.call(rbind, contamination.list);
@@ -152,10 +156,13 @@ if (any(grepl('fastq', contest.data$sample))) {
 	colnames(contest.data)[which(colnames(contest.data) == 'sample')] <- 'FASTQ';
 	contest.data$sample <- rownames(contest.data);
 	contest.data <- contest.data[,c('sample','contamination','error','FASTQ')];
+	} else {
+	contest.data <- contest.data[,c('ID','sample','contamination','error')];
 	}
 
 metric.data <- do.call(rbind, alignment.list);
 insert.data <- do.call(rbind, insert.list);
+insert.data <- insert.data[,c('SAMPLE',setdiff(colnames(insert.data),'SAMPLE'))];
 
 # save combined/formatted data to file
 write.table(
