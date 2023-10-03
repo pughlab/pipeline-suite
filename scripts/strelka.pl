@@ -274,7 +274,9 @@ sub pon {
 
 	$reference = $tool_data->{reference};
 	$seq_type = $tool_data->{seq_type};
-
+	if ('rna' eq $seq_type) {
+		die("Experiment type is set to RNA-Seq so we will not run germline variant detecton; exiting now.");
+		}
 
 	if ( ('exome' eq $seq_type) || ('targeted' eq $seq_type) ) {
 		$intervals = $tool_data->{intervals_bed};
@@ -310,6 +312,17 @@ sub pon {
 
 	unless($args{dry_run}) {
 		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
+		}
+
+	# do an initial check for normals; no normals = don't bother running
+	my @has_normals;
+	foreach my $patient (sort keys %{$smp_data}) {
+		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
+		if (scalar(@normal_ids) > 0) { push @has_normals, $patient; }
+		}
+
+	if (scalar(@has_normals) == 0) {
+		die("No normals provided from which to generate PoN, therefore we will exit now.");
 		}
 
 	# create an array to hold final outputs and all patient job ids
@@ -359,7 +372,6 @@ sub pon {
 		$cleanup{$patient} = "rm -rf $tmp_directory";
 
 		next if (scalar(@normal_ids) == 0);
-		next if ('rna' eq $seq_type);
 
 		# for germline variants
 		foreach my $norm (@normal_ids) {
@@ -394,13 +406,13 @@ sub pon {
 
 			my $link = join('/',
 				$germline_directory,
-				$norm . '_Strelka_germline_filtered.vcf'
+				$norm . '_Strelka_germline_filtered.vcf.gz'
 				);
 
 			# check if this should be run
 			if (
 				('Y' eq missing_file($germline_output)) && 
-				('Y' eq missing_file($filtered_germline_output)) 
+				('Y' eq missing_file("$filtered_germline_output.gz")) 
 				) {
 
 				# record command (in log directory) and then run job
@@ -444,14 +456,18 @@ sub pon {
 				tmp_dir	=> $tmp_directory
 				);
 
-			$filter_command .= "\n\nmd5sum $filtered_germline_output > $filtered_germline_output.md5";
+			$filter_command .= "\n\n" . join("\n",
+				"md5sum $filtered_germline_output > $filtered_germline_output.md5",
+				"bgzip $filtered_germline_output",
+				"tabix $filtered_germline_output.gz"
+				);
 
 			# create symlinks in the pon directory
 			if (-l $link) {
 				unlink $link or die "Failed to remove previous symlink: $link";
 				}
 
-			symlink ($filtered_germline_output, $link);
+			symlink ("$filtered_germline_output.gz", $link);
 
 			# check if this should be run
 			if ('Y' eq missing_file($filtered_germline_output . '.md5')) {
@@ -463,7 +479,7 @@ sub pon {
 					log_dir	=> $log_directory,
 					name	=> 'run_vcf_filter_germline_variants_' . $norm,
 					cmd	=> $filter_command,
-					modules	=> [$vcftools],
+					modules	=> [$vcftools, 'tabix'],
 					dependencies	=> $run_id,
 					max_time	=> $parameters->{filter}->{time},
 					mem		=> $parameters->{filter}->{mem},
@@ -486,8 +502,8 @@ sub pon {
 				print $log "  >> Skipping VCF-Filter (germline) because this has already been completed!\n";
 				}
 
-			push @{$final_outputs{$patient}}, $filtered_germline_output;
-			push @pon_vcfs, "-V:$norm $filtered_germline_output";
+			push @{$final_outputs{$patient}}, "$filtered_germline_output.gz";
+			push @pon_vcfs, "-V:$norm $filtered_germline_output.gz";
 			}
 
 		# should intermediate files be removed
@@ -542,8 +558,7 @@ sub pon {
 	print $log "\n---\nCreating panel of normals...\n";
 
 	# let's create a command and write script to combine variants for a PoN
-	my $pon_tmp	= join('/', $pon_directory, $date . "_merged_panelOfNormals.vcf");
-	$pon		= join('/', $pon_directory, $date . "_merged_panelOfNormals_trimmed.vcf");
+	$pon		= join('/', $pon_directory, $date . "_merged_panelOfNormals.vcf");
 	my $final_pon_link = join('/', $output_directory, 'panel_of_normals.vcf');
 
 	# create a trimmed (sites only) output (this is the panel of normals)

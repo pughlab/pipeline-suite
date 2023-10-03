@@ -305,6 +305,18 @@ sub pon {
 		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
 		}
 
+	# do an initial check for normals; no normals = don't bother running
+	my @has_normals;
+	foreach my $patient (sort keys %{$smp_data}) {
+		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
+		if (scalar(@normal_ids) > 0) { push @has_normals, $patient; }
+		}
+
+	if (scalar(@has_normals) == 0) {
+		die("No normals provided from which to generate PoN, therefore we will exit now.");
+		}
+
+	# initiate some variables
 	my ($run_script, $run_id, $link, $java_check, $cleanup_cmd);
 	my (@all_jobs, @pon_vcfs);
 
@@ -366,7 +378,7 @@ sub pon {
 
 			# this is a java-based command, so run a final check
 			my $java_check = "\n" . check_java_output(
-				extra_cmd => "\n\nmd5sum $output_stem.vcf > $output_stem.vcf.md5"
+				extra_cmd => "\n  md5sum $output_stem.vcf > $output_stem.vcf.md5"
 				);
 
 			$mutect_command .= "\n$java_check";
@@ -408,9 +420,10 @@ sub pon {
 				tmp_dir	=> $tmp_directory
 				);
 
-			$filter_command .= "\n\n" . join(' ',
-				'md5sum', $output_stem . "_filtered.vcf",
-				'>', $output_stem . "_filtered.vcf.md5"
+			$filter_command .= "\n\n" . join("\n",
+				"md5sum $output_stem\_filtered.vcf > $output_stem\_filtered.vcf.md5",
+				"bgzip $output_stem\_filtered.vcf",
+				"tabix $output_stem\_filtered.vcf.gz"
 				);
 
 			# check if this should be run
@@ -423,7 +436,7 @@ sub pon {
 					log_dir	=> $log_directory,
 					name	=> 'run_post-mutect_filter_' . $sample,
 					cmd	=> $filter_command,
-					modules	=> [$vcftools],
+					modules	=> [$vcftools, 'tabix'],
 					dependencies	=> $run_id,
 					max_time	=> $parameters->{filter}->{time},
 					mem		=> $parameters->{filter}->{mem},
@@ -444,13 +457,12 @@ sub pon {
 				print $log "  >> Skipping VCF-filter because this has already been completed!\n";
 				}
 
-			push @pon_vcfs, join(' ', "-V:$sample", $output_stem . "_filtered.vcf");
+			push @pon_vcfs, join(' ', "-V:$sample", $output_stem . "_filtered.vcf.gz");
 			} # end sample
 		} # end patient
 
 	# combine results
-	my $pon_tmp	= join('/', $pon_directory, $date . "_merged_panelOfNormals.vcf");
-	my $pon		= join('/', $pon_directory, $date . "_merged_panelOfNormals_trimmed.vcf");
+	my $pon		= join('/', $pon_directory, $date . "_merged_panelOfNormals.vcf");
 
 	# create a trimmed output (minN 2, sites_only) to use as pon
 	my $trimmed_merge_command = generate_pon(

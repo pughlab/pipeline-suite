@@ -1149,7 +1149,11 @@ sub main {
 					);
 				}
 
-			$format_germline_cmd .= "\nmd5sum $merged_germline > $merged_germline.md5";
+			$format_germline_cmd .= "\n\n" . join("\n",
+				"md5sum $merged_germline > $merged_germline.md5",
+				"bgzip $merged_germline",
+				"tabix $merged_germline.gz"
+				);
 
 			if ('Y' eq missing_file($merged_germline . '.md5')) {
 
@@ -1180,7 +1184,7 @@ sub main {
 				push @all_jobs, $run_id;
 				}
 
-			push @pon_vcfs, "-V:$patient $merged_germline";
+			push @pon_vcfs, "-V:$patient $merged_germline.gz";
 			}
 
 		# should intermediate files be removed
@@ -1239,7 +1243,7 @@ sub main {
 		print $log "\n---\nCreating Panel of Normals...\n";
 
 		# let's create a command and write script to combine variants for a PoN
-		my $pon		= join('/', $pon_directory, $date . "_merged_panelOfNormals_trimmed.vcf");
+		my $pon		= join('/', $pon_directory, $date . "_merged_panelOfNormals.vcf");
 		my $final_pon_link = join('/', $output_directory, 'panel_of_normals.vcf');
 
 		# create a trimmed (sites only) output (this is the panel of normals)
@@ -1290,7 +1294,9 @@ sub main {
 	#########################################
 	### BEGIN PROCESSING UNPAIRED SAMPLES ###
 	#########################################
-	print $log "\n\n>>>Beginning processing of tumour-only samples<<<\n\n";
+	if (scalar(@tumour_only) > 0) {
+		print $log "\n\n>>>Beginning processing of tumour-only samples<<<\n\n";
+		}
 
 	# process each sample in $smp_data
 	foreach my $patient (@tumour_only) {
