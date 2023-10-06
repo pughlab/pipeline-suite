@@ -51,9 +51,10 @@ parser <- ArgumentParser();
 parser$add_argument('-t', '--seq_type', type = 'character', help = 'either wgs, exome, targeted or rna', 
 	default = 'exome');
 parser$add_argument('-g', '--correlations', type = 'character', help = 'path to germline correlation file');
-parser$add_argument('-c', '--contest', type = 'character', help = 'path to contest file', default = NULL);
-parser$add_argument('-m', '--contamination', type = 'character', help = 'path to contamination file', default = NULL);
-parser$add_argument('-q', '--coverage', type = 'character', help = 'path to coverage metrics');
+parser$add_argument('-c', '--contest', type = 'character', help = 'path to contamination file (ContEst)', default = NULL);
+parser$add_argument('-m', '--contamination', type = 'character', help = 'path to contamination file (CalculateContamination)', default = NULL);
+parser$add_argument('-v', '--coverage', type = 'character', help = 'path to coverage metrics (depthOfCoverage)');
+parser$add_argument('-w', '--wgscoverage', type = 'character', help = 'path to coverage metrics (WGSMetrics)');
 parser$add_argument('-o', '--output_dir', type = 'character', help = 'path to output directory');
 parser$add_argument('-p', '--project', type = 'character', help = 'project name');
 
@@ -64,17 +65,49 @@ date <- Sys.Date();
 
 # clarify input files
 is.dna <- !(arguments$seq_type == 'rna');
-summary.file <- arguments$coverage;
+summary.file <- ifelse(!is.null(arguments$wgscoverage), arguments$wgscoverage, arguments$coverage);
 contest.file <- arguments$contest;
 other.contamination <- arguments$contamination;
 cor.file <- arguments$correlations;
 output.dir <- arguments$output_dir;
 
 ### MAIN ##########################################################################################
-# read in data file
-metric.data  <- read.delim(summary.file, row.names = 1);
+## read in data files
+# read in correlation heatmap data
 cor.data <- read.delim(cor.file, row.names = 1);
 
+# read in coverage metrics
+metric.data  <- read.delim(summary.file, row.names = 1);
+
+if (arguments$seq_type == 'wgs') {
+
+	target_coverage <- '15';
+	metric.data$percent_bases_above_targetX <- metric.data[,paste0('PCT_', target_coverage, 'X')];
+
+	colnames(metric.data)[which(colnames(metric.data) == 'MEAN_COVERAGE')] <- 'mean';
+	metric.data$lower_cov <- metric.data$mean - metric.data$SD_COVERAGE; 
+	metric.data$upper_cov <- metric.data$mean + metric.data$SD_COVERAGE; 
+	metric.data <- metric.data[,c('mean','lower_cov','upper_cov','percent_bases_above_targetX')];
+
+	cov.method <- "GATK's WGSMetrics was used to estimate coverage.";
+	} else if (is.dna) {
+
+	target_coverage <- as.numeric(unlist(
+		strsplit(colnames(metric.data)[grepl('percent_bases_above_', colnames(metric.data))],'_')
+		)[4]);
+
+	metric.data$percent_bases_above_targetX <- metric.data[,paste0('percent_bases_above_', target_coverage)]/100;
+
+	colnames(metric.data)[which(colnames(metric.data) == 'granular_third_quartile')] <- 'upper_cov';
+	colnames(metric.data)[which(colnames(metric.data) == 'granular_first_quartile')] <- 'lower_cov';
+	metric.data <- metric.data[,c('mean','lower_cov','upper_cov','percent_bases_above_targetX')];
+
+	cov.method <- "GATK's depthOfCoverage was used to estimate coverage.";
+	} else {
+	cov.method <- NULL;
+	}
+
+# read in contamination metrics
 if (is.dna) {
 	if (!is.null(contest.file)) {
 		contest.data <- read.delim(contest.file);
@@ -89,7 +122,7 @@ if (is.dna) {
 		pileup.contam$contamination <- pileup.contam$contamination * 100;
 		pileup.contam$confidence_interval_95_low <- pileup.contam$contamination - (pileup.contam$error*100);
 		pileup.contam$confidence_interval_95_high <- pileup.contam$contamination + (pileup.contam$error*100);
-		rownames(pileup.contam) <- pileup.contam$sample;
+		rownames(pileup.contam) <- pileup.contam$ID;
 		pileup.contam <- pileup.contam[,c('contamination','confidence_interval_95_low','confidence_interval_95_high')];
 		pileup.contam$Method <- 'pileup';
 		}
@@ -138,10 +171,6 @@ if (is.dna) {
 	qc.metrics <- merge(metric.data, contam.data, by = 'row.names', all.x = TRUE);
 	qc.metrics <- qc.metrics[which(qc.metrics$Row.names %in% smp.names),];
 	qc.metrics$Sample <- factor(qc.metrics$Row.names, levels = smp.names);
-	target_coverage <- as.numeric(unlist(
-		strsplit(colnames(qc.metrics)[grepl('percent_bases_above_', colnames(qc.metrics))],'_')
-		)[4]);
-	qc.metrics$percent_bases_above_targetX <- qc.metrics[,paste0('percent_bases_above_', target_coverage)]/100;
 	} else {
 	keep.metrics <- c('Total.Purity.Filtered.Reads.Sequenced','Mapping.Rate','Exonic.Rate','Intronic.Rate','Intergenic.Rate','rRNA.rate','Mean.Per.Base.Cov','Mean.CV','Duplication.Rate.of.Mapped','Base.Mismatch.Rate');
 	qc.metrics <- metric.data[intersect(rownames(metric.data), smp.names),keep.metrics];
@@ -187,7 +216,7 @@ axis.cex <- if (nrow(cor.data) <= 30) { 1
 
 if (is.dna) {
 
-	max.cov <- max(qc.metrics$granular_third_quartile, na.rm = TRUE);
+	max.cov <- max(qc.metrics$upper_cov, na.rm = TRUE);
 	if ( (max.cov == 1) || (max.cov == 500) ) { max.cov <- max(qc.metrics$mean, na.rm = TRUE); }
 
 	if (max.cov <= 100) {
@@ -325,11 +354,11 @@ if (is.dna) {
 
 	# plot coverage metrics
 	qc.metrics$percent_target <- qc.metrics$percent_bases_above_targetX * total.cov.limits[2];
-	qc.metrics$Point <- if (all(qc.metrics$granular_median == 1)) { qc.metrics$mean
-		} else { qc.metrics$granular_median }
+	key.lab <- if (!is.null(arguments$wgscoverage)) { 'mean read depth ( \u00B1 SD )';
+		} else { 'mean read depth (1st - 3rd quartile)'; }
 
 	total.coverage.plot <- create.scatterplot(
-		Point ~ Order,
+		mean ~ Order,
 		qc.metrics,
 		xaxis.lab = rep('',nrow(qc.metrics)),
 		xlimits = c(0.5, length(smp.names)+0.5),
@@ -338,8 +367,7 @@ if (is.dna) {
 		xaxis.tck = 0,
 		xaxis.fontface = 'plain',
 		yaxis.fontface = 'plain',
-		ylab.label = if (all(qc.metrics$granular_median == 1)) { 'Mean Coverage'
-			} else { 'Read depth' },
+		ylab.label = 'Read depth',
 		ylab.cex = 1.5,
 		xlab.label = '',
 		ylimits = total.cov.limits,
@@ -347,10 +375,8 @@ if (is.dna) {
 		yaxis.cex = 1.3,
 		cex = max(c(axis.cex,0.2)),
 		axes.lwd = 1,
-		y.error.up = if (! all(qc.metrics$granular_median == 1)) {
-			qc.metrics$granular_third_quartile - qc.metrics$granular_median } else { NA },
-		y.error.down = if (! all(qc.metrics$granular_median == 1)) {
-			qc.metrics$granular_median - qc.metrics$granular_first_quartile } else { NA },
+		y.error.up = qc.metrics$upper_cov - qc.metrics$mean,
+		y.error.down = qc.metrics$mean - qc.metrics$lower_cov,
 		error.whisker.angle = 0,
 		abline.v = line.breaks,
 		abline.col = 'grey80',
@@ -371,37 +397,35 @@ if (is.dna) {
 				),
 			padding.text = 8.2
 			),
-		legend = if (! all(qc.metrics$granular_median == 1)) {
-			list(
-				top = list(
-					fun = draw.key,
-					args = list(
-						key = list(
-							lines = list(cex = 1, col = 'black', pch = 19, type = 'b'),
-							text = list(lab = 'median read depth (1st - 3rd quartile)', cex = 1),
-							divide = 1
-							)
-						),
-					x = 0.5, y = 1
-					)
+		legend = list(
+			top = list(
+				fun = draw.key,
+				args = list(
+					key = list(
+						lines = list(cex = 1, col = 'black', pch = 19, type = 'b'),
+						text = list(lab = key.lab, cex = 1),
+						divide = 1
+						)
+					),
+				x = 0.5, y = 1
 				)
-			} else { NULL }
+			)
 		);		
 
 	# identify cases with poor coverage
-	poor.coverage <- qc.metrics[which(qc.metrics$percent_bases_above_targetX < 0.8),c(1,2,3,5)];
+	poor.coverage <- qc.metrics[which(qc.metrics$percent_bases_above_targetX < 0.8),c(1,2,5)];
 	coverage.caption <- paste0(
 		"Samples with low coverage ($<$80\\% bases with at least ", target_coverage,
 		"x coverage)."
 		);
 	if (nrow(poor.coverage) > 20) {
-		poor.coverage <- qc.metrics[which(qc.metrics$percent_bases_above_targetX < 0.5),c(1,2,3,5)];
+		poor.coverage <- qc.metrics[which(qc.metrics$percent_bases_above_targetX < 0.5),c(1,2,5)];
 		coverage.caption <- paste0(
 			"Samples with low coverage ($<$50\\% bases with at least ",
 			target_coverage, "x coverage)."
 			);
 		}
-	colnames(poor.coverage) <- c('Sample','TotalBasesSequenced','Mean Coverage','Median Coverage');
+	colnames(poor.coverage) <- c('Sample','Mean Coverage','fraction_above_targetX');
 
 	# plot contamination estimates
 	contest.plot <- create.segplot(
@@ -438,7 +462,7 @@ if (is.dna) {
 		);
 
 	# identify cases with high contamination estimates
-	high.contamination <- qc.metrics[which(qc.metrics$contamination > 3),c(1,8)];
+	high.contamination <- qc.metrics[which(qc.metrics$contamination > 3),c(1,6)];
 	colnames(high.contamination) <- c('Sample','Contamination_Estimate');
 
 	# combine them!
@@ -728,7 +752,7 @@ if (is.dna) {
 			poor.coverage,
 			caption = paste0(coverage.caption, " Low coverage of either a tumour or normal sample may affect variant callablility."),
 			align = rep('c',ncol(poor.coverage)+1),
-			digits = c(0,0,0,1,1)
+			digits = c(0,0,1,1)
 			);
 		print(poor.coverage, file = 'qc_concerns.tex', append = TRUE, include.rownames = FALSE, latex.environments = "");
 		} else {
