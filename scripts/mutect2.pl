@@ -446,6 +446,18 @@ sub pon {
 		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
 		}
 
+	# do an initial check for normals; no normals = don't bother running
+	my @has_normals;
+	foreach my $patient (sort keys %{$smp_data}) {
+		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
+		if (scalar(@normal_ids) > 0) { push @has_normals, $patient; }
+		}
+
+	if (scalar(@has_normals) == 0) {
+		die("No normals provided from which to generate PoN, therefore we will exit now.");
+		}
+
+	# initiate some variables
 	my ($run_script, $run_id, $link, $cleanup_cmd);
 	my (@all_jobs, @pon_vcfs);
 
@@ -720,9 +732,10 @@ sub pon {
 				tmp_dir		=> $tmp_directory
 				);
 
-			$filter_command .= "\n\n" . join(' ',
-				'md5sum', $filtered_stem . '.vcf',
-				'>', "$filtered_stem.vcf.md5"
+			$filter_command .= "\n\n" . join("\n",
+				"md5sum $filtered_stem.vcf > $filtered_stem.vcf.md5",
+				"bgzip $filtered_stem.vcf",
+				"tabix $filtered_stem.vcf.gz"
 				);
 
 			# check if this should be run
@@ -735,7 +748,7 @@ sub pon {
 					log_dir	=> $log_directory,
 					name	=> 'run_post-mutect_filter_' . $sample,
 					cmd	=> $filter_command,
-					modules	=> [$vcftools],
+					modules	=> [$vcftools, 'tabix'],
 					dependencies	=> $run_id,
 					max_time	=> $parameters->{filter}->{time},
 					mem		=> $parameters->{filter}->{mem},
@@ -756,13 +769,12 @@ sub pon {
 				print $log "  >> Skipping VCF-filter because this has already been completed!\n";
 				}
 
-			push @pon_vcfs, join(' ', "-V:$sample", $filtered_stem . ".vcf");
+			push @pon_vcfs, join(' ', "-V:$sample", $filtered_stem . ".vcf.gz");
 			} # end sample
 		} # end patient
 
 	# combine results
-	my $pon_tmp	= join('/', $pon_directory, $date . "_merged_panelOfNormals.vcf");
-	my $pon		= join('/', $pon_directory, $date . "_merged_panelOfNormals_trimmed.vcf");
+	my $pon		= join('/', $pon_directory, $date . "_merged_panelOfNormals.vcf");
 
 	# create a trimmed output (minN 2, sites_only) to use as pon
 	my $trimmed_merge_command = generate_pon(

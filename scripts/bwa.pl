@@ -392,7 +392,7 @@ sub main {
 						symlink($r2, $raw_link);
 						}
 
-					my $filestem = join('_', $sample, $lane);
+					my $filestem = join('_', $lib, $lane);
 					($run_id, $run_id_extra) = '';
 
 					# run BWA-MEM on these fastqs
@@ -415,20 +415,20 @@ sub main {
 						n_cpus		=> $parameters->{bwa}->{n_cpus}->{$type}
 						);
 
-					$bwa .= "\n\n" . "echo 'alignment finished successfully' > bwa.COMPLETE";
+					$bwa .= "\n\n" . "echo 'alignment finished successfully' > $filestem.COMPLETE";
 
 					my $output = join('/', $lane_directory, $filestem);
 
 					# check if this should be run
 					if ( 
-						('Y' eq missing_file(join('/', $lane_directory, 'bwa.COMPLETE'))) &&
+						('Y' eq missing_file(join("$output.COMPLETE"))) &&
 						# if the index is missing, then this has been run before and the 
 						# resulting sam deleted, (so don't do it again)
 						('Y' eq missing_file("$output.bam.bai"))
 						) {
 
 						# record command (in log directory) and then run job
-						print $log "Submitting job for bwa...\n";
+						print $log "      >> Submitting job for bwa...\n";
 						$run_script = write_script(
 							log_dir => $log_directory,
 							name	=> 'run_bwa_mem_' . $filestem,
@@ -452,7 +452,7 @@ sub main {
 						push @smp_jobs, $run_id;
 						push @all_jobs, $run_id;
 						} else {
-						print $log "Skipping alignment because output already exists...\n";
+						print $log "      >> Skipping alignment because output already exists...\n";
 						}
 
 					# sort the resulting SAM and output BAM
@@ -470,7 +470,7 @@ sub main {
 						('Y' eq missing_file("$output.bam.bai"))
 						) {
 						# record command (in log directory) and then run job
-						print $log "Submitting job to sort bam...\n";
+						print $log "      >> Submitting job to sort bam...\n";
 						$run_script = write_script(
 							log_dir	=> $log_directory,
 							name	=> 'run_sort_sam_' . $filestem,
@@ -494,7 +494,7 @@ sub main {
 						push @smp_jobs, $run_id;
 						push @all_jobs, $run_id;
 						} else {
-						print $log "Skipping sort step because this was performed previously...\n";
+						print $log "      >> Skipping sort step because this was performed previously...\n";
 						}
 
 					# index the resulting BAM and remove intermediate SAM
@@ -511,7 +511,7 @@ sub main {
 						('Y' eq missing_file("$output.bam.md5"))
 						) {
 						# record command (in log directory) and then run job
-						print $log "Submitting job to index bam...\n";
+						print $log "      >> Submitting job to index bam...\n";
 						$run_script = write_script(
 							log_dir	=> $log_directory,
 							name	=> 'run_bam_index_' . $filestem,
@@ -535,7 +535,7 @@ sub main {
 						push @smp_jobs, $run_id;
 						push @all_jobs, $run_id;
 						} else {
-						print $log "Skipping index step because this was performed previously...\n";
+						print $log "      >> Skipping index step because this was performed previously...\n";
 						}
 
 					push @lane_intermediates, $output . '.bam';

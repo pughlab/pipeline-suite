@@ -666,7 +666,7 @@ sub pon {
 		# make sure final output exists before removing intermediate files!
 		my $cleanup_cmd = join("\n",
 			"if [ -s $pon_genotyped.md5 ]; then",
-			"  rm $intermediate_directory/*Delly_SV.bcf",
+			"  rm $intermediate_directory/*Delly_SV.bcf*",
 			"  rm $intermediate_directory/*Delly_SV_genotyped.bcf",
 			"else",
 			'  echo "FINAL OUTPUT is missing; not removing intermediates"',

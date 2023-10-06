@@ -7,6 +7,7 @@ use Getopt::Std;
 use Getopt::Long;
 use File::Basename;
 use File::Path qw(make_path);
+use List::Util qw(any);
 use YAML qw(DumpFile);
 use Data::Dumper;
 
@@ -69,15 +70,20 @@ while (my $line = <$INPUT>) {
 	$smp_data->{$subject}->{$sample}->{type} = $type;
 
 	# find sample fastq files
-	my @subset = grep {/$sample/} @fastqfiles;
+	# this assumes that the sample ID is present in the fastq filename
+	my @subset = grep { /$sample/ } @fastqfiles;
 	@subset = sort(@subset);
 	my $size = scalar @subset;
 
 	# Extract library and lane names
+	# in general, the filename will be in the format libraryID_laneID_R1.fastq.gz
 	my @parts;
 	my ($lib,$lane,$read_dir);
 
 	foreach my $fastq ( @subset ) {
+
+		# a 'standard' library ID will end with the sequencing type
+		# where WG = wgs, EX = whole-exome, WT = rna-seq
 		if (grep /WG/, $fastq) {
 			@parts = split(/WG_/, $fastq);
 			$lib = $parts[0] . 'WG';
@@ -94,11 +100,14 @@ while (my $line = <$INPUT>) {
 			$lane = $parts[1];
 			$lane =~ s/_R1.fastq.gz|_R2.fastq.gz//;
 			} else {
+			# for a 'non-standard' case, let's assume the libraryID is the sampleID
 			@parts = split(/_|\./, $fastq);
 			$lib = $sample;
 
-			my $lane_idx = first_index { $_ eq 'L00' } @parts;
-			if ($lane_idx) {
+			# if non-unique lane identifier is used, it will generally be 
+			# in the format L# (ie, L001)
+			if (any { $_ =~ m/L00/ } @parts) {
+				my $lane_idx = first_index { $_ eq 'L00' } @parts;
 				$lane = $parts[$lane_idx];
 				} else {
 				$lane = 'lane_name';

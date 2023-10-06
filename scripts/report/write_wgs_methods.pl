@@ -10,6 +10,7 @@ use POSIX qw(strftime);
 use File::Basename;
 use File::Path qw(make_path);
 use YAML qw(LoadFile);
+use Data::Dumper;
 
 my $cwd = dirname(__FILE__);
 require "$cwd/../utilities.pl";
@@ -66,6 +67,8 @@ sub main {
 		'chord'		=> defined($tool_data->{summarize_steps}->{run_chord}) ? $tool_data->{summarize_steps}->{run_chord} : 'N',
 		'hrdetect'	=> defined($tool_data->{summarize_steps}->{run_hrdetect}) ? $tool_data->{summarize_steps}->{run_hrdetect} : 'N'
 		);
+
+#	print Dumper \%tool_set;
 
 	# how was BWA run?
 	if ('Y' eq $tool_set{'bwa'}) {
@@ -233,8 +236,10 @@ sub main {
 	$bcftools	= $samtools;
 	
 	$somaticsniper = defined($tool_data->{somaticsniper_version}) ? $tool_data->{somaticsniper_version} : undef;
-	my ($tool, $version) = split('/', $somaticsniper);
-	$somaticsniper = $version;
+	if (defined($somaticsniper)) {
+		my ($tool, $version) = split('/', $somaticsniper);
+		$somaticsniper = $version;
+		}
 
 	# annotation
 	if (defined($tool_data->{annotate}->{vep_path})) {
@@ -329,6 +334,8 @@ sub main {
 		$methods .= "\\subsubsection{Pindel (v$pindel)}\n";
 		$methods .= "Pindel was run on each T/N pair or tumour-only sample, split by chromosome and excluding all telomere and centromere regions to decrease run time. Pindel was run using mean insert size (determined using samtools (v$samtools)), with the report\_long\_insertions turned on. Raw output were treated separately for short INDELs and longer structural variants. For INDELs, output were converted to VCF using pindel2vcf with the following filters: \-pr 3 \-ir 3 \-il 3 \-pl 3 \-as 100 \-e 5. The final VCF was further filtered using vcftools (v$vcftools) to remove structural variants (long insertions, duplications, inversions). For SVs, unique breakpoints were extracted for use downstream with Mavis.\\newline\n";
 		}
+
+
 
 	# SomaticSniper
 	if ('Y' eq $tool_set{'somaticsniper'}) {
@@ -541,10 +548,10 @@ sub main {
 	# for mutation signatures
 	$methods .= "\\subsection{Mutation signatures}\n";
 
-	$msi = defined($tool_data->{msi_sensor_version}) ? $tool_data->{msi_sensor_version} : undef;
-	$msi = basename($msi);
-
 	if ('Y' eq $tool_set{'msi'}) {
+
+		$msi = defined($tool_data->{msi_sensor_version}) ? $tool_data->{msi_sensor_version} : undef;
+		$msi = basename($msi);
 
 		# fill in methods
 		$methods .= "MSI-Sensor pro (v$msi) was run using recommended best practices with coverage threshold of 15x (as recommended).\\newline\n\\newline\n";

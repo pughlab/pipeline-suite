@@ -71,7 +71,7 @@ sub get_manta_command {
 		}
 
 	if (defined($args{tumour})) {
-		$manta_cmd .= "--tumorBam $args{tumour}";
+		$manta_cmd .= " --tumorBam $args{tumour}";
 		}
 
 	if ('wgs' eq $seq_type) {

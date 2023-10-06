@@ -1,8 +1,8 @@
 ---
 project_name: PROJECTNAME
 output_dir: /cluster/projects/pughlab/projects/PROJECTNAME
+sample_type: germline # optional; can be germline or ctdna
 seq_type: wgs # must be one of exome, targeted, rna or wgs
-is_ctdna: false # must be one of true or false
 seq_center: OICR
 platform: Illumina
 hpc_group:
@@ -296,6 +296,9 @@ svict:
 mavis:
     run: Y
     mem: 4G # increase this is patient has multiple tumours and/or many SV callers were run
+    mavis_mem_limit: # in Mb, default is 16000; increase if individual steps are running out of memory
+    mavis_time_limit: # in seconds, default is 57600 ; increase if individual steps are running out of time
+#    mavis_queue: # if the above mavis_mem_limit or mavis_time_limit require a non-default queue/partition
     mavis_annotations: /cluster/projects/pughlab/references/MAVIS_ref/ensembl79_hg38_annotations.json
     mavis_masking: /cluster/projects/pughlab/references/MAVIS_ref/GRCh38_masking.tab
     mavis_dgv_anno: /cluster/projects/pughlab/references/MAVIS_ref/dgv_hg38_variants.tab

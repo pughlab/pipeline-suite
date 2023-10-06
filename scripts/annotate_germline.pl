@@ -326,6 +326,8 @@ sub main{
 					name	=> 'run_select_variants_' . $sample,
 					cmd	=> $prepare_vcf_cmd,
 					modules	=> [$gatk],
+					max_time	=> '06:00:00',
+					#mem		=> $parameters->{cpsr}->{mem},
 					hpc_driver	=> $args{hpc_driver},
 					extra_args	=> [$hpc_group]
 					);
