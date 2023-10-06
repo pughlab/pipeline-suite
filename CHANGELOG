@@ -1,3 +1,12 @@
+2023-10-07: PughLab pipeline-suite (version 0.9.1);
+- mavis.pl: added arguments to customize memory/time for mavis jobs
+- collect_delly_output.R: added check to identify which FORMAT tag contains CN information
+- create_fastq_yaml.pl: added flexibility to input filenames
+- NEW: create_data_yaml__tgl.R; can generate fastq or bam config yaml files when provided with directory containing these files; assumes filenames are in standard TGL format
+- collect_sequencing_metrics/delly/manta: minor updates
+- mutect/mutect2/strelka/varscan: updates to error checks and additional file cleanup for germline cases and/or PoN generation
+- assorted updates for germline-only runs (utilities/example configs)
+
 2023-09-26: PughLab pipeline-suite (version 0.9.0);
 - NEW: initial addition of pughlab_fragmentomics_pipeline.pl; this pipeline examines fragmentation patterns within plasma WGS BAM files utilizing code developed by Derek Wong
 
