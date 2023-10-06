@@ -533,10 +533,10 @@ sub main {
 	# for mutation signatures
 	$methods .= "\\subsection{Mutation signatures}\n";
 
-	$msi = defined($tool_data->{msi_sensor_version}) ? $tool_data->{msi_sensor_version} : undef;
-	$msi = basename($msi);
-
 	if ('Y' eq $tool_set{'msi'}) {
+
+		$msi = defined($tool_data->{msi_sensor_version}) ? $tool_data->{msi_sensor_version} : undef;
+		$msi = basename($msi);
 
 		# fill in methods
 		$methods .= "MSI-Sensor pro (v$msi) was run using recommended best practices with target regions provided to msi (T/N pairs) or pro (tumour only) commands and coverage threshold of 20x (as recommended).\\newline\n\\newline\n";
