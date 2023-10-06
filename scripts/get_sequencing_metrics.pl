@@ -625,6 +625,11 @@ sub main {
 				} else {
 				print $log "  >> Skipping GetPileupSummaries because this has already been completed!\n";
 				}
+			}
+
+		# now that all pileup jobs are submitted, run calculate contamination on each T/N (or T-only or N-only) set
+		print $log "\nRunning CalculateContamination steps...\n";
+		foreach my $sample (@sample_ids) {
 
 			# find contamination
 			my $tumour_pileup = join('/', $patient_directory, $sample . '_pileup.table');
@@ -651,7 +656,7 @@ sub main {
 			if ('Y' eq missing_file($contest_output . '.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "  >> Submitting job for CalculateContamination...\n";
+				print $log ">> Submitting job for CalculateContamination...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -676,7 +681,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "  >> Skipping CalculateContamination because this has already been completed!\n";
+				print $log ">> Skipping CalculateContamination because this has already been completed!\n";
 				}
 
 			push @final_outputs, $contest_output;
