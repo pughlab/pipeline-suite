@@ -106,9 +106,11 @@ sub create_extract_command {
 	$extract_command .= "\n\n" . join(' ',
 		'cat', $args{tier_files},
 		"| grep -v 'GENOMIC_CHANGE'",
-		'| awk -F"\t"', "'\$81 >= 0' | cut -f1 | sort -u",
-		'| perl -e', "'while(<>) { \$_ =~ m/(^[0-9XY]+):g.([0-9]+)/;",
-		'print join("\t", "chr" . $1, $2) . "\n" }', "'",
+		'| awk -F"\t"', "'\$81 >= 0' | cut -f1,81 | sort -Vk1,2",
+#		'| perl -e', "'while(<>) { \$_ =~ m/(^[0-9XY]+):g.([0-9]+)/;",
+		'| perl -e',	
+		"'while(<>) { \$_ =~ m/(^[0-9XY]+):g.([0-9]+)[A-Z]*>[A-Z]*\\t([-+]?[0-9]*\\.?[0-9]+)/;",
+		'print join("\t", "chr" . $1, $2, $3) . "\n" }', "'",
 		'> cpsr_significant.txt'
 		);
 
@@ -119,11 +121,24 @@ sub create_extract_command {
 		);
 
 	$extract_command .= "\n\n" . join(' ',
+		'echo -e',
+		"'##INFO=<ID=CPSR_PATHOGENICITY_SCORE,Number=1,Type=String,Description=\"CPSR Pathogenicity Score\">'",
+		'> header'
+		);
+
+	$extract_command .= "\n\n" . join("\n",
+		"bgzip cpsr_significant.txt",
+		"tabix -s1 -b2 -e2 cpsr_significant.txt.gz"
+		);
+
+	$extract_command .= "\n\n" . join(' ',
 		"bcftools view -a --no-update", 
 		'-R keep_positions.txt',
 		'-s', $args{samples},
 		$args{input_vcf},
 		"| bcftools view -e 'FORMAT/GT[0]=" . '"RR"' . "'",
+		"| bcftools annotate -a cpsr_significant.txt.gz",
+		"-c CHROM,POS,CPSR_PATHOGENICITY_SCORE -h header",
 		'>', $args{output_vcf}
 		);
 
@@ -387,7 +402,7 @@ sub main{
 			}
 
 		# extract 
-		print $log "\n>> Combining and extracting significant variants...\n";
+		print $log "\nCombining and extracting significant variants for $patient...\n";
 
 		my $filtered_vcf = join('/',
 			$patient_directory,
@@ -460,6 +475,8 @@ sub main{
 				tmp_dir		=> $sample_directory,
 				parameters	=> $tool_data->{annotate}
 				);
+
+			$vcf2maf_cmd .= ' --retain-info CPSR_PATHOGENICITY_SCORE';
 
 			# check if this should be run
 			if ('Y' eq missing_file($final_maf . '.md5')) {

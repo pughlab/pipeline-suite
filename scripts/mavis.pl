@@ -339,11 +339,8 @@ sub main {
 #		$mavis_export .= "\nexport MAVIS_QUEUE=$tool_data->{mavis}->{mavis_queue}";
 #		}
 
-	if (defined($args{pindel_dir})) {
-		$mavis_export .= "\n" . join("\n",
-			"export MAVIS_MIN_CLUSTERS_PER_FILE=100",
-			"export MAVIS_MAX_FILES=100"
-			);
+	if (defined($tool_data->{mavis}->{mavis_max_jobs})) {
+		$mavis_export .= "\nexport MAVIS_CONCURRENCY_LIMIT=$tool_data->{mavis}->{mavis_max_jobs}";
 		}
 
 	unless ('wgs' eq $tool_data->{seq_type}) {
@@ -403,19 +400,31 @@ sub main {
 		}
 
 	# find SV files in each directory
-	my (@manta_files, @delly_germline_files, @delly_files, @starfusion_files, @fusioncatcher_files);
+	my (@manta_files, @delly_files, @starfusion_files, @fusioncatcher_files);
 	my (@novobreak_files, @svict_files, @pindel_files, @arriba_files);
 	my $should_run_final;
 
-	if (defined($args{manta_dir})) {
-		@manta_files = _get_files($args{manta_dir}, 'diploidSV.vcf.gz');
-		push @manta_files, _get_files($args{manta_dir}, 'somaticSV.vcf.gz');
-		push @manta_files, _get_files($args{manta_dir}, 'tumorSV.vcf.gz');
-		}
-	if (defined($args{delly_dir})) {
-		@delly_files = _get_files($args{delly_dir}, 'Delly_SVs_somatic_hc.bcf');
-		@delly_germline_files = _get_files($args{delly_dir}, 'genotyped_filtered.bcf');
-		}
+	if ('germline' eq $tool_data->{sample_type}) {
+
+		if (defined($args{manta_dir})) {
+			@manta_files = _get_files($args{manta_dir}, 'diploidSV.vcf.gz');
+			}
+		if (defined($args{delly_dir})) {
+			@delly_files = _get_files($args{delly_dir}, 'Delly_SVs_germline_hc.bcf');
+			}
+
+	} else {
+
+		if (defined($args{manta_dir})) {
+			@manta_files = _get_files($args{manta_dir}, 'diploidSV.vcf.gz');
+			push @manta_files, _get_files($args{manta_dir}, 'somaticSV.vcf.gz');
+			push @manta_files, _get_files($args{manta_dir}, 'tumorSV.vcf.gz');
+			}
+		if (defined($args{delly_dir})) {
+			@delly_files = _get_files($args{delly_dir}, 'Delly_SVs_somatic_hc.bcf');
+			}
+	}
+
 	if (defined($args{novobreak_dir})) {
 		@novobreak_files = _get_files($args{novobreak_dir}, 'novoBreak_filtered.tsv');
 		}
@@ -456,11 +465,6 @@ sub main {
 		print $log "> Found " . scalar(@tumour_ids) . " tumour BAMs.\n";
 		print $log "> Found " . scalar(@rna_ids_patient) . " RNA-Seq BAMs.\n";
 
-#		if ( (scalar(@tumour_ids) == 0) & (scalar(@rna_ids_patient) == 0) ) {
-#			print $log "\n>> No tumour BAMs provided, skipping patient.\n";
-#			next;
-#			}
-
 		# create some directories
 		my $patient_directory = join('/', $output_directory, $patient);
 		unless(-e $patient_directory) { make_path($patient_directory); }
@@ -499,8 +503,8 @@ sub main {
 				}
 
 			# organize Delly input
-			if (scalar(@delly_germline_files) > 0) {
-				my @delly_svs = grep { /$normal/ } @delly_germline_files;
+			if (scalar(@delly_files) > 0) {
+				my @delly_svs = grep { /$normal/ } @delly_files;
 
 				unless (scalar(@delly_svs) == 0) {
 					$link = join('/', $link_directory, $normal . '_Delly_SVs.bcf');
@@ -537,6 +541,11 @@ sub main {
 					push @manta_svs_formatted, $formatted_vcf;
 					}
 				}
+			}
+
+		if (scalar(@normal_ids) > 0) {
+			print $log "> Found " . scalar(@manta_svs_formatted) . " manta files for $patient.\n";
+			print $log "> Found " . scalar(@delly_svs_patient) . " delly files for $patient.\n";
 			}
 
 		foreach my $tumour (@tumour_ids) {
@@ -701,6 +710,8 @@ sub main {
 
 			push @format_jobs, $run_id;
 			push @all_jobs, $run_id;
+			} elsif (!defined($format_command)) {
+			print $log "\nNo manta files detected; skipping format step!\n";
 			} else {
 			print $log "\nSkipping format manta step because this has already been completed!\n";
 			}

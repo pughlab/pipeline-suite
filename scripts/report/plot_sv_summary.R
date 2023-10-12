@@ -182,6 +182,12 @@ anno.data$Chromosome <- factor(anno.data$Chromosome, levels = paste0('chr',c(1:2
 anno.data <- anno.data[order(anno.data$Chromosome, anno.data$chromStart),];
 
 ### FORMAT DATA ####################################################################################
+# is this a tumour- or germline-only study?
+if (nrow(somatic.svs) == 0) { # probably germline
+	print("No somatic SVs detected. Using germline variants for downstream visualizations.");
+	somatic.svs <- germline.svs;
+	}
+
 # summarize tool data
 tool.list <- c();
 if (any(somatic.svs$protocol == 'genome')) {
@@ -380,8 +386,10 @@ plot.data <- data.frame(
 	Count = event.counts$Count 
 	);
 
-plot.data <- plot.data[!grepl('None', event.counts$Fusion),];
-plot.data <- plot.data[which(plot.data$Chromosome != 'chrY' & plot.data$Chromosome.1 != 'chrY'),];
+if (nrow(plot.data) > 15) {
+	plot.data <- plot.data[!grepl('None', event.counts$Fusion),];
+	plot.data <- plot.data[which(plot.data$Chromosome != 'chrY' & plot.data$Chromosome.1 != 'chrY'),];
+	}
 
 geneset <- intersect(
 	driver.genes$Hugo_Symbol,
@@ -390,6 +398,11 @@ geneset <- intersect(
 	);
 
 gene.data <- anno.data[which(anno.data$Gene %in% geneset),c(3,4,5,2)];
+
+if (nrow(gene.data) == 0) {
+	geneset <- unique(unlist(sapply(event.counts$Fusion, function(i) { setdiff(unlist(strsplit(i,'--')),'None') } )));
+	gene.data <- anno.data[which(anno.data$Gene %in% geneset),c(3,4,5,2)];
+	}
 
 # plot results (if any)
 if (nrow(plot.data) > 0) {
@@ -414,8 +427,10 @@ if (nrow(plot.data) > 0) {
 	RCircos.Draw.Chromosome.Ideogram();
 	RCircos.Label.Chromosome.Names();
 
-	RCircos.Gene.Connector.Plot(gene.data, track.num = 1, side = 'in');
-	RCircos.Gene.Name.Plot(gene.data, name.col = 4, track.num = 2, side = 'in');
+	if (nrow(gene.data) > 0) {
+		RCircos.Gene.Connector.Plot(gene.data, track.num = 1, side = 'in');
+		RCircos.Gene.Name.Plot(gene.data, name.col = 4, track.num = 2, side = 'in');
+		}
 
 	# ensure ordering
 	x <- RCircos.Get.Paired.Points.Positions(plot.data, genomic.columns = 3, plot.type = "link");

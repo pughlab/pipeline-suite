@@ -253,7 +253,7 @@ if (nrow(plot.data) > 1) {
 			cex = 0.7
 			),
 		padding.text = 1.05,
-		title = 'Tumour VAF',
+		title = 'VAF',
 		cex.title = 0.8
 		);
 

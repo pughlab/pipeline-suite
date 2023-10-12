@@ -298,6 +298,7 @@ mavis:
     mem: 4G # increase this is patient has multiple tumours and/or many SV callers were run
     mavis_mem_limit: # in Mb, default is 16000; increase if individual steps are running out of memory
     mavis_time_limit: # in seconds, default is 57600 ; increase if individual steps are running out of time
+    mavis_max_jobs: # maximum number of jobs to submit at a time; decrease if hitting slurm job cap
 #    mavis_queue: # if the above mavis_mem_limit or mavis_time_limit require a non-default queue/partition
     mavis_annotations: /cluster/projects/pughlab/references/MAVIS_ref/ensembl79_hg38_annotations.json
     mavis_masking: /cluster/projects/pughlab/references/MAVIS_ref/GRCh38_masking.tab

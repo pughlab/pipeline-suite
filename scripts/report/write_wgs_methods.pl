@@ -52,6 +52,7 @@ sub main {
 		'mutect2'	=> defined($tool_data->{mutect2}->{run}) ? $tool_data->{mutect2}->{run} : 'N',
 		'somaticsniper'	=> defined($tool_data->{somaticsniper}->{run}) ? $tool_data->{somaticsniper}->{run} : 'N',
 		'strelka'	=> defined($tool_data->{strelka}->{run}) ? $tool_data->{strelka}->{run} : 'N',
+		'manta'		=> defined($tool_data->{strelka}->{run}) ? $tool_data->{strelka}->{run} : 'N',
 		'varscan'	=> defined($tool_data->{varscan}->{run}) ? $tool_data->{varscan}->{run} : 'N',
 		'vardict'	=> defined($tool_data->{vardict}->{run}) ? $tool_data->{vardict}->{run} : 'N',
 		'pindel'	=> defined($tool_data->{pindel}->{run}) ? $tool_data->{pindel}->{run} : 'N',
@@ -61,14 +62,35 @@ sub main {
 		'svict'		=> 'N', 
 		'ascat'		=> defined($tool_data->{ascat}->{run}) ? $tool_data->{ascat}->{run} : 'N',
 		'ichor_cna'	=> defined($tool_data->{ichor_cna}->{run}) ? $tool_data->{ichor_cna}->{run} : 'N',
-		'mavis'	=> defined($tool_data->{mavis}->{run}) ? $tool_data->{mavis}->{run} : 'N',
-		'msi'	=> defined($tool_data->{msi_sensor}->{run}) ? $tool_data->{msi_sensor}->{run} : 'N',
+		'mavis'		=> defined($tool_data->{mavis}->{run}) ? $tool_data->{mavis}->{run} : 'N',
+		'msi'		=> defined($tool_data->{msi_sensor}->{run}) ? $tool_data->{msi_sensor}->{run} : 'N',
 		'cosmic_sbs'	=> defined($tool_data->{summarize_steps}->{run_cosmic_sbs}) ? $tool_data->{summarize_steps}->{run_cosmic_sbs} : 'N',
 		'chord'		=> defined($tool_data->{summarize_steps}->{run_chord}) ? $tool_data->{summarize_steps}->{run_chord} : 'N',
 		'hrdetect'	=> defined($tool_data->{summarize_steps}->{run_hrdetect}) ? $tool_data->{summarize_steps}->{run_hrdetect} : 'N'
 		);
 
-#	print Dumper \%tool_set;
+	# add germline-only check here?
+	if ('germline' eq $tool_data->{sample_type}) {
+
+		# skip somatic variant summarizations
+		$tool_set{mutect}		= 'N';
+		$tool_set{mutect2}		= 'N';
+		$tool_set{somaticsniper}	= 'N';
+		$tool_set{strelka}		= 'N';
+		$tool_set{varscan}		= 'N';
+		$tool_set{vardict}		= 'N';
+		$tool_set{pindel}		= 'N';
+		$tool_set{mutsig}		= 'N';
+		$tool_set{cosmic_sbs}		= 'N';
+		$tool_set{chord}		= 'N';
+		$tool_set{hrdetect}		= 'N';
+		$tool_set{msi}			= 'N';
+		$tool_set{svict}		= 'N';
+		$tool_set{delly_gsv}		= 'Y';
+		$tool_set{manta_gsv}		= 'Y';
+		$tool_set{gatk_cnv}		= 'N';
+
+		}
 
 	# how was BWA run?
 	if ('Y' eq $tool_set{'bwa'}) {
@@ -205,7 +227,7 @@ sub main {
 			}
 
 		$methods .= "Germline variants were identified using GATK's (v$gatk) HaplotypeCaller and GenotypeGVCFs as per GATK's germline variant calling best practices. HaplotypeCaller was run in GVCF mode, using a minimum confidence threshold of 30, variant index type and parameter of LINEAR and 128000. Known variants (dbSNP) were provided. Variants were combined across samples (using CombineGVCFs) and genotyped using GenotypeGVCFs. Variant score recalibration was performed for INDELs and SNPs separately. For INDELs, known indels were provided, and recalibrator run using tranche sensitivity thresholds of 90, 99, 99.9 and 100 percent and maximum 2 Gaussians for the positive model. For SNPs, known snps were provided, and recalibrator run using maximum 4 Gaussians for the positive model. Recalibration was applied using truth sensitivity filter of 99 using the above generated .tranches and .recal files.\\newline\n";
-		$methods .= "Germline variant significance was assessed using CPSR (v$cpsr) and PCGR (v$pcgr). Variants with a CSPR score above 0 were carried forward, as were any variants previously identified as significant within the TCGA cohort (Huang et al.).\\newline\n";
+		$methods .= "\\newline\nGermline variant significance was assessed using CPSR (v$cpsr) and PCGR (v$pcgr). Variants with a CSPR score above 0 were carried forward, as were any variants previously identified as significant within the TCGA cohort (Huang et al.).\\newline\n";
 		$methods .= join("\n",
 			"{\\scriptsize \\begin{itemize}",
 			"  \\vspace{-0.2cm}\\item dbSNP: $dbsnp",
@@ -422,11 +444,10 @@ sub main {
 			}
 		}
 
-	# VEP + vcf2maf
-	if (defined($vep)) {
-		$methods .= "\\subsubsection{Annotation}\n";
-		$methods .= "Somatic short variants (SNVs and INDELs) were annotated using VEP (v$vep) and vcf2maf ($vcf2maf), with population frequencies for known common variants annotated from ExAC (nonTCGA version r1) and gnomAD.\\newline\n";
-		$methods .= "\\noindent\nLastly, an ensemble approach was applied, such that variants meeting the following criteria were carried forward for downstream analyses:\\newline\n";
+	# ensemble methods + flags
+	if (scalar(@snv_tools) > 0) {
+		$methods .= "\\subsection{Variant Filtering}\n";
+		$methods .= "An ensemble approach was applied, such that variants meeting the following criteria were carried forward for downstream analyses:\\newline\n";
 		# based on suggested criteria here:
 		# 	https://www.nature.com/articles/s41598-020-69772-8
 		$methods .= join("\n",
@@ -446,10 +467,13 @@ sub main {
 			"  \\vspace{-0.2cm}\\item low VAF \$<\$ 0.05",
 			"  \\vspace{-0.2cm}\\item high population allele frequency (AF \$>\$ 0.001 in gnomAD, ExAC, other)",
 			"\\end{itemize} }"
-			) . "\n";
-		
-		} else {
-		$methods .= "No somatic variant calling performed.\\newline\n";
+			) . "\n";	
+		}
+
+	# VEP + vcf2maf
+	if (defined($vep)) {
+		$methods .= "\\subsection{Annotation}\n";
+		$methods .= "Short variants (SNVs and INDELs) were annotated using VEP (v$vep) and vcf2maf ($vcf2maf), with population frequencies for known common variants annotated from ExAC (nonTCGA version r1) and gnomAD.\\newline\n";
 		}
 
 	# how were SVs called?
@@ -464,23 +488,29 @@ sub main {
 	# fill in methods
 	my @sv_tools;
 	if ('Y' eq $tool_set{'delly'}) { push @sv_tools, "Delly (v$delly)"; }
-	if ('Y' eq $tool_set{'strelka'}) { push @sv_tools, "Manta (v$manta)"; }
+	if ( ('Y' eq $tool_set{'strelka'}) || ('Y' eq $tool_set{'manta'}) ) { push @sv_tools, "Manta (v$manta)"; }
 	if ('Y' eq $tool_set{'novobreak'}) { push @sv_tools, "NovoBreak (v$novobreak)"; }
 	if ('Y' eq $tool_set{'pindel'}) { push @sv_tools, "Pindel (v$pindel)"; }
 
 	if (scalar(@sv_tools) > 0) {
-		$methods .= "Somatic structural variants (SVs) including large insertions/deletions, duplications, inversions and translocations were identified using the following tools: " . join(', ', @sv_tools) . "\\newline\n";
+		$methods .= "Structural variants (SVs) including large insertions/deletions, duplications, inversions and translocations were identified using the following tools: " . join(', ', @sv_tools) . "\\newline\n";
 		} else {
 		$methods .= "No structural variant calling performed or this was performed outside of the present pipeline.\\newline\n";
 		}
 
 	$methods .= "\\newline\n";
 
-	if ('Y' eq $tool_set{'delly'}) {
+	if ('Y' eq $tool_set{'delly_gsv'}) {
+		$methods .= "Delly was run on each germline sample, with variants merged to identify a joint site list. Sites were genotyped in each sample, merged using bcftools (v$samtools), filtered (PASS) and a set of non-reference, germline SVs were extracted for each sample.\\newline\n\\newline\n";
+	
+	} elsif ('Y' eq $tool_set{'delly'}) {
 		$methods .= "Delly was run on each T/N pair or tumour-only sample, with variants filtered (per patient; -m 0 -a 0.1 -r 0.5 -v 10 -p) and merged (cohort; -m 0 -n 250000000 -b 0 -r 1.0) to identify a joint site list. Sites were genotyped in each sample, merged using bcftools (v$samtools) and finalized (per tumour, filtered against all available normals; -m 0 -a 0.1 -r 0.5 -v 10 -p), according to published best practices.\\newline\n\\newline\n";
 		}
 
-	if ('Y' eq $tool_set{'strelka'}) {
+	if ('Y' eq $tool_set{'manta_gsv'}) {
+		$methods .= "Manta was run using default settings on each germline sample.\\newline\n\\newline\n";
+
+	} elsif ('Y' eq $tool_set{'manta'}) {
 		$methods .= "Manta was run using default settings on each T/N pair or tumour-only sample.\\newline\n\\newline\n";
 		}
 
@@ -546,7 +576,9 @@ sub main {
 		}
 
 	# for mutation signatures
-	$methods .= "\\subsection{Mutation signatures}\n";
+	if ( ('Y' eq $tool_set{'msi'}) || ('Y' eq $tool_set{'cosmic_sbs'}) || ('Y' eq $tool_set{'chord'}) || ('Y' eq $tool_set{'hrdetect'}) ) {
+		$methods .= "\\subsection{Mutation signatures}\n";
+		}
 
 	if ('Y' eq $tool_set{'msi'}) {
 
@@ -555,8 +587,6 @@ sub main {
 
 		# fill in methods
 		$methods .= "MSI-Sensor pro (v$msi) was run using recommended best practices with coverage threshold of 15x (as recommended).\\newline\n\\newline\n";
-		} else {
-		$methods .= "MSI-Sensor was not run.\newline\n\\newline\n";
 		}
 
 	if ('Y' eq $tool_set{'cosmic_sbs'}) {

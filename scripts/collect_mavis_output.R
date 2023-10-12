@@ -277,7 +277,7 @@ if (arguments$find_drawings) {
 	if ( (length(normal.smps) > 0) & (any(svs$library %in% normal.smps)) ) {
 		svs[which(svs$library %in% normal.smps),]$Status <- 'germline';
 		}
-	if (length(normal.smps) > 1) {
+	if ( (length(tumour.smps) > 0) & (length(normal.smps) > 1) ) {
 		germ.idx <- which(apply(
 			svs[,names(normal.smps)],1,function(i) { any(i == 'germline', na.rm = TRUE) } ));
 		svs[germ.idx,]$Status <- 'germline';
@@ -567,27 +567,31 @@ if (arguments$find_drawings) {
 
 	for.cbio <- cbio.svs[-to.remove,];
 
-	# remove duplicates
-	for.cbio$BP1 <- round(for.cbio$Site1_Position/1000,0);
-	for.cbio$BP2 <- round(for.cbio$Site2_Position/1000,0);
+	# unless this is germline-only, set up for cbioportal
+	if (nrow(for.cbio) > 0) {
 
-	for.cbio <- for.cbio[order(for.cbio$Sample_Id, for.cbio$Fusion, -for.cbio$Total_Evidence),];
-	for.cbio <- for.cbio[!duplicated(for.cbio[,c('Sample_Id','Site1_Chromosome','BP1','Site2_Chromosome','BP2','Class','Fusion')]),];	
+		# remove duplicates
+		for.cbio$BP1 <- round(for.cbio$Site1_Position/1000,0);
+		for.cbio$BP2 <- round(for.cbio$Site2_Position/1000,0);
 
-	if (any(grepl('rna', for.cbio$Sample_Id))) {
-		for.cbio$ID <- gsub('-rna','',for.cbio$Sample_Id);
-		for.cbio <- for.cbio[order(for.cbio$ID, for.cbio$Fusion, for.cbio$Class),];
+		for.cbio <- for.cbio[order(for.cbio$Sample_Id, for.cbio$Fusion, -for.cbio$Total_Evidence),];
+		for.cbio <- for.cbio[!duplicated(for.cbio[,c('Sample_Id','Site1_Chromosome','BP1','Site2_Chromosome','BP2','Class','Fusion')]),];	
+
+		if (any(grepl('rna', for.cbio$Sample_Id))) {
+			for.cbio$ID <- gsub('-rna','',for.cbio$Sample_Id);
+			for.cbio <- for.cbio[order(for.cbio$ID, for.cbio$Fusion, for.cbio$Class),];
+			}
+
+		# save to file
+		write.table(
+			for.cbio[,1:37],
+			file = generate.filename(arguments$project, 'sv_data_for_cbioportal','tsv'),
+			row.names = FALSE,
+			col.names = TRUE,
+			quote = FALSE,
+			sep = '\t'
+			);
 		}
-
-	# save to file
-	write.table(
-		for.cbio[,1:37],
-		file = generate.filename(arguments$project, 'sv_data_for_cbioportal','tsv'),
-		row.names = FALSE,
-		col.names = TRUE,
-		quote = FALSE,
-		sep = '\t'
-		);
 
 	### SAVE SESSION INFO ##############################################################################
 	save.session.profile(generate.filename('CollectMAVIS','SessionProfile','txt'));

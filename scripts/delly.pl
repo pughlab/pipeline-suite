@@ -134,29 +134,26 @@ sub get_delly_filter_command {
 		@_
 		);
 
-	my $filter_command;
+	my $filter_command = join(' ',
+		'delly filter',
+		'-o', $args{output},
+		'-p'
+		);
 
 	if ('germline' eq $args{type}) {
 
-		$filter_command = join(' ',
-			'delly filter',
-			'-f germline -p',
-			'-o', $args{output},
-			$args{input}
-			);
-		}
+		$filter_command .= ' -f germline';
 
-	elsif ('somatic' eq $args{type}) {
+		} elsif ('somatic' eq $args{type}) {
 
-		$filter_command = join(' ',
-			'delly filter',
-			'-f somatic',
-			'-o', $args{output},
+		$filter_command .= join(' ',
+			' -f somatic',
 			'-s', $args{samples},
-			'-m 0 -a 0.1 -r 0.5 -v 10 -p',
-			$args{input}
+			'-m 0 -a 0.1 -r 0.5 -v 10'
 			);
 		}
+
+	$filter_command .= " $args{input}";
 
 	return($filter_command);
 	}
@@ -226,6 +223,7 @@ sub get_finalize_command {
 		id		=> undef,
 		input		=> undef,
 		output		=> undef,
+		germline	=> 0,
 		@_
 		);
 
@@ -233,6 +231,11 @@ sub get_finalize_command {
 	my $sm_tag = $id_parts[0];
 	my $tumour_id = $id_parts[2];
 	chomp($tumour_id);
+
+	my $filter = '';
+	if ($args{germline}) {
+		$filter = "| bcftools view -e 'FORMAT/GT[0]=" . '"RR"' . "'";
+		}
 
 	my $job_command;
 
@@ -246,6 +249,18 @@ sub get_finalize_command {
 			$args{input}
 			);
 
+		if ($args{germline}) {
+
+			$job_command = join(' ',
+				'bcftools view',
+				'-f PASS',
+				'-s', $tumour_id,
+				$args{input},
+				"| bcftools view -e 'FORMAT/GT[0]=" . '"RR"' . "'",
+				'-O v -o', $args{output},
+				);
+			}
+
 		} else {
 
 		$job_command = "echo $sm_tag $tumour_id > $args{output}.reheader";
@@ -254,6 +269,7 @@ sub get_finalize_command {
 			'-f PASS',
 			'-s', $sm_tag,
 			$args{input},
+			$filter,
 			'| bcftools reheader',
 			'-s', "$args{output}.reheader",
 			'>', $args{output}
@@ -385,8 +401,9 @@ sub pon {
 		}
 
 	my ($run_script, $run_id, $link, $should_run_final);
-	my (@part1_jobs, @part2_jobs, @all_jobs);
+	my (@part1_jobs, @part2_jobs, @part3_jobs, @all_jobs);
 	my (@pon_bcfs, @genotyped_bcfs);
+	my %sample_sheet_normal;
 
 	# create some directories
 	my $link_directory = join('/', $output_directory, 'bam_links');
@@ -409,6 +426,7 @@ sub pon {
 
 		# if there are any samples to run, we will run the final combine job
 		if (scalar(@normal_ids) > 0) { $should_run_final = 1; }
+		@sample_sheet_normal{$patient} = [];
 
 		# for germline variants
 		foreach my $norm (@normal_ids) {
@@ -419,6 +437,13 @@ sub pon {
 			my @tmp = split /\//, $smp_data->{$patient}->{normal}->{$norm};
 			$link = join('/', $link_directory, $tmp[-1]);
 			symlink($smp_data->{$patient}->{normal}->{$norm}, $link);
+
+			# extract sm tag (from bam header)
+			my $sm_tag = $norm;
+			if ('N' eq missing_file($smp_data->{$patient}->{normal}->{$norm})) { 
+				$sm_tag = get_sm_tag(bam => $smp_data->{$patient}->{normal}->{$norm});
+				}
+			push @{$sample_sheet_normal{$norm}}, "$sm_tag\tcontrol\t$norm\n";
 
 			$run_id = '';
 
@@ -604,7 +629,7 @@ sub pon {
 			extra_args	=> [$hpc_group]
 			);
 
-		$run_id = submit_job(
+		$pon_run_id = submit_job(
 			jobname		=> 'merge_and_filter_germline_SVs',
 			shell_command	=> $run_script,
 			hpc_driver	=> $args{hpc_driver},
@@ -612,7 +637,65 @@ sub pon {
 			log_file	=> $log
 			);
 
-		push @all_jobs, $run_id;
+		push @all_jobs, $pon_run_id;
+		}
+
+	# filter germline variants for each sample
+	foreach my $patient (sort keys %{$smp_data}) {
+
+		# find bams
+		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
+		next if (scalar(@normal_ids) == 0);
+
+		# for germline variants
+		foreach my $norm (@normal_ids) {
+
+			print $log "Extracting germline SVs for NORMAL: $norm\n";
+
+			# name final output file
+			my $final_output = join('/', $intermediate_directory, $norm . '_Delly_SVs_germline_hc.bcf');
+
+			# set up command for final filter
+			my $finalize_cmd = get_finalize_command(
+				id		=> @{$sample_sheet_normal{$norm}},
+				output		=> $final_output,
+				input		=> $pon_genotyped,
+				germline	=> 1
+				);
+
+			$finalize_cmd .= "\n\n" . "md5sum $final_output > $final_output.md5";
+
+			# check if this should be run
+			if ('Y' eq missing_file($final_output . ".md5")) {
+
+				# record command (in log directory) and then run job
+				print $log "  >> Submitting job for finalize (filter) step...\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'finalize_germline_svs_' . $norm,
+					cmd	=> $finalize_cmd,
+					modules		=> [$delly, $samtools],
+					dependencies	=> $pon_run_id,
+					max_time	=> $parameters->{filter}->{time},
+					mem		=> $parameters->{filter}->{mem},
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'finalize_germline_svs_' . $norm,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				push @part3_jobs, $run_id;
+				} else {
+				print $log "  >> Skipping finalize step because this has already been completed!\n";
+				}
+			}
 		}
 
 	# collate results
@@ -658,6 +741,8 @@ sub pon {
 		push @all_jobs, $run_id;
 		}
 
+	push @all_jobs, @part3_jobs;
+
 	# should intermediate files be removed
 	if ($args{del_intermediates}) {
 
@@ -667,7 +752,7 @@ sub pon {
 		my $cleanup_cmd = join("\n",
 			"if [ -s $pon_genotyped.md5 ]; then",
 			"  rm $intermediate_directory/*Delly_SV.bcf*",
-			"  rm $intermediate_directory/*Delly_SV_genotyped.bcf",
+			"  rm $intermediate_directory/*Delly_SV_genotyped.bcf*",
 			"else",
 			'  echo "FINAL OUTPUT is missing; not removing intermediates"',
 			"fi"
