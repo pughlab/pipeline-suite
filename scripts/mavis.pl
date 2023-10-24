@@ -321,7 +321,7 @@ sub main {
 		"export MAVIS_DGV_ANNOTATION=$tool_data->{mavis}->{mavis_dgv_anno}",
 		"export MAVIS_TEMPLATE_METADATA=$tool_data->{mavis}->{mavis_cytoband}",
 		"export MAVIS_REFERENCE_GENOME=$tool_data->{reference}",
-		"export MAVIS_ALIGNER=$tool_data->{mavis}->{mavis_aligner}",
+		"export MAVIS_ALIGNER='$tool_data->{mavis}->{mavis_aligner}'",
 		"export MAVIS_ALIGNER_REFERENCE=$tool_data->{bwa}->{reference}",
 		"export MAVIS_DRAW_FUSIONS_ONLY=$tool_data->{mavis}->{mavis_draw_fusions_only}",
 		"export MAVIS_SCHEDULER=" . uc($args{hpc_driver})
@@ -404,7 +404,7 @@ sub main {
 	my (@novobreak_files, @svict_files, @pindel_files, @arriba_files);
 	my $should_run_final;
 
-	if ('germline' eq $tool_data->{sample_type}) {
+	if ( (defined($tool_data->{sample_type})) && ('germline' eq $tool_data->{sample_type}) ) {
 
 		if (defined($args{manta_dir})) {
 			@manta_files = _get_files($args{manta_dir}, 'diploidSV.vcf.gz');
