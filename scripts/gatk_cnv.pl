@@ -50,7 +50,7 @@ sub get_format_intervals_command {
 	my $gatk_command;
 
 	if (! $args{is_wgs}) {
-		$gatk_command .= "\n\n" . join(' ',
+		$gatk_command = join(' ',
 			'gatk PreprocessIntervals', # by default, this adds 250bp padding to each interval
 			'-L', $args{intervals},
 			'-R', $reference,
@@ -62,7 +62,7 @@ sub get_format_intervals_command {
 
 		} else {
 
-		$gatk_command .= "\n\n" . join(' ',
+		$gatk_command = join(' ',
 			'gatk PreprocessIntervals',
 			'-L', $args{intervals},
 			'-R', $reference,
