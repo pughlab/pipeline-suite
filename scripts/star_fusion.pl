@@ -175,7 +175,7 @@ sub main {
 	# process each patient in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient";
+		print $log "\nInitiating process for PATIENT: $patient\n";
 
 		my $patient_directory = join('/', $output_directory, $patient);
 		unless(-e $patient_directory) { make_path($patient_directory); }
@@ -237,7 +237,8 @@ sub main {
 			# if we will be running FusionInspect validate, we will need the fastq files as well
 			my ($r1, $r2);
 			my (@r1_fastq_files, @r2_fastq_files);
-			if (defined($parameters->{FusionInspect})) {
+			if ( (defined($parameters->{FusionInspect})) && 
+				('Y' eq $parameters->{FusionInspect}) ) {
 
 				$data_dir = join('/', $data_dir, $sample, 'fastq_links');
 				opendir(RAWFILES, $data_dir) or die "Cannot open $data_dir !";

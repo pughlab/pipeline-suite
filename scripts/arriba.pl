@@ -260,7 +260,7 @@ sub main {
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient";
+		print $log "\nInitiating process for PATIENT: $patient\n";
 
 		my $patient_directory = join('/', $output_directory, $patient);
 		unless(-e $patient_directory) { make_path($patient_directory); }
@@ -296,29 +296,32 @@ sub main {
 			unless(-e $tmp_directory) { make_path($tmp_directory); }
 			$cleanup_cmd .= "\n  rm -rf $tmp_directory";
 
-			my @lanes = keys %{$smp_data->{$patient}->{$sample}->{runlanes}};
-			my (@r1_fastqs, @r2_fastqs);
+			my (@libraries, @lanes, @r1_fastqs, @r2_fastqs);
+			@libraries = keys %{$smp_data->{$patient}->{$sample}->{libraries}};
+			foreach my $lib ( @libraries ) {
+				print $log "\n    LIBRARY: $lib\n";
+				my $lib_data = $smp_data->{$patient}->{$sample}->{libraries}->{$lib};
+				@lanes = keys %{$lib_data->{runlanes}};
+				foreach my $lane ( sort(@lanes) ) {
+					print $log "      LANE: $lane\n";
+					my $r1 = $lib_data->{runlanes}->{$lane}->{fastq}->{R1};
+					my $r2 = $lib_data->{runlanes}->{$lane}->{fastq}->{R2};
 
-			foreach my $lane ( @lanes ) {
+					print $log "      R1: $r1\n";
+					print $log "      R2: $r2\n\n";
 
-				print $log "    LANE: $lane\n";
+					# create a symlink for this file
+					my @tmp = split /\//, $r1;
+					my $raw_link = join('/', $raw_directory, $tmp[-1]);
+					symlink($r1, $raw_link);
 
-				# collect input files
-				my $r1 = $smp_data->{$patient}->{$sample}->{runlanes}->{$lane}->{R1};
-				my $r2 = $smp_data->{$patient}->{$sample}->{runlanes}->{$lane}->{R2};
+					@tmp = split /\//, $r2;
+					$raw_link = join('/', $raw_directory, $tmp[-1]);
+					symlink($r2, $raw_link);
 
-				print $log "      R1: $r1\n";
-				print $log "      R2: $r2\n\n";
-
-				my @tmp = split /\//, $r1;
-				my $raw_link = join('/', $raw_directory, $tmp[-1]);
-				symlink($r1, $raw_link);
-				$raw_link =~ s/R1/R2/;
-				symlink($r2, $raw_link);
-
-				# add to respective lists
-				push @r1_fastqs, $r1;
-				push @r2_fastqs, $r2;
+					push @r1_fastqs, $r1;
+					push @r2_fastqs, $r2;
+					}
 				}
 
 			# set up commands and output
