@@ -91,7 +91,7 @@ sub main {
 	### MAIN ###########################################################################################
 
 	my $run_script;
-	my ($bwa_run_id, $gatk_run_id, $qc_run_id, $coverage_run_id, $hc_run_id);
+	my ($fastqc_run_id, $bwa_run_id, $gatk_run_id, $qc_run_id, $coverage_run_id, $hc_run_id);
 	my ($strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id, $vardict_run_id);
 	my ($delly_run_id, $manta_run_id, $gatk_cnv_run_id, $svict_run_id, $mavis_run_id, $report_run_id);
 
@@ -99,6 +99,7 @@ sub main {
 	my $current_dependencies = '';
 
 	# prepare directory structure
+	my $fastqc_directory	= join('/', $output_directory, 'fastqc');
 	my $bwa_directory	= join('/', $output_directory, 'BWA');
 	my $gatk_directory	= join('/', $output_directory, 'GATK');
 	my $gatk_cnv_directory	= join('/', $output_directory, 'GATK_CNV');
@@ -117,6 +118,7 @@ sub main {
 
 	# check which tools have been requested
 	my %tool_set = (
+		'fastqc' => defined($tool_data->{fastqc}->{run}) ? $tool_data->{fastqc}->{run} : 'N',
 		'bwa'	=> defined($tool_data->{bwa}->{run}) ? $tool_data->{bwa}->{run} : 'N',
 		'gatk'	=> defined($tool_data->{gatk}->{run}) ? $tool_data->{gatk}->{run} : 'N',
 		'bamqc'	=> defined($tool_data->{bamqc}->{run}) ? $tool_data->{bamqc}->{run} : 'N',
@@ -151,6 +153,55 @@ sub main {
 
 	# Should pre-processing (alignment + GATK indel realignment/recalibration + QC) be performed?
 	if ($args{step1}) {
+
+		## run FASTQC pipeline
+		unless(-e $fastqc_directory) { make_path($fastqc_directory); }
+
+		if ('Y' eq $tool_set{'fastqc'}) {
+
+			my $fastqc_command = join(' ',
+				"perl $cwd/scripts/collect_fastqc_metrics.pl",
+				"-o", $fastqc_directory,
+				"-t", $tool_config,
+				"-d", $data_config,
+				"-c", $args{cluster}
+				);
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for collect_fastqc_metrics.pl\n";
+			print $log "  COMMAND: $fastqc_command\n\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_fastqc',
+				cmd	=> $fastqc_command,
+				modules	=> ['perl'],
+				mem		=> '256M',
+				max_time	=> '48:00:00',
+				hpc_driver	=> $args{cluster},
+				extra_args	=> [$hpc_group]
+				);
+
+			if ($args{dry_run}) {
+
+				$fastqc_command .= " --dry-run";
+				`$fastqc_command`;
+				$fastqc_run_id = 'pughlab_dna_pipeline__run_fastqc';
+
+				} else {
+
+				$fastqc_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> FASTQC job id: $fastqc_run_id\n\n";
+				push @job_ids, $fastqc_run_id;
+				}
+			}
 
 		## run BWA-alignment pipeline
 		unless(-e $bwa_directory) { make_path($bwa_directory); }

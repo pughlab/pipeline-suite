@@ -77,13 +77,14 @@ sub main {
 
 	### MAIN ###########################################################################################
 
-	my ($star_run_id, $gatk_run_id, $vc_run_id, $rsem_run_id);
+	my ($fastqc_run_id, $star_run_id, $gatk_run_id, $vc_run_id, $rsem_run_id);
 	my ($fc_run_id, $starfus_run_id, $arriba_run_id, $mavis_run_id);
 	my ($run_script, $report_run_id);
 
 	my @job_ids;
 
 	# prepare directory structure
+	my $fastqc_directory = join('/', $output_directory, 'fastqc');
 	my $fc_directory = join('/', $output_directory, 'FusionCatcher');
 	my $star_directory = join('/', $output_directory, 'STAR');
 	my $starfus_directory = join('/', $output_directory, 'STAR-Fusion');
@@ -95,6 +96,7 @@ sub main {
 
 	# check which tools have been requested
 	my %tool_set = (
+		'fastqc' => defined($tool_data->{fastqc}->{run}) ? $tool_data->{fastqc}->{run} : 'N',
 		'star'	=> defined($tool_data->{star}->{run}) ? $tool_data->{star}->{run} : 'N',
 		'rsem'	=> defined($tool_data->{rsem}->{run}) ? $tool_data->{rsem}->{run} : 'N',
 		'gatk'	=> defined($tool_data->{gatk}->{run}) ? $tool_data->{gatk}->{run} : 'N',
@@ -110,6 +112,55 @@ sub main {
 	# indicate YAML files for processed BAMs
 	my $star_output_yaml = join('/', $star_directory, 'star_bam_config_' . $timestamp . '.yaml');
 	my $gatk_output_yaml = join('/', $gatk_directory, 'gatk_bam_config_' . $timestamp . '.yaml');
+
+	## run FASTQC pipeline
+	unless(-e $fastqc_directory) { make_path($fastqc_directory); }
+
+	if ('Y' eq $tool_set{'fastqc'}) {
+
+		my $fastqc_command = join(' ',
+			"perl $cwd/scripts/collect_fastqc_metrics.pl",
+			"-o", $fastqc_directory,
+			"-t", $tool_config,
+			"-d", $data_config,
+			"-c", $args{cluster}
+			);
+
+		# record command (in log directory) and then run job
+		print $log "Submitting job for collect_fastqc_metrics.pl\n";
+		print $log "  COMMAND: $fastqc_command\n\n";
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'pughlab_dna_pipeline__run_fastqc',
+			cmd	=> $fastqc_command,
+			modules	=> ['perl'],
+			mem		=> '256M',
+			max_time	=> '48:00:00',
+			hpc_driver	=> $args{cluster},
+			extra_args	=> [$hpc_group]
+			);
+
+		if ($args{dry_run}) {
+
+			$fastqc_command .= " --dry-run";
+			`$fastqc_command`;
+			$fastqc_run_id = 'pughlab_dna_pipeline__run_fastqc';
+
+			} else {
+
+			$fastqc_run_id = submit_job(
+				jobname		=> $log_directory,
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			print $log ">>> FASTQC job id: $fastqc_run_id\n\n";
+			push @job_ids, $fastqc_run_id;
+			}
+		}
 
 	## run FusionCatcher pipeline
 	unless(-e $fc_directory) { make_path($fc_directory); }

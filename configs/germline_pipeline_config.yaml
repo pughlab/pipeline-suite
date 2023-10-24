@@ -36,6 +36,12 @@ pcgr_version: 0.9.1
 vcf2maf_version: 1.6.17 
 r_version: 4.1.0
 # tool specific parameters
+fastqc:
+    run: Y
+    parameters:
+        fastqc:
+            mem: 2G
+            time: '24:00:00'
 bwa:
     run: Y
     aligner: bwamem

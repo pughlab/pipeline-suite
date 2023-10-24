@@ -13,7 +13,7 @@ use List::Util 'any';
 use YAML qw(LoadFile);
 
 my $cwd = dirname(__FILE__);
-require "$cwd/scripts/utilities.pl";
+require "$cwd/utilities.pl";
 
 ####################################################################################################
 # version       author		comment
@@ -55,7 +55,6 @@ sub get_fastqc_metrics {
 
 	my $extract_cmd = join("\n",
 		"cd $args{output_dir}",
-		"rm *html",
 		'for i in *.zip',
 		'  do',
 		'    TMP=${i//.zip/};',
@@ -72,11 +71,12 @@ sub get_fastqc_metrics {
 ### MAIN ###########################################################################################
 sub main{
 	my %args = (
-		tool_config	=> undef,
-		data_config	=> undef,
-		data_type	=> undef,
-		cluster		=> undef,
-		dry_run		=> undef,
+		tool_config		=> undef,
+		data_config		=> undef,
+		output_directory	=> undef,
+		hpc_driver		=> undef,
+		dry_run			=> undef,
+		no_wait			=> undef,
 		@_
 		);
 
@@ -84,17 +84,19 @@ sub main{
 	my $data_config = $args{data_config};
 
 	### PREAMBLE ######################################################################################
+	unless($args{dry_run}) {
+		print "Initiating FASTQC pipeline...\n";
+		}
 
 	# load tool config
-	my $tool_data = LoadFile($tool_config);
-	my $date = strftime "%F", localtime;
+	my $tool_data_orig = LoadFile($tool_config);
+	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'fastqc');
 
 	# organize output directories
-	$tool_data->{output_dir} =~ s/\/$//;
-	my $output_directory = $tool_data->{output_dir};
-	my $log_directory = join('/', $output_directory, 'logs');
+	my $output_directory = $args{output_directory};
+	$output_directory =~ s/\/$//;
 
-	unless(-e $output_directory) { make_path($output_directory); }
+	my $log_directory = join('/', $output_directory, 'logs');
 	unless(-e $log_directory) { make_path($log_directory); }
 
 	# start logging
@@ -117,17 +119,32 @@ sub main{
 		}
 
 	open (my $log, '>', $log_file) or die "Could not open $log_file for writing.";
+	$log->autoflush;
 
 	print $log "---\n";
-	print $log "Running pipeline to collect quality metrics...\n";
+	print $log "Running FASTQC pipeline to collect quality metrics from fastq files...\n";
 	print $log "\n  Tool config used: $tool_config";
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n---\n";
 
+	# set tools and versions
+	my $fastqc	= 'fastqc';
+	my $r_version   = 'R/' . $tool_data->{r_version};
+
+	# get user-specified tool parameters
+	my $parameters = $tool_data->{fastqc}->{parameters};
+
+	# get optional HPC group
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+
 	### RUN ###########################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
+
+	unless($args{dry_run}) {
+		print "Processing fastq files for " . scalar(keys %{$smp_data}) . " patients.\n";
+		}
 
 	my ($run_script, $run_id);
 	my @all_jobs;
@@ -135,12 +152,14 @@ sub main{
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
+		print $log "\nInitiating process for PATIENT: $patient";
+
 		foreach my $sample (sort keys %{$smp_data->{$patient}}) {
 
 			my @fastqs;
 
 			# is this DNA or RNA?
-			if ( 'dna' eq $args{data_type} ) {
+#			unless ( 'rna' eq $tool_data->{seq_type} ) {
 
 				my @libraries = keys %{$smp_data->{$patient}->{$sample}->{libraries}};
 
@@ -156,79 +175,98 @@ sub main{
 						push @fastqs, $r2;
 						}
 					}
-				} elsif ( 'rna' eq $args{data_type} ) {
 
-				my @lanes = keys %{$smp_data->{$patient}->{$sample}->{runlanes}};
+#				} else {
 
-				foreach my $lane ( @lanes ) {
+#				my @lanes = keys %{$smp_data->{$patient}->{$sample}->{runlanes}};
 
-					my $r1 = $smp_data->{$patient}->{$sample}->{runlanes}->{$lane}->{R1};
-					my $r2 = $smp_data->{$patient}->{$sample}->{runlanes}->{$lane}->{R2};
+#				foreach my $lane ( @lanes ) {
 
-					push @fastqs, $r1;
-					push @fastqs, $r2;
-					}
-				}
+#					my $r1 = $smp_data->{$patient}->{$sample}->{runlanes}->{$lane}->{R1};
+#					my $r2 = $smp_data->{$patient}->{$sample}->{runlanes}->{$lane}->{R2};
+
+#					push @fastqs, $r1;
+#					push @fastqs, $r2;
+#					}
+#				}
+
+			my $n_fastqs = scalar(@fastqs);
+			print $log "  SAMPLE: $sample has $n_fastqs fastqs to QC\n";
 
 			# Run FASTQC
+			my $out_file = join('/', $output_directory, $sample . '_fastqc_status.COMPLETE');
 			my $fastqc_cmd = get_fastqc_cmd( 
 				input		=> join(' ', @fastqs),
 				output_dir	=> $output_directory
 				);
 
-			# record command (in log directory) and then run job
-			print $log "Submitting job for FASTQC...\n";
+			$fastqc_cmd .= "\n\n" . "echo 'fastqc finished successfully' > $out_file";
 
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'run_fastqc_' . $sample,
-				cmd	=> $fastqc_cmd,
-				modules	=> ['fastqc'],
-				max_time	=> $tool_data->{parameters}->{fastqc}->{time},
-				mem		=> $tool_data->{parameters}->{fastqc}->{mem},
-				hpc_driver	=> $args{cluster}
-				);
+			# check if this should be run
+			if ('Y' eq missing_file($out_file)) {
 
-			$run_id = submit_job(
-				jobname		=> 'run_fastqc_' . $sample,
-				shell_command	=> $run_script,
-				hpc_driver	=> $args{cluster},
-				dry_run		=> $args{dry_run},
-				log_file	=> $log
-				);
+				# record command (in log directory) and then run job
+				print $log "  >> Submitting job for FASTQC...\n";
 
-			push @all_jobs, $run_id;
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_fastqc_' . $sample,
+					cmd	=> $fastqc_cmd,
+					modules	=> [$fastqc],
+					max_time	=> $parameters->{fastqc}->{time},
+					mem		=> $parameters->{fastqc}->{mem},
+					hpc_driver	=> $args{hpc_driver}
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_fastqc_' . $sample,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				push @all_jobs, $run_id;
+				} else {
+				print $log "  >> Skipping FASTQC because output already exists...\n";
+				}
 
 			# get MD5SUMs (if necessary)
+			$out_file = join('/', $output_directory, $sample . '_md5sums.COMPLETE');
 			my $md5_cmd = "cd $output_directory\n";
 			foreach my $file ( @fastqs ) {
-				my @parts = split /\//, $file;
-				my $stem = $parts[-1];
+				my $stem = basename($file);
 				$md5_cmd .= "md5sum $file > $stem.md5\n";
 				}
 
-			# record command (in log directory) and then run job
-			print $log "Submitting job for MD5SUM...\n";
+			$md5_cmd .= "\n\n" . "echo 'md5sum collection finished successfully' > $out_file";
 
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'run_md5sums_' . $sample,
-				cmd	=> $md5_cmd,
-				max_time	=> $tool_data->{parameters}->{md5sum}->{time},
-				mem		=> $tool_data->{parameters}->{md5sum}->{mem},
-				hpc_driver	=> $args{cluster}
-				);
+			# check if this should be run
+			if ('Y' eq missing_file($out_file)) {
 
-			$run_id = submit_job(
-				jobname		=> 'run_md5sums_' . $sample,
-				shell_command	=> $run_script,
-				hpc_driver	=> $args{cluster},
-				dry_run		=> $args{dry_run},
-				log_file	=> $log
-				);
+				# record command (in log directory) and then run job
+				print $log "  >> Submitting job for MD5SUM...\n";
 
-			push @all_jobs, $run_id;
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_md5sums_' . $sample,
+					cmd	=> $md5_cmd,
+					max_time	=> '24:00:00',
+					hpc_driver	=> $args{hpc_driver}
+					);
 
+				$run_id = submit_job(
+					jobname		=> 'run_md5sums_' . $sample,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				push @all_jobs, $run_id;
+				} else {
+				print $log "  >> Skipping MD5SUM collection because output already exists...\n";
+				}
 			}
 		}
 
@@ -236,7 +274,7 @@ sub main{
 	my $extract_cmd = get_fastqc_metrics(output_dir => $output_directory);
 
 	# format command to collate results
-	my $combine_cmd = "Rscript $cwd/scripts/combine_key_metrics.R";
+	my $combine_cmd = "Rscript $cwd/combine_key_metrics.R";
 
 	my $collate_cmd = $extract_cmd . "\n" . $combine_cmd;
 	$collate_cmd .= "\n\n" . join("\n",
@@ -254,17 +292,17 @@ sub main{
 		log_dir	=> $log_directory,
 		name	=> 'run_collate_results',
 		cmd	=> $collate_cmd,
-		modules	=> ['R'],
+		modules	=> [$r_version],
 		dependencies	=> join(',', @all_jobs),
 		max_time	=> '01:00:00',
 		mem		=> '1G',
-		hpc_driver	=> $args{cluster}
+		hpc_driver	=> $args{hpc_driver}
 		);
 
 	$run_id = submit_job(
 		jobname		=> 'run_collate_results',
 		shell_command	=> $run_script,
-		hpc_driver	=> $args{cluster},
+		hpc_driver	=> $args{hpc_driver},
 		dry_run		=> $args{dry_run},
 		log_file	=> $log
 		);
@@ -275,32 +313,46 @@ sub main{
 	print $log "---\n";
 
 	# collect job metrics if not dry_run
-	unless ($args{dry_run}) {
+	unless ( ($args{dry_run}) || (scalar(@all_jobs) == 0) ) {
 
 		# collect job stats
 		my $collect_metrics = collect_job_stats(
-			job_ids => join(',', @all_jobs),
-			outfile => $outfile,
-			hpc_driver => $args{cluster}
+			job_ids		=> join(',', @all_jobs),
+			outfile		=> $outfile,
+			hpc_driver	=> $args{hpc_driver}
 			);
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
 			name	=> 'output_job_metrics_' . $run_count,
 			cmd	=> $collect_metrics,
-			dependencies	=> join(',', @all_jobs),
-			max_time	=> '0:10:00',
-			mem		=> '1G',
-			hpc_driver	=> $args{cluster}
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '256M',
+			kill_on_error	=> 0,
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
 			);
 
 		$run_id = submit_job(
 			jobname		=> 'output_job_metrics',
 			shell_command	=> $run_script,
-			hpc_driver	=> $args{cluster},
+			hpc_driver	=> $args{hpc_driver},
 			dry_run		=> $args{dry_run},
 			log_file	=> $log
 			);
+
+		push @all_jobs, $run_id;
+
+		# do some logging
+		print "Number of jobs submitted: " . scalar(@all_jobs) . "\n";
+
+		my $n_queued = `squeue -r | wc -l`;
+		print "Total number of jobs in queue: " . $n_queued . "\n";
+
+		# wait until it finishes
+		unless ($args{no_wait}) {
+			check_final_status(job_id => $run_id);
+			}
 		}
 
 	# finish up
@@ -311,18 +363,19 @@ sub main{
 
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
-my ($tool_config, $data_config);
+my ($tool_config, $data_config, $output_directory);
 my $hpc_driver = 'slurm';
-my ($help, $rna, $dry_run);
+my ($help, $no_wait, $dry_run);
 
 # get command line arguments
 GetOptions(
 	'h|help'	=> \$help,
 	't|tool=s'	=> \$tool_config,
 	'd|data=s'	=> \$data_config,
-	'rna'		=> \$rna,
+	'o|out_dir=s'	=> \$output_directory,
 	'c|cluster=s'	=> \$hpc_driver,
-	'dry-run'	=> \$dry_run
+	'dry-run'	=> \$dry_run,
+	'no-wait'	=> \$no_wait
 	);
 
 if ($help) {
@@ -331,9 +384,10 @@ if ($help) {
 		"\t--help|-h\tPrint this help message",
 		"\t--data|-d\t<string> data config (yaml format)",
 		"\t--tool|-t\t<string> tool config (yaml format)",
-		"\t--rna\t<boolean> is this RNA?",
+		"\t--out_dir|-o\t<string> path to output directory",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
-		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)"
+		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
+		"\t--no-wait\t<boolean> should we exit after job submission (true) or wait until all jobs have completed (false)? (default: false)"
 		);
 
 	print "$help_msg\n";
@@ -344,21 +398,11 @@ if ($help) {
 if (!defined($tool_config)) { die("No tool config file defined; please provide -t | --tool (ie, tool_config.yaml)"); }
 if (!defined($data_config)) { die("No data config file defined; please provide -d | --data (ie, sample_config.yaml)"); }
 
-# check for compatible HPC driver; if not found, change dry_run to Y
-my @compatible_drivers = qw(slurm);
-if ( (!any { /$hpc_driver/ } @compatible_drivers ) && (!$dry_run) ) {
-	print "Unrecognized HPC driver requested: setting dry_run to true -- jobs will not be submitted but commands will be written to file.\n";
-	$dry_run = 1;
-	}
-
-# check if input is DNA or RNA
-my $data_type = 'dna';
-if ($rna) { $data_type = 'rna'; }
-
 main(
-	tool_config	=> $tool_config,
-	data_config	=> $data_config,
-	data_type	=> $data_type,
-	cluster		=> $hpc_driver,
-	dry_run		=> $dry_run
+	tool_config		=> $tool_config,
+	data_config		=> $data_config,
+	output_directory	=> $output_directory,
+	hpc_driver		=> $hpc_driver,
+	dry_run			=> $dry_run,
+	no_wait			=> $no_wait
 	);
