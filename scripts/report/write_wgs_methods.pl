@@ -53,12 +53,14 @@ sub main {
 		'somaticsniper'	=> defined($tool_data->{somaticsniper}->{run}) ? $tool_data->{somaticsniper}->{run} : 'N',
 		'strelka'	=> defined($tool_data->{strelka}->{run}) ? $tool_data->{strelka}->{run} : 'N',
 		'manta'		=> defined($tool_data->{strelka}->{run}) ? $tool_data->{strelka}->{run} : 'N',
+		'manta_gsv'	=> 'N',
 		'varscan'	=> defined($tool_data->{varscan}->{run}) ? $tool_data->{varscan}->{run} : 'N',
 		'vardict'	=> defined($tool_data->{vardict}->{run}) ? $tool_data->{vardict}->{run} : 'N',
 		'pindel'	=> defined($tool_data->{pindel}->{run}) ? $tool_data->{pindel}->{run} : 'N',
 		'gatk_cnv'	=> defined($tool_data->{gatk_cnv}->{run}) ? $tool_data->{gatk_cnv}->{run} : 'N',
 		'novobreak'	=> defined($tool_data->{novobreak}->{run}) ? $tool_data->{novobreak}->{run} : 'N',
 		'delly'		=> defined($tool_data->{delly}->{run}) ? $tool_data->{delly}->{run} : 'N',
+		'delly_gsv'	=> 'N',
 		'svict'		=> 'N', 
 		'ascat'		=> defined($tool_data->{ascat}->{run}) ? $tool_data->{ascat}->{run} : 'N',
 		'ichor_cna'	=> defined($tool_data->{ichor_cna}->{run}) ? $tool_data->{ichor_cna}->{run} : 'N',
@@ -70,7 +72,7 @@ sub main {
 		);
 
 	# add germline-only check here?
-	if ('germline' eq $tool_data->{sample_type}) {
+	if ( (defined($tool_data->{sample_type})) && ('germline' eq $tool_data->{sample_type}) ) {
 
 		# skip somatic variant summarizations
 		$tool_set{mutect}		= 'N';
