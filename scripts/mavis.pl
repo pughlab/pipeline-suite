@@ -410,7 +410,7 @@ sub main {
 			@manta_files = _get_files($args{manta_dir}, 'diploidSV.vcf.gz');
 			}
 		if (defined($args{delly_dir})) {
-			@delly_files = _get_files($args{delly_dir}, 'Delly_SVs_germline_hc.bcf');
+			@delly_files = _get_files($args{delly_dir}, 'Delly_SVs_germline_hc.vcf');
 			}
 
 	} else {
