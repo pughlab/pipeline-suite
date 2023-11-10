@@ -186,7 +186,7 @@ sv.data$Evidence <- apply(
 	# if call method uses spanning reads
 	if (i[3] >= 20) { return('PASS')
 		# if call method uses split reads
-		} else if (i[1] >= 10 & i[2] >= 10) { return('PASS')
+		} else if (i[1] >= 3 & i[2] >= 3) { return('PASS')
 		} else if (i[4] >= 10) { return('PASS')
 		} else { return('FAIL');
 		}
