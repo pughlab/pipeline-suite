@@ -59,6 +59,8 @@ library(UpSetR);
 library(RCircos);
 library(xtable);
 
+# Rscript /cluster/home/sprokope/git/pipeline-suite/scripts/report/plot_sv_summary.R -p INSIGHTSDH -o /cluster/projects/pughlab/hereditary/projects/INSIGHT_SDH/pipeline_suite/SUMMARY_RESULTS/SV_Summary -r hg38 --report /cluster/projects/pughlab/hereditary/projects/INSIGHT_SDH/pipeline_suite/SUMMARY_RESULTS/Report/plots -m /cluster/projects/pughlab/hereditary/projects/INSIGHT_SDH/pipeline_suite/SUMMARY_RESULTS/data/mavis_sv_data.tsv
+
 ### READ DATA ######################################################################################
 # get data
 if (is.null(arguments$mavis)) {
@@ -207,8 +209,8 @@ for (tool in colnames(tool.summary)) {
 		counts <- if (type == 'Total') {
 			nrow(somatic.svs[grepl(tolower(tool),somatic.svs$tools),]);
 			} else {
-			nrow(somatic.svs[grepl(tolower(tool),somatic.svs$tools) &
-				grepl(type, somatic.svs$event_type),]);
+			nrow(somatic.svs[which(somatic.svs$event_type == type & 
+				grepl(tolower(tool),somatic.svs$tools)),]);
 			}
 
 		tool.summary[type,tool] <- counts;
