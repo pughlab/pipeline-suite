@@ -228,7 +228,7 @@ sub get_postprocess_command {
 	$gatk_command .= "\n\n" . join("\n",
 		join(' ', 'md5sum', $args{output_stem} . '_genotyped_intervals.vcf', '>', $args{output_stem} . '_genotyped_intervals.vcf.md5'),
 		join(' ', 'md5sum', $args{output_stem} . '_genotyped_segments.vcf', '>', $args{output_stem} . '_genotyped_segments.vcf.md5'),
-		join(' ', 'md5sum', $args{output_stem} . '_denoised_copy_ratios.vcf', '>', $args{output_stem} . '_denoised_copy_ratios.vcf.md5')
+		join(' ', 'md5sum', $args{output_stem} . '_denoised_copy_ratios.tsv', '>', $args{output_stem} . '_denoised_copy_ratios.tsv.md5')
 		);
 
 	return($gatk_command);
@@ -328,7 +328,7 @@ sub main {
 	my $r_version	= 'R/' . $tool_data->{r_version};
 
 	# get user-specified tool parameters
-	my $parameters = $tool_data->{gatk_gcnv}->{parameters};
+	my $parameters = $tool_data->{gatk_cnv}->{parameters};
 
 	# get optional HPC group
 	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
@@ -483,6 +483,8 @@ sub main {
 	my (@normal_jobs, @input_counts);
 
 	# process each patient in $smp_data
+	print $log "\nCollecting readcounts for each sample...\n\n";
+
 	foreach my $patient (sort keys %{$smp_data}) {
 
 		# find bams
@@ -512,7 +514,7 @@ sub main {
 			# if there are any samples to run, we will run the final combine job
 			$should_run_final = 1;
 
-			print $log "  SAMPLE: $sample\n\n";
+			print $log "  SAMPLE: $sample\n";
 
 			# run get read counts on each normal
 			my $norm_readcounts = join('/', $patient_directory, $sample . '.readCounts.hdf5');
@@ -528,7 +530,7 @@ sub main {
 			if ('Y' eq missing_file($norm_readcounts)) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for CollectReadCounts...\n";
+				print $log "  >> Submitting job for CollectReadCounts...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -552,14 +554,15 @@ sub main {
 
 				push @{$patient_jobs{$patient}}, $run_id;
 				push @normal_jobs, $run_id;
+				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping CollectReadCounts as this has already been completed!\n";
+				print $log "  >> Skipping CollectReadCounts as this has already been completed!\n";
 				}
 			}
 		}
 
 	# begin cohort-level functions
-	print $log "Processing COHORT...\n\n";
+	print $log "\nProcessing COHORT...\n\n";
 
 	my ($filter_run_id, $scatter_run_id, $ploidy_run_id, $cohort_run_id) = '';
 
@@ -580,7 +583,7 @@ sub main {
 	if ('Y' eq missing_file($filtered_intervals)) {
 
 		# record command (in log directory) and then run job
-		print $log "Submitting job for FilterIntervals...\n";
+		print $log ">> Submitting job for FilterIntervals...\n";
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
@@ -604,11 +607,12 @@ sub main {
 
 		push @all_jobs, $filter_run_id;
 		} else {
-		print $log "Skipping FilterIntervals as this has already been completed!\n";
+		print $log ">> Skipping FilterIntervals as this has already been completed!\n";
 		}
 
 	# scatter intervals
-	my $scatter_dir = join('/', $intermediates_die, 'scatter');
+	my $scatter_dir = join('/', $intermediate_dir, 'scatter');
+	unless(-e $scatter_dir) { make_path($scatter_dir); }
 	my $scatter_parts = join('/', $intermediate_dir, 'scatter_parts.txt');
 
 	if ('Y' eq missing_file($scatter_parts)) {
@@ -635,7 +639,7 @@ sub main {
 	if ('Y' eq missing_file($scatter_complete)) {
 
 		# record command (in log directory) and then run job
-		print $log "Submitting job for ScatterIntervals...\n";
+		print $log ">> Submitting job for ScatterIntervals...\n";
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
@@ -643,6 +647,8 @@ sub main {
 			cmd	=> $scatter_cmd,
 			modules	=> [$gatk],
 			dependencies	=> $filter_run_id,
+			max_time	=> '02:00:00',
+			mem		=> '4G',
 			hpc_driver	=> $args{hpc_driver},
 			extra_args	=> [$hpc_group]
 			);
@@ -657,7 +663,7 @@ sub main {
 
 		push @all_jobs, $scatter_run_id;
 		} else {
-		print $log "Skipping ScatterIntervals as this has already been completed!\n";
+		print $log ">> Skipping ScatterIntervals as this has already been completed!\n";
 		}
 
 	# set up ploidy priors and determine germline ploidy estimates
@@ -696,7 +702,7 @@ sub main {
 	if ('Y' eq missing_file($ploidy_complete)) {
 
 		# record command (in log directory) and then run job
-		print $log "Submitting job for DetermineGermlineContigPloidy...\n";
+		print $log ">> Submitting job for DetermineGermlineContigPloidy...\n";
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
@@ -704,8 +710,8 @@ sub main {
 			cmd	=> $ploidy_cmd,
 			modules	=> [$gatk],
 			dependencies	=> $filter_run_id,
-			max_time	=> '24:00:00', #$parameters->{create_pon}->{time},
-			mem		=> '8G', #$parameters->{create_pon}->{mem},
+			max_time	=> '24:00:00',
+			mem		=> '4G',
 			hpc_driver	=> $args{hpc_driver},
 			extra_args	=> [$hpc_group]
 			);
@@ -720,7 +726,7 @@ sub main {
 
 		push @all_jobs, $ploidy_run_id;
 		} else {
-		print $log "Skipping DetermineGermlineContigPloidy as this has already been completed!\n";
+		print $log ">> Skipping DetermineGermlineContigPloidy as this has already been completed!\n";
 		}
 
 	# for each scatter, run cohort-germlineCNVcaller
@@ -733,7 +739,6 @@ sub main {
 		scatter_parts	=> $scatter_parts,
 		scatter_dir	=> $scatter_dir,
 		ploidy_dir	=> join('/', $intermediate_dir, 'ploidy-calls')
-		@_
 		);
 
 	my $cohort_complete = join('/', $intermediate_dir, 'cohort_gCNV.COMPLETE');
@@ -743,7 +748,7 @@ sub main {
 	if ('Y' eq missing_file($cohort_complete)) {
 
 		# record command (in log directory) and then run job
-		print $log "Submitting job for GermlineCNVCaller...\n";
+		print $log ">> Submitting job for GermlineCNVCaller...\n";
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
@@ -752,9 +757,9 @@ sub main {
 			modules	=> [$gatk],
 			dependencies	=> join(':', $filter_run_id, $scatter_run_id, $ploidy_run_id),
 			max_time	=> '24:00:00', #$parameters->{create_pon}->{time},
-			mem		=> '8G', #$parameters->{create_pon}->{mem},
+			mem		=> '28G', #$parameters->{create_pon}->{mem},
 			hpc_driver	=> $args{hpc_driver},
-			extra_args	=> [$hpc_group]
+			extra_args	=> [$hpc_group, '--array=1-10']
 			);
 
 		$cohort_run_id = submit_job(
@@ -788,7 +793,7 @@ sub main {
 
 		push @all_jobs, $cohort_run_id;
 		} else {
-		print $log "Skipping GermlineCNVCaller as this has already been completed!\n";
+		print $log ">> Skipping GermlineCNVCaller as this has already been completed!\n";
 		}
 
 	# end cohort-level functions
@@ -804,7 +809,7 @@ sub main {
 		}
 
 	# begin case-level functions
-	print $log "Begin INDIVIDUAL functions...\n\n";
+	print $log "\nExtracting germline-CNVs for each sample...\n\n";
 
 	my $smp_index = 0;
 
@@ -824,14 +829,14 @@ sub main {
 
 			# run postprocess gCNV calls for each sample
 			my $smp_output_stem = join('/', $patient_directory, $sample);
-			my $genotyped_intervals = $smp_output_stem} . '_genotyped_intervals.vcf';
-			my $genotyped_segments = $smp_output_stem} . '_genotyped_segments.vcf';
-			my $denoised_copy_ratios =  $smp_output_stem} . '_denoised_copy_ratios.tsv';
+			my $genotyped_intervals = $smp_output_stem . '_genotyped_intervals.vcf';
+			my $genotyped_segments = $smp_output_stem . '_genotyped_segments.vcf';
+			my $denoised_copy_ratios =  $smp_output_stem . '_denoised_copy_ratios.tsv';
 
 			my $postprocess_cmd = get_postprocess_command(
 				cohort_models	=> join(' --model-shard-path ', @cohort_models),
 				cohort_calls	=> join(' --calls-shard-path ', @cohort_calls),
-				ploidy_dir	=> join('/', $intermediate_dir, 'ploidy-calls')
+				ploidy_dir	=> join('/', $intermediate_dir, 'ploidy-calls'),
 				output_stem	=> $smp_output_stem,
 				index		=> $smp_index
 				);
@@ -842,7 +847,7 @@ sub main {
 			if ('Y' eq missing_file("$denoised_copy_ratios.md5")) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for PostprocessGermlineCNVCalls...\n";
+				print $log "  >> Submitting job for PostprocessGermlineCNVCalls...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -866,15 +871,98 @@ sub main {
 
 				push @{$patient_jobs{$patient}}, $run_id;
 				} else {
-				print $log "Skipping PostprocessGermlineCNVCalls as this has already been completed!\n";
+				print $log "  >> Skipping PostprocessGermlineCNVCalls as this has already been completed!\n";
 				}
-			my $genotyped_intervals = $smp_output_stem} . '_genotyped_intervals.vcf';
-			my $genotyped_segments = $smp_output_stem} . '_genotyped_segments.vcf';
-			my $denoised_copy_ratios =  $smp_output_stem} . '_denoised_copy_ratios.tsv';
+
+			$genotyped_intervals = $smp_output_stem . '_genotyped_intervals.vcf';
+			$genotyped_segments = $smp_output_stem . '_genotyped_segments.vcf';
+			$denoised_copy_ratios =  $smp_output_stem . '_denoised_copy_ratios.tsv';
 
 			push @{$final_outputs{$patient}}, $genotyped_intervals;
 			push @{$final_outputs{$patient}}, $genotyped_segments;
 			push @{$final_outputs{$patient}}, $denoised_copy_ratios;	
+			}
+		}
+
+	# collate results
+	if ($should_run_final) {
+
+		my $collect_output = join(' ',
+			"Rscript $cwd/collect_gatk_cnv_output.R",
+			'-d', $output_directory,
+			'-p', $tool_data->{project_name},
+			'-r', $tool_data->{ref_type},
+			'--germline'
+			);
+
+		if (defined($intervals_bed)) {
+			$collect_output .= " -t $picard_intervals";
+			}
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'combine_gatk_cnv_output',
+			cmd	=> $collect_output,
+			modules	=> ['R/4.1.0'],
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '4G',
+			max_time	=> '12:00:00',
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'combine_gatk_cnv_output',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @all_jobs, $run_id;
+		}
+
+	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
+	# collect job metrics (exit status, mem, run time)
+	unless ( ($args{dry_run}) || (scalar(@all_jobs) == 0) ) {
+
+		# collect job stats
+		my $collect_metrics = collect_job_stats(
+			job_ids		=> join(',', @all_jobs),
+			outfile		=> $outfile,
+			hpc_driver	=> $args{hpc_driver}
+			);
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'output_job_metrics_' . $run_count,
+			cmd	=> $collect_metrics,
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '256M',
+			hpc_driver	=> $args{hpc_driver},
+			kill_on_error	=> 0,
+			extra_args	=> [$hpc_group]
+			);
+
+		$run_id = submit_job(
+			jobname		=> 'output_job_metrics',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @all_jobs, $run_id;
+
+		# do some logging
+		print "Number of jobs submitted: " . scalar(@all_jobs) . "\n";
+
+		my $n_queued = `squeue -r | wc -l`;
+		print "Total number of jobs in queue: " . $n_queued . "\n";
+
+		# wait until it finishes
+		unless ($args{no_wait}) {
+			check_final_status(job_id => $run_id);
 			}
 		}
 
