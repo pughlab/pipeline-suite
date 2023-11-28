@@ -212,6 +212,8 @@ if (length(insertsize.files) > 0) {
 		tmp.metrics,
 		by = 'Sample'
 		);
+
+	histogram.data[is.na(histogram.data)] <- 0;
 	}
 
 ## format fragment ratio data
@@ -315,6 +317,14 @@ if (exists('fragment.size.summary')) {
 	write.table(
 		fragment.size.summary,
 		file = generate.filename(arguments$project, 'insert_size_summary', 'tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+
+	write.table(
+		histogram.data,
+		file = generate.filename(arguments$project, 'insert_size_counts', 'tsv'),
 		row.names = FALSE,
 		col.names = TRUE,
 		sep = '\t'
