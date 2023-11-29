@@ -22,4 +22,3 @@ site_files:
   TGCT: /cluster/projects/pughlab/bin/Griffin/sites/TCGA/TGCT_top_10000.txt
   THCA: /cluster/projects/pughlab/bin/Griffin/sites/TCGA/THCA_top_10000.txt
   UCEC: /cluster/projects/pughlab/bin/Griffin/sites/TCGA/UCEC_top_10000.txt
-  stop: /cluster/projects/pughlab/bin/Griffin/stop.txt

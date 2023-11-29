@@ -334,4 +334,3 @@ site_files:
   ZSCAN16: /cluster/projects/pughlab/bin/Griffin/sites/TFBS/ZSCAN16.hg38.10000.txt
   ZSCAN22: /cluster/projects/pughlab/bin/Griffin/sites/TFBS/ZSCAN22.hg38.10000.txt
   ZSCAN9: /cluster/projects/pughlab/bin/Griffin/sites/TFBS/ZSCAN9.hg38.10000.txt
-  stop: /cluster/projects/pughlab/bin/Griffin/stop.txt

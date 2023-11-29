@@ -117,6 +117,7 @@ sub create_extract_command {
 	$extract_command .= "\n\n" . join(' ',
 		'cat', $args{known_positions}, 'cpsr_significant.txt',
 		"| cut -f1,2 | grep -v 'Chromosome'",
+		'| sort -k1,1V -k2,2n -u',
 		'> keep_positions.txt'
 		);
 

@@ -95,44 +95,8 @@ df <- df[order(
 	df$Library
 	),];
 
-# for RNA-Seq fastqs
-if ( ('fastq' == arguments$file_type) & ('rna' == arguments$seq_type) ) {
-
-	for (pat in unique(df$Patient)) {
-
-		patient.data <- droplevels(df[which(df$Patient == pat),]);
-		if (nrow(patient.data) == 0) { next; }
-
-		write(paste0(pat,':'), file = arguments$output, append = TRUE);
-
-		for (smp in unique(df[which(df$Patient == pat),]$Sample)) {
-
-			sample.data <- droplevels(patient.data[which(patient.data$Sample == smp),]);
-			if (nrow(sample.data) == 0) { next; }
-
-			write(paste0('    ', smp, ':'), file = arguments$output, append = TRUE);
-
-			# is this tumour or normal (may not apply to all projects)
-			if ('R' == sample.data[1,]$Type) { type <- 'normal'; } else { type <- 'tumour'; }
-
-			write(paste0('        type: ', type), file = arguments$output, append = TRUE);
-			write('        runlanes:', file = arguments$output, append = TRUE);
-
-			for (lane in unique(df[which(df$Sample == smp),]$Lane)) {
-
-				lane.data <- droplevels(sample.data[which(sample.data$Lane == lane),]);
-				if (nrow(lane.data) == 0) { next; }
-
-				write(paste0('            ', lane, ':'), file = arguments$output, append = TRUE);
-
-				write(paste0('                R1: ', lane.data[1,]$R1), file = arguments$output, append = TRUE);
-				write(paste0('                R2: ', lane.data[1,]$R2), file = arguments$output, append = TRUE);
-				}
-			}
-		}
-
-	# for DNA-Seq fastqs
-	} else if ( ('fastq' == arguments$file_type) & ('dna' == arguments$seq_type) ) {
+# for fastqs
+if ('fastq' == arguments$file_type) {
 
 	for (pat in unique(df$Patient)) {
 

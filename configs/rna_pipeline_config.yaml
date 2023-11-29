@@ -30,6 +30,12 @@ fusioncatcher_version: 1.20
 arriba_version: 2.3.0
 vcf2maf_version: 1.6.17 
 # tool specific parameters
+fastqc:
+    run: Y
+    parameters:
+        fastqc:
+            mem: 2G
+            time: '24:00:00'
 star:
     run: Y
     parameters:
@@ -116,6 +122,7 @@ arriba:
         star:
             mem: 38G
             time: '48:00:00'
+            n_cpus: 1
         arriba:
             mem: 18G
             time: '24:00:00'
