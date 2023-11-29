@@ -18,12 +18,14 @@ use IO::Handle;
 my $cwd = dirname(__FILE__);
 require "$cwd/scripts/utilities.pl";
 
+# define path to fragmentomics code location(s)
+our ($fragmentomics_code_dir, $griffin_code_dir) = undef;
+
 # define some global variables
 our ($reference, $reference_peaks) = undef;
 our ($delfi_healthy, $delfi_gaps, $delfi_vntrs, $delfi_tiles, $delfi_filters) = undef;
-
-# define path to fragmentomics code location(s)
-our ($fragmentomics_dir, $griffin_dir) = undef;
+our ($tfbs_sites, $tcga_sites, $dhs_sites, $hk_sites) = undef;
+our ($griffin_mappable, $griffin_mappable_name) = undef;
 
 ####################################################################################################
 # version       author		comment
@@ -85,11 +87,11 @@ sub create_ratio_command {
 		);
 
 	my $delfi_command = join(' ',
-		"Rscript $fragmentomics_dir/ratio/runFrag.R",
+		"Rscript $fragmentomics_code_dir/ratio/runFrag.R",
 		"--id", $args{id},
 		"--bam", $args{bam},
 		"--outdir", $args{outdir},
-		"--libdir $fragmentomics_dir/ratio",
+		"--libdir $fragmentomics_code_dir/ratio",
 		"--filters $delfi_filters",
 		"--gaps $delfi_gaps",
 		"--VNTRs $delfi_vntrs",
@@ -110,12 +112,12 @@ sub create_fragmentscore_command {
 		);
 
 	my $score_command = join(' ',
-		"Rscript $fragmentomics_dir/fragment_score/scripts/04_patient_score.R",
+		"Rscript $fragmentomics_code_dir/fragment_score/scripts/04_patient_score.R",
 		"--id", $args{id},
 		"--bam", $args{bam},
 		"--outdir", $args{outdir},
-		"--ref $fragmentomics_dir/fragment_score/ref/vessies_reference_set.txt",
-		"--libdir $fragmentomics_dir/fragment_score/scripts"
+		"--ref $fragmentomics_code_dir/fragment_score/ref/vessies_reference_set.txt",
+		"--libdir $fragmentomics_code_dir/fragment_score/scripts"
 		);
 
 	return($score_command);
@@ -292,14 +294,14 @@ sub create_nucleosome_position_command {
 	$nuc_pos_command .= "\n\n# split bedpe by chromosome";
 	$nuc_pos_command .= "\necho '>>> Running splitBedpe.sh <<<'";
 	$nuc_pos_command .= "\n\n" . join(' ',
-		"$fragmentomics_dir/nucleosome_peak/scripts/splitBedpe.sh",
+		"$fragmentomics_code_dir/nucleosome_peak/scripts/splitBedpe.sh",
 		$linked_bedpe
 		);
 
 	$nuc_pos_command .= "\n\n# calculate distance to nucleosome peaks";
 	$nuc_pos_command .= "\necho '>>> Running nucleosome_peaks_distance.R <<<'";
 	$nuc_pos_command .= "\n\n" . join(' ',
-		"Rscript $fragmentomics_dir/nucleosome_peak/scripts/nucleosome_peaks_distance.R",
+		"Rscript $fragmentomics_code_dir/nucleosome_peak/scripts/nucleosome_peaks_distance.R",
 		"--id", $args{id},
 		"--path", $args{outdir},
 		"--peaks", $reference_peaks, 
@@ -354,49 +356,78 @@ sub get_griffin_gc_command {
 		@_
 		);
 
-	my $gc_command = "source activate base";
-	$gc_command .= "\nconda activate griffin2";
+	my $gc_command;
 
-	my $map_stem = join('/', $args{outdir}, 'mappability_bias', $args{id} . '.mappability_bias');
+	# using Griffin v0.1.0 (version provided with Pipeline-Suite)
+	unless ($griffin_code_dir =~ m/v0.2.0/) {
 
-	$gc_command .= "\n\n" . join(' ',
-		"$griffin_dir/scripts/griffin_mappability_correction.py",
-		'--bam_file', $args{bam},
-		'--bam_file_name', $args{id},
-		'--output', $map_stem . '.txt',
-		'--output_plot', $map_stem . '.pdf',
-		'--mappability', "$griffin_dir/Ref/k50.Umap.MultiTrackMappability.hg38.bw",
-		'--exclude_paths', "$griffin_dir/Ref/encode_unified_GRCh38_exclusion_list.bed",
-		'--chrom_sizes', "$griffin_dir/Ref/hg38.standard.chrom.sizes",
-		'--tmp_dir', $args{tmpdir},
-		'--map_quality 20 --CPU', $args{n_cpu}
-		);
+		$gc_command = join(' ',
+			"$griffin_code_dir/scripts/griffin_GC_counts.py",
+			'--bam_file', $args{bam},
+			'--bam_file_name', $args{id},
+			'--mapable_regions', $griffin_mappable,
+			'--ref_seq', $reference,
+			'--chrom_sizes', "$griffin_code_dir/Ref/hg38.standard.chrom.sizes",
+			'--out_dir', $args{outdir},
+			'--map_q 20 --size_range 15 500 --CPU', $args{n_cpu}
+			);
 
-	$gc_command .= "\n\n" . join(' ',
-		"$griffin_dir/scripts/griffin_GC_counts.py",
-		'--bam_file', $args{bam},
-		'--bam_file_name', $args{id},
-		'--mappable_regions_path', "$griffin_dir/Ref/k100_minus_exclusion_lists.mappable_regions.hg38.bed",
-		'--ref_seq', $reference,
-		'--chrom_sizes', "$griffin_dir/Ref/hg38.standard.chrom.sizes",
-		'--out_dir', $args{outdir},
-		'--map_q 20 --size_range 15 500 --CPU', $args{n_cpu}
-		);
+		$gc_command .= "\n\n" . join(' ',
+			"$griffin_code_dir/scripts/griffin_GC_bias.py",
+			'--bam_file_name', $args{id},
+			'--mapable_name', $griffin_mappable_name,
+			'--genome_GC_frequency', "$griffin_code_dir/Ref/genome_GC_frequency",
+			'--out_dir', $args{outdir},
+			'--size_range 15 500'
+			);
 
-	$gc_command .= "\n\n" . join(' ',
-		"$griffin_dir/scripts/griffin_GC_bias.py",
-		'--bam_file_name', $args{id},
-		'--mappable_name k100_minus_exclusion_lists.mappable_regions.hg38',
-		'--genome_GC_frequency', "$griffin_dir/Ref/genome_GC_frequency",
-		'--out_dir', $args{outdir},
-		'--size_range 15 500'
-		);
+		} else {
+
+		# using Griffin v0.2.0 (currently doesn't work; testing in progress)
+		$gc_command = "source activate base";
+		$gc_command .= "\nconda activate griffin2";
+
+		my $map_stem = join('/', $args{outdir}, 'mappability_bias', $args{id} . '.mappability_bias');
+
+		$gc_command .= "\n\n" . join(' ',
+			"$griffin_code_dir/scripts/griffin_mappability_correction.py",
+			'--bam_file', $args{bam},
+			'--bam_file_name', $args{id},
+			'--output', $map_stem . '.txt',
+			'--output_plot', $map_stem . '.pdf',
+			'--mappability', "$griffin_code_dir/Ref/k50.Umap.MultiTrackMappability.hg38.bw",
+			'--exclude_paths', "$griffin_code_dir/Ref/encode_unified_GRCh38_exclusion_list.bed",
+			'--chrom_sizes', "$griffin_code_dir/Ref/hg38.standard.chrom.sizes",
+			'--tmp_dir', $args{tmpdir},
+			'--map_quality 20 --CPU', $args{n_cpu}
+			);
+
+		$gc_command .= "\n\n" . join(' ',
+			"$griffin_code_dir/scripts/griffin_GC_counts.py",
+			'--bam_file', $args{bam},
+			'--bam_file_name', $args{id},
+			'--mappable_regions_path', "$griffin_code_dir/Ref/k100_minus_exclusion_lists.mappable_regions.hg38.bed",
+			'--ref_seq', $reference,
+			'--chrom_sizes', "$griffin_code_dir/Ref/hg38.standard.chrom.sizes",
+			'--out_dir', $args{outdir},
+			'--map_q 20 --size_range 15 500 --CPU', $args{n_cpu}
+			);
+
+		$gc_command .= "\n\n" . join(' ',
+			"$griffin_code_dir/scripts/griffin_GC_bias.py",
+			'--bam_file_name', $args{id},
+			'--mappable_name k100_minus_exclusion_lists.mappable_regions.hg38',
+			'--genome_GC_frequency', "$griffin_code_dir/Ref/genome_GC_frequency",
+			'--out_dir', $args{outdir},
+			'--size_range 15 500'
+			);
+		}
 
 	return($gc_command);
 	}
 
-# format command to run Griffin TFBS profiling
-sub get_griffin_tfbs_command {
+# format command to run Griffin nucleosome profiling
+sub get_griffin_profiling_command {
 	my %args = (
 		id		=> undef,
 		bam		=> undef,
@@ -405,82 +436,98 @@ sub get_griffin_tfbs_command {
 		n_cpu		=> 8,
 		tmpdir		=> undef,
 		outdir		=> undef,
+		sites		=> undef,
 		@_
 		);
 
-	my $griffin_command = "source activate base";
-	$griffin_command .= "\nconda activate griffin2";
+	my $griffin_command;
+
+	# using Griffin v0.1.0 (version provided with Pipeline-Suite)
+	unless ($griffin_code_dir =~ m/v0.2.0/) {
+
+		$griffin_command = join(' ',
+			"$griffin_code_dir/scripts/griffin_calc_coverage.py",
+			'--sample_name', $args{id},
+			'--bam', $args{bam},
+			'--reference_genome', $reference,
+			'--GC_bias', $args{gc_bias},
+			'--background_normalization None',
+			'--sites_yaml', $args{sites},
+			'--results_dir', $args{outdir},
+			'--chrom_column Chrom',
+			'--strand_column Strand',
+			'--chroms chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 chr11 chr12 chr13 chr14 chr15 chr16 chr17 chr18 chr19 chr20 chr21 chr22',
+			'--norm_window -5000 5000',
+			'--plot_window -1000 1000',
+			'--fragment_length 165',
+			'--step 15 --size_range 90 220 --map_quality 20',
+			'--individual False --smoothing True --num_sites none',
+			'--sort_by none --ascending none --cpu', $args{n_cpu},
+			'--erase_intermediates False'
+			);
+
+		} else {
+
+		# using Griffin v0.2.0 (currently doesn't work; testing in progress)
+		$griffin_command = "source activate base";
+		$griffin_command .= "\nconda activate griffin2";
+
+		$griffin_command .= "\n\n" . join(' ',
+			"$griffin_code_dir/scripts/griffin_coverage.py",
+			'--sample_name', $args{id},
+			'--bam', $args{bam},
+			'--reference_genome', $reference,
+			'--GC_bias', $args{gc_bias},
+			'--mappability_bias', $args{map_bias},
+			'--mappability_correction True',
+			'--mappability_bw', "$griffin_code_dir/Ref/k50.Umap.MultiTrackMappability.hg38.bw",
+			'--chrom_sizes_path', "$griffin_code_dir/Ref/hg38.standard.chrom.sizes",
+			'--tmp_dir', $args{tmpdir},
+			'--griffin_scripts', "$griffin_code_dir/scripts",
+			'--sites_yaml', $args{sites},
+			'--position_column position',
+			'--size_range 90 220 --map_quality 20 --number_of_sites none',
+			'--CPU', $args{n_cpu}
+			);
+
+		my $uncorrected_bw = join('/', $args{tmpdir}, $args{id}, 'tmp_bigWig', $args{id} . '.uncorrected.bw');
+		my $corrected_bw = join('/', $args{tmpdir}, $args{id}, 'tmp_bigWig', $args{id} . '.GC_corrected.bw');
+		my $map_corrected_bw = join('/', $args{tmpdir}, $args{id}, 'tmp_bigWig', $args{id} . '.GC_map_corrected.bw');
+
+		my $exclude_encode = join('/', $griffin_code_dir, 'Ref', 'encode_unified_GRCh38_exclusion_list.bed');
+		my $exclude_centromeres = join('/', $griffin_code_dir, 'Ref', 'hg38_centromeres.bed');
+		my $exclude_gaps = join('/', $griffin_code_dir, 'Ref', 'hg38_gaps.bed');
+		my $exclude_patches = join('/', $griffin_code_dir, 'Ref', 'hg38_fix_patches.bed');
+		my $exclude_alts = join('/', $griffin_code_dir, 'Ref', 'hg38_alternative_haplotypes.bed');
+
+		$griffin_command .= "\n\n" . join(' ',
+			"$griffin_code_dir/scripts/griffin_merge_sites.py",
+			'--sample_name', $args{id},
+			'--uncorrected_bw_path', $uncorrected_bw,
+			'--GC_corrected_bw_path', $corrected_bw,
+			'--GC_map_corrected_bw_path', $map_corrected_bw,
+			'--mappability_correction False',
+			'--mappability_bw', "$griffin_code_dir/Ref/k50.Umap.MultiTrackMappability.hg38.bw",
+			'--chrom_sizes_path', "$griffin_code_dir/Ref/hg38.standard.chrom.sizes",
+			'--sites_yaml', $args{sites},
+			'--griffin_scripts_dir', "$griffin_code_dir/scripts",
+			'--tmp_dir', $args{tmpdir},
+			'--results_dir', $args{outdir},
+			'--position_column position',
+			'--exclude_paths', $exclude_encode, $exclude_centromeres, $exclude_gaps, $exclude_patches, $exclude_alts,
+			'--exclude_outliers True',
+			'--exclude_zero_mappability True',
+			'--step 15',
+			'--CNA_normalization False',
+			'--CPU', $args{n_cpu},
+			'--individual False',
+			'--smoothing True'
+			);
+		}
 
 	$griffin_command .= "\n\n" . join(' ',
-		"$griffin_dir/scripts/griffin_coverage.py",
-		'--sample_name', $args{id},
-		'--bam', $args{bam},
-		'--reference_genome', $reference,
-		'--GC_bias', $args{gc_bias},
-		'--mappability_bias', $args{map_bias},
-		'--mappability_correction True',
-		'--mappability_bw', "$griffin_dir/Ref/k50.Umap.MultiTrackMappability.hg38.bw",
-		'--chrom_sizes_path', "$griffin_dir/Ref/hg38.standard.chrom.sizes",
-		'--tmp_dir', $args{tmpdir},
-		'--griffin_scripts', "$griffin_dir/scripts",
-		'--sites_yaml', "$griffin_dir/site_configs/TFBS_sites.yaml",
-	#	'--chrom_column Chrom',
-		'--position_column position',
-	#	'--strand_column Strand',
-	#	'--chroms chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 chr11 chr12 chr13 chr14 chr15 chr16 chr17 chr18 chr19 chr20 chr21 chr22',
-	#	'--norm_window -5000 5000',
-		'--size_range 90 220',
-		'--map_quality 20',
-		'--number_of_sites none',
-	#	'--sort_by none',
-	#	'--ascending none',
-		'--CPU', $args{n_cpu}
-		);
-
-	my $uncorrected_bw = join('/', $args{tmpdir}, $args{id}, 'tmp_bigWig', $args{id} . '.uncorrected.bw');
-	my $corrected_bw = join('/', $args{tmpdir}, $args{id}, 'tmp_bigWig', $args{id} . '.GC_corrected.bw');
-	my $map_corrected_bw = join('/', $args{tmpdir}, $args{id}, 'tmp_bigWig', $args{id} . '.GC_map_corrected.bw');
-
-	my $exclude_encode = join('/', $griffin_dir, 'Ref', 'encode_unified_GRCh38_exclusion_list.bed');
-	my $exclude_centromeres = join('/', $griffin_dir, 'Ref', 'hg38_centromeres.bed');
-	my $exclude_gaps = join('/', $griffin_dir, 'Ref', 'hg38_gaps.bed');
-	my $exclude_patches = join('/', $griffin_dir, 'Ref', 'hg38_fix_patches.bed');
-	my $exclude_alts = join('/', $griffin_dir, 'Ref', 'hg38_alternative_haplotypes.bed');
-
-	$griffin_command .= "\n\n" . join(' ',
-		"$griffin_dir/scripts/griffin_merge_sites.py",
-		'--sample_name', $args{id},
-		'--uncorrected_bw_path', $uncorrected_bw,
-		'--GC_corrected_bw_path', $corrected_bw,
-		'--GC_map_corrected_bw_path', $map_corrected_bw,
-		'--mappability_correction False',
-		'--mappability_bw', "$griffin_dir/Ref/k50.Umap.MultiTrackMappability.hg38.bw",
-		'--chrom_sizes_path', "$griffin_dir/Ref/hg38.standard.chrom.sizes",
-		'--sites_yaml', "$griffin_dir/site_configs/TFBS_sites.yaml",
-		'--griffin_scripts', "$griffin_dir/scripts",
-		'--tmp_dir', $args{tmpdir},
-		'--results_dir', $args{outdir},
-#		'--chrom_column Chrom',
-		'--position_column position',
-#		'--strand_column Strand',
-#		'--chroms chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 chr11 chr12 chr13 chr14 chr15 chr16 chr17 chr18 chr19 chr20 chr21 chr22',
-#		'--norm_window -5000 5000',
-#		'--save_window -1000 1000', # plot_window in v0.1.0
-#		'--center_window -30 30',
-#		'--fft_window -960 960',
-#		'--fft_index 10',
-#		'--smoothing_length 165', # approx. fragment length
-		'--exclude_paths', $exclude_encode, $exclude_centromeres, $exclude_gaps, $exclude_patches, $exclude_alts,
-#		'--exclude_outliers True',
-#		'--exclude_zero_mappability True',
-		'--step 15',
-#		'--CNA_normalization False',
-#		'--number_of_sites none',
-#		'--sort_by none',
-#		'--ascending none',
-		'--CPU', $args{n_cpu},
-#		'--individual False',
-#		'--smoothing True'
+		"echo 'Griffin nucleosome profiling completed successfully' >",
+		$args{outdir} . '/nucleosome_profiling.COMPLETE'
 		);
 
 	return($griffin_command);
@@ -504,7 +551,7 @@ sub get_end_motif_command {
 	$motif_command .= "\n\n# convert bedpe to bed";
 	$motif_command .= "\necho '>>> Running motif_format_bedpe.R <<<'";
 	$motif_command .= "\n\n" . join(' ',
-		"Rscript $fragmentomics_dir/end_motif/scripts/motif_format_bedpe.R",
+		"Rscript $fragmentomics_code_dir/end_motif/scripts/motif_format_bedpe.R",
 		'--id', $args{id},
 		'--bedpe', $linked_bedpe,
 		'--outdir', $args{outdir}
@@ -531,7 +578,7 @@ sub get_end_motif_command {
 	$motif_command .= "\n\n# run end motif context profiling";
 	$motif_command .= "\necho '>>> Running motif_get_contexts.R <<<'";
 	$motif_command .= "\n\n" . join(' ',
-		"Rscript $fragmentomics_dir/end_motif/scripts/motif_get_contexts.R",
+		"Rscript $fragmentomics_code_dir/end_motif/scripts/motif_get_contexts.R",
 		"--id", $args{id},
 		"--fasta_5", $output_stem . '_fasta_5.bed',
 		"--fasta_3", $output_stem . '_fasta_3.bed',
@@ -568,7 +615,7 @@ sub get_profile_breakpoints_command {
 	$bkpt_command .= "\n\n# convert bedpe to bed";
 	$bkpt_command .= "\necho '>>> Running breakpoint_format_bedpe.R <<<'";
 	$bkpt_command .= "\n\n" . join(' ',
-		"Rscript $fragmentomics_dir/breakpoint/scripts/breakpoint_format_bedpe.R",
+		"Rscript $fragmentomics_code_dir/breakpoint/scripts/breakpoint_format_bedpe.R",
 		'--id', $args{id},
 		'--bedpe', $linked_bedpe,
 		'--outdir', $args{outdir}
@@ -595,7 +642,7 @@ sub get_profile_breakpoints_command {
 	$bkpt_command .= "\n\n# run breakpoint context profiling";
 	$bkpt_command .= "\necho '>>> Running breakpoint_get_contexts.R <<<'";
 	$bkpt_command .= "\n\n" . join(' ',
-		"Rscript $fragmentomics_dir/breakpoint/scripts/breakpoint_get_contexts.R",
+		"Rscript $fragmentomics_code_dir/breakpoint/scripts/breakpoint_get_contexts.R",
 		"--id", $args{id},
 		"--fasta_5", $output_stem . '_fasta_5.bed',
 		"--fasta_3", $output_stem . '_fasta_3.bed',
@@ -629,7 +676,7 @@ sub get_dinucleotide_profiling_command {
 	my $din_command = "# convert bedpe to bed";
 	$din_command .= "\necho '>>> Running dinucleotide_format_bedpe.R <<<'";
 	$din_command .= "\n\n" . join(' ',
-		"Rscript $fragmentomics_dir/dinucleotide/scripts/dinucleotide_format_bedpe.R",
+		"Rscript $fragmentomics_code_dir/dinucleotide/scripts/dinucleotide_format_bedpe.R",
 		'--id', $args{id},
 		'--bedpe', $args{bedpe},
 		'--outdir', $args{outdir}
@@ -649,7 +696,7 @@ sub get_dinucleotide_profiling_command {
 	$din_command .= "\n\n# run dinucleotide context profiling";
 	$din_command .= "\necho '>>> Running dinucleotide_get_contexts.R <<<'";
 	$din_command .= "\n\n" . join(' ',
-		"Rscript $fragmentomics_dir/dinucleotide/scripts/dinucleotide_get_contexts.R",
+		"Rscript $fragmentomics_code_dir/dinucleotide/scripts/dinucleotide_get_contexts.R",
 		"--id", $args{id},
 		"--fasta", $output_stem . '_fasta.bed',
 		"--outdir", $args{outdir}
@@ -727,7 +774,6 @@ sub main {
 	print $log "\n  Output directory: $output_directory";
 	print $log "\n---";
 
-
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{parameters};
  
@@ -738,34 +784,45 @@ sub main {
 	my $python3	= 'python3/' . $tool_data->{python3_version};
 	my $r_version	= 'R/' . $tool_data->{r_version};
 
-	$griffin_dir	= $tool_data->{griffin_dir};
-
 	if (defined($tool_data->{fragmentomics_dir})) {
-		$fragmentomics_dir = $tool_data->{fragmentomics_dir};
+		$fragmentomics_code_dir = $tool_data->{fragmentomics_dir};
 		} else {
-		$fragmentomics_dir = "$cwd/scripts/fragmentomics";
+		$fragmentomics_code_dir = "$cwd/scripts/fragmentomics";
+		}
+
+	if (defined($tool_data->{griffin_dir})) {
+		$griffin_code_dir = $tool_data->{griffin_dir};
+		} else {
+		$griffin_code_dir = "$cwd/scripts/fragmentomics/griffin";
 		}
 
 	# set reference files
 	$reference = $tool_data->{reference};
 
-	if (defined($parameters->{nucleosome_peaks})) {
-		$reference_peaks = $tool_data->{nucleosome_peaks};
+	$reference_peaks = defined($tool_data->{nucleosome_peaks}) ? $tool_data->{nucleosome_peaks} : "$fragmentomics_code_dir/nucleosome_peak/ref/hg38";
+
+	$delfi_filters	= defined($tool_data->{delfi_filters}) ? $tool_data->{delfi_filters} : "$fragmentomics_code_dir/ratio/extdata/filters.hg38.rda";
+	$delfi_gaps	= defined($tool_data->{delfi_gaps}) ? $tool_data->{delfi_gaps} : "$fragmentomics_code_dir/ratio/extdata/gaps.hg38.rda";
+	$delfi_vntrs	= defined($tool_data->{delfi_vntrs}) ? $tool_data->{delfi_vntrs} : "$fragmentomics_code_dir/ratio/extdata/VNTRs.hg38.rda";
+	$delfi_tiles	= defined($tool_data->{delfi_tiles}) ? $tool_data->{delfi_tiles} : "$fragmentomics_code_dir/ratio/extdata/hg38_tiles.bed";
+	$delfi_healthy	= defined($tool_data->{delfi_pon}) ? $tool_data->{delfi_pon} : "$fragmentomics_code_dir/ratio/extdata/healthy.median.hg38.rda";
+
+	if (defined($tool_data->{griffin_ref_mappable})) {
+		$griffin_mappable = $tool_data->{griffin_ref_mappable};
 		} else {
-		$reference_peaks = "$cwd/scripts/fragmentomics/nucleosome_peak/ref/hg38";
+		$griffin_mappable = "$cwd/scripts/fragmentomics/griffin/Ref/repeat_masker.mapable.k50.Umap.hg38.bedGraph.gz";
 		}
 
-	$delfi_filters	= defined($tool_data->{delfi_filters}) ? $tool_data->{delfi_filters} : "$fragmentomics_dir/ratio/extdata/filters.hg38.rda";
-	$delfi_gaps	= defined($tool_data->{delfi_gaps}) ? $tool_data->{delfi_gaps} : "$fragmentomics_dir/ratio/extdata/gaps.hg38.rda";
-	$delfi_vntrs	= defined($tool_data->{delfi_vntrs}) ? $tool_data->{delfi_vntrs} : "$fragmentomics_dir/ratio/extdata/VNTRs.hg38.rda";
-	$delfi_tiles	= defined($tool_data->{delfi_tiles}) ? $tool_data->{delfi_tiles} : "$fragmentomics_dir/ratio/extdata/hg38_tiles.bed";
-	$delfi_healthy	= defined($tool_data->{delfi_pon}) ? $tool_data->{delfi_pon} : "$fragmentomics_dir/ratio/extdata/healthy.median.hg38.rda";
+	$griffin_mappable_name = basename $griffin_mappable;
+	$griffin_mappable_name =~ s/\.[^.]+$//;
 
+	$tfbs_sites = defined($tool_data->{TFBS_sites}) ? $tool_data->{TFBS_sites} : "$griffin_code_dir/site_configs/TFBS_sites.yaml";
+	$tcga_sites = defined($tool_data->{TCGA_sites}) ? $tool_data->{TCGA_sites} : "$griffin_code_dir/site_configs/TCGA_sites.yaml";
+	$dhs_sites = defined($tool_data->{DHS_sites}) ? $tool_data->{DHS_sites} : "$griffin_code_dir/site_configs/DHS_sites.yaml";
+	$hk_sites = defined($tool_data->{housekeeping_sites}) ? $tool_data->{housekeeping_sites} : "$griffin_code_dir/site_configs/housekeeping_sites.yaml";
 
 	# get optional HPC group
 	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
-
-
 	
 	### RUN ###########################################################################################
 	# first, determine which steps/fragmentomics analyses to run
@@ -775,15 +832,27 @@ sub main {
 		'ratio'		=> defined($parameters->{ratio}) ? 'Y' : 'N',
 		'score'		=> defined($parameters->{score}) ? 'Y' : 'N',
 		'insertsize'	=> defined($parameters->{insertsize}) ? 'Y' : 'N',
-		'griffin'	=> defined($parameters->{griffin_gc}) ? 'Y' : 'N',
+		'griffin'	=> 'N',
+		'griffin_gc'	=> defined($parameters->{griffin_gc}) ? 'Y' : 'N',
+		'griffin_tfbs'	=> defined($parameters->{griffin_tfbs}) ? 'Y' : 'N',
+		'griffin_tcga'	=> defined($parameters->{griffin_tcga}) ? 'Y' : 'N',
+		'griffin_dhs'	=> defined($parameters->{griffin_dhs}) ? 'Y' : 'N',
+		'griffin_hk'	=> defined($parameters->{griffin_housekeeping}) ? 'Y' : 'N',
 		'nucleosome'	=> defined($parameters->{nucleosome_position}) ? 'Y' : 'N',
 		'dinucleotide'	=> defined($parameters->{dinucleotide}) ? 'Y' : 'N',
 		'end_motifs'	=> defined($parameters->{end_motifs}) ? 'Y' : 'N',
 		'breakpoints'	=> defined($parameters->{breakpoints}) ? 'Y' : 'N'
 		);
 
-	if ( ('Y' eq $tool_set{'nucleosome'}) || ('Y' eq $tool_set{'end_motifs'}) || ('Y' eq $tool_set{'breakpoints'}) ) {
+	if ( ('Y' eq $tool_set{'nucleosome'}) || 
+		('Y' eq $tool_set{'end_motifs'}) || ('Y' eq $tool_set{'breakpoints'}) ) {
 		$tool_set{'deduplicate'} = 'Y';
+		}
+
+	if ( ('Y' eq $tool_set{'griffin_gc'}) || ('Y' eq $tool_set{'griffin_tfbs'}) ||
+		('Y' eq $tool_set{'griffin_tcga'}) || ('Y' eq $tool_set{'griffin_dhs'}) ||
+		('Y' eq $tool_set{'griffin_hk'}) ) {
+		$tool_set{'griffin'} = 'Y';
 		}
 
 	print $log "\nTools/steps to run:\n";
@@ -1121,7 +1190,30 @@ sub main {
 
 
 			### Griffin Profiling
+			my ($griffin_map_dir,$griffin_gc_dir,$map_bias_out,$gc_bias_out);
+
 			if ('Y' eq $tool_set{'griffin'}) {
+
+				# different versions require different bias files
+				if ($griffin_code_dir =~ m/v0.2.0/) {
+
+					$griffin_map_dir = join('/', $griffin_directory, 'mappability_bias');
+					$griffin_gc_dir = join('/', $griffin_directory, 'GC_bias');
+
+					unless(-e $griffin_map_dir) { make_path($griffin_map_dir); }
+					unless(-e $griffin_gc_dir) { make_path($griffin_gc_dir); }
+
+					$map_bias_out = join('/', $griffin_map_dir, $tumour_stem . '.mappability_bias.txt');
+					$gc_bias_out = join('/', $griffin_gc_dir, $tumour_stem . '.GC_bias.txt');
+					} else {
+
+					$gc_bias_out = join('/',
+						$griffin_directory,
+						$griffin_mappable_name,
+						'GC_bias',
+						$tumour_stem . '.GC_bias.txt'
+						);
+					}
 
 				# run GC correction functions
 				my $griffin_cmd = get_griffin_gc_command(
@@ -1130,18 +1222,6 @@ sub main {
 					outdir	=> $griffin_directory,
 					tmpdir	=> $tmp_directory,
 					n_cpu	=> $parameters->{griffin_gc}->{n_cpus}
-					);
-
-				my $map_bias_out = join('/',
-					$griffin_directory,
-					'mappability_bias',
-					$tumour_stem . '.mappability_bias.txt'
-					);
-
-				my $gc_bias_out = join('/',
-					$griffin_directory,
-					'GC_bias',
-					$tumour_stem . '.GC_bias.txt'
 					);
 
 				# check if this should be run
@@ -1154,7 +1234,7 @@ sub main {
 						log_dir	=> $log_directory,
 						name	=> 'run_griffin_gc_correction_' . $tumour,
 						cmd	=> $griffin_cmd,
-						modules	=> [$python3],
+						modules	=> [$python3, $bedtools],
 						dependencies	=> $downsample_run_id,
 						cpus_per_task	=> $parameters->{griffin_gc}->{n_cpus},
 						max_time	=> $parameters->{griffin_gc}->{time},
@@ -1175,12 +1255,19 @@ sub main {
 					} else {
 					print $log " >> Skipping Griffin GC Correction because this has already been completed!\n";
 					}
+				}
 
-				# run Griffin TFBS profiling
-				$griffin_cmd = get_griffin_tfbs_command(
+			# run Griffin TFBS profiling
+			if ('Y' eq $tool_set{'griffin_tfbs'}) {
+
+				my $griffin_tfbs_dir = join('/', $griffin_directory, 'TFBS');
+				unless(-e $griffin_tfbs_dir) { make_path($griffin_tfbs_dir); }
+
+				my $griffin_cmd = get_griffin_profiling_command(
 					id	=> $tumour_stem,
 					bam	=> $tumour_bam,
-					outdir	=> $griffin_directory,
+					sites	=> $tfbs_sites,
+					outdir	=> $griffin_tfbs_dir,
 					gc_bias		=> $gc_bias_out,
 					map_bias	=> $map_bias_out,
 					tmpdir	=> $tmp_directory,
@@ -1188,8 +1275,8 @@ sub main {
 					);
 
 				my $tfbs_output = join('/',
-					$griffin_directory,
-					''
+					$griffin_tfbs_dir,
+					'nucleosome_profiling.COMPLETE'
 					);
 
 				# check if this should be run
@@ -1202,7 +1289,7 @@ sub main {
 						log_dir	=> $log_directory,
 						name	=> 'run_griffin_tfbs_coverage_' . $tumour,
 						cmd	=> $griffin_cmd,
-						modules	=> [$python3],
+						modules	=> [$python3, $bedtools],
 						dependencies	=> $griffin_id,
 						cpus_per_task	=> $parameters->{griffin_tfbs}->{n_cpus},
 						max_time	=> $parameters->{griffin_tfbs}->{time},
@@ -1211,7 +1298,7 @@ sub main {
 						extra_args	=> [$hpc_group]
 						);
 
-					$griffin_id = submit_job(
+					$run_id = submit_job(
 						jobname		=> 'run_griffin_tfbs_coverage_' . $tumour,
 						shell_command	=> $run_script,
 						hpc_driver	=> $args{hpc_driver},
@@ -1222,6 +1309,171 @@ sub main {
 					push @all_jobs, $griffin_id;
 					} else {
 					print $log " >> Skipping Griffin TFBS Coverage because this has already been completed!\n";
+					}
+				}
+
+			# run Griffin DHS profiling
+			if ('Y' eq $tool_set{'griffin_dhs'}) {
+
+				my $griffin_dhs_dir = join('/', $griffin_directory, 'DHS');
+				unless(-e $griffin_dhs_dir) { make_path($griffin_dhs_dir); }
+
+				my $griffin_cmd = get_griffin_profiling_command(
+					id	=> $tumour_stem,
+					bam	=> $tumour_bam,
+					sites	=> $dhs_sites,
+					outdir	=> $griffin_dhs_dir,
+					gc_bias		=> $gc_bias_out,
+					map_bias	=> $map_bias_out,
+					tmpdir	=> $tmp_directory,
+					n_cpu	=> $parameters->{griffin_dhs}->{n_cpus}
+					);
+
+				my $dhs_output = join('/',
+					$griffin_dhs_dir,
+					'nucleosome_profiling.COMPLETE'
+					);
+
+				# check if this should be run
+				if ('Y' eq missing_file($dhs_output)) {
+
+					# record command (in log directory) and then run job
+					print $log " >> Submitting job for Griffin DHS Coverage...\n";
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_griffin_dhs_coverage_' . $tumour,
+						cmd	=> $griffin_cmd,
+						modules	=> [$python3, $bedtools],
+						dependencies	=> $griffin_id,
+						cpus_per_task	=> $parameters->{griffin_dhs}->{n_cpus},
+						max_time	=> $parameters->{griffin_dhs}->{time},
+						mem		=> $parameters->{griffin_dhs}->{mem},
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group]
+						);
+
+					$run_id = submit_job(
+						jobname		=> 'run_griffin_dhs_coverage_' . $tumour,
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @all_jobs, $griffin_id;
+					} else {
+					print $log " >> Skipping Griffin DHS Coverage because this has already been completed!\n";
+					}
+				}
+
+			# run Griffin TCGA tumour type profiling
+			if ('Y' eq $tool_set{'griffin_tcga'}) {
+
+				my $griffin_tcga_dir = join('/', $griffin_directory, 'TCGA');
+				unless(-e $griffin_tcga_dir) { make_path($griffin_tcga_dir); }
+
+				my $griffin_cmd = get_griffin_profiling_command(
+					id	=> $tumour_stem,
+					bam	=> $tumour_bam,
+					sites	=> $tcga_sites,
+					outdir	=> $griffin_tcga_dir,
+					gc_bias		=> $gc_bias_out,
+					map_bias	=> $map_bias_out,
+					tmpdir	=> $tmp_directory,
+					n_cpu	=> $parameters->{griffin_tcga}->{n_cpus}
+					);
+
+				my $tcga_output = join('/',
+					$griffin_tcga_dir,
+					'nucleosome_profiling.COMPLETE'
+					);
+
+				# check if this should be run
+				if ('Y' eq missing_file($tcga_output)) {
+
+					# record command (in log directory) and then run job
+					print $log " >> Submitting job for Griffin TCGA Coverage...\n";
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_griffin_tcga_coverage_' . $tumour,
+						cmd	=> $griffin_cmd,
+						modules	=> [$python3, $bedtools],
+						dependencies	=> $griffin_id,
+						cpus_per_task	=> $parameters->{griffin_tcga}->{n_cpus},
+						max_time	=> $parameters->{griffin_tcga}->{time},
+						mem		=> $parameters->{griffin_tcga}->{mem},
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group]
+						);
+
+					$run_id = submit_job(
+						jobname		=> 'run_griffin_tcga_coverage_' . $tumour,
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @all_jobs, $griffin_id;
+					} else {
+					print $log " >> Skipping Griffin TCGA Coverage because this has already been completed!\n";
+					}
+				}
+
+			# run Griffin across housekeeping sites
+			if ('Y' eq $tool_set{'griffin_hk'}) {
+
+				my $griffin_hk_dir = join('/', $griffin_directory, 'housekeeping');
+				unless(-e $griffin_hk_dir) { make_path($griffin_hk_dir); }
+
+				my $griffin_cmd = get_griffin_profiling_command(
+					id	=> $tumour_stem,
+					bam	=> $tumour_bam,
+					sites	=> $hk_sites,
+					outdir	=> $griffin_hk_dir,
+					gc_bias		=> $gc_bias_out,
+					map_bias	=> $map_bias_out,
+					tmpdir	=> $tmp_directory,
+					n_cpu	=> $parameters->{griffin_housekeeping}->{n_cpus}
+					);
+
+				my $hk_output = join('/',
+					$griffin_hk_dir,
+					'nucleosome_profiling.COMPLETE'
+					);
+
+				# check if this should be run
+				if ('Y' eq missing_file($hk_output)) {
+
+					# record command (in log directory) and then run job
+					print $log " >> Submitting job for Griffin housekeeping Coverage...\n";
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_griffin_hk_coverage_' . $tumour,
+						cmd	=> $griffin_cmd,
+						modules	=> [$python3, $bedtools],
+						dependencies	=> $griffin_id,
+						cpus_per_task	=> $parameters->{griffin_housekeeping}->{n_cpus},
+						max_time	=> $parameters->{griffin_housekeeping}->{time},
+						mem		=> $parameters->{griffin_housekeeping}->{mem},
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group]
+						);
+
+					$run_id = submit_job(
+						jobname		=> 'run_griffin_hk_coverage_' . $tumour,
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @all_jobs, $griffin_id;
+					} else {
+					print $log " >> Skipping Griffin housekeeping Coverage because this has already been completed!\n";
 					}
 				}
 
@@ -1422,6 +1674,7 @@ sub main {
 						name	=> 'run_format_bedpe_for_dinucleotide_' . $tumour,
 						cmd	=> $size_dedup_cmd,
 						modules	=> [$picard, $samtools, $bedtools],
+						dependencies	=> $downsample_run_id,
 						max_time	=> $parameters->{dedup}->{time},
 						mem		=> $parameters->{dedup}->{mem},
 						hpc_driver	=> $args{hpc_driver},
