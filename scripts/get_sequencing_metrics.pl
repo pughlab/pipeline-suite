@@ -157,6 +157,62 @@ sub get_artefacts_command {
 	return($qc_command);
 	}
 
+# format command to extract metrics on HS experiments
+sub get_hs_metrics_command {
+	my %args = (
+		input		=> undef,
+		output_stem	=> undef,
+		java_mem	=> undef,
+		tmp_dir		=> undef,
+		baits		=> undef,
+		targets		=> undef,
+		@_
+		);
+
+	my $qc_command = join(' ',
+		'java -Xmx' . $args{java_mem},
+		'-Djava.io.tmpdir=' . $args{tmp_dir},
+		'-jar $picard_dir/picard.jar CollectHsMetrics',
+		'R=' . $reference,
+		'I=' . $args{input},
+		'O=' . $args{output_stem} . '.txt',
+		'BAIT_INTERVALS=' . $args{baits},
+		'TARGET_INTERVALS=' . $args{targets},
+		'PER_TARGET_COVERAGE=' . $args{output_stem} . '_targetcoverage.txt',
+		'MINIMUM_MAPPING_QUALITY=20 COVERAGE_CAP=1000 NEAR_DISTANCE=500'
+		);
+
+	$qc_command .= "\n\necho 'CollectHsMetrics completed successfully.' > $args{output_stem}.COMPLETE";
+
+	return($qc_command);
+	}
+
+# format command to extract metrics on GC bias
+sub get_gc_bias_command {
+	my %args = (
+		input		=> undef,
+		output_stem	=> undef,
+		java_mem	=> undef,
+		tmp_dir		=> undef,
+		@_
+		);
+
+	my $qc_command = join(' ',
+		'java -Xmx' . $args{java_mem},
+		'-Djava.io.tmpdir=' . $args{tmp_dir},
+		'-jar $picard_dir/picard.jar CollectGcBiasMetrics',
+		'R=' . $reference,
+		'I=' . $args{input},
+		'O=' . $args{output_stem} . '.txt',
+		'S=' . $args{output_stem} . '_summary.txt',
+		'CHART=' . $args{output_stem} . '.pdf'
+		);
+
+	$qc_command .= "\n\necho 'CollectGcBiasMetrics completed successfully.' > $args{output_stem}.COMPLETE";
+
+	return($qc_command);
+	}
+
 # format command for GetPileupSummaries
 sub get_pileup_command {
 	my %args = (
@@ -239,14 +295,16 @@ sub main {
 
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
-	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'gatk');
+	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'qc');
 
 	# confirm version
-	my $needed = version->declare('4.1')->numify;
-	my $given = version->declare($tool_data->{gatk_cnv_version})->numify;
+	if ('emseq' ne $tool_data->{seq_type}) {
+		my $needed = version->declare('4.1')->numify;
+		my $given = version->declare($tool_data->{gatk_cnv_version})->numify;
 
-	if ($given < $needed) {
-		die("Incompatible GATK version requested! QC pipeline is currently only compatible with GATK >4.1");
+		if ($given < $needed) {
+			die("Incompatible GATK version requested! QC pipeline is currently only compatible with GATK >4.1");
+			}
 		}
 
 	# organize output and log directories
@@ -287,11 +345,13 @@ sub main {
 	$dictionary = $reference;
 	$dictionary =~ s/.fa/.dict/;
 
-	if (defined($tool_data->{gnomad})) {
-		$gnomad = $tool_data->{gnomad};
-		print $log "\n    gnomAD SNPs: $tool_data->{gnomad}";
-		} else {
-		die("No gnomAD file provided; please provide path to gnomAD VCF");
+	unless ('emseq' eq $tool_data->{seq_type}) {
+		if (defined($tool_data->{gnomad})) {
+			$gnomad = $tool_data->{gnomad};
+			print $log "\n    gnomAD SNPs: $tool_data->{gnomad}";
+			} else {
+			die("No gnomAD file provided; please provide path to gnomAD VCF");
+			}
 		}
 
 	print $log "\n    Output directory: $output_directory";
@@ -310,10 +370,8 @@ sub main {
 	my @chroms = split(',', $string);
 
 	# set tools and versions
-	my $gatk	= 'gatk/' . $tool_data->{gatk_cnv_version};
+	my $gatk	= ('emseq' ne $tool_data->{seq_type}) ? 'gatk/' . $tool_data->{gatk_cnv_version} : undef;
 	my $picard	= 'picard/' . $tool_data->{picard_version};
-	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
-	my $bedtools	= 'bedtools/' . $tool_data->{bedtools_version};
 	my $r_version	= 'R/' . $tool_data->{r_version};
 
 	# get user-specified tool parameters
@@ -323,15 +381,32 @@ sub main {
 	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
 
 	### RUN ###########################################################################################
-	my ($run_script, $run_id, $link, $cleanup_cmd, $picard_intervals, $should_run_final);
+	my ($run_script, $run_id, $link, $cleanup_cmd, $should_run_final);
+	my ($target_intervals, $bait_intervals);
 	my @all_jobs;
 
 	# use picard-style intervals list
-	if (defined($tool_data->{intervals_bed})) {
-		$picard_intervals = $tool_data->{intervals_bed};
-		$picard_intervals =~ s/\.bed/\.interval_list/;
+	if ('emseq' eq $tool_data->{seq_type}) {
+
+		if (defined($tool_data->{targets_bed})) {
+			$target_intervals = $tool_data->{targets_bed};
+			$target_intervals =~ s/\.bed/\.interval_list/;
+			}
+
+		if (defined($tool_data->{baits_bed})) {
+			$bait_intervals = $tool_data->{baits_bed};
+			$bait_intervals =~ s/\.bed/\.interval_list/;
+			}
+
+		# for every other sequencing type
 		} else {
-		$picard_intervals = join(' -L ', @chroms);
+
+		if (defined($tool_data->{intervals_bed})) {
+			$target_intervals = $tool_data->{intervals_bed};
+			$target_intervals =~ s/\.bed/\.interval_list/;
+			} else {
+			$target_intervals = join(' -L ', @chroms);
+			}
 		}
 
 	# get sample data
@@ -402,7 +477,7 @@ sub main {
 			my $qc_command = get_artefacts_command(
 				input		=> $smp_data->{$patient}->{$type}->{$sample},
 				output_stem	=> $output_stem,
-				intervals	=> $picard_intervals,
+				intervals	=> $target_intervals,
 				java_mem	=> $parameters->{qc}->{java_mem},
 				tmp_dir		=> $tmp_directory
 				);
@@ -417,38 +492,41 @@ sub main {
 				}
 
 			# check if this should be run
-			if ('Y' eq missing_file($output_stem . '.COMPLETE')) {
+			unless ('emseq' eq $tool_data->{seq_type}) {
 
-				# record command (in log directory) and then run job
-				print $log "  >> Submitting job for CollectSequenceArtefacts...\n";
+				if ('Y' eq missing_file($output_stem . '.COMPLETE')) {
 
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_collect_sequencing_artefacts_' . $sample,
-					cmd	=> $qc_command,
-					modules	=> [$picard],
-					max_time	=> $parameters->{qc}->{time},
-					mem		=> $parameters->{qc}->{mem},
-					hpc_driver	=> $args{hpc_driver},
-					extra_args	=> [$hpc_group]
-					);
+					# record command (in log directory) and then run job
+					print $log "  >> Submitting job for CollectSequenceArtefacts...\n";
 
-				$run_id = submit_job(
-					jobname		=> 'run_collect_sequencing_artefacts_' . $sample,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{hpc_driver},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
-					);
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_collect_sequencing_artefacts_' . $sample,
+						cmd	=> $qc_command,
+						modules	=> [$picard],
+						max_time	=> $parameters->{qc}->{time},
+						mem		=> $parameters->{qc}->{mem},
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group]
+						);
 
-				push @patient_jobs, $run_id;
-				push @all_jobs, $run_id;
-				} else {
-				print $log "  >> Skipping CollectSequenceArtefacts because this has already been completed!\n";
+					$run_id = submit_job(
+						jobname		=> 'run_collect_sequencing_artefacts_' . $sample,
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @patient_jobs, $run_id;
+					push @all_jobs, $run_id;
+					} else {
+					print $log "  >> Skipping CollectSequenceArtefacts because this has already been completed!\n";
+					}
+
+				push @final_outputs, $output_stem . '.bait_bias_summary_metrics';
+				push @final_outputs, $output_stem . '.pre_adapter_summary_metrics';
 				}
-
-			push @final_outputs, $output_stem . '.bait_bias_summary_metrics';
-			push @final_outputs, $output_stem . '.pre_adapter_summary_metrics';
 
 			## Collect InsertSize metrics 
 			$output_stem = join('/', $patient_directory, $sample . '_insert_size');
@@ -470,7 +548,7 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> 'run_collect_insert_sizes_' . $sample,
 					cmd	=> $qc_command,
-					modules	=> [$picard,'R/4.1.0'],
+					modules	=> [$picard, $r_version],
 					max_time	=> $parameters->{qc}->{time},
 					mem		=> $parameters->{qc}->{mem},
 					hpc_driver	=> $args{hpc_driver},
@@ -582,110 +660,207 @@ sub main {
 				push @final_outputs, $output_stem . '.txt';
 				}
 
+			## Collect HS metrics
+			if ('emseq' eq $tool_data->{seq_type}) {
+
+				$output_stem = join('/', $patient_directory, $sample . '_hs_metrics');
+
+				$qc_command = get_hs_metrics_command(
+					input		=> $smp_data->{$patient}->{$type}->{$sample},
+					output_stem	=> $output_stem,
+					java_mem	=> $parameters->{qc}->{java_mem},
+					tmp_dir		=> $tmp_directory,
+					baits		=> $bait_intervals,
+					targets		=> $target_intervals
+					);
+
+				# check if this should be run
+				if ('Y' eq missing_file($output_stem . '.COMPLETE')) {
+
+					# record command (in log directory) and then run job
+					print $log "  >> Submitting job for CollectHsMetrics...\n";
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_collect_hs_metrics_' . $sample,
+						cmd	=> $qc_command,
+						modules	=> [$picard],
+						max_time	=> $parameters->{qc}->{time},
+						mem		=> $parameters->{qc}->{mem},
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group]
+						);
+
+					$run_id = submit_job(
+						jobname		=> 'run_collect_hs_metrics_' . $sample,
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @patient_jobs, $run_id;
+					push @all_jobs, $run_id;
+					} else {
+					print $log "  >> Skipping CollectHsMetrics because this has already been completed!\n";
+					}
+
+				push @final_outputs, $output_stem . '.txt';
+
+				# collect GC Bias metrics
+				$output_stem = join('/', $patient_directory, $sample . '_gc_bias_metrics');
+
+				$qc_command = get_gc_bias_command(
+					input		=> $smp_data->{$patient}->{$type}->{$sample},
+					output_stem	=> $output_stem,
+					java_mem	=> $parameters->{qc}->{java_mem},
+					tmp_dir		=> $tmp_directory
+					);
+
+				# check if this should be run
+				if ('Y' eq missing_file($output_stem . '.COMPLETE')) {
+
+					# record command (in log directory) and then run job
+					print $log "  >> Submitting job for CollectGCBiasMetrics...\n";
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_collect_gc_bias_metrics_' . $sample,
+						cmd	=> $qc_command,
+						modules	=> [$picard, $r_version],
+						max_time	=> $parameters->{qc}->{time},
+						mem		=> $parameters->{qc}->{mem},
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group]
+						);
+
+					$run_id = submit_job(
+						jobname		=> 'run_collect_gc_bias_metrics_' . $sample,
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @patient_jobs, $run_id;
+					push @all_jobs, $run_id;
+					} else {
+					print $log "  >> Skipping CollectGCBiasMetrics because this has already been completed!\n";
+					}
+
+				push @final_outputs, $output_stem . '.txt';
+				}
+
 			## Collect contamination estimates
-			my $pileup_out = join('/', $patient_directory, $sample . '_pileup.table');
+			unless ('emseq' eq $tool_data->{seq_type}) {
 
-			my $pileup_command = get_pileup_command(
-				input		=> $smp_data->{$patient}->{$type}->{$sample},
-				output		=> $pileup_out,
-				intervals	=> $picard_intervals,
-				tmp_dir		=> $tmp_directory
-				);
+				my $pileup_out = join('/', $patient_directory, $sample . '_pileup.table');
 
-			$cleanup_cmd .= "\nrm $pileup_out";
-
-			# check if this should be run
-			if ('Y' eq missing_file($pileup_out . '.md5')) {
-
-				# record command (in log directory) and then run job
-				print $log "  >> Submitting job for GetPileupSummaries...\n";
-
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_get_pileup_summaries_' . $sample,
-					cmd	=> $pileup_command,
-					modules	=> [$gatk],
-					max_time	=> $parameters->{qc}->{time},
-					mem		=> $parameters->{qc}->{mem},
-					hpc_driver	=> $args{hpc_driver},
-					extra_args	=> [$hpc_group]
+				my $pileup_command = get_pileup_command(
+					input		=> $smp_data->{$patient}->{$type}->{$sample},
+					output		=> $pileup_out,
+					intervals	=> $target_intervals,
+					tmp_dir		=> $tmp_directory
 					);
 
-				$run_id = submit_job(
-					jobname		=> 'run_get_pileup_summaries_' . $sample,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{hpc_driver},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
-					);
+				$cleanup_cmd .= "\nrm $pileup_out";
 
-				push @pileup_jobs, $run_id;
-				push @patient_jobs, $run_id;
-				push @all_jobs, $run_id;
-				} else {
-				print $log "  >> Skipping GetPileupSummaries because this has already been completed!\n";
+				# check if this should be run
+				if ('Y' eq missing_file($pileup_out . '.md5')) {
+
+					# record command (in log directory) and then run job
+					print $log "  >> Submitting job for GetPileupSummaries...\n";
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_get_pileup_summaries_' . $sample,
+						cmd	=> $pileup_command,
+						modules	=> [$gatk],
+						max_time	=> $parameters->{qc}->{time},
+						mem		=> $parameters->{qc}->{mem},
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group]
+						);
+
+					$run_id = submit_job(
+						jobname		=> 'run_get_pileup_summaries_' . $sample,
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @pileup_jobs, $run_id;
+					push @patient_jobs, $run_id;
+					push @all_jobs, $run_id;
+					} else {
+					print $log "  >> Skipping GetPileupSummaries because this has already been completed!\n";
+					}
 				}
 			}
 
 		# now that all pileup jobs are submitted, run calculate contamination on each T/N (or T-only or N-only) set
-		print $log "\nRunning CalculateContamination steps...\n";
-		foreach my $sample (@sample_ids) {
+		unless ('emseq' eq $tool_data->{seq_type}) {
 
-			# find contamination
-			my $tumour_pileup = join('/', $patient_directory, $sample . '_pileup.table');
-			my $normal_pileup = undef;
+			print $log "\nRunning CalculateContamination steps...\n";
+			foreach my $sample (@sample_ids) {
 
-			if (scalar(@normal_ids) > 0) {
-				if ( !(any { $_ =~ m/$sample/ } @normal_ids) ) {
-					$normal_pileup = join('/',
-						$patient_directory,
-						$normal_ids[0] . '_pileup.table'
-						);
+				# find contamination
+				my $tumour_pileup = join('/', $patient_directory, $sample . '_pileup.table');
+				my $normal_pileup = undef;
+
+				if (scalar(@normal_ids) > 0) {
+					if ( !(any { $_ =~ m/$sample/ } @normal_ids) ) {
+						$normal_pileup = join('/',
+							$patient_directory,
+							$normal_ids[0] . '_pileup.table'
+							);
+						}
 					}
-				}
 
-			my $contest_output = join('/', $patient_directory, $sample . '_contamination.table');
-			my $contest_command = get_estimate_contamination_command(
-				tumour		=> $tumour_pileup,
-				normal		=> $normal_pileup,
-				output		=> $contest_output,
-				tmp_dir		=> $tmp_directory
-				);
-
-			# check if this should be run
-			if ('Y' eq missing_file($contest_output . '.md5')) {
-
-				# record command (in log directory) and then run job
-				print $log ">> Submitting job for CalculateContamination...\n";
-
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_calculate_contamination_' . $sample,
-					cmd	=> $contest_command,
-					modules	=> [$gatk],
-					dependencies	=> join(':', @pileup_jobs),
-					max_time	=> ('wgs' eq $tool_data->{seq_type}) ? '12:00:00' : '01:00:00',
-					mem		=> ('wgs' eq $tool_data->{seq_type}) ? '4G' : '1G',
-					hpc_driver	=> $args{hpc_driver},
-					extra_args	=> [$hpc_group]
+				my $contest_output = join('/', $patient_directory, $sample . '_contamination.table');
+				my $contest_command = get_estimate_contamination_command(
+					tumour		=> $tumour_pileup,
+					normal		=> $normal_pileup,
+					output		=> $contest_output,
+					tmp_dir		=> $tmp_directory
 					);
 
-				$run_id = submit_job(
-					jobname		=> 'run_calculate_contamination_' . $sample,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{hpc_driver},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
-					);
+				# check if this should be run
+				if ('Y' eq missing_file($contest_output . '.md5')) {
 
-				push @patient_jobs, $run_id;
-				push @all_jobs, $run_id;
-				} else {
-				print $log ">> Skipping CalculateContamination because this has already been completed!\n";
+					# record command (in log directory) and then run job
+					print $log ">> Submitting job for CalculateContamination...\n";
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_calculate_contamination_' . $sample,
+						cmd	=> $contest_command,
+						modules	=> [$gatk],
+						dependencies	=> join(':', @pileup_jobs),
+						max_time	=> ('wgs' eq $tool_data->{seq_type}) ? '12:00:00' : '01:00:00',
+						mem		=> ('wgs' eq $tool_data->{seq_type}) ? '4G' : '1G',
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group]
+						);
+
+					$run_id = submit_job(
+						jobname		=> 'run_calculate_contamination_' . $sample,
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @patient_jobs, $run_id;
+					push @all_jobs, $run_id;
+					} else {
+					print $log ">> Skipping CalculateContamination because this has already been completed!\n";
+					}
+
+				push @final_outputs, $contest_output;
+				print $log "  >> Processing SAMPLE: $sample complete!\n";
 				}
-
-			push @final_outputs, $contest_output;
-			print $log "  >> Processing SAMPLE: $sample complete!\n";
 			}
 
 		# should intermediate files be removed

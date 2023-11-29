@@ -5,6 +5,7 @@ output_dir: /cluster/projects/pughlab/projects/PROJECTNAME/RNASeq/
 seq_type: rna # must be one of exome, targeted, rna or wgs
 seq_center: PMGC
 platform: Illumina
+flowcell_type: random # one of random or patterned, depends on the instrument used: https://knowledge.illumina.com/instrumentation/general/instrumentation-general-faq-list/000007786
 hpc_group:
 # reference files
 ref_type: hg38

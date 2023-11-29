@@ -15,12 +15,16 @@ use IO::Handle;
 my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
+# define some global variables
+our ($reference, $bwameth_path);
+ 
 ####################################################################################################
 # version       author		comment
 # 1.0           sprokopec	run BWA-MEM on raw FASTQ files (paired end only!)
 # 1.1		sprokopec	minor updates for compatibility with larger pipeline
 # 1.2		sprokopec	added help msg and cleaned up code
 # 1.3		sprokopec	minor updates for tool config
+# 1.4		sprokopec	added EMSeq methods
 
 #### USAGE ##########################################################################################
 # bwa.pl -t tool_config.yaml -d data_config.yaml -o /path/to/output/dir -b /path/to/output/yaml -c slurm --remove --dry_run
@@ -65,7 +69,6 @@ sub get_bwa_command {
 		r2		=> undef,
 		stem		=> undef,
 		readgroup	=> undef,
-		reference	=> undef,
 		n_cpus		=> 4,
 		@_
 		);
@@ -73,7 +76,7 @@ sub get_bwa_command {
 	my $bwa_command = join(' ',
 		'bwa mem -M -t' . $args{n_cpus},
 		'-R', $args{readgroup},
-		$args{reference},
+		$reference,
 		$args{r1}
 		);
 
@@ -179,6 +182,7 @@ sub get_merge_markdup_command {
 		java_mem	=> undef,
 		n_cpus		=> undef,
 		tool		=> 'picard',
+		flowcell_type	=> 'random',
 		@_
 		};
 
@@ -211,11 +215,67 @@ sub get_merge_markdup_command {
 			'ASSUME_SORTED=true CREATE_INDEX=true CREATE_MD5_FILE=true',
 			'MAX_RECORDS_IN_RAM=100000 VALIDATION_STRINGENCY=SILENT'
 			);
+
+		if ('patterned' eq $args->{flowcell_type}) {
+			$merge_command .= " OPTICAL_DUPLICATE_PIXEL_DISTANCE=2500";
+			}
+
 		} else {
 			die('Unrecognized tool requested for MarkDuplicates');
 		}
 
 	return($merge_command);
+	}
+
+# format command to run bwa_meth (for EM-Seq)
+sub get_bwameth_command {
+	my %args = (
+		r1		=> undef,
+		r2		=> undef,
+		stem		=> undef,
+		readgroup	=> undef,
+		n_cpus		=> 4,
+		@_
+		);
+
+	my $bwa_command = join(' ',
+		$bwameth_path,
+		'-t' . $args{n_cpus},
+		'--read-group', $args{readgroup},
+		'--reference', $reference,
+		$args{r1}
+		);
+
+	if (defined($args{r2})) {
+		$bwa_command .= ' ' . $args{r2};
+		}
+
+	$bwa_command .= " > $args{stem}" . '.sam';
+
+	return($bwa_command);
+	}	
+
+# format command to filter EM-Seq reads
+sub get_bam_filter_command {
+	my %args = (
+		input		=> undef,
+		output		=> undef,
+		@_
+		);
+
+	my $filter_command = join(' ',
+		'samtools view -b',
+		'-o', $args{output},
+		'-q 1 -f 0x2 -F 2816',
+		'-T', $reference,
+		$args{input}
+		);
+
+	$filter_command .= "\n\n" . get_index_bam_command(
+		output => $args{output}
+		);	
+
+	return($filter_command);
 	}
 
 ### MAIN ##########################################################################################
@@ -274,18 +334,31 @@ sub main {
 	$log->autoflush;
 
 	print $log "---\n";
-	print $log "Running BWA-MEM alignment pipeline.\n";
+	print $log "Running BWA alignment pipeline.\n";
 	print $log "\n  Tool config used: $tool_config";
-	print $log "\n    Reference: $tool_data->{reference}";
+	print $log "\n    Reference: $tool_data->{bwa}->{reference}";
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config\n";
 	print $log "\n---";
 
+	$reference = $tool_data->{bwa}->{reference};
+
 	# set tools and versions
 	my $bwa_version	= 'bwa/' . $tool_data->{bwa_version};
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
+	my $python	= 'python3/' . $tool_data->{python3_version};
 	my $picard	= 'picard/' . $tool_data->{picard_version};
 	my $sambamba	= 'sambamba/' . $tool_data->{sambamba_version};
+
+	my $bwameth_version;
+	$bwameth_path = 'bwameth.py';
+	if (defined($tool_data->{bwa_meth_version})) {
+		$bwameth_version = 'bwa_meth/' . $tool_data->{bwa_meth};
+		} elsif (defined($tool_data->{bwa_meth_path})) {
+		$bwameth_path = $tool_data->{bwa_meth_path};
+		} else {
+		$bwameth_version = 'bwa_meth/git';
+		}
 
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{bwa}->{parameters};
@@ -405,15 +478,32 @@ sub main {
 						center		=> $tool_data->{seq_center}
 						);
 
+					my @modules = ( $bwa_version, $samtools );
+ 
 					my $bwa = "cd $lane_directory;\n";
-					$bwa .= get_bwa_command(
-						r1		=> $r1,
-						r2		=> $r2,
-						stem		=> $filestem,
-						readgroup	=> $readgroup,
-						reference	=> $tool_data->{bwa}->{reference},
-						n_cpus		=> $parameters->{bwa}->{n_cpus}->{$type}
-						);
+					unless ('emseq' eq $tool_data->{seq_type}) {
+
+						$bwa .= get_bwa_command(
+							r1		=> $r1,
+							r2		=> $r2,
+							stem		=> $filestem,
+							readgroup	=> $readgroup,
+							n_cpus		=> $parameters->{bwa}->{n_cpus}->{$type}
+							);
+
+						} else {
+
+						if (defined($bwameth_version)) { push @modules, $bwameth_version; }
+						push @modules, $python;
+
+						$bwa .= get_bwameth_command(
+							r1		=> $r1,
+							r2		=> $r2,
+							stem		=> $filestem,
+							readgroup	=> $readgroup,
+							n_cpus		=> $parameters->{bwa}->{n_cpus}->{$type}
+							);
+						}
 
 					$bwa .= "\n\n" . "echo 'alignment finished successfully' > $filestem.COMPLETE";
 
@@ -431,9 +521,9 @@ sub main {
 						print $log "      >> Submitting job for bwa...\n";
 						$run_script = write_script(
 							log_dir => $log_directory,
-							name	=> 'run_bwa_mem_' . $filestem,
+							name	=> 'run_bwa_' . $filestem,
 							cmd	=> $bwa,
-							modules => [$bwa_version, $samtools],
+							modules => [ @modules ],
 							max_time	=> $parameters->{bwa}->{time}->{$type},
 							mem		=> $parameters->{bwa}->{mem}->{$type},
 							cpus_per_task	=> $parameters->{bwa}->{n_cpus}->{$type},
@@ -442,7 +532,7 @@ sub main {
 							);
 
 						$run_id = submit_job(
-							jobname		=> 'run_bwa_mem_' . $filestem,
+							jobname		=> 'run_bwa_' . $filestem,
 							shell_command	=> $run_script,
 							hpc_driver	=> $args{hpc_driver},
 							dry_run		=> $args{dry_run},
@@ -538,8 +628,56 @@ sub main {
 						print $log "      >> Skipping index step because this was performed previously...\n";
 						}
 
+					# if this is EM-Seq, filter reads (keep high quality primary alignments and proper paired only)
+					if ('emseq' eq $tool_data->{seq_type}) {
+
+						$output = join('/', $lane_directory, $filestem . '_filtered');
+
+						my $filter_cmd = "cd $lane_directory;\n";
+						$filter_cmd .= get_bam_filter_command(
+							input		=> $filestem . '.bam',
+							output		=> $output . '.bam'
+							);
+
+						$cleanup_cmd .= "\nrm $lane_directory/$filestem.bam";
+
+						# check if this should be run
+						if (
+							('Y' eq missing_file("$output.bam.bai")) ||
+							('Y' eq missing_file("$output.bam.md5"))
+							) {
+							# record command (in log directory) and then run job
+							print $log "      >> Submitting job to filter EM-Seq bam...\n";
+							$run_script = write_script(
+								log_dir	=> $log_directory,
+								name	=> 'run_filter_bam_and_index_' . $filestem,
+								cmd	=> $filter_cmd,
+								modules	=> [$samtools],
+								dependencies	=> $run_id,
+								max_time	=> $parameters->{index}->{time}->{$type},
+								mem		=> $parameters->{index}->{mem}->{$type},
+								hpc_driver	=> $args{hpc_driver},
+								extra_args	=> [$hpc_group]
+								);
+
+							$run_id = submit_job(
+								jobname		=> 'run_filter_bam_and_index_' . $filestem,
+								shell_command	=> $run_script,
+								hpc_driver	=> $args{hpc_driver},
+								dry_run		=> $args{dry_run},
+								log_file	=> $log
+								);
+
+							push @smp_jobs, $run_id;
+							push @all_jobs, $run_id;
+							} else {
+							print $log "      >> Skipping filter step because this was performed previously...\n";
+							}
+						}
+
 					push @lane_intermediates, $output . '.bam';
 					push @lane_holds, $run_id;
+
 					}
 				}
 
@@ -589,7 +727,8 @@ sub main {
 						input		=> \@lane_intermediates,
 						output		=> $smp_output,
 						tmp_dir		=> $tmp_directory,
-						java_mem	=> $parameters->{merge}->{java_mem}->{$type}
+						java_mem	=> $parameters->{merge}->{java_mem}->{$type},
+						flowcell_type	=> $tool_data->{flowcell})
 						);
 					}
 				}

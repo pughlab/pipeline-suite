@@ -57,17 +57,21 @@ setwd(arguments$directory);
 bait.bias.files <- list.files(pattern = 'bait_bias_summary_metrics', recursive = TRUE);
 pre.adapter.files <- list.files(pattern = 'pre_adapter_summary_metrics', recursive = TRUE);
 contamination.files <- list.files(pattern = 'contamination.table$', recursive = TRUE);
+gc.bias.files <- list.files(pattern = 'gc_bias_metrics_summary.txt', recursive = TRUE);
 
 alignment.files <- list.files(pattern = 'alignment_metrics.txt', recursive = TRUE);
 wgs.files <- list.files(pattern = 'wgs_metrics.txt', recursive = TRUE);
+hs.files <- list.files(pattern = 'hs_metrics.txt', recursive = TRUE);
 
 insert.files <- list.files(pattern = 'insert_size.txt', recursive = TRUE);
 
 # read them in
 artefact.list <- list();
 contamination.list <- list();
+gcbias.list <- list();
 alignment.list <- list();
 wgs.list <- list();
+hs.list <- list();
 insert.list <- list();
 
 for (file in bait.bias.files) {
@@ -111,6 +115,15 @@ for (file in insert.files) {
 	insert.list[[smp]] <- tmp[,-which(colnames(tmp) %in% c('LIBRARY','READ_GROUP'))];
 	}
 
+for (file in gc.bias.files) {
+	# extract sample ID
+	smp <- sub('_gc_bias_metrics_summary.txt','',basename(file));
+	# store data in list
+	tmp <- read.delim(file, comment.char = '#');
+	tmp$ID <- smp;
+	gcbias.list[[smp]] <- tmp;
+	}
+
 for (file in alignment.files) {
 	# extract sample ID
 	smp <- sub('_alignment_metrics.txt','',basename(file));
@@ -126,19 +139,28 @@ for (file in alignment.files) {
 	alignment.list[[smp]] <- tmp[,c(23,26,1:22,24:25)];
 	}
 
-if (length(wgs.files) > 0) {
+for (file in wgs.files) {
+	# extract sample ID
+	smp <- sub('_wgs_metrics.txt','',basename(file));
+	# read in data
+	metrics <- read.delim(file, skip = 6, nrow = 1);
+	counts <- read.delim(file, skip = 10);
+	colnames(counts)[2] <- smp;
+	# store data in list
+	wgs.list$metrics[[smp]] <- metrics;
+	wgs.list$counts[[smp]] <- counts;
+	}
 
-	for (file in wgs.files) {
-		# extract sample ID
-		smp <- sub('_wgs_metrics.txt','',basename(file));
-		# read in data
-		metrics <- read.delim(file, skip = 6, nrow = 1);
-		counts <- read.delim(file, skip = 10);
-		colnames(counts)[2] <- smp;
-		# store data in list
-		wgs.list$metrics[[smp]] <- metrics;
-		wgs.list$counts[[smp]] <- counts;
-		}
+for (file in hs.files) {
+	# extract sample ID
+	smp <- sub('_hs_metrics.txt','',basename(file));
+	# read in data
+	metrics <- read.delim(file, skip = 6, nrow = 1);
+	counts <- read.delim(file, skip = 10);
+	counts$ID <- smp;
+	# store data in list
+	hs.list$metrics[[smp]] <- metrics;
+	hs.list$counts[[smp]] <- counts;
 	}
 
 # reshape/format data
@@ -161,42 +183,61 @@ if (any(grepl('fastq', contest.data$sample))) {
 	}
 
 metric.data <- do.call(rbind, alignment.list);
+gcbias.data <- do.call(rbind, gcbias.list);
 insert.data <- do.call(rbind, insert.list);
 insert.data <- insert.data[,c('SAMPLE',setdiff(colnames(insert.data),'SAMPLE'))];
 
 # save combined/formatted data to file
-write.table(
-	artefact.data,
-	file = generate.filename(arguments$project, 'SequenceArtefacts','tsv'),
-	row.names = FALSE,
-	col.names = TRUE,
-	sep = '\t'
-	);
+if (!is.null(artefact.data)) {
+	write.table(
+		artefact.data,
+		file = generate.filename(arguments$project, 'SequenceArtefacts','tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+	}
 
-write.table(
-	contest.data,
-	file = generate.filename(arguments$project, 'ContaminationEstimates','tsv'),
-	row.names = FALSE,
-	col.names = TRUE,
-	sep = '\t'
-	);
+if (!is.null(contest.data)) {
+	write.table(
+		contest.data,
+		file = generate.filename(arguments$project, 'ContaminationEstimates','tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+	}
 
-write.table(
-	metric.data,
-	file = generate.filename(arguments$project, 'AlignmentMetrics','tsv'),
-	row.names = FALSE,
-	col.names = TRUE,
-	sep = '\t'
-	);
+if (!is.null(metric.data)) {
+	write.table(
+		metric.data,
+		file = generate.filename(arguments$project, 'AlignmentMetrics','tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+	}
 
-write.table(
-	insert.data,
-	file = generate.filename(arguments$project, 'InsertSizes','tsv'),
-	row.names = FALSE,
-	col.names = TRUE,
-	quote = FALSE,
-	sep = '\t'
-	);
+if (!is.null(gcbias.data)) {
+	write.table(
+		gcbias.data,
+		file = generate.filename(arguments$project, 'GCbiasMetrics','tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+	}
+
+if (!is.null(insert.data)) {
+	write.table(
+		insert.data,
+		file = generate.filename(arguments$project, 'InsertSizes','tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		quote = FALSE,
+		sep = '\t'
+		);
+	}
 
 # format WGS metrics if available
 if (length(wgs.files) > 0) {
@@ -217,6 +258,29 @@ if (length(wgs.files) > 0) {
 	write.table(
 		wgs.histogram,
 		file = generate.filename(arguments$project, 'CoverageHistogram','tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+	}
+
+# format HS metrics if available
+if (length(hs.files) > 0) {
+
+	hs.metrics <- do.call(rbind, hs.list$metrics);
+	hs.histogram <- do.call(rbind, hs.list$counts);
+
+	write.table(
+		hs.metrics,
+		file = generate.filename(arguments$project, 'HSMetrics','tsv'),
+		row.names = TRUE,
+		col.names = NA,
+		sep = '\t'
+		);
+
+	write.table(
+		hs.histogram,
+		file = generate.filename(arguments$project, 'HShistogram','tsv'),
 		row.names = FALSE,
 		col.names = TRUE,
 		sep = '\t'

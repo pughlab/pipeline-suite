@@ -5,6 +5,7 @@ sample_type: # optional; can be germline or ctdna
 seq_type: exome # must be one of exome, targeted, rna or wgs
 seq_center: PMGC
 platform: Illumina
+flowcell_type: random # one of random or patterned, depends on the instrument used: https://knowledge.illumina.com/instrumentation/general/instrumentation-general-faq-list/000007786
 hpc_group:
 # reference files
 ref_type: hg38 # one of hg38, hg19, GRCh37 or GRCh38 (minimal testing with GRCh37/8)

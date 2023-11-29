@@ -129,6 +129,7 @@ sub get_markdup_command {
 		output		=> undef,
 		java_mem	=> undef,
 		tmp_dir		=> undef,
+		flowcell_type	=> 'random',
 		@_
 		);
 
@@ -142,6 +143,10 @@ sub get_markdup_command {
 		'ASSUME_SORTED=true CREATE_INDEX=true CREATE_MD5_FILE=true',
 		'MAX_RECORDS_IN_RAM=100000 VALIDATION_STRINGENCY=SILENT'
 		);
+
+	if ('patterned' eq $args->{flowcell_type}) {
+		$markdup_command .= " OPTICAL_DUPLICATE_PIXEL_DISTANCE=2500";
+		}
 
 	return($markdup_command);
 	}
@@ -434,7 +439,8 @@ sub main {
 					input		=> $input_file,
 					output		=> $dedup_bam,
 					java_mem	=> $parameters->{markdup}->{java_mem},
-					tmp_dir		=> $tmp_directory
+					tmp_dir		=> $tmp_directory,
+					flowcell_type	=> $tool_data->{flowcell}
 					);
 		
 				if ('normal' eq $type) { $normals{$sample} = $dedup_bam; }
