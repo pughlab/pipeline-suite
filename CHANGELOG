@@ -1,4 +1,28 @@
+2023-11-29.2: PughLab pipeline-suite (version 0.9.4);
+- NEW: initial addition of EM-Seq pipeline (wip)
+        - pughlab_emseq_pipeline.pl to run the full EM-Seq pipeline (wip)
+        - bwa.pl: incorporated bwameth into existing pipeline
+        - get_sequencing_metrics.pl: added hs and gc bias metrics
+- UPDATE: added flowcell argument to adjust markduplicates command (https://knowledge.illumina.com/instrumentation/general/instrumentation-general-faq-list/000007786):
+        - bwa.pl
+        - star.pl
+        - utilities.pl (will force to 'random' if undefined in tool configs)
+        - example dna and rna pipeline config yamls
+
+2023-11-29: PughLab pipeline-suite (version 0.9.3);
+- UPDATE: added griffin nucleosome profiling to fragmentomics pipeline; currently only validated with Griffin v0.1.0; example sites.yaml files can be found in scripts/fragmentomics/griffin/site_configs
+	- pughlab_fragmentomics_pipeline.pl
+	- fragmentomics_pipeline_config.yaml (specify paths to sites.yaml files and step parameters)
+	- added reference files for griffin
+- mavis.pl: updated filename for germline Delly input (bcf to vcf)
+- gatk_gcnv.pl: minor updates; merged collect_gatk_gcnv_output.R into collect_gatk_cnv_output.R
+- annotate_germline.pl: added sort command to keep_positions.txt
+- collect_fragmentomics_output.R: write insert size histogram data to file
+- report: minor updates throughout
+
 2023-10-12: PughLab pipeline-suite (version 0.9.2);
+- fastq yaml format has been standardized between dna and rna experiments
+- fastqc: integrated into dna/rna pipelines
 - get_sequencing_metrics: update to ensure matched normal pileup is included in dependencies for tumour contamination estimates
 - delly: added final filter step for germline-only runs
 - mavis: updates for compatibility with germline-only runs; added max_jobs to config files

@@ -43,10 +43,23 @@ sub error_checking {
 
 	# BWA (DNA only)
 	if ('bwa' eq $pipeline) {
-		if ('bwamem' ne $tool_data->{bwa}->{aligner}) {
+
+		# alignment method
+		if ( ('emseq' eq $tool_data->{seq_type}) && ('bwameth' ne $tool_data->{bwa}->{aligner}) ) {
+			die("EM-Seq is currently only compatible with BWA-METH alignment!");
+		}
+
+		if ( ('emseq' ne $tool_data->{seq_type}) && ('bwamem' ne $tool_data->{bwa}->{aligner}) ) {
 			die("This pipeline is currently only compatible with BWA-MEM!");
 		}
 
+		# type of flowcell (for markduplicates)
+		unless (defined($tool_data->{flowcell})) {
+			print "tool_config: Option flowcell must be either random or patterned, defaulting to random\n";
+			$tool_data->{flowcell} = 'random';
+		}
+
+		# fill in any missing parameters
 		if (
 			('Y' ne $tool_data->{bwa}->{parameters}->{merge}->{mark_dup}) && 
 			('N' ne $tool_data->{bwa}->{parameters}->{merge}->{mark_dup})
@@ -79,11 +92,51 @@ sub error_checking {
 			exts		=> [qw(.fa .fa.fai .dict)]
 		);
 
+		if ('emseq' eq $tool_data->{seq_type}) {
+			$is_ref_valid = validate_ref(
+				reference	=> $tool_data->{bwa}->{reference},
+				pipeline	=> 'bwa',
+				exts		=> [qw(.fa.bwameth.c2t .fa.bwameth.c2t.amb .fa.bwameth.c2t.ann .fa.bwameth.c2t.bwt .fa.bwameth.c2t.pac .fa.bwameth.c2t.sa)]
+			);	
+		} else {
+			$is_ref_valid = validate_ref(
+				reference	=> $tool_data->{bwa}->{reference},
+				pipeline	=> 'bwa',
+				exts		=> [qw(.fa .fa.amb .fa.ann .fa.bwt .fa.pac .fa.sa)]
+			);
+		}
+	}
+
+	# QC pipeline (gatk/picard functions)
+	if ('qc' eq $pipeline) {
+
+		if (!defined($tool_data->{reference})) { die("Must supply path to reference genome!"); }
 		$is_ref_valid = validate_ref(
-			reference	=> $tool_data->{bwa}->{reference},
-			pipeline	=> 'bwa',
-			exts		=> [qw(.fa .fa.amb .fa.ann .fa.bwt .fa.pac .fa.sa)]
+			reference	=> $tool_data->{reference},
+			pipeline	=> 'gatk',
+			exts		=> [qw(.fa .dict .fa.fai)]
 		);
+
+		if ('dna' eq $data_type) {
+			if (!defined($tool_data->{intervals_bed}) & 
+				('wgs' ne $tool_data->{seq_type}) & ('emseq' ne $tool_data->{seq_type})) {
+				print "gatk_config: WARNING: no target intervals provided.\n";
+				print ">>If this is exome data, target regions are recommended!\n";
+			}
+
+			if ('emseq' eq $tool_data->{seq_type}) {
+
+				if ( (defined($tool_data->{targets_bed})) & (!defined($tool_data->{baits_bed})) ) {
+					$tool_data->{baits_bed} = $tool_data->{targets_bed};
+					print "Only one of target/bait intervals files provided; using for both settings.\n";
+				} elsif ( (!defined($tool_data->{targets_bed})) & (defined($tool_data->{baits_bed})) ) {
+					$tool_data->{targets_bed} = $tool_data->{baits_bed};
+					print "Only one of target/bait intervals files provided; using for both settings.\n";
+				} elsif ( (!defined($tool_data->{targets_bed})) & (!defined($tool_data->{baits_bed})) ) {
+					die("Must provide path to target regions and/or baits bed file(s).");
+				}
+			}
+		}
 	}
 
 	# GATK (indel realignment/recalibration + HaplotypeCaller + MuTect + MuTect2 + GATK-CNV)
@@ -212,6 +265,12 @@ sub error_checking {
 	if ('star' eq $pipeline) {
 		if (!defined($tool_data->{star_reference_dir}))  {
 			die("star_config: Must supply path to reference genome directory!");
+		}
+
+		# type of flowcell (for markduplicates)
+		unless (defined($tool_data->{flowcell})) {
+			print "tool_config: Option flowcell must be either random or patterned, defaulting to random\n";
+			$tool_data->{flowcell} = 'random';
 		}
 	}
 
