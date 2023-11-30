@@ -346,7 +346,10 @@ sub main {
 	# set tools and versions
 	my $bwa_version	= 'bwa/' . $tool_data->{bwa_version};
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
-	my $python	= 'python3/' . $tool_data->{python3_version};
+	my $python;
+	if ('emseq' eq $tool_data->{seq_type}) {
+		$python	= 'python3/' . $tool_data->{python3_version};
+		}
 	my $picard	= 'picard/' . $tool_data->{picard_version};
 	my $sambamba	= 'sambamba/' . $tool_data->{sambamba_version};
 
@@ -728,7 +731,7 @@ sub main {
 						output		=> $smp_output,
 						tmp_dir		=> $tmp_directory,
 						java_mem	=> $parameters->{merge}->{java_mem}->{$type},
-						flowcell_type	=> $tool_data->{flowcell})
+						flowcell_type	=> $tool_data->{flowcell}
 						);
 					}
 				}
