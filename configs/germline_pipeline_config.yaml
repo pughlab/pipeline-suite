@@ -34,6 +34,7 @@ svict_version: 1.0.1
 mavis_version: 2.2.5
 cpsr_version: 0.6.1
 pcgr_version: 0.9.1
+erds_path: /cluster/projects/pughlab/bin/ERDS/v1.1/erds_pipeline.pl
 vcf2maf_version: 1.6.17 
 r_version: 4.1.0
 # tool specific parameters
@@ -169,7 +170,7 @@ annotate:
     mem: 16G
     time: '12:00:00'
 mutect:
-    run: Y
+    run: N
     parameters:
         mutect:
             java_mem: 11g
@@ -184,7 +185,7 @@ mutect:
             mem: 4G
             time: '24:00:00'
 mutect2:
-    run: Y
+    run: N
     parameters:
         mutect:
             java_mem: 3g
@@ -208,7 +209,7 @@ manta:
             mem: 8G
             time: '24:00:00'
 strelka:
-    run: Y
+    run: N
     parameters:
         strelka:
             mem: 8G
@@ -222,7 +223,7 @@ strelka:
             mem: 4G
             time: '96:00:00'
 varscan:
-    run: Y
+    run: N
     parameters:
         varscan:
             java_mem: 3g
@@ -237,7 +238,7 @@ varscan:
             mem: 4G
             time: '24:00:00'
 vardict:
-    run: Y
+    run: N
     intervals: /cluster/projects/pughlab/references/intervals/whole_genome_intervals/hg38_wgs_intervals_for_vardict_no_centromere.txt # only for WGS
     parameters:
         vardict:
@@ -294,6 +295,12 @@ delly:
         filter:
             mem: 2G
             time: '12:00:00'
+erds:
+    run: N
+    parameters:
+        erds:
+            mem: 22G
+            time: '48:00:00'
 svict:
     run: N # only for ctDNA (targeted panel)
     parameters:

@@ -192,7 +192,7 @@ gene.by.patient <- reshape(
 	timevar = 'ID',
 	idvar = c('SYMBOL','ENTREZID','ENSEMBL')
 	);
-colnames(gene.by.patient) <- gsub('x.','',colnames(gene.by.patient));
+colnames(gene.by.patient) <- gsub('CN.','',colnames(gene.by.patient));
 
 cn.data.annotated <- merge(
 	gene.annotation,

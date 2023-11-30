@@ -93,7 +93,8 @@ sub main {
 	my $run_script;
 	my ($fastqc_run_id, $bwa_run_id, $gatk_run_id, $qc_run_id, $coverage_run_id, $hc_run_id);
 	my ($strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id, $vardict_run_id);
-	my ($delly_run_id, $manta_run_id, $gatk_cnv_run_id, $svict_run_id, $mavis_run_id, $report_run_id);
+	my ($delly_run_id, $manta_run_id, $gatk_cnv_run_id, $svict_run_id);
+	my ($hc_run_id1, $erds_run_id, $mavis_run_id, $report_run_id);
 
 	my (@step1_job_ids, @step2_job_ids, @step3_job_ids, @step4_job_ids, @job_ids);
 	my $current_dependencies = '';
@@ -107,6 +108,7 @@ sub main {
 	my $coverage_directory	= join('/', $output_directory, 'BAMQC', 'Coverage');
 	my $hc_directory	= join('/', $output_directory, 'HaplotypeCaller');
 	my $strelka_directory	= join('/', $output_directory, 'Strelka');
+	my $erds_directory	= join('/', $output_directory, 'ERDS');
 	my $manta_directory	= join('/', $output_directory, 'Manta');
 	my $mutect_directory	= join('/', $output_directory, 'MuTect');
 	my $mutect2_directory	= join('/', $output_directory, 'MuTect2');
@@ -132,6 +134,7 @@ sub main {
 		'delly'	=> defined($tool_data->{delly}->{run}) ? $tool_data->{delly}->{run} : 'N',
 		'manta'	=> defined($tool_data->{manta}->{run}) ? $tool_data->{manta}->{run} : 'N',
 		'svict'	=> defined($tool_data->{svict}->{run}) ? $tool_data->{svict}->{run} : 'N',
+		'erds'	=> defined($tool_data->{erds}->{run}) ? $tool_data->{erds}->{run} : 'N',
 		'mavis'	=> defined($tool_data->{mavis}->{run}) ? $tool_data->{mavis}->{run} : 'N'
 		);
 
@@ -151,7 +154,7 @@ sub main {
 		$args{step4} = 1;
 		}
 
-	# Should pre-processing (alignment + GATK indel realignment/recalibration + QC) be performed?
+	# Should pre-processing (fastqc, alignment + GATK indel realignment/recalibration) be performed?
 	if ($args{step1}) {
 
 		## run FASTQC pipeline
@@ -497,6 +500,8 @@ sub main {
 				push @step3_job_ids, $hc_run_id;
 				push @job_ids, $hc_run_id;
 				}
+
+			$hc_run_id1 = $hc_run_id;
 
 			# next step will run Genotype GVCFs, and filter final output
 			$hc_command = join(' ',
@@ -876,7 +881,7 @@ sub main {
 				}
 			}
 
-		## GATK-CNV pipeline
+		## GATK gCNV pipeline
 		if ('Y' eq $tool_set{'gatk_cnv'}) {
 
 			unless(-e $gatk_cnv_directory) { make_path($gatk_cnv_directory); }
@@ -890,12 +895,12 @@ sub main {
 				);
 
 			# record command (in log directory) and then run job
-			print $log "Submitting job for gatk_cnv.pl\n";
+			print $log "Submitting job for gatk_gcnv.pl\n";
 			print $log "  COMMAND: $gatk_cnv_command\n\n";
 
 			$run_script = write_script(
 				log_dir	=> $log_directory,
-				name	=> 'pughlab_dna_pipeline__run_gatk_cnv',
+				name	=> 'pughlab_dna_pipeline__run_gatk_gcnv',
 				cmd	=> $gatk_cnv_command,
 				modules	=> ['perl'],
 				dependencies	=> $current_dependencies,
@@ -909,7 +914,7 @@ sub main {
 
 				$gatk_cnv_command .= " --dry-run";
 				`$gatk_cnv_command`;
-				$gatk_cnv_run_id = 'pughlab_dna_pipeline__run_gatk_cnv';
+				$gatk_cnv_run_id = 'pughlab_dna_pipeline__run_gatk_gcnv';
 
 				} else {
 
@@ -921,16 +926,65 @@ sub main {
 					log_file	=> $log
 					);
 
-				print $log ">>> GATK-CNV job id: $gatk_cnv_run_id\n\n";
+				print $log ">>> GATK gCNV job id: $gatk_cnv_run_id\n\n";
 				push @step3_job_ids, $gatk_cnv_run_id;
 				push @job_ids, $gatk_cnv_run_id;
 				}
 			}
 
-		# let's let the first bunch finish before starting the next set
-#		if (scalar(@step3_job_ids) > 4) {
-#			$current_dependencies = join(':', @step3_job_ids);
-#			}
+		## ERDS gCNV pipeline
+		if ('Y' eq $tool_set{'erds'}) {
+
+			unless(-e $erds_directory) { make_path($erds_directory); }
+
+			my $erds_command = join(' ',
+				"perl $cwd/scripts/erds_gcnv.pl",
+				"-o", $erds_directory,
+				"-t", $tool_config,
+				"-d", $gatk_output_yaml,
+				"-v", $hc_directory,
+				"-c", $args{cluster}
+				);
+
+			if ($args{cleanup}) {
+				$erds_command .= " --remove";
+				}
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for erds_gcnv.pl\n";
+			print $log "  COMMAND: $erds_command\n\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_erds',
+				cmd	=> $erds_command,
+				modules	=> ['perl'],
+				dependencies	=> join(':', $hc_run_id1, $current_dependencies),
+				mem		=> '256M',
+				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
+
+				$erds_run_id = 'pughlab_dna_pipeline__run_erds';
+
+				} else {
+
+				$erds_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> ERDS gCNV job id: $erds_run_id\n\n";
+				push @step3_job_ids, $erds_run_id;
+				push @job_ids, $erds_run_id;
+				}
+			}
 
 		## SViCT pipeline
 		if ('Y' eq $tool_set{'svict'}) {
@@ -982,7 +1036,7 @@ sub main {
 					);
 
 				print $log ">>> SViCT job id: $svict_run_id\n\n";
-				push @step4_job_ids, $svict_run_id;
+				push @step3_job_ids, $svict_run_id;
 				push @job_ids, $svict_run_id;
 				}
 			}
@@ -1038,16 +1092,13 @@ sub main {
 					);
 
 				print $log ">>> Delly job id: $delly_run_id\n\n";
-				push @step4_job_ids, $delly_run_id;
+				push @step3_job_ids, $delly_run_id;
 				push @job_ids, $delly_run_id;
 				}
 			}
 
 		# let's let the first bunch finish before starting the next set
-		push @step3_job_ids, @step4_job_ids;
-		if (scalar(@step4_job_ids) > 4) {
-			$current_dependencies = join(':', @step4_job_ids);
-			} elsif (scalar(@step3_job_ids) > 4) {
+		if (scalar(@step3_job_ids) > 4) {
 			$current_dependencies = join(':', @step3_job_ids);
 			}
 

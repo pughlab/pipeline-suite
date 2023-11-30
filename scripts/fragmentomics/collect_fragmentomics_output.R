@@ -52,17 +52,18 @@ setwd(arguments$directory);
 
 ### READ DATA ######################################################################################
 # find data files
-score.files <- list.files(pattern = 'score.txt', recursive = TRUE);
-insertsize.files <- list.files(pattern = 'picard.txt', recursive = TRUE);
-fs.ratio.files <- list.files(pattern = '5Mb_bins.txt', recursive = TRUE);
-nucleosome.files <- list.files(pattern = 'peak_distance.txt', recursive = TRUE);
+score.files		<- list.files(pattern = 'score.txt', recursive = TRUE);
+insertsize.files	<- list.files(pattern = 'picard.txt', recursive = TRUE);
+fs.ratio.files		<- list.files(pattern = '5Mb_bins.txt', recursive = TRUE);
+nucleosome.files	<- list.files(pattern = 'peak_distance.txt', recursive = TRUE);
+griffin.files		<- list.files(pattern = 'all_sites.coverage.txt', recursive = TRUE);
 # motifs = *_motifs.txt, *_raw.txt
-motif.files <- list.files(pattern = 'motifs.txt', recursive = TRUE);
+motif.files		<- list.files(pattern = 'motifs.txt', recursive = TRUE);
 # bkpts = *_count.txt, *_frequency.txt, *_ratio.txt
-breakpoint.files <- list.files(pattern = 'frequency.txt', recursive = TRUE);
+breakpoint.files	<- list.files(pattern = 'frequency.txt', recursive = TRUE);
 # dinus = *_len150_contexts.txt, *_len167_contexts.txt (dinuc x position)
-dinucleotide.long = list.files(pattern = 'len167_contexts.txt', recursive = TRUE);
-dinucleotide.short = list.files(pattern = 'len150_contexts.txt', recursive = TRUE);
+dinucleotide.long	<- list.files(pattern = 'len167_contexts.txt', recursive = TRUE);
+dinucleotide.short	<- list.files(pattern = 'len150_contexts.txt', recursive = TRUE);
 
 # read in fragment scores
 if (length(score.files) > 0) {
@@ -120,6 +121,24 @@ if (length(nucleosome.files) > 0) {
 			}
 		return(tmp);
 		}));
+	}
+
+# read in nucleosome accessibility data
+if (length(griffin.files) > 0) {
+	griffin.data <- do.call(rbind, lapply(griffin.files, function(i) {
+		tmp <- read.delim(i);
+		type <- if (grepl('TFBS', i)) { 
+			'TFBS' } else if (grepl('DHS', i)) { 
+			'DHS' } else if (grepl('TCGA', i)) { 
+			'TCGA' } else if (grepl('housekeeping', i)) {
+			'housekeeping' } else { 'unknown' };
+		tmp$site_type <- type;
+		return(tmp);
+		}));
+
+	if (any(grepl('downsample', griffin.data$sample))) {
+		griffin.data$sample <- gsub('_downsample','',griffin.data$sample);
+		}
 	}
 
 # read in end motif scores
@@ -227,6 +246,33 @@ if (length(fs.ratio.files) > 0) {
 		timevar = 'sample_id'
 		);
 	colnames(ratio.data.wide) <- gsub('combined_centered.','',colnames(ratio.data.wide));
+	}
+
+## format griffin data
+if (length(griffin.files) > 0) {
+
+	# select only 1 entry per site
+	if (length(unique(griffin.data$GC_correction)) == 2) {
+		griffin.data <- griffin.data[which(griffin.data$GC_correction == 'GC_corrected'),];
+		}
+	colnames(griffin.data) <- sub('sample', 'Sample', colnames(griffin.data));
+
+	# find distance fields	
+	distance.fields <- colnames(griffin.data)[grepl('X',colnames(griffin.data))];
+
+	# reshape data
+	griffin.long <- reshape(
+		griffin.data[,c(distance.fields,'Sample','site_name','site_type')],
+		direction = 'long',
+		varying = list(1:length(distance.fields)),
+		v.names = 'Coverage',
+		timevar = 'Position',
+		times = as.numeric(gsub('X','', gsub('\\.','-',distance.fields)))
+		);
+
+	griffin.long <- griffin.long[,1:5];
+	griffin.long <- griffin.long[order(griffin.long$Sample, griffin.long$site_type,
+		griffin.long$site_name, griffin.long$Position),];
 	}
 
 ## format end motif frequencies
@@ -349,6 +395,18 @@ if (exists('nucleosome.data')) {
 	write.table(
 		nucleosome.data[,c('Sample','distance',paste0('chr',1:22))],
 		file = generate.filename(arguments$project, 'nucleosome_peak_distances', 'tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+	}
+
+# save nucleosome accessibility data
+if (exists('griffin.long')) {
+
+	write.table(
+		griffin.long,
+		file = generate.filename(arguments$project, 'nucleosome_accessibility_distances', 'tsv'),
 		row.names = FALSE,
 		col.names = TRUE,
 		sep = '\t'
