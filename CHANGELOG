@@ -1,3 +1,10 @@
+2023-11-30: PughLab pipeline-suite (version 0.9.5);
+- UPDATE: added ERDS (germine CNV caller) to pughlab_dnaseq_germline_pipeline.pl 
+- added griffin output to collect_fragmentomics_output.R
+- added cleanup step to pughlab_fragmentomics_pipeline.pl
+- added example config for emseq pipeline (emseq_pipeline_config.yaml)
+- minor updates to ERDS (cleanup and collection steps)
+
 2023-11-29.2: PughLab pipeline-suite (version 0.9.4);
 - NEW: initial addition of EM-Seq pipeline (wip)
         - pughlab_emseq_pipeline.pl to run the full EM-Seq pipeline (wip)
