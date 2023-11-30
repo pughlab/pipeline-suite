@@ -209,6 +209,9 @@ sub main {
 			unless(-e $sample_directory) { make_path($sample_directory); }
 
 			$cleanup_cmd .= "\nrm -rf $sample_directory/rc/;";
+			$cleanup_cmd .= "\nrm -rf $sample_directory/cnv/;";
+			$cleanup_cmd .= "\nrm -rf $sample_directory/cnv_1000/;";
+			$cleanup_cmd .= "\nrm -rf $sample_directory/script/;";
 
 			# find genotyped VCF
 			my @vcf = grep { /$sample/ } @haplotype_caller_files;
