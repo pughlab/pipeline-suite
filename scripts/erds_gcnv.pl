@@ -18,7 +18,7 @@ use IO::Handle;
 my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
-our ($reference, $intervals_bed);
+our ($reference, $intervals_bed, $erds_path);
 
 ####################################################################################################
 # version	author		comment
@@ -54,7 +54,7 @@ sub get_erds_command {
 		);
 
 	my $erds_command = join(' ',
-		'perl ~/git/erds1.1/erds_pipeline.pl',
+		'perl', $erds_path, # ~/git/erds1.1/erds_pipeline.pl',
 		'-b', $args{bam},
 		'-v', $args{vcf},
 		'-r', $reference,
@@ -139,14 +139,16 @@ sub main {
 		}
 
 	print $log "\n    Output directory: $output_directory";
+	print $log "\n  VCFs used: $args{vcf_directory}";
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n---\n";
 
 	# set tools and versions
-#	my $r_version	= 'R/' . $tool_data->{r_version};
+	$erds_path	= $tool_data->{erds_path};
+	my $r_version	= 'R/' . $tool_data->{r_version};
 
 	# get user-specified tool parameters
-#	my $parameters = $tool_data->{erds}->{parameters};
+	my $parameters = $tool_data->{erds}->{parameters};
 
 	# get optional HPC group
 	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
@@ -163,7 +165,18 @@ sub main {
 		}
 
 	# find called germline SNPs
-	my @haplotype_caller_files = _get_files($args{vcf_directory}, 'recalibrated.vep.vcf.gz');
+	my @haplotype_caller_files;
+	if ($args{vcf_directory} =~ m/VCF2MAF/) {
+		@haplotype_caller_files = _get_files($args{vcf_directory}, 'recalibrated.vep.vcf.gz');
+		} elsif ($args{vcf_directory} =~ m/HaplotypeCaller$/) {
+		@haplotype_caller_files = _get_files($args{vcf_directory}, 'HaplotypeCaller.g.vcf.gz');
+		} else {
+		@haplotype_caller_files = _get_files($args{vcf_directory}, 'vcf.gz');
+		}
+
+	if (scalar(@haplotype_caller_files) == 0) {
+		die('No VCF files found; ensure these are bgzipped (vcf.gz)');
+		}
 
 	# organize directory structure
 	foreach my $patient (sort keys %{$smp_data}) {
@@ -243,8 +256,8 @@ sub main {
 					name	=> 'run_erds_' . $sample,
 					cmd	=> $erds_command,
 					modules	=> ['perl'],
-					max_time	=> '24:00:00',
-					mem		=> '12G',
+					max_time	=> $parameters->{erds}->{time},
+					mem		=> $parameters->{erds}->{mem},
 					hpc_driver	=> $args{hpc_driver},
 					extra_args	=> [$hpc_group]
 					);
@@ -329,10 +342,10 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'combine_erds_output',
 			cmd	=> $collect_output,
-			modules	=> ['R'],
+			modules	=> [$r_version],
 			dependencies	=> join(':', @all_jobs),
 			max_time	=> '12:00:00',
-			mem		=> '8G',
+			mem		=> '4G',
 			hpc_driver	=> $args{hpc_driver},
 			extra_args	=> [$hpc_group]
 			);
