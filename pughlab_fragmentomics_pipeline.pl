@@ -889,6 +889,10 @@ sub main {
 		unless(-e $patient_directory) { make_path($patient_directory); }
 		unless(-e $tmp_directory) { make_path($tmp_directory); }
 
+		my (@final_outputs, @patient_jobs);
+
+		my $cleanup_cmd = "  rm -rf $tmp_directory;";
+
 		# process each sample provided for this patient
 		foreach my $tumour (@tumour_ids) {
 
@@ -960,6 +964,9 @@ sub main {
 				$tumour_stem = $tumour . '_downsample';
 				$tumour_bam = $downsampled_bam;
 
+				# add to cleanup
+				$cleanup_cmd .= "\n  rm $downsampled_bam;";
+
 				# check if this should be run
 				if ('Y' eq missing_file($downsampled_bam)) {
 
@@ -985,6 +992,7 @@ sub main {
 						log_file	=> $log
 						);
 
+					push @patient_jobs, $downsample_run_id;
 					push @all_jobs, $downsample_run_id;
 					} else {
 					print $log "\n >> Skipping Downsample step because this has already been completed!\n";
@@ -1014,6 +1022,10 @@ sub main {
 					$tumour_stem . '_q30.bedpe'
 					);
 
+				# add to cleanup
+				$cleanup_cmd .= "\n  rm $deduped_bedpe;";
+				$cleanup_cmd .= "\n  rm $deduped_bedpe_hc;";
+
 				# check if this should be run
 				if ('Y' eq missing_file($deduped_bedpe_hc)) {
 
@@ -1040,6 +1052,7 @@ sub main {
 						log_file	=> $log
 						);
 
+					push @patient_jobs, $dedup_run_id;
 					push @all_jobs, $dedup_run_id;
 					} else {
 					print $log " >> Skipping deduplicate/bedpe step because this has already been completed!\n";
@@ -1086,10 +1099,13 @@ sub main {
 						log_file	=> $log
 						);
 
+					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
 					} else {
 					print $log " >> Skipping DELFI because this has already been completed!\n";
 					}
+
+				push @final_outputs, $ratio_output;
 				}
 
 
@@ -1133,10 +1149,13 @@ sub main {
 						log_file	=> $log
 						);
 
+					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
 					} else {
 					print $log " >> Skipping VESSIES score because this has already been completed!\n";
 					}
+
+				push @final_outputs, $score_output;
 				}
 
 
@@ -1182,15 +1201,18 @@ sub main {
 						log_file	=> $log
 						);
 
+					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
 					} else {
 					print $log " >> Skipping InsertSizes because this has already been completed!\n";
 					}
+
+				push @final_outputs, $insert_sizes;
 				}
 
 
 			### Griffin Profiling
-			my ($griffin_map_dir,$griffin_gc_dir,$map_bias_out,$gc_bias_out);
+			my ($griffin_map_dir, $griffin_gc_dir, $map_bias_out, $gc_bias_out);
 
 			if ('Y' eq $tool_set{'griffin'}) {
 
@@ -1251,6 +1273,7 @@ sub main {
 						log_file	=> $log
 						);
 
+					push @patient_jobs, $griffin_id;
 					push @all_jobs, $griffin_id;
 					} else {
 					print $log " >> Skipping Griffin GC Correction because this has already been completed!\n";
@@ -1306,10 +1329,13 @@ sub main {
 						log_file	=> $log
 						);
 
-					push @all_jobs, $griffin_id;
+					push @patient_jobs, $run_id;
+					push @all_jobs, $run_id;
 					} else {
 					print $log " >> Skipping Griffin TFBS Coverage because this has already been completed!\n";
 					}
+
+				push @final_outputs, $tfbs_output;
 				}
 
 			# run Griffin DHS profiling
@@ -1361,10 +1387,13 @@ sub main {
 						log_file	=> $log
 						);
 
-					push @all_jobs, $griffin_id;
+					push @patient_jobs, $run_id;
+					push @all_jobs, $run_id;
 					} else {
 					print $log " >> Skipping Griffin DHS Coverage because this has already been completed!\n";
 					}
+
+				push @final_outputs, $dhs_output;
 				}
 
 			# run Griffin TCGA tumour type profiling
@@ -1416,10 +1445,13 @@ sub main {
 						log_file	=> $log
 						);
 
-					push @all_jobs, $griffin_id;
+					push @patient_jobs, $run_id;
+					push @all_jobs, $run_id;
 					} else {
 					print $log " >> Skipping Griffin TCGA Coverage because this has already been completed!\n";
 					}
+
+				push @final_outputs, $tcga_output;
 				}
 
 			# run Griffin across housekeeping sites
@@ -1471,10 +1503,13 @@ sub main {
 						log_file	=> $log
 						);
 
-					push @all_jobs, $griffin_id;
+					push @patient_jobs, $run_id;
+					push @all_jobs, $run_id;
 					} else {
 					print $log " >> Skipping Griffin housekeeping Coverage because this has already been completed!\n";
 					}
+
+				push @final_outputs, $hk_output;
 				}
 
 
@@ -1518,10 +1553,13 @@ sub main {
 						log_file	=> $log
 						);
 
+					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
 					} else {
 					print $log " >> Skipping NucleosomePositioning because this has already been completed!\n";
 					}
+
+				push @final_outputs, $peaks_output;
 				}
 
 
@@ -1565,10 +1603,13 @@ sub main {
 						log_file	=> $log
 						);
 
+					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
 					} else {
 					print $log " >> Skipping EndMotif profiling because this has already been completed!\n";
 					}
+
+				push @final_outputs, $motifs_output;
 				}
 
 
@@ -1612,10 +1653,13 @@ sub main {
 						log_file	=> $log
 						);
 
+					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
 					} else {
 					print $log " >> Skipping Breakpoint profiling because this has already been completed!\n";
 					}
+
+				push @final_outputs, $breakpoint_output;
 				}
 
 
@@ -1663,6 +1707,10 @@ sub main {
 					$required_bedpe = $short_bedpe;
 					}
 
+				# add to cleanup
+				$cleanup_cmd .= "\n  rm $normal_bedpe;";
+				$cleanup_cmd .= "\n  rm $short_bedpe;";
+
 				# check if this should be run
 				if ('Y' eq missing_file($required_bedpe)) {
 
@@ -1689,6 +1737,7 @@ sub main {
 						log_file	=> $log
 						);
 
+					push @patient_jobs, $dedup_run_id;
 					push @all_jobs, $dedup_run_id;
 					} else {
 					print $log " >> Skipping deduplicate/bedpe step because this has already been completed!\n";
@@ -1755,42 +1804,85 @@ sub main {
 						log_file	=> $log
 						);
 
+					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
 					} else {
 					print $log " >> Skipping Dinucleotide profiling because this has already been completed!\n";
 					}
+
+				push @final_outputs, $required_out;
 				}
 			}
+
+		# should intermediate files be removed
+		# run per patient
+		if ($args{del_intermediates}) {
+
+			print $log ">> Saving command to clean up temporary/intermediate files...\n";
+
+			# make sure final output exists before removing intermediate files!
+			$cleanup_cmd = join("\n",
+				"if [ -s " . join(" ] && [ -s ", @final_outputs) . " ]; then",
+				"$cleanup_cmd",
+				"else",
+				'  echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
+				"fi"
+				);
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'run_cleanup_' . $patient,
+				cmd	=> $cleanup_cmd,
+				dependencies	=> join(':', @patient_jobs),
+				mem		=> '256M',
+				hpc_driver	=> $args{hpc_driver},
+				kill_on_error	=> 0,
+				extra_args	=> [$hpc_group]
+				);
+
+			$run_id = submit_job(
+				jobname		=> 'run_cleanup_' . $patient,
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+			}
+
+		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
 		}
 
 	# collate results
-	my $collect_output = join(' ',
-		"Rscript $cwd/scripts/fragmentomics/collect_fragmentomics_output.R",
-		'-d', $output_directory,
-		'-p', $tool_data->{project_name}
-		);
+	if (scalar(@all_jobs) == 0) {
 
-	$run_script = write_script(
-		log_dir	=> $log_directory,
-		name	=> 'collect_fragmentomics_outputs',
-		cmd	=> $collect_output,
-		modules	=> ['R/4.1.0'],
-		dependencies	=> join(':', @all_jobs),
-		mem		=> '6G',
-		max_time	=> '24:00:00',
-		hpc_driver	=> $args{hpc_driver},
-		extra_args	=> [$hpc_group]
-		);
+		my $collect_output = join(' ',
+			"Rscript $cwd/scripts/fragmentomics/collect_fragmentomics_output.R",
+			'-d', $output_directory,
+			'-p', $tool_data->{project_name}
+			);
 
-	$run_id = submit_job(
-		jobname		=> 'collect_fragmentomics_outputs',
-		shell_command	=> $run_script,
-		hpc_driver	=> $args{hpc_driver},
-		dry_run		=> $args{dry_run},
-		log_file	=> $log
-		);
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'collect_fragmentomics_outputs',
+			cmd	=> $collect_output,
+			modules	=> ['R/4.1.0'],
+			dependencies	=> join(':', @all_jobs),
+			mem		=> '6G',
+			max_time	=> '24:00:00',
+			hpc_driver	=> $args{hpc_driver},
+			extra_args	=> [$hpc_group]
+			);
 
-	push @all_jobs, $run_id;
+		$run_id = submit_job(
+			jobname		=> 'collect_fragmentomics_outputs',
+			shell_command	=> $run_script,
+			hpc_driver	=> $args{hpc_driver},
+			dry_run		=> $args{dry_run},
+			log_file	=> $log
+			);
+
+		push @all_jobs, $run_id;
+		}
 
 	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
 	# collect job metrics (exit status, mem, run time)
@@ -1844,7 +1936,7 @@ sub main {
 # declare variables
 my ($tool_config, $data_config, $output_directory);
 my $hpc_driver = 'slurm';
-my ($dry_run, $help, $no_wait);
+my ($dry_run, $help, $no_wait, $remove_intermediates);
 
 # get command line arguments
 GetOptions(
@@ -1853,6 +1945,7 @@ GetOptions(
 	't|tool=s'	=> \$tool_config,
 	'o|out_dir=s'	=> \$output_directory,
 	'c|cluster=s'	=> \$hpc_driver,
+	'remove'	=> \$remove_intermediates,
 	'dry-run'	=> \$dry_run,
 	'no-wait'	=> \$no_wait
 	);
@@ -1865,6 +1958,7 @@ if ($help) {
 		"\t--tool|-t\t<string> tool config (yaml format)",
 		"\t--out_dir|-o\t<string> path to output directory",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
+		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
 		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
 		"\t--no-wait\t<boolean> should we exit after job submission (true) or wait until all jobs have completed (false)? (default: false)"
 		);
@@ -1883,6 +1977,7 @@ main(
 	data_config		=> $data_config,
 	output_directory	=> $output_directory,
 	hpc_driver		=> $hpc_driver,
+	del_intermediates	=> $remove_intermediates,
 	dry_run			=> $dry_run,
 	no_wait			=> $no_wait
 	);

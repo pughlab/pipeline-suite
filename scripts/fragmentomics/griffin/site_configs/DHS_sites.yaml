@@ -15,4 +15,3 @@ site_files:
   Stromal_B: /cluster/projects/pughlab/bin/Griffin/sites/DHS/Stromal_B_DHS.top_10000.txt
   Tissue_invariant: /cluster/projects/pughlab/bin/Griffin/sites/DHS/Tissue_invariant_DHS.top_10000.txt
   Vascular_endothelial: /cluster/projects/pughlab/bin/Griffin/sites/DHS/Vascular_endothelial_DHS.top_10000.txt
-  stop: /cluster/projects/pughlab/bin/Griffin/stop.txt
