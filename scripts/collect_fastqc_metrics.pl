@@ -215,7 +215,8 @@ sub main{
 					modules	=> [$fastqc],
 					max_time	=> $parameters->{fastqc}->{time},
 					mem		=> $parameters->{fastqc}->{mem},
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
@@ -252,7 +253,8 @@ sub main{
 					name	=> 'run_md5sums_' . $sample,
 					cmd	=> $md5_cmd,
 					max_time	=> '24:00:00',
-					hpc_driver	=> $args{hpc_driver}
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
 					);
 
 				$run_id = submit_job(
