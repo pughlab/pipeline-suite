@@ -490,23 +490,26 @@ sub main {
 		# get normal stats (if present)
 		my $normal_insert_size = 152; # expected read length + 1
 		my $normal = undef;
+
 		if (scalar(@normal_ids) > 0) {
 			$normal = $normal_ids[0];
-			if (defined($bam_metrics_file)) {
-				$normal_insert_size = max(
-					$normal_insert_size,
-					get_median_insert_size_command(
-						input 	=> $bam_metrics_file,
-						sample	=> $normal
-						)
-					);
-				} else {
-				$normal_insert_size = max(
-					$normal_insert_size,
-					get_mean_insert_size_command(
-						input => $smp_data->{$patient}->{normal}->{$normal}
-						)
-					);
+			unless($args{dry_run}) {
+				if (defined($bam_metrics_file)) {
+					$normal_insert_size = max(
+						$normal_insert_size,
+						get_median_insert_size_command(
+							input 	=> $bam_metrics_file,
+							sample	=> $normal
+							)
+						);
+					} else {
+					$normal_insert_size = max(
+						$normal_insert_size,
+						get_mean_insert_size_command(
+							input => $smp_data->{$patient}->{normal}->{$normal}
+							)
+						);
+					}
 				}
 			}
 
@@ -534,10 +537,10 @@ sub main {
 			# generate necessary samples.tsv
 			my $sample_sheet = join('/', $sample_directory, 'pindel_config.txt');
 
-			if ('Y' eq missing_file($sample_sheet)) {
-				open(my $fh, '>', $sample_sheet) or die "Cannot open '$sample_sheet' !";
+			open(my $fh, '>', $sample_sheet) or die "Cannot open '$sample_sheet' !";
 
-				my $tumor_insert_size = 152; # expected read length + 1
+			my $tumor_insert_size = 152; # expected read length + 1
+			unless($args{dry_run}) {
 				if (defined($bam_metrics_file)) {
 					$tumor_insert_size = max(
 						$tumor_insert_size,
@@ -554,17 +557,17 @@ sub main {
 							)
 						);
 					}
-
-				print $fh "$smp_data->{$patient}->{tumour}->{$sample}\t$tumor_insert_size\t$sample\n";
-
-				# add the normal (if present)
-				if (scalar(@normal_ids) > 0) {
-					my $normal_bam = $smp_data->{$patient}->{normal}->{$normal};
-					print $fh "$normal_bam\t$normal_insert_size\t$normal\n";
-					}
-
-				close $fh;
 				}
+
+			print $fh "$smp_data->{$patient}->{tumour}->{$sample}\t$tumor_insert_size\t$sample\n";
+
+			# add the normal (if present)
+			if (scalar(@normal_ids) > 0) {
+				my $normal_bam = $smp_data->{$patient}->{normal}->{$normal};
+				print $fh "$normal_bam\t$normal_insert_size\t$normal\n";
+				}
+
+			close $fh;
 
 			# indicate output stem
 			my $output_stem = join('/', $tmp_directory, $sample . '_pindel');
