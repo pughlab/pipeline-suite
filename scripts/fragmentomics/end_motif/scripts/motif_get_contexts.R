@@ -53,9 +53,8 @@ concat <- lapply(reversed, function(x){paste(x, collapse = "")})
 fasta_3$V4 <- unlist(concat)
 fasta_3$V4 <- chartr("ATGC","TACG", fasta_3$V4)
 
-### Count the motifs
-fasta <- bind_rows(fasta_5, fasta_3)
-motif <- as.data.frame(table(fasta$V4))
+### Count the motifs (5')
+motif <- as.data.frame(table(fasta_5$V4))
 motif$frequency <- motif$Freq/sum(motif$Freq)
 colnames(motif) <- c("motif", "count", "frequency")
 
@@ -63,5 +62,18 @@ motif_raw <- motif[, c("motif", "count")]
 motif <- motif[, c("motif", "frequency")]
 
 ### Write file
-write.table(motif, file.path(outdir, paste0(id, "_motifs.txt")), sep = "\t", row.names = FALSE)
-write.table(motif_raw, file.path(outdir, paste0(id, "_raw.txt")), sep = "\t", row.names = FALSE)
+write.table(motif, file.path(outdir, paste0(id, "_5prime_motifs.txt")), sep = "\t", row.names = FALSE)
+write.table(motif_raw, file.path(outdir, paste0(id, "_5prime_raw.txt")), sep = "\t", row.names = FALSE)
+
+
+### Count the motifs (3')
+motif <- as.data.frame(table(fasta_3$V4))
+motif$frequency <- motif$Freq/sum(motif$Freq)
+colnames(motif) <- c("motif", "count", "frequency")
+
+motif_raw <- motif[, c("motif", "count")]
+motif <- motif[, c("motif", "frequency")]
+
+### Write file
+write.table(motif, file.path(outdir, paste0(id, "_3prime_motifs.txt")), sep = "\t", row.names = FALSE)
+write.table(motif_raw, file.path(outdir, paste0(id, "_3prime_raw.txt")), sep = "\t", row.names = FALSE)
