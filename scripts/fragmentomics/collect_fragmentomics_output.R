@@ -58,7 +58,8 @@ fs.ratio.files		<- list.files(pattern = '5Mb_bins.txt', recursive = TRUE);
 nucleosome.files	<- list.files(pattern = 'peak_distance.txt', recursive = TRUE);
 griffin.files		<- list.files(pattern = 'all_sites.coverage.txt', recursive = TRUE);
 # motifs = *_motifs.txt, *_raw.txt
-motif.files		<- list.files(pattern = 'motifs.txt', recursive = TRUE);
+motif5.files		<- list.files(pattern = '5prime_motifs.txt', recursive = TRUE);
+motif3.files		<- list.files(pattern = '3prime_motifs.txt', recursive = TRUE);
 # bkpts = *_count.txt, *_frequency.txt, *_ratio.txt
 breakpoint.files	<- list.files(pattern = 'frequency.txt', recursive = TRUE);
 # dinus = *_len150_contexts.txt, *_len167_contexts.txt (dinuc x position)
@@ -142,8 +143,18 @@ if (length(griffin.files) > 0) {
 	}
 
 # read in end motif scores
-if (length(motif.files) > 0) {
-	motif.data <- do.call(rbind, lapply(motif.files, function(i) { 
+if (length(motif5.files) > 0) {
+	motif5.data <- do.call(rbind, lapply(motif5.files, function(i) { 
+		tmp <- read.delim(i);
+		tmp$Sample <- sub('_motifs.txt','',basename(i));
+		if (grepl('downsample', basename(i))) {
+			tmp$Sample <- gsub('_downsample','',tmp$Sample);
+			}
+		return(tmp);
+		}));
+	}
+if (length(motif3.files) > 0) {
+	motif3.data <- do.call(rbind, lapply(motif3.files, function(i) { 
 		tmp <- read.delim(i);
 		tmp$Sample <- sub('_motifs.txt','',basename(i));
 		if (grepl('downsample', basename(i))) {
@@ -279,13 +290,22 @@ if (length(griffin.files) > 0) {
 if (length(motif.files) > 0) {
 
 	# reshape frequency data
-	motifs.wide <- reshape(
-		motif.data,
+	motifs5.wide <- reshape(
+		motif5.data,
 		direction = 'wide',
 		idvar = 'motif',
 		timevar = 'Sample'
 		);
-	colnames(motifs.wide) <- gsub('frequency.','',colnames(motifs.wide));
+	colnames(motifs5.wide) <- gsub('frequency.','',colnames(motifs5.wide));
+
+	# reshape frequency data
+	motifs3.wide <- reshape(
+		motif3.data,
+		direction = 'wide',
+		idvar = 'motif',
+		timevar = 'Sample'
+		);
+	colnames(motifs3.wide) <- gsub('frequency.','',colnames(motifs3.wide));
 	}
 
 ## format breakpoint nucleotide frequencies
@@ -414,11 +434,19 @@ if (exists('griffin.long')) {
 	}
 
 # save end-motif frequencies
-if (exists('motifs.wide')) {
+if (exists('motifs5.wide')) {
 
 	write.table(
-		motifs.wide,
-		file = generate.filename(arguments$project, 'endmotif_frequencies', 'tsv'),
+		motifs5.wide,
+		file = generate.filename(arguments$project, '5prime_endmotif_frequencies', 'tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+
+	write.table(
+		motifs3.wide,
+		file = generate.filename(arguments$project, '3prime_endmotif_frequencies', 'tsv'),
 		row.names = FALSE,
 		col.names = TRUE,
 		sep = '\t'
