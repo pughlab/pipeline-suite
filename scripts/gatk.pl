@@ -9,8 +9,9 @@ use Getopt::Std;
 use Getopt::Long;
 use File::Basename;
 use File::Path qw(make_path);
-use YAML qw(LoadFile);
 use List::Util qw(any);
+use YAML qw(LoadFile DumpFile);
+use Data::Dumper;
 use IO::Handle;
 
 my $cwd = dirname(__FILE__);
@@ -379,14 +380,14 @@ sub main {
 	if (defined($args{output_config})) {
 		$output_yaml = $args{output_config};
 		}
-	open (my $yaml, '>', $output_yaml) or die "Cannot open '$output_yaml' !";
-	print $yaml "---\n";
+
+	# initiate output yaml object
+	my $smp_data_out;
 
 	# process each patient in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
 		print $log "\nInitiating process for PATIENT: $patient";
-		print $yaml "$patient:\n";
 
 		# make a sample-specific directory
 		my $patient_directory = join('/', $output_directory, $patient);
@@ -556,8 +557,6 @@ sub main {
 			}
 
 		# Run per-sample steps (BQSR for DNA, all for RNA)
-		my (%tumours, %normals);
-
 		foreach my $sample (@samples) {
 
 			$run_id_sample = '';
@@ -780,8 +779,9 @@ sub main {
 				tmp_dir		=> $tmp_directory
 				);
 
-			if ('normal' eq $type) { $normals{$sample} = $recal_bam; }
-			if ('tumour' eq $type) { $tumours{$sample} = $recal_bam; } 
+			# add output file to list
+			if ('normal' eq $type) { $smp_data_out->{$patient}->{normal}->{$sample} = $recal_bam; }
+			if ('tumour' eq $type) { $smp_data_out->{$patient}->{tumour}->{$sample} = $recal_bam; }
 
 			# check if this should be run
 			if ('Y' eq missing_file($recal_bam . '.md5')) {
@@ -823,17 +823,6 @@ sub main {
 			push @final_outputs, $recal_bam;
 			}
 	
-		# and finally, add the final files to the output yaml
-		my $key;
-		if (scalar(@tumour_ids) > 0) {
-			print $yaml "    tumour:\n";
-			foreach $key (keys %tumours) { print $yaml "        $key: $tumours{$key}\n"; }
-			}
-		if (scalar(@normal_ids) > 0) {
-			print $yaml "    normal:\n";
-			foreach $key (keys %normals) { print $yaml "        $key: $normals{$key}\n"; }
-			}
-
 		# clean up/remove intermediate files
 		if ($args{del_intermediates}) {
 
@@ -876,6 +865,10 @@ sub main {
 		print $log "FINAL OUTPUT:\n  " . join("\n  ", @final_outputs) . "\n";
 		print $log "---\n";
 		}
+
+	# output final data config
+	local $YAML::Indent = 4;
+	DumpFile($output_yaml, $smp_data_out);
 
 	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
 	# collect job metrics (exit status, mem, run time)
@@ -922,8 +915,6 @@ sub main {
 		}
 
 	# finish up
-	close $yaml;
-
 	print $log "\nProgramming terminated successfully.\n\n";
 	close $log;
 	}
