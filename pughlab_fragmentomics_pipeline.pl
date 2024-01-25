@@ -1853,7 +1853,7 @@ sub main {
 		}
 
 	# collate results
-	if (scalar(@all_jobs) == 0) {
+	if (scalar(@all_jobs) > 0) {
 
 		my $collect_output = join(' ',
 			"Rscript $cwd/scripts/fragmentomics/collect_fragmentomics_output.R",

@@ -150,6 +150,7 @@ sub main {
 		);
 
 	print $log Dumper \%tool_set;
+	print $log "\n";
 
 	# indicate YAML files for processed BAMs
 	my $bwa_output_yaml = join('/', $bwa_directory, 'bwa_bam_config_' . $timestamp . '.yaml');
