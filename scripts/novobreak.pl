@@ -49,8 +49,8 @@ sub get_novobreak_command {
 	my $nb_command = "cd $args{out_dir}\n";
 
 	$nb_command .= join("\n",
-		"if [ -s $args{tumour_id}" . '_nb.out.md5]; then',
-		"  echo Intermediate output file: $args{tumour_id}" . '_nb.out.md5 already exists.',
+		"if [ -s $args{tumour_id}" . '_nb_kmer.out.md5 ]; then',
+		"  echo Intermediate output file: $args{tumour_id}" . '_nb_kmer.out.md5 already exists.',
 		"else",
 		"  echo 'Running novoBreak...'"
 		);
@@ -60,10 +60,10 @@ sub get_novobreak_command {
 		'-i', $args{tumour_bam},
 		'-c', $args{normal_bam},
 		'-r', $reference,
-		'-o', $args{tumour_id} . '_nb.out'
+		'-o', $args{tumour_id} . '_nb_kmer.out'
 		);
 
-	$nb_command .= "\n  md5sum $args{tumour_id}\_nb.out > $args{tumour_id}\_nb.out.md5";
+	$nb_command .= "\n  md5sum $args{tumour_id}\_nb\_kmer.out > $args{tumour_id}\_nb\_kmer.out.md5";
 
 	$nb_command .="\nfi";
 
@@ -79,12 +79,28 @@ sub get_group_by_reads_command {
 		);
 
 	my $group_command = join("\n",
-		"cd $args{directory}",
-		'if [ ! -s bp_reads.tsv ] && [ ! -s ssake.sam.md5 ]; then',
-		'  samtools bam2fq -1 read1.fq -2 read2.fq ../somaticreads.bam;',
+		"cd $args{directory}\n",
+		"echo 'Processing kmers...'",
+		'if [ ! -s somaticreads.srtnm.bam.md5 ]; then',
+		"  echo '>> sorting somaticreads.bam by query name...'",
+		'  samtools sort -T . -n -o somaticreads.srtnm.bam somaticreads.bam;',
+		'  md5sum somaticreads.srtnm.bam > somaticreads.srtnm.bam.md5;',
+		'  rm {somaticreads,germlinereads}.bam;',
+		'fi',
+		'if [ ! -s bam2fq.status ]; then',
+		"  echo '>> extracting reads from somaticreads.srtnm.bam...'",
+		'  samtools bam2fq -1 read1.fq -2 read2.fq somaticreads.srtnm.bam;',
+		"  echo 'samtools bam2fq COMPLETE' > bam2fq.status",
+		'fi',
+		'if [ ! -s bp_reads.tsv.md5 ]; then',
+		"  echo '>> extracting and sorting kmers...'",
 		'  group_bp_reads.pl ' . $args{nb_file} . ' read1.fq read2.fq > bp_reads.tsv;',
-		'  rm ../{somaticreads,germlinereads}.bam;',
-		'  rm read{1,2}.fq;',
+		'  md5sum bp_reads.tsv > bp_reads.tsv.md5',
+		'  if [ -s bp_reads.tsv.md5 ]; then',
+		"    rm somaticreads.srtnm.bam;",
+		'    rm read{1,2}.fq;',
+		"    rm $args{nb_file};",
+		'  fi',
 		'fi'
 		);
 
@@ -102,23 +118,31 @@ sub get_prep_ssake_command {
 	my $nb_output = $args{output_file};
 	my $cpu_count = $args{n_cpus} - 1;
 	my $part1_command = join("\n",
-		'  if [ -s bp_reads.tsv ] && [ ! -s ssake.sam.md5 ]; then',
-		'    cls=$(tail -1 bp_reads.tsv | cut -f1);',
-		'    rec=$(echo $cls/' . $args{n_cpus} . ' | bc);',
-		'    rec=$((rec+1));',
-		'    awk -v rec=$rec ' . "'{print" . ' > int($1/rec)".txt"' . "}' bp_reads.tsv;",
-		'    for file in *.txt; do',
-		'      run_ssake.pl $file > /dev/null &',
-		'    done',
-		'    wait',
-		"\n    awk 'length(\$0)>1' *.ssake.asm.out > ssake.fa;",
-		'    bwa mem -t ' . $args{n_cpus} . " -M $bwa_ref ssake.fa > ssake.sam;",
-		'    md5sum ssake.sam > ssake.sam.md5;',
-		'  fi',
-		'  if [ -s ssake.sam.md5 ]; then',
-		'    rm bp_reads.tsv;',
-		"    rm {0..$cpu_count}.txt*;",
-		'    rm ssake.fa;',
+		'  if [ -s bp_reads.tsv.md5 ] && [ ! -s ssake.sam.md5 ]; then',
+		"    echo 'Processing breakpoints...'",
+		'    if [ ! -s ssake.fa.md5 ]; then',
+		"      echo '>> converting kmers to fasta...'",
+		'      cls=$(tail -1 bp_reads.tsv | cut -f1);',
+		'      rec=$(echo $cls/' . $args{n_cpus} . ' | bc);',
+		'      rec=$((rec+1));',
+		'      awk -v rec=$rec ' . "'{print" . ' > int($1/rec)".txt"' . "}' bp_reads.tsv;",
+		'      for file in *.txt; do',
+		'        run_ssake.pl $file > /dev/null &',
+		'      done',
+		'      wait',
+		"\n      awk 'length(\$0)>1' *.ssake.asm.out > ssake.fa;",
+		'      md5sum ssake.fa > ssake.fa.md5;',
+		'    fi',
+		'    if [ ! -s ssake.sam.md5 ]; then',
+		"      echo '>> aligning fasta reads...'",
+		"      bwa mem -t $args{n_cpus} -M $bwa_ref ssake.fa > ssake.sam;",
+		'      md5sum ssake.sam > ssake.sam.md5;',
+		'      if [ -s ssake.sam.md5 ]; then',
+		'        rm bp_reads.tsv;',
+		"        rm {0..$cpu_count}.txt*;",
+		'        rm ssake.fa;',
+		'      fi',
+		'    fi',
 		'  fi'
 		);
 
@@ -139,10 +163,12 @@ sub get_infer_breakpoints_command {
 
 	my $part2_command = join("\n",
 		"  if [ ! -s ssake.pass.vcf ] && [ ! -s $nb_output.md5 ]; then",
+		"    echo '>> infer structural variants from ssake.sam ...'",
 		'    infer_sv.pl ssake.sam > ssake.vcf',
 		"    grep -v '^#' ssake.vcf | sed 's/|/\t/g' | sed 's/read//' |  awk '{ if (!x[\$1\$2]) { y[\$1\$2]=\$14; x[\$1\$2]=\$0 } else { if (\$14 > y[\$1\$2]) { y[\$1\$2]=\$14; x[\$1\$2]=\$0 }}} END { for (i in x) { print x[i]}}' | sort -k1,1 -k2,2n | perl -ne 'if (/TRA/) { print } elsif (/SVLEN=(\\d+)/) { if (\$1 > 100) { print \$_ }} elsif (/SVLEN=-(\\d+)/) { if (\$1 > 100 ) { print }}' > ssake.pass.vcf",
 		'  fi',
 		"  if [ -s ssake.pass.vcf ] && [ ! -s $nb_output.md5 ]; then",
+		"    echo '>> infer breakpoints for SVs...'",
 		'    num=$(wc -l ssake.pass.vcf | cut -f1 -d' . "' ');",
 		'    rec=$(echo $num/' . $args{n_cpus} . ' | bc);',
 		'    rec=$((rec+1));',
@@ -151,14 +177,15 @@ sub get_infer_breakpoints_command {
 		'      infer_bp_v4.pl $file '. "$args{tumour_bam} $args{normal_bam}" . ' > $file.sp.vcf & ',
 		'    done',
 		'    wait',
+		"    echo '>> filter SVs...'",
 		"\n" . "    grep '^#' ssake.vcf > header.txt;",
 		'    filter_sv_icgc.pl *.sp.vcf | cat header.txt - > ' . $nb_output . ';',
 		"    md5sum $nb_output > $nb_output.md5;",
-		'  fi',
-		"  if [ -s $nb_output.md5 ]; then",
-		'    rm ssake.{sam,vcf,pass.vcf};',
-		'    rm x??;',
-		'    rm x??.sp.vcf;',
+		"    if [ -s $nb_output.md5 ]; then",
+		'      rm ssake.{sam,vcf,pass.vcf};',
+		'      rm x??;',
+		'      rm x??.sp.vcf;',
+		'    fi',
 		'  fi'
 		);
 
@@ -181,7 +208,7 @@ sub get_process_novobreak_command {
 
 	# part 1
 	$part1_command .= "\n" . join("\n",
-		'if [ -s ssake.sam ]; then',
+		'if [ -s ssake.sam.md5 ]; then',
 		"  echo 'Intermediate output file: ssake.sam already exists';",
 		'else',
 		"  echo 'Extracting and aligning reads...';"
@@ -246,6 +273,7 @@ sub get_filter_command {
 		);
 
 	$filter_command .= "\n\nmd5sum $args{output_file} > $args{output_file}.md5";
+	$filter_command .= "\n\nrm $sorted_file";
 
 	return($filter_command);
 	}
@@ -344,7 +372,7 @@ sub main {
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient\n";
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		# find bams
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
@@ -394,14 +422,13 @@ sub main {
 			$run_id = '';
 
 			# run novoBreak using full BAMs
-			my $nb_output = join('/', $sample_directory, $sample . '_nb.out');
-			$cleanup_cmd .= "\n" . "rm $nb_output";
+			my $nb_output = join('/', $tmp_directory, $sample . '_nb_kmer.out');
 
 			my $full_novo_command = get_novobreak_command(
 				tumour_id	=> $sample,
 				tumour_bam	=> $smp_data->{$patient}->{tumour}->{$sample},
 				normal_bam	=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
-				out_dir		=> $sample_directory
+				out_dir		=> $tmp_directory
 				);
 
 			if ('Y' eq missing_file("$nb_output.md5")) {
@@ -484,7 +511,7 @@ sub main {
 				normal_bam	=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
 				nb_file		=> $nb_output,
 				tmp_dir		=> $tmp_directory,
-				n_cpus		=> $parameters->{process}->{n_cpu}
+				n_cpus		=> $parameters->{postprocess}->{n_cpus}
 				);
 
 			if ('Y' eq missing_file($final_nb_output . '.md5')) {
@@ -498,9 +525,9 @@ sub main {
 					cmd	=> $nb_process_command,
 					modules	=> [$samtools, $novobreak, $bwa, 'perl'],
 					dependencies	=> $run_id,
-					max_time	=> $parameters->{process}->{time},
-					mem		=> $parameters->{process}->{mem},
-					cpus_per_task	=> $parameters->{process}->{n_cpu},
+					max_time	=> $parameters->{postprocess}->{time},
+					mem		=> $parameters->{postprocess}->{mem},
+					cpus_per_task	=> $parameters->{postprocess}->{n_cpus},
 					hpc_driver	=> $args{hpc_driver},
 					extra_args	=> [$hpc_group]
 					);
