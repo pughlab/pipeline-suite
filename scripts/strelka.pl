@@ -659,6 +659,7 @@ sub main {
 		tool_config		=> undef,
 		data_config		=> undef,
 		output_directory	=> undef,
+		manta_directory		=> undef,
 		pon			=> undef,
 		hpc_driver		=> undef,
 		del_intermediates	=> undef,
@@ -733,13 +734,16 @@ sub main {
 		print $log "\n      No panel of normals defined! Additional filtering will not be performed!";
 		}
 
+	my $manta_directory = $args{manta_directory};
+	$manta_directory =~ s/\/$//;
+
+	print $log "\n    Manta directory: $manta_directory";
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n---";
 
 	# set tools and versions
 	my $strelka	= 'strelka/' . $tool_data->{strelka_version};
-	my $manta	= 'manta/' . $tool_data->{manta_version};
 	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $r_version	= 'R/' . $tool_data->{r_version};
@@ -779,7 +783,7 @@ sub main {
 		my @tumour_ids = keys %{$smp_data->{$patient}->{'tumour'}};
 
 		if (scalar(@tumour_ids) == 0) {
-			print $log "\n>> No tumour BAM provided. Skipping $patient...\n";
+			print $log "\n  >> No tumour BAM provided. Skipping $patient...\n";
 			next;
 			}
 
@@ -822,87 +826,26 @@ sub main {
 
 			$run_id = '';
 
-			# first, run MANTA to find small indels
-			my $manta_directory = join('/', $sample_directory, 'Manta');
-			unless(-e $manta_directory) { make_path($manta_directory); }
-
-			my $manta_command;
-
-			# run on tumour-only (includes RNA)
-			if (scalar(@normal_ids) == 0) {
-
-				$manta_command = get_manta_command(
-					tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
-					output_dir	=> $manta_directory,
-					intervals	=> $intervals,
-					tmp_dir		=> $tmp_directory
-					);
-
-				} else { # run on T/N pairs
-
-				$manta_command = get_manta_command(
-					tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
-					normal		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
-					output_dir	=> $manta_directory,
-					intervals	=> $intervals,
-					tmp_dir		=> $tmp_directory
-					);
-				}
-
-			$manta_command .= ";\n\n$manta_directory/runWorkflow.py --quiet";
-
-			my $manta_output = join('/', $manta_directory, 'results/variants/candidateSmallIndels.vcf.gz');
-
-			$cleanup{$patient} .= "\nrm -rf " . join('/', $manta_directory, 'workspace');
-
-			my $manta_run_id = '';
+			my $manta_output = join('/',
+				$manta_directory,
+				$patient,
+				$sample,
+				'results/variants/candidateSmallIndels.vcf.gz'
+				);
 
 			# check if this should be run
 			if ('Y' eq missing_file($manta_output)) {
-
-				# record command (in log directory) and then run job
-				print $log "  >> Submitting job for Manta...\n";
-
-				# if this has been run once before and failed, we need to clean up the previous attempt
-				# before initiating a new one
-				if ('N' eq missing_file("$manta_directory/runWorkflow.py")) {
-					`rm -rf $manta_directory`;
-					}
-
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_manta_' . $sample,
-					cmd	=> $manta_command,
-					modules	=> [$manta],
-					max_time	=> $parameters->{manta}->{time},
-					mem		=> $parameters->{manta}->{mem},
-					hpc_driver	=> $args{hpc_driver},
-					extra_args	=> [$hpc_group]
-					);
-
-				$manta_run_id = submit_job(
-					jobname		=> 'run_manta_' . $sample,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{hpc_driver},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
-					);
-
-				push @{$patient_jobs{$patient}}, $manta_run_id;
+				print $log "  >> Manta output file is empty or missing: $manta_output\n";
 				} else {
-				print $log "  >> Skipping MANTA because this has already been completed!\n";
+				print $log "  >> Manta output file used: $manta_output\n";
 				}
 
-			push @{$final_outputs{$patient}}, $manta_output;
-
-			# next, run Strelka Somatic variant caller (T/N only)
+			# run Strelka Somatic variant caller (T/N only)
 			my $somatic_snv_command;
-			my $depends = '';
 
 			# run on T/N pairs
 			if (scalar(@normal_ids) > 0) {
 
-				$depends = $manta_run_id;
 				$somatic_snv_command = get_strelka_somatic_command(
 					tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
 					normal		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
@@ -1002,7 +945,6 @@ sub main {
 					name	=> 'run_strelka_somatic_variant_caller_' . $sample,
 					cmd	=> $somatic_snv_command,
 					modules	=> [$strelka],
-					dependencies	=> $depends,
 					max_time	=> $parameters->{strelka}->{time},
 					mem		=> $parameters->{strelka}->{mem},
 					hpc_driver	=> $args{hpc_driver},
@@ -1035,7 +977,7 @@ sub main {
 					name	=> 'run_vcf_filter_somatic_variants_' . $sample,
 					cmd	=> $filter_command,
 					modules	=> [$vcftools],
-					dependencies	=> join(':', $depends, $strelka_run_id),
+					dependencies	=> $strelka_run_id,
 					max_time	=> $parameters->{filter}->{time},
 					mem		=> $parameters->{filter}->{mem},
 					hpc_driver	=> $args{hpc_driver},
@@ -1151,7 +1093,7 @@ sub main {
 				`rm -rf $tmp_directory`;
 				} else {
 
-				print $log "\n>> Submitting job to clean up temporary/intermediate files...\n";
+				print $log ">> Submitting job to clean up temporary/intermediate files...\n";
 
 				# make sure final output exists before removing intermediate files!
 				my $cleanup_cmd = join("\n",
@@ -1183,7 +1125,7 @@ sub main {
 				}
 			}
 
-		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @{$final_outputs{$patient}}) . "\n";
+		print $log "\nFINAL OUTPUT:\n  " . join("\n  ", @{$final_outputs{$patient}}) . "\n";
 		print $log "---\n";
 		}
 
@@ -1270,23 +1212,24 @@ sub main {
 
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
-my ($tool_config, $data_config, $output_directory);
+my ($tool_config, $data_config, $output_directory, $manta_directory);
 my $hpc_driver = 'slurm';
 my ($remove_junk, $dry_run, $help, $no_wait, $create_pon);
 my $panel_of_normals = undef;
 
 # get command line arguments
 GetOptions(
-	'h|help'	=> \$help,
-	'd|data=s'	=> \$data_config,
-	't|tool=s'	=> \$tool_config,
-	'o|out_dir=s'	=> \$output_directory,
+	'h|help'			=> \$help,
+	'd|data=s'			=> \$data_config,
+	't|tool=s'			=> \$tool_config,
+	'o|out_dir=s'			=> \$output_directory,
+	'm|manta_dir=s'			=> \$manta_directory,
 	'create-panel-of-normals'	=> \$create_pon,
-	'c|cluster=s'	=> \$hpc_driver,
-	'remove'	=> \$remove_junk,
-	'dry-run'	=> \$dry_run,
-	'no-wait'	=> \$no_wait,
-	'pon=s'		=> \$panel_of_normals
+	'c|cluster=s'			=> \$hpc_driver,
+	'remove'			=> \$remove_junk,
+	'dry-run'			=> \$dry_run,
+	'no-wait'			=> \$no_wait,
+	'pon=s'				=> \$panel_of_normals
 	);
 
 if ($help) {
@@ -1296,6 +1239,7 @@ if ($help) {
 		"\t--data|-d\t<string> data config (yaml format)",
 		"\t--tool|-t\t<string> tool config (yaml format)",
 		"\t--out_dir|-o\t<string> path to output directory",
+		"\t--manta_dir|-m\t<string> path to directory containing output from Manta",
 		"\t--create-panel-of-normals\t<boolean> create a panel of normals? Use to generate germline variant calls. (default: false)",
 		"\t--pon\t<string> path to panel of normals (optional: useful for restarting once this has already been generated)",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
@@ -1312,6 +1256,7 @@ if ($help) {
 if (!defined($tool_config)) { die("No tool config file defined; please provide -t | --tool (ie, tool_config.yaml)"); }
 if (!defined($data_config)) { die("No data config file defined; please provide -d | --data (ie, sample_config.yaml)"); }
 if (!defined($output_directory)) { die("No output directory defined; please provide -o | --out_dir"); }
+if (!defined($manta_directory)) { die("No manta output directory defined; please provide -m | --manta_dir"); }
 
 if ($create_pon) {
 	pon(
@@ -1328,6 +1273,7 @@ if ($create_pon) {
 		tool_config		=> $tool_config,
 		data_config		=> $data_config,
 		output_directory	=> $output_directory,
+		manta_directory		=> $manta_directory,
 		pon			=> $panel_of_normals,
 		hpc_driver		=> $hpc_driver,
 		del_intermediates	=> $remove_junk,
