@@ -366,6 +366,21 @@ sub main {
 	my $pon_directory = join('/', $output_directory, 'PanelOfNormals');
 	my $pon_intermediates = join('/', $pon_directory, 'intermediate_files');
 
+	# are there any normals available to make a PoN?
+	my @normal_samples;
+	foreach my $patient (sort keys %{$smp_data}) {
+		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
+		push @normal_samples, @normal_ids;
+		}
+
+	# if any normals are present
+	if (scalar(@normal_samples) > 0) { $should_run_pon = 1; }
+
+	if ( (!defined($args{pon})) & ($should_run_pon) ) {
+		unless(-e $pon_directory) { make_path($pon_directory); }
+		unless(-e $pon_intermediates) { make_path($pon_intermediates); }
+		}
+
 	my @tumour_only;
 
 	# process each sample in $smp_data
@@ -385,8 +400,6 @@ sub main {
 
 		# if any normals are present
 		$should_run_pon = 1;
-		unless(-e $pon_directory) { make_path($pon_directory); }
-		unless(-e $pon_intermediates) { make_path($pon_intermediates); }
 
 		# create some directories
 		my $patient_directory = join('/', $output_directory, $patient);
@@ -701,6 +714,7 @@ sub main {
 			$cleanup_cmd .= "\nrm $concat_file.Germline";
 			$cleanup_cmd .= "\nrm $concat_file.Somatic";
 			$cleanup_cmd .= "\nrm $concat_file.LOH";
+			$cleanup_cmd .= "\ngzip $concat_file";
 
 			# check if this should be run
 			if ('Y' eq missing_file("$concat_file.Somatic.hc")) {
@@ -899,7 +913,12 @@ sub main {
 				"tabix -p vcf $merged_vcf_output.snp_and_indel.vcf.gz"
 				);
 
-			$cleanup_cmd .= "\nrm $output_stem\__chr*";
+			if (scalar(@chroms) > 1) {
+				$cleanup_cmd .= "\nrm $output_stem\__chr*";
+				} else {
+				$cleanup_cmd .= "\nrm $merged_vcf_output\__" . $chroms[0] . ".snp.vcf";
+				$cleanup_cmd .= "\nrm $merged_vcf_output\__" . $chroms[0] . ".indel.vcf";
+				}
 
 			# check if this should be run
 			if ('Y' eq missing_file("$merged_vcf_output.snp_and_indel.vcf.md5")) {
@@ -958,6 +977,8 @@ sub main {
 
 			push @germline_vcfs, $merged_vcf_output . "_germline_hc.vcf.gz";
 
+			$cleanup_cmd .= "rm $merged_vcf_output\_somatic_hc.vcf";
+
 			# check if this should be run
 			if ('Y' eq missing_file($merged_vcf_output . '_somatic_hc.vcf.md5')) {
 
@@ -992,8 +1013,8 @@ sub main {
 				}
 
 			### Run variant annotation (VEP + vcf2maf)
-			my $final_maf = $output_stem . '_somatic_annotated.maf';
-			my $final_vcf = $output_stem . '_somatic_annotated.vcf';
+			my $final_maf = $output_stem . '_somatic_hc_annotated.maf';
+			my $final_vcf = $merged_vcf_output . '_somatic_hc.vep.vcf';
 
 			my $vcf2maf_cmd = get_vcf2maf_command(
 				input		=> $merged_vcf_output . '_somatic_hc.vcf',
@@ -1009,11 +1030,15 @@ sub main {
 			# check if this should be run
 			if ('Y' eq missing_file($final_maf . '.md5')) {
 
+				# make sure to remove temp files from previous attempts
+				if ('N' eq missing_file($final_vcf)) {
+					`rm $final_vcf`;
+					}
+
 				# IF THIS FINAL STEP IS SUCCESSFULLY RUN
 				$vcf2maf_cmd .= "\n\n" . join("\n",
 					"if [ -s $final_maf ]; then",
 					"  md5sum $final_maf > $final_maf.md5",
-					"  mv $merged_vcf_output\_somatic_hc.vep.vcf $final_vcf",
 					"  md5sum $final_vcf > $final_vcf.md5",
 					"  bgzip $final_vcf",
 					"  tabix -p vcf $final_vcf.gz",
@@ -1583,7 +1608,7 @@ sub main {
 
 			### Run variant annotation (VEP + vcf2maf)
 			my $final_maf = $output_stem . '_annotated.maf';
-			my $final_vcf = $output_stem . '_annotated.vcf';
+			my $final_vcf = $output_stem . '_filtered.vep.vcf';
 
 			my $vcf2maf_cmd = get_vcf2maf_command(
 				input		=> "$output_stem\_filtered.vcf",
@@ -1601,11 +1626,15 @@ sub main {
 			# check if this should be run
 			if ('Y' eq missing_file($final_maf . '.md5')) {
 
+				# make sure to remove temp files from previous attempts
+				if ('N' eq missing_file($final_vcf)) {
+					`rm $final_vcf`;
+					}
+
 				# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
 				$vcf2maf_cmd .= "\n\n" . join("\n",
 					"if [ -s $final_maf ]; then",
 					"  md5sum $final_maf > $final_maf.md5",
-					"  mv $output_stem\_filtered.vep.vcf $final_vcf",
 					"  md5sum $final_vcf > $final_vcf.md5",
 					"  bgzip $final_vcf",
 					"  tabix -p vcf $final_vcf.gz",
