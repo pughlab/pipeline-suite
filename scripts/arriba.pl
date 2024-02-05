@@ -341,8 +341,7 @@ sub main {
 			$star_cmd .= "\n\necho 'alignments complete' > $star_log";
 
 			# check if this should be run
-			if ( ('Y' eq missing_file($bam)) &
-				('Y' eq missing_file($star_log)) ) {
+			if ( ('Y' eq missing_file($star_log)) ) {
 
 				# record command (in log directory) and then run job
 				print $log "Submitting job to run STAR...\n";
