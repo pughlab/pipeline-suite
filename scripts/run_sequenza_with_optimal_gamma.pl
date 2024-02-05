@@ -114,6 +114,7 @@ sub main {
 		tool_config		=> undef,
 		data_config		=> undef,
 		output_directory	=> undef,
+		del_intermediates	=> undef,
 		hpc_driver		=> undef,
 		dry_run			=> undef,
 		no_wait			=> undef,
@@ -213,6 +214,8 @@ sub main {
 		# create some directories
 		my $patient_directory = join('/', $output_directory, $patient);
 
+		my (@final_outputs, @patient_jobs, $cleanup_cmd);
+
 		foreach my $tumour (@tumour_ids) {
 
 			my $sample_directory = join('/', $patient_directory, $tumour);
@@ -226,9 +229,6 @@ sub main {
 			next if (scalar(@snp_files) == 0);
 			next if (scalar(@cnv_files) == 0);
 
-			# if there are any samples to run, we will run the final combine job
-			$should_run_final = 1;
-
 			my $seqz_cmd = create_seqz_command(
 				snp		=> $snp_files[0],
 				cnv		=> $cnv_files[0],
@@ -239,6 +239,15 @@ sub main {
 
 			my $seqz_file = $snp_files[0];
 			$seqz_file =~ s/.snp/.seqz/;
+
+			# cleanup/compress intermediate files
+			my $indel_file = $snp_files[0];
+			$indel_file =~ s/.snp/.indel/;
+
+			$cleanup_cmd .= "\ngzip $cnv_files[0]";
+			$cleanup_cmd .= "\ngzip $snp_files[0]";
+			$cleanup_cmd .= "\ngzip $indel_file";
+			$cleanup_cmd .= "\ngzip $seqz_file";
 
 			$run_id = '';
 
@@ -267,6 +276,7 @@ sub main {
 					log_file	=> $log
 					);
 
+				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
 				print $log "\nSkipping Sequenza (SEQZ) because this has already been completed!\n";
@@ -319,6 +329,7 @@ sub main {
 					log_file	=> $log
 					);
 
+				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
 				print $log "Skipping Sequenza gamma tuning because this has already been completed!\n";
@@ -361,9 +372,53 @@ sub main {
 					log_file	=> $log
 					);
 
+				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
 				print $log "Skipping Sequenza (OPTIMIZED) because this has already been completed!\n";
+				}
+
+			push @final_outputs, $final_calls;
+
+			# if there are any samples to run, we will run the final combine job
+			$should_run_final = 1;
+			}
+
+		# should intermediate files be removed
+		# run per patient
+		if ($args{del_intermediates}) {
+
+			unless (scalar(@patient_jobs) == 0) {
+
+				print $log ">> Submitting job to clean up temporary/intermediate files...\n";
+
+				# make sure final output exists before removing intermediate files!
+				$cleanup_cmd = join("\n",
+					"if [ -s " . join(" ] && [ -s ", @final_outputs) . " ]; then",
+					"  $cleanup_cmd",
+					"else",
+					'  echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
+					"fi"
+					);
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_cleanup_' . $patient,
+					cmd	=> $cleanup_cmd,
+					dependencies	=> join(':', @patient_jobs),
+					mem		=> '256M',
+					hpc_driver	=> $args{hpc_driver},
+					kill_on_error	=> 0,
+					extra_args	=> [$hpc_group]
+					);
+
+				$run_id = submit_job(
+					jobname		=> 'run_cleanup_' . $patient,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
 				}
 			}
 		}
@@ -458,7 +513,7 @@ sub main {
 # declare variables
 my ($tool_config, $data_config, $output_directory);
 my $hpc_driver = 'slurm';
-my ($dry_run, $help, $no_wait);
+my ($remove_junk, $dry_run, $help, $no_wait);
 
 # get command line arguments
 GetOptions(
@@ -467,6 +522,7 @@ GetOptions(
 	't|tool=s'	=> \$tool_config,
 	'o|out_dir=s'	=> \$output_directory,
 	'c|cluster=s'	=> \$hpc_driver,
+	'remove'	=> \$remove_junk,
 	'dry-run'	=> \$dry_run,
 	'no-wait'	=> \$no_wait
 	);
@@ -479,6 +535,7 @@ if ($help) {
 		"\t--tool|-t\t<string> tool config (yaml format)",
 		"\t--out_dir|-o\t<string> path to output directory",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
+		"\t--remove\t<boolean> should intermediates be compressed? (default: false)",
 		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
 		"\t--no-wait\t<boolean> should we exit after job submission (true) or wait until all jobs have completed (false)? (default: false)"
 		);
@@ -496,6 +553,7 @@ main(
 	tool_config		=> $tool_config,
 	data_config		=> $data_config,
 	output_directory	=> $output_directory,
+	del_intermediates	=> $remove_junk,
 	hpc_driver		=> $hpc_driver,
 	dry_run			=> $dry_run,
 	no_wait			=> $no_wait
