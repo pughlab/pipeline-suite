@@ -421,6 +421,9 @@ sub main {
 
 			$run_id = '';
 
+			# indicate final output file
+			my $filtered_output = join('/', $sample_directory, $sample . '_novoBreak_filtered.vcf');
+
 			# run novoBreak using full BAMs
 			my $nb_output = join('/', $tmp_directory, $sample . '_nb_kmer.out');
 
@@ -431,7 +434,7 @@ sub main {
 				out_dir		=> $tmp_directory
 				);
 
-			if ('Y' eq missing_file("$nb_output.md5")) {
+			if ( ('Y' eq missing_file("$nb_output.md5")) && ('Y' eq missing_file("$filtered_output.md5")) ) {
 
 				# record command (in log directory) and then run job
 				print $log "Submitting job for NovoBreak...\n";
@@ -547,8 +550,6 @@ sub main {
 				}
 
 			# sort and filter output
-			my $filtered_output = join('/', $sample_directory, $sample . '_novoBreak_filtered.vcf');
-
 			$cleanup_cmd .= "\nrm " . join('/',
 				$sample_directory,
 				$sample . '_novoBreak.pass_sorted.vcf;'
