@@ -123,6 +123,21 @@ sub format_readgroup {
 	return($readgroup);
 	}
 
+# format command to index genome-sorted bam
+sub get_index_bam_command {
+	my %args = (
+		output => undef,
+		@_
+		);
+
+	my $index_command = join(' ',
+		'samtools index',
+		$args{output}
+		);
+
+	return($index_command);
+	}
+
 # format command to mark duplicates
 sub get_markdup_command {
 	my %args = (
@@ -286,8 +301,8 @@ sub main {
 		$output_yaml = $args{output_config};
 		}
 
-	# initiate output yaml object
-	my $smp_data_out;
+	# initiate output yaml objects
+	my ($smp_data_out, $smp_data_markdup);
 
 	# create sample sheet (tab-delim file with id/path/group)
 	my $qc_directory = join('/', $output_directory, 'RNASeQC_' . $run_count);
@@ -387,10 +402,17 @@ sub main {
 				tmp_dir		=> $temp_star
 				);
 
-			my $required = join('/', $sample_directory, 'Aligned.sortedByCoord.out.bam');
+			my $genome_bam = join('/', $sample_directory, 'Aligned.sortedByCoord.out.bam');
+
+			# add output file to list
+			if ('normal' eq $type) {
+				$smp_data_out->{$patient}->{normal}->{$sample} = $genome_bam;
+				} elsif ('tumour' eq $type) {
+				$smp_data_out->{$patient}->{tumour}->{$sample} = $genome_bam;
+				}
 
 			# check if this should be run
-			if ('Y' eq missing_file($required)) {
+			if ('Y' eq missing_file($genome_bam)) {
 
 				# record command (in log directory) and then run job
 				print $log "  >> Submitting job to run STAR...\n";
@@ -420,27 +442,58 @@ sub main {
 				} else {
 				print $log "  >> Skipping alignment step because output already exists...\n";
 				}
-		
+
+			# index the resulting BAM and remove intermediate SAM
+			my $index_cmd = get_index_bam_command(
+				output => $genome_bam
+				);
+
+			# check if this should be run
+			if ( ('N' eq missing_file($genome_bam)) &&  
+				('Y' eq missing_file("$genome_bam.bai")) ) {
+
+				# record command (in log directory) and then run job
+				print $log "  >> Submitting job to run BAM INDEX...\n";
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_bam_index_' . $sample,
+					cmd	=> $index_cmd,
+					modules	=> [$samtools],
+					dependencies	=> $run_id,
+					max_time	=> '12:00:00',
+					mem		=> '2G',
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
+					);
+
+				my $idx_run_id = submit_job(
+					jobname		=>'run_bam_index_' . $sample,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				push @patient_jobs, $idx_run_id;
+				push @all_jobs, $idx_run_id;
+				} else {
+				print $log "  >> Skipping index step because output already exists...\n";
+				}
+
 			## mark duplicates
-			my $input_file = join('/', $sample_directory, '/Aligned.sortedByCoord.out.bam');
 			my $dedup_bam = join('/', $patient_directory, $sample . '_sorted_markdup.bam');
 
 			if ('N' eq $parameters->{markdup}->{run}) {
 
-				# add output file to list
-				if ('normal' eq $type) { $smp_data_out->{$patient}->{normal}->{$sample} = $input_file; }
-				if ('tumour' eq $type) { $smp_data_out->{$patient}->{tumour}->{$sample} = $input_file; }
-
-				print $fh "$sample\t$input_file\tRNASeq\n";
-
-				push @final_outputs, $input_file;
+				print $fh "$sample\t$genome_bam\tRNASeq\n";
+				push @final_outputs, $genome_bam;
 
 				} else {
 
 				print $fh "$sample\t$dedup_bam\tRNASeq\n";
 
 				my $markdup_cmd = get_markdup_command(
-					input		=> $input_file,
+					input		=> $genome_bam,
 					output		=> $dedup_bam,
 					java_mem	=> $parameters->{markdup}->{java_mem},
 					tmp_dir		=> $tmp_directory,
@@ -448,8 +501,11 @@ sub main {
 					);
 		
 				# add output file to list
-				if ('normal' eq $type) { $smp_data_out->{$patient}->{normal}->{$sample} = $dedup_bam; }
-				if ('tumour' eq $type) { $smp_data_out->{$patient}->{tumour}->{$sample} = $dedup_bam; }
+				if ('normal' eq $type) {
+					$smp_data_out->{$patient}->{normal}->{$sample} = $dedup_bam;
+					} elsif ('tumour' eq $type) {
+					$smp_data_out->{$patient}->{tumour}->{$sample} = $dedup_bam;
+					}
 
 				# check if this should be run
 				if ('Y' eq missing_file($dedup_bam . '.md5')) {
