@@ -788,7 +788,7 @@ sub main {
 			if ('Y' eq missing_file("$smp_output.md5")) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job to merge lanes and mark duplicates...\n";
+				print $log "  >> Submitting job to merge lanes and mark duplicates...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -826,7 +826,7 @@ sub main {
 					`rm -rf $tmp_directory`;
 					} else {
 
-					print $log "Submitting job to clean up temporary/intermediate files...\n";
+					print $log "  >> Submitting job to clean up temporary/intermediate files...\n";
 
 					# make sure final output exists before removing intermediate files!
 					$cleanup_cmd = join("\n",

@@ -387,7 +387,7 @@ sub main {
 	# process each patient in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient";
+		print $log "\nInitiating process for PATIENT: $patient\n";
 
 		# make a sample-specific directory
 		my $patient_directory = join('/', $output_directory, $patient);
@@ -469,7 +469,7 @@ sub main {
 			if ('Y' eq missing_file($target_intervals . '.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for RealignerTargetCreator...\n";
+				print $log "  >> Submitting job for RealignerTargetCreator...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -494,7 +494,7 @@ sub main {
 				push @patient_jobs, $run_id_patient;
 				push @all_jobs, $run_id_patient;
 				} else {
-				print $log "Skipping RealignerTargetCreator because this has already been completed!\n";
+				print $log "  >> Skipping RealignerTargetCreator because this has already been completed!\n";
 				}
 
 			## IndelRealigner
@@ -527,7 +527,7 @@ sub main {
 			if ('Y' eq missing_file($realign_bams_dna[-1] . '.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for IndelRealigner...\n";
+				print $log "  >> Submitting job for IndelRealigner...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -552,7 +552,7 @@ sub main {
 				push @patient_jobs, $run_id_patient;
 				push @all_jobs, $run_id_patient;
 				} else {
-				print $log "Skipping IndelRealigner because this has already been completed!\n";
+				print $log "  >> Skipping IndelRealigner because this has already been completed!\n";
 				}
 			}
 
@@ -592,7 +592,7 @@ sub main {
 				if ('Y' eq missing_file($split_bam . '.md5')) {
 
 					# record command (in log directory) and then run job
-					print $log "Submitting job for SplitNCigarReads...\n";
+					print $log "    >> Submitting job for SplitNCigarReads...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
@@ -616,7 +616,7 @@ sub main {
 					push @patient_jobs, $run_id_sample;
 					push @all_jobs, $run_id_sample;
 					} else {
-					print $log "Skipping SplitNCigarReads because this has already been completed!\n";
+					print $log "    >> Skipping SplitNCigarReads because this has already been completed!\n";
 					}
 
 				# create target intervals
@@ -635,7 +635,7 @@ sub main {
 				if ('Y' eq missing_file($target_intervals . '.md5')) {
 
 					# record command (in log directory) and then run job
-					print $log "Submitting job for RealignerTargetCreator...\n";
+					print $log "    >> Submitting job for RealignerTargetCreator...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
@@ -660,7 +660,7 @@ sub main {
 					push @patient_jobs, $run_id_sample;
 					push @all_jobs, $run_id_sample;
 					} else {
-					print $log "Skipping RealignerTargetCreator because this has already been completed!\n";
+					print $log "    >> Skipping RealignerTargetCreator because this has already been completed!\n";
 					}
 
 				# perform indel realignment
@@ -682,7 +682,7 @@ sub main {
 				if ('Y' eq missing_file($realigned_bam . '.md5')) {
 
 					# record command (in log directory) and then run job
-					print $log "Submitting job for IndelRealigner...\n";
+					print $log "    >> Submitting job for IndelRealigner...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
@@ -707,12 +707,12 @@ sub main {
 					push @patient_jobs, $run_id_sample;
 					push @all_jobs, $run_id_sample;
 					} else {
-					print $log "Skipping IndelRealigner because this has already been completed!\n";
+					print $log "    >> Skipping IndelRealigner because this has already been completed!\n";
 					}
 				}
 
 			## BaseRecalibrator
-			print $log "Performing base recalibration steps for: $sample\n";
+			print $log "  Performing base recalibration steps for: $sample\n";
 
 			my $bqsr_file = join('/', $intermediate_directory, $sample . '.recal_data.grp');
 
@@ -733,7 +733,7 @@ sub main {
 			if ('Y' eq missing_file($bqsr_file)) {
 
 				# record command (in log directory) and then run job
-				print $log "\nSubmitting job for BaseRecalibrator...";
+				print $log "    >> Submitting job for BaseRecalibrator...\n";
 
 				my $n_cpu = 1;
 				if ('dna' eq $data_type) { $n_cpu = 8; }
@@ -765,7 +765,7 @@ sub main {
 				push @patient_jobs, $run_id_sample;
 				push @all_jobs, $run_id_sample;
 				} else {
-				print $log "Skipping BaseRecalibrator because this has already been completed!\n";
+				print $log "    >> Skipping BaseRecalibrator because this has already been completed!\n";
 				}
 
 			## PrintReads
@@ -787,7 +787,7 @@ sub main {
 			if ('Y' eq missing_file($recal_bam . '.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for PrintReads (applying base recalibration)...\n";
+				print $log "    >> Submitting job for PrintReads (applying base recalibration)...\n";
 
 				# determine number of cpus to request
 				my $n_cpu = 1;
@@ -817,7 +817,7 @@ sub main {
 				push @patient_jobs, $run_id_sample;
 				push @all_jobs, $run_id_sample;
 				} else {
-				print $log "Skipping PrintReads (apply base recalibration) because this has already been completed!\n";
+				print $log "    >> Skipping PrintReads (apply base recalibration) because this has already been completed!\n";
 				}
 
 			push @final_outputs, $recal_bam;
@@ -830,7 +830,7 @@ sub main {
 				`rm -rf $tmp_directory`;
 				} else {
 
-				print $log "Submitting job to clean up temporary/intermediate files...\n";
+				print $log "    >> Submitting job to clean up temporary/intermediate files...\n";
 
 				# make sure final output exists before removing intermediate files!
 				$cleanup_cmd = join("\n",
@@ -862,8 +862,8 @@ sub main {
 				}
 			}
 
-		print $log "FINAL OUTPUT:\n  " . join("\n  ", @final_outputs) . "\n";
-		print $log "---\n";
+		print $log "\nFINAL OUTPUT:\n  " . join("\n  ", @final_outputs) . "\n";
+		print $log "\n---";
 		}
 
 	# output final data config
