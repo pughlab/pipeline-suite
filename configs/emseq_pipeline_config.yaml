@@ -5,7 +5,7 @@ sample_type: # optional; can be germline or ctdna
 seq_type: emseq # must be one of exome, targeted, rna, wgs or emseq
 seq_center: PMGC
 platform: Illumina
-flowcell: random # see here for details: https://knowledge.illumina.com/instrumentation/general/instrumentation-general-faq-list/000007786
+flowcell_type: random # see here for details: https://knowledge.illumina.com/instrumentation/general/instrumentation-general-faq-list/000007786
 hpc_group: 
 # reference files
 ref_type: hg38 # one of hg38, hg19, GRCh37 or GRCh38 (minimal testing with GRCh37/8)
@@ -15,6 +15,7 @@ targets_bed:
 # tool versions
 bwa_meth_version: # for use with module load bwa_meth/version (if available)
 bwa_meth_path: /cluster/projects/pughlab/bin/bwa_meth/v0.2.7/bwameth.py
+mark_nonconverted_path: /cluster/projects/pughlab/bin/mark-nonconverted-reads/mark-nonconverted-reads.py
 bwa_version: 0.7.15
 samtools_version: 1.10
 python3_version: 3.10.9
@@ -22,6 +23,12 @@ picard_version: 2.10.9
 sambamba_version: 0.7.0 
 r_version: 4.1.0
 # tool specific parameters
+trim_adapters:
+    run: Y
+    parameters:
+        trim:
+            mem: 4G
+            time: '24:00:00'
 fastqc:
     run: Y
     parameters:
@@ -57,6 +64,9 @@ bwa:
             time:
                 normal: '05:00:00'
                 tumour: '05:00:00'
+        filter:
+            mem: 12G
+            time: '48:00:00'
         merge:
             tool: 'picard' # or sambamba
             mark_dup: Y
@@ -77,3 +87,12 @@ bamqc:
             java_mem: 3g
             mem: 4G
             time: '72:00:00'
+methyldackel:
+    run: Y
+    parameters:
+        mbias:
+            mem: 4G
+            time: '24:00:00'
+        methyldackel:
+            mem: 4G
+            time: '24:00:00'
