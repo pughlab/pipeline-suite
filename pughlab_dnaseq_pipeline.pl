@@ -92,7 +92,8 @@ sub main {
 
 	my ($run_script, $fastqc_run_id);
 	my ($bwa_run_id, $gatk_run_id, $contest_run_id, $qc_run_id, $coverage_run_id, $hc_run_id);
-	my ($strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id, $msi_run_id, $pindel_run_id);
+	my ($manta_run_id, $strelka_run_id);
+	my ($mutect_run_id, $mutect2_run_id, $varscan_run_id, $msi_run_id, $pindel_run_id);
 	my ($somaticsniper_run_id, $delly_run_id, $vardict_run_id, $gatk_cnv_run_id, $novobreak_run_id);
 	my ($mops_run_id, $svict_run_id, $ichor_run_id, $ascat_run_id, $mavis_run_id, $report_run_id);
 
@@ -108,6 +109,7 @@ sub main {
 	my $contest_directory = join('/', $output_directory, 'BAMQC', 'ContEst');
 	my $coverage_directory = join('/', $output_directory, 'BAMQC', 'Coverage');
 	my $hc_directory = join('/', $output_directory, 'HaplotypeCaller');
+	my $manta_directory = join('/', $output_directory, 'Manta');
 	my $strelka_directory = join('/', $output_directory, 'Strelka');
 	my $msi_directory = join('/', $output_directory, 'MSI');
 	my $mutect_directory = join('/', $output_directory, 'MuTect');
@@ -134,6 +136,7 @@ sub main {
 		'mutect'	=> defined($tool_data->{mutect}->{run}) ? $tool_data->{mutect}->{run} : 'N',
 		'mutect2'	=> defined($tool_data->{mutect2}->{run}) ? $tool_data->{mutect2}->{run} : 'N',
 		'somaticsniper'	=> defined($tool_data->{somaticsniper}->{run}) ? $tool_data->{somaticsniper}->{run} : 'N',
+		'manta'		=> defined($tool_data->{manta}->{run}) ? $tool_data->{manta}->{run} : 'N',
 		'strelka'	=> defined($tool_data->{strelka}->{run}) ? $tool_data->{strelka}->{run} : 'N',
 		'varscan'	=> defined($tool_data->{varscan}->{run}) ? $tool_data->{varscan}->{run} : 'N',
 		'vardict'	=> defined($tool_data->{vardict}->{run}) ? $tool_data->{vardict}->{run} : 'N',
@@ -148,6 +151,12 @@ sub main {
 		'mavis'	=> defined($tool_data->{mavis}->{run}) ? $tool_data->{mavis}->{run} : 'N',
 		'msi'	=> defined($tool_data->{msi_sensor}->{run}) ? $tool_data->{msi_sensor}->{run} : 'N'
 		);
+
+	# force manta to run if strelka is requested
+	if ( ('Y' eq $tool_set{'strelka'}) && ('N' eq $tool_set{'manta'}) ) {
+		print $log "Setting manta to run:Y as this is required for strelka.";
+		$tool_set{'manta'} = 'Y';
+		}
 
 	print $log Dumper \%tool_set;
 	print $log "\n";
@@ -657,7 +666,63 @@ sub main {
 				}
 			}
 
-		## run STRELKA/MANTA pipeline
+		## run MANTA pipeline
+		if ('Y' eq $tool_set{'manta'}) {
+
+			unless(-e $manta_directory) { make_path($manta_directory); }
+
+			# next run somatic variant calling
+			my $manta_command = join(' ',
+				"perl $cwd/scripts/manta.pl",
+				"-o", $manta_directory,
+				"-t", $tool_config,
+				"-d", $gatk_output_yaml,
+				"-c", $args{cluster}
+				);
+
+			if ($args{cleanup}) {
+				$_command .= " --remove";
+				}
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for manta.pl\n";
+			print $log "  COMMAND: $manta_command\n\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_manta',
+				cmd	=> $manta_command,
+				modules	=> ['perl',$samtools],
+				dependencies	=> $current_dependencies,
+				mem		=> '256M',
+				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
+
+				$manta_command .= " --dry-run";
+				`$manta_command`;
+				$manta_run_id = 'pughlab_dna_pipeline__run_manta';
+
+				} else {
+
+				$manta_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> Strelka job id: $manta_run_id\n\n";
+				push @step3_job_ids, $manta_run_id;
+				push @job_ids, $manta_run_id;
+				}
+			}
+
+		## run STRELKA pipeline
 		if ('Y' eq $tool_set{'strelka'}) {
 
 			unless(-e $strelka_directory) { make_path($strelka_directory); }
@@ -730,6 +795,7 @@ sub main {
 				"-t", $tool_config,
 				"-d", $gatk_output_yaml,
 				"-c", $args{cluster},
+				"-m", $manta_directory,
 				"--pon", $pon
 				);
 
@@ -746,7 +812,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_strelka',
 				cmd	=> $strelka_command,
 				modules	=> ['perl',$samtools],
-				dependencies	=> join(':', $current_dependencies, $strelka_run_id),
+				dependencies	=> join(':', $current_dependencies, $strelka_run_id, $manta_run_id),
 				mem		=> '256M',
 				max_time	=> $max_time,
 				extra_args	=> [$hpc_group],
@@ -1761,9 +1827,9 @@ sub main {
 				$mavis_command .= " --delly $delly_directory";
 				push @depends, $delly_run_id;
 				}
-			if (defined($strelka_run_id)) {
-				$mavis_command .= " --manta $strelka_directory";
-				push @depends, $strelka_run_id;
+			if (defined($manta_run_id)) {
+				$mavis_command .= " --manta $manta_directory";
+				push @depends, $manta_run_id;
 				}
 			if (defined($novobreak_run_id)) {
 				$mavis_command .= " --novobreak $novobreak_directory";
