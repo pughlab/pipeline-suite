@@ -157,7 +157,7 @@ sub main {
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient";
+		print $log "\nInitiating process for PATIENT: $patient\n";
 
 		my $patient_directory = join('/', $output_directory, $patient);
 		unless(-e $patient_directory) { make_path($patient_directory); }
@@ -176,7 +176,7 @@ sub main {
 			# if there are any samples to run, we will run the final combine job
 			$should_run_final = 1;
 
-			print $log "  SAMPLE: $sample\n";
+			print $log "\n  SAMPLE: $sample\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
@@ -205,8 +205,6 @@ sub main {
 			# now direct it to the specific sample of interest
 			my $aligned_bam = join('/', $data_dir, $sample, 'Aligned.toTranscriptome.out.bam');
 
-			print $log "    STAR aligned BAM: $aligned_bam\n\n";
-			
 			# create a symlink for the bam
 			my @tmp = split /\//, $aligned_bam;
 			$raw_link = join('/', $link_directory, $tmp[-1]);
@@ -233,7 +231,7 @@ sub main {
 			if ('Y' eq missing_file($genes_file)) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for RSEM...\n";
+				print $log "  >> Submitting job for RSEM...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -257,7 +255,7 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping rsem-calculate-expression because this has already been completed!\n";
+				print $log "  >> Skipping rsem-calculate-expression because this has already been completed!\n";
 				}
 
 			push @final_outputs, $genes_file;
@@ -303,7 +301,7 @@ sub main {
 				}
 			}
 
-		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
+		print $log "\nFINAL OUTPUT:\n  " . join("\n  ", @final_outputs) . "\n";
 		print $log "---\n";
 		}
 

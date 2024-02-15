@@ -108,6 +108,7 @@ sub main {
 		);
 
 	print $log Dumper \%tool_set;
+	print $log "\n";
 
 	# indicate YAML files for processed BAMs
 	my $star_output_yaml = join('/', $star_directory, 'star_bam_config_' . $timestamp . '.yaml');
@@ -132,7 +133,7 @@ sub main {
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
-			name	=> 'pughlab_dna_pipeline__run_fastqc',
+			name	=> 'pughlab_rna_pipeline__run_fastqc',
 			cmd	=> $fastqc_command,
 			modules	=> ['perl'],
 			mem		=> '256M',
@@ -145,7 +146,7 @@ sub main {
 
 			$fastqc_command .= " --dry-run";
 			`$fastqc_command`;
-			$fastqc_run_id = 'pughlab_dna_pipeline__run_fastqc';
+			$fastqc_run_id = 'pughlab_rna_pipeline__run_fastqc';
 
 			} else {
 
@@ -180,7 +181,7 @@ sub main {
 			}
 
 		# record command (in log directory) and then run job
-		print $log "\n\nSubmitting job for fusioncatcher.pl\n";
+		print $log "Submitting job for fusioncatcher.pl\n";
 		print $log "  COMMAND: $fc_command\n\n";
 
 		$run_script = write_script(
@@ -338,7 +339,7 @@ sub main {
 			}
 
 		# record command (in log directory) and then run job
-		print $log "\n\nSubmitting job for arriba.pl\n";
+		print $log "Submitting job for arriba.pl\n";
 		print $log "  COMMAND: $arriba_command\n\n";
 
 		$run_script = write_script(

@@ -9,14 +9,15 @@ use Getopt::Std;
 use Getopt::Long;
 use File::Basename;
 use File::Path qw(make_path);
-use YAML qw(LoadFile);
+use YAML qw(LoadFile DumpFile);
+use Data::Dumper;
 use IO::Handle;
 
 my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
 # define some global variables
-our ($reference, $bwameth_path);
+our ($reference, $bwameth_path, $mark_nonconverted_path);
  
 ####################################################################################################
 # version       author		comment
@@ -182,7 +183,7 @@ sub get_merge_markdup_command {
 		java_mem	=> undef,
 		n_cpus		=> undef,
 		tool		=> 'picard',
-		flowcell_type	=> 'random',
+		flowcell	=> 'random',
 		@_
 		};
 
@@ -216,7 +217,7 @@ sub get_merge_markdup_command {
 			'MAX_RECORDS_IN_RAM=100000 VALIDATION_STRINGENCY=SILENT'
 			);
 
-		if ('patterned' eq $args->{flowcell_type}) {
+		if ('patterned' eq $args->{flowcell}) {
 			$merge_command .= " OPTICAL_DUPLICATE_PIXEL_DISTANCE=2500";
 			}
 
@@ -255,8 +256,31 @@ sub get_bwameth_command {
 	return($bwa_command);
 	}	
 
+# format command to mark non-converted reads (for EM-Seq)
+sub mark_nonconverted_command {
+	my %args = (
+		input	=> undef,
+		output	=> undef,
+		@_
+		);
+
+	my $mark_command = join(' ',
+		$mark_nonconverted_path,
+		'--reference', $reference,
+		'--bam', $args{input},
+		'| samtools view -b',
+		'>', $args{output}
+		);
+
+	$mark_command .= "\n\n" . get_index_bam_command(
+		output => $args{output}
+		);	
+
+	return($mark_command);
+	}
+
 # format command to filter EM-Seq reads
-sub get_bam_filter_command {
+sub get_ts_bam_filter_command {
 	my %args = (
 		input		=> undef,
 		output		=> undef,
@@ -363,6 +387,15 @@ sub main {
 		$bwameth_version = 'bwa_meth/git';
 		}
 
+	# indicate type of sequencing (WGS/WXS or EMSeq (WGS or targeted))
+	my ($standard, $em_wgs, $em_target) = 0;
+
+	$mark_nonconverted_path = '';
+	if ('emseq' eq $tool_data->{seq_type}) {
+		$mark_nonconverted_path = $tool_data->{mark_nonconverted_path};
+		if (defined($tool_data->{baits_bed})) { $em_target = 1; } else { $em_wgs = 1; }
+		} else { $standard = 1; }
+	
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{bwa}->{parameters};
 
@@ -385,14 +418,14 @@ sub main {
 	if (defined($args{output_config})) {
 		$output_yaml = $args{output_config};
 		}
-	open (my $yaml, '>', $output_yaml) or die "Cannot open '$output_yaml' !";
-	print $yaml "---\n";
+
+	# initiate output yaml object
+	my $smp_data_out;
 
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
 		print $log "\nInitiating process for PATIENT: $patient";
-		print $yaml "$patient:\n";
 
 		# make a sample-specific directory
 		my $patient_directory = join('/', $output_directory, $patient);
@@ -401,11 +434,9 @@ sub main {
 		my @final_outputs;
 		my $type = '';
 
-		my (%tumours, %normals);
-
 		foreach my $sample (sort keys %{$smp_data->{$patient}}) {
 
-			print $log "  SAMPLE: $sample\n";
+			print $log "\n  SAMPLE: $sample\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
@@ -635,14 +666,25 @@ sub main {
 					if ('emseq' eq $tool_data->{seq_type}) {
 
 						$output = join('/', $lane_directory, $filestem . '_filtered');
+						$cleanup_cmd .= "\nrm $lane_directory/$filestem.bam";
 
 						my $filter_cmd = "cd $lane_directory;\n";
-						$filter_cmd .= get_bam_filter_command(
-							input		=> $filestem . '.bam',
-							output		=> $output . '.bam'
-							);
 
-						$cleanup_cmd .= "\nrm $lane_directory/$filestem.bam";
+						# if this is WG:EM-Seq, remove nonconverted reads
+						if ($em_wgs) {
+
+							$filter_cmd .= mark_nonconverted_command(
+								input	=> $filestem . '.bam',
+								output	=> $filestem . '_filtered.bam'
+								);
+
+							} else {
+
+							$filter_cmd .= get_ts_bam_filter_command(
+								input	=> $filestem . '.bam',
+								output	=> $output . '.bam'
+								);
+							}
 
 						# check if this should be run
 						if (
@@ -655,10 +697,10 @@ sub main {
 								log_dir	=> $log_directory,
 								name	=> 'run_filter_bam_and_index_' . $filestem,
 								cmd	=> $filter_cmd,
-								modules	=> [$samtools],
+								modules	=> [$samtools, $python],
 								dependencies	=> $run_id,
-								max_time	=> $parameters->{index}->{time}->{$type},
-								mem		=> $parameters->{index}->{mem}->{$type},
+								max_time	=> $parameters->{filter}->{time},
+								mem		=> $parameters->{filter}->{mem},
 								hpc_driver	=> $args{hpc_driver},
 								extra_args	=> [$hpc_group]
 								);
@@ -731,7 +773,7 @@ sub main {
 						output		=> $smp_output,
 						tmp_dir		=> $tmp_directory,
 						java_mem	=> $parameters->{merge}->{java_mem}->{$type},
-						flowcell_type	=> $tool_data->{flowcell}
+						flowcell	=> $tool_data->{flowcell_type}
 						);
 					}
 				}
@@ -739,14 +781,14 @@ sub main {
 			$cleanup_cmd .= "\nrm " . join(";\nrm ", @lane_intermediates) . "\n";
 
 			# add output file to list
-			if ('normal' eq $type) { $normals{$sample} = $smp_output; }
-			if ('tumour' eq $type) { $tumours{$sample} = $smp_output; }
+			if ('normal' eq $type) { $smp_data_out->{$patient}->{normal}->{$sample} = $smp_output; }
+			if ('tumour' eq $type) { $smp_data_out->{$patient}->{tumour}->{$sample} = $smp_output; }
 
 			# check if this should be run
 			if ('Y' eq missing_file("$smp_output.md5")) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job to merge lanes and mark duplicates...\n";
+				print $log "  >> Submitting job to merge lanes and mark duplicates...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -772,7 +814,7 @@ sub main {
 				push @smp_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping mark duplicate step because this was performed previously...\n";	
+				print $log "  >> Skipping mark duplicate step because this was performed previously...\n";	
 				}
 
 			push @final_outputs, $smp_output;
@@ -784,7 +826,7 @@ sub main {
 					`rm -rf $tmp_directory`;
 					} else {
 
-					print $log "Submitting job to clean up temporary/intermediate files...\n";
+					print $log "  >> Submitting job to clean up temporary/intermediate files...\n";
 
 					# make sure final output exists before removing intermediate files!
 					$cleanup_cmd = join("\n",
@@ -817,22 +859,14 @@ sub main {
 				}
 			}
 
-		# and finally, add the final files to the output yaml
-		my $key;
-		if (scalar(keys %tumours) > 0) {
-			print $yaml "    tumour:\n";
-			foreach $key (keys %tumours) { print $yaml "        $key: $tumours{$key}\n"; }
-			}
-		if (scalar(keys %normals) > 0) {
-			print $yaml "    normal:\n";
-			foreach $key (keys %normals) { print $yaml "        $key: $normals{$key}\n"; }
-			}
-
-		print $log "FINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
+		# and finally, add final files to the log
+		print $log "FINAL OUTPUT:\n  " . join("\n  ", @final_outputs) . "\n";
 		print $log "---\n";
 		}
 
-	close $yaml;
+	# output final data config
+	local $YAML::Indent = 4;
+	DumpFile($output_yaml, $smp_data_out);
 
 	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
 	# collect job metrics (exit status, mem, run time)

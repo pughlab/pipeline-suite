@@ -288,6 +288,21 @@ sub main {
 	my $pon_directory = join('/', $output_directory, 'PanelOfNormals');
 	my $pon_intermediates = join('/', $pon_directory, 'intermediate_files');
 
+	# are there any normals available to make a PoN?
+	my @normal_samples;
+	foreach my $patient (sort keys %{$smp_data}) {
+		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
+		push @normal_samples, @normal_ids;
+		}
+
+	# if any normals are present
+	if (scalar(@normal_samples) > 0) { 
+		$should_run_pon = 1;
+
+		unless(-e $pon_directory) { make_path($pon_directory); }
+		unless(-e $pon_intermediates) { make_path($pon_intermediates); }
+		}
+
 	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
@@ -296,11 +311,6 @@ sub main {
 		my @tumour_ids = keys %{$smp_data->{$patient}->{'tumour'}};
 
 		next if (scalar(@normal_ids) == 0);
-
-		# if there are any normals
-		$should_run_pon = 1;
-		unless(-e $pon_directory) { make_path($pon_directory); }
-		unless(-e $pon_intermediates) { make_path($pon_intermediates); }
 
 		print $log "\nInitiating process for PATIENT: $patient";
 

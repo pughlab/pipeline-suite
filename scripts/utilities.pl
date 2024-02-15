@@ -54,9 +54,9 @@ sub error_checking {
 		}
 
 		# type of flowcell (for markduplicates)
-		unless (defined($tool_data->{flowcell})) {
+		unless (defined($tool_data->{flowcell_type})) {
 			print "tool_config: Option flowcell must be either random or patterned, defaulting to random\n";
-			$tool_data->{flowcell} = 'random';
+			$tool_data->{flowcell_type} = 'random';
 		}
 
 		# fill in any missing parameters
@@ -268,9 +268,9 @@ sub error_checking {
 		}
 
 		# type of flowcell (for markduplicates)
-		unless (defined($tool_data->{flowcell})) {
+		unless (defined($tool_data->{flowcell_type})) {
 			print "tool_config: Option flowcell must be either random or patterned, defaulting to random\n";
-			$tool_data->{flowcell} = 'random';
+			$tool_data->{flowcell_type} = 'random';
 		}
 	}
 

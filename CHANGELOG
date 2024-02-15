@@ -1,3 +1,19 @@
+2024-02-15: PughLab pipeline-suite (version 0.9.6);
+- NEW: added code to trim adapters (used for EM-Seq pipeline only)
+- NEW: added convert_bam_to_cram.pl
+- MISC UPDATES:
+	- collect_fastqc_metrics.pl: added hpc_group specification
+	- bwa, gatk and star: simplified formatting of output yaml
+	- bwa and star: cleaned up flowcell usage
+	- strelka: removed manta as this is now run separately (manta.pl)
+	- pindel: added default insert size used for dryrun instead of failing when input files are not available yet
+	- novobreak: updated parameter configuration and workflow (wip); added checks for final output files to avoid re-running early steps
+	- varscan: added conditions for PoN creation; added more files to cleanup
+	- vardict: updated conditions for PoN creation
+	- star: added bam index for Aligned.sortedByCoord.out.bam
+	- fragmentomics end-motif motif_get_contexts.R: split output for 5' and 3' motifs
+	- minor updates to logging and status checks
+
 2023-11-30: PughLab pipeline-suite (version 0.9.5);
 - UPDATE: added ERDS (germine CNV caller) to pughlab_dnaseq_germline_pipeline.pl 
 - added griffin output to collect_fragmentomics_output.R

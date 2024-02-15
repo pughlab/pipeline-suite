@@ -362,10 +362,10 @@ novobreak:
         group_reads:
             mem: 40G
             time: '24:00:00'
-        process:
+        postprocess:
             mem: 12G
             time: '5-00:00:00'
-            n_cpu: 4
+            n_cpus: 4
         filter:
             mem: 4G
             time: '12:00:00'

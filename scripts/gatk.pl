@@ -9,8 +9,9 @@ use Getopt::Std;
 use Getopt::Long;
 use File::Basename;
 use File::Path qw(make_path);
-use YAML qw(LoadFile);
 use List::Util qw(any);
+use YAML qw(LoadFile DumpFile);
+use Data::Dumper;
 use IO::Handle;
 
 my $cwd = dirname(__FILE__);
@@ -379,14 +380,14 @@ sub main {
 	if (defined($args{output_config})) {
 		$output_yaml = $args{output_config};
 		}
-	open (my $yaml, '>', $output_yaml) or die "Cannot open '$output_yaml' !";
-	print $yaml "---\n";
+
+	# initiate output yaml object
+	my $smp_data_out;
 
 	# process each patient in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
 
-		print $log "\nInitiating process for PATIENT: $patient";
-		print $yaml "$patient:\n";
+		print $log "\nInitiating process for PATIENT: $patient\n";
 
 		# make a sample-specific directory
 		my $patient_directory = join('/', $output_directory, $patient);
@@ -468,7 +469,7 @@ sub main {
 			if ('Y' eq missing_file($target_intervals . '.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for RealignerTargetCreator...\n";
+				print $log "  >> Submitting job for RealignerTargetCreator...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -493,7 +494,7 @@ sub main {
 				push @patient_jobs, $run_id_patient;
 				push @all_jobs, $run_id_patient;
 				} else {
-				print $log "Skipping RealignerTargetCreator because this has already been completed!\n";
+				print $log "  >> Skipping RealignerTargetCreator because this has already been completed!\n";
 				}
 
 			## IndelRealigner
@@ -526,7 +527,7 @@ sub main {
 			if ('Y' eq missing_file($realign_bams_dna[-1] . '.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for IndelRealigner...\n";
+				print $log "  >> Submitting job for IndelRealigner...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -551,13 +552,11 @@ sub main {
 				push @patient_jobs, $run_id_patient;
 				push @all_jobs, $run_id_patient;
 				} else {
-				print $log "Skipping IndelRealigner because this has already been completed!\n";
+				print $log "  >> Skipping IndelRealigner because this has already been completed!\n";
 				}
 			}
 
 		# Run per-sample steps (BQSR for DNA, all for RNA)
-		my (%tumours, %normals);
-
 		foreach my $sample (@samples) {
 
 			$run_id_sample = '';
@@ -593,7 +592,7 @@ sub main {
 				if ('Y' eq missing_file($split_bam . '.md5')) {
 
 					# record command (in log directory) and then run job
-					print $log "Submitting job for SplitNCigarReads...\n";
+					print $log "    >> Submitting job for SplitNCigarReads...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
@@ -617,7 +616,7 @@ sub main {
 					push @patient_jobs, $run_id_sample;
 					push @all_jobs, $run_id_sample;
 					} else {
-					print $log "Skipping SplitNCigarReads because this has already been completed!\n";
+					print $log "    >> Skipping SplitNCigarReads because this has already been completed!\n";
 					}
 
 				# create target intervals
@@ -636,7 +635,7 @@ sub main {
 				if ('Y' eq missing_file($target_intervals . '.md5')) {
 
 					# record command (in log directory) and then run job
-					print $log "Submitting job for RealignerTargetCreator...\n";
+					print $log "    >> Submitting job for RealignerTargetCreator...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
@@ -661,7 +660,7 @@ sub main {
 					push @patient_jobs, $run_id_sample;
 					push @all_jobs, $run_id_sample;
 					} else {
-					print $log "Skipping RealignerTargetCreator because this has already been completed!\n";
+					print $log "    >> Skipping RealignerTargetCreator because this has already been completed!\n";
 					}
 
 				# perform indel realignment
@@ -683,7 +682,7 @@ sub main {
 				if ('Y' eq missing_file($realigned_bam . '.md5')) {
 
 					# record command (in log directory) and then run job
-					print $log "Submitting job for IndelRealigner...\n";
+					print $log "    >> Submitting job for IndelRealigner...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
@@ -708,12 +707,12 @@ sub main {
 					push @patient_jobs, $run_id_sample;
 					push @all_jobs, $run_id_sample;
 					} else {
-					print $log "Skipping IndelRealigner because this has already been completed!\n";
+					print $log "    >> Skipping IndelRealigner because this has already been completed!\n";
 					}
 				}
 
 			## BaseRecalibrator
-			print $log "Performing base recalibration steps for: $sample\n";
+			print $log "  Performing base recalibration steps for: $sample\n";
 
 			my $bqsr_file = join('/', $intermediate_directory, $sample . '.recal_data.grp');
 
@@ -734,7 +733,7 @@ sub main {
 			if ('Y' eq missing_file($bqsr_file)) {
 
 				# record command (in log directory) and then run job
-				print $log "\nSubmitting job for BaseRecalibrator...";
+				print $log "    >> Submitting job for BaseRecalibrator...\n";
 
 				my $n_cpu = 1;
 				if ('dna' eq $data_type) { $n_cpu = 8; }
@@ -766,7 +765,7 @@ sub main {
 				push @patient_jobs, $run_id_sample;
 				push @all_jobs, $run_id_sample;
 				} else {
-				print $log "Skipping BaseRecalibrator because this has already been completed!\n";
+				print $log "    >> Skipping BaseRecalibrator because this has already been completed!\n";
 				}
 
 			## PrintReads
@@ -780,14 +779,15 @@ sub main {
 				tmp_dir		=> $tmp_directory
 				);
 
-			if ('normal' eq $type) { $normals{$sample} = $recal_bam; }
-			if ('tumour' eq $type) { $tumours{$sample} = $recal_bam; } 
+			# add output file to list
+			if ('normal' eq $type) { $smp_data_out->{$patient}->{normal}->{$sample} = $recal_bam; }
+			if ('tumour' eq $type) { $smp_data_out->{$patient}->{tumour}->{$sample} = $recal_bam; }
 
 			# check if this should be run
 			if ('Y' eq missing_file($recal_bam . '.md5')) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job for PrintReads (applying base recalibration)...\n";
+				print $log "    >> Submitting job for PrintReads (applying base recalibration)...\n";
 
 				# determine number of cpus to request
 				my $n_cpu = 1;
@@ -817,23 +817,12 @@ sub main {
 				push @patient_jobs, $run_id_sample;
 				push @all_jobs, $run_id_sample;
 				} else {
-				print $log "Skipping PrintReads (apply base recalibration) because this has already been completed!\n";
+				print $log "    >> Skipping PrintReads (apply base recalibration) because this has already been completed!\n";
 				}
 
 			push @final_outputs, $recal_bam;
 			}
 	
-		# and finally, add the final files to the output yaml
-		my $key;
-		if (scalar(@tumour_ids) > 0) {
-			print $yaml "    tumour:\n";
-			foreach $key (keys %tumours) { print $yaml "        $key: $tumours{$key}\n"; }
-			}
-		if (scalar(@normal_ids) > 0) {
-			print $yaml "    normal:\n";
-			foreach $key (keys %normals) { print $yaml "        $key: $normals{$key}\n"; }
-			}
-
 		# clean up/remove intermediate files
 		if ($args{del_intermediates}) {
 
@@ -841,7 +830,7 @@ sub main {
 				`rm -rf $tmp_directory`;
 				} else {
 
-				print $log "Submitting job to clean up temporary/intermediate files...\n";
+				print $log "    >> Submitting job to clean up temporary/intermediate files...\n";
 
 				# make sure final output exists before removing intermediate files!
 				$cleanup_cmd = join("\n",
@@ -873,9 +862,13 @@ sub main {
 				}
 			}
 
-		print $log "FINAL OUTPUT:\n  " . join("\n  ", @final_outputs) . "\n";
-		print $log "---\n";
+		print $log "\nFINAL OUTPUT:\n  " . join("\n  ", @final_outputs) . "\n";
+		print $log "\n---";
 		}
+
+	# output final data config
+	local $YAML::Indent = 4;
+	DumpFile($output_yaml, $smp_data_out);
 
 	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
 	# collect job metrics (exit status, mem, run time)
@@ -922,8 +915,6 @@ sub main {
 		}
 
 	# finish up
-	close $yaml;
-
 	print $log "\nProgramming terminated successfully.\n\n";
 	close $log;
 	}

@@ -10,7 +10,8 @@ use Getopt::Std;
 use Getopt::Long;
 use File::Basename;
 use File::Path qw(make_path);
-use YAML qw(LoadFile);
+use YAML qw(LoadFile DumpFile);
+use Data::Dumper;
 use IO::Handle;
 
 my $cwd = dirname(__FILE__);
@@ -122,6 +123,21 @@ sub format_readgroup {
 	return($readgroup);
 	}
 
+# format command to index genome-sorted bam
+sub get_index_bam_command {
+	my %args = (
+		output => undef,
+		@_
+		);
+
+	my $index_command = join(' ',
+		'samtools index',
+		$args{output}
+		);
+
+	return($index_command);
+	}
+
 # format command to mark duplicates
 sub get_markdup_command {
 	my %args = (
@@ -129,7 +145,7 @@ sub get_markdup_command {
 		output		=> undef,
 		java_mem	=> undef,
 		tmp_dir		=> undef,
-		flowcell_type	=> 'random',
+		flowcell	=> 'random',
 		@_
 		);
 
@@ -144,7 +160,7 @@ sub get_markdup_command {
 		'MAX_RECORDS_IN_RAM=100000 VALIDATION_STRINGENCY=SILENT'
 		);
 
-	if ('patterned' eq $args->{flowcell_type}) {
+	if ('patterned' eq $args{flowcell}) {
 		$markdup_command .= " OPTICAL_DUPLICATE_PIXEL_DISTANCE=2500";
 		}
 
@@ -280,9 +296,13 @@ sub main {
 	my @all_jobs;
 
 	# initiate final output yaml file
-	my $output_yaml = $args{output_config};
-	open (my $yaml, '>', $output_yaml) or die "Cannot open '$output_yaml' !";
-	print $yaml "---\n";
+	my $output_yaml = join('/', $output_directory, 'star_bam_config.yaml');
+	if (defined($args{output_config})) {
+		$output_yaml = $args{output_config};
+		}
+
+	# initiate output yaml objects
+	my ($smp_data_out, $smp_data_markdup);
 
 	# create sample sheet (tab-delim file with id/path/group)
 	my $qc_directory = join('/', $output_directory, 'RNASeQC_' . $run_count);
@@ -298,7 +318,6 @@ sub main {
 	foreach my $patient (sort keys %{$smp_data}) {
 
 		print $log "\nInitiating process for PATIENT: $patient\n";
-		print $yaml "$patient:\n";
 
 		my $patient_directory = join('/', $output_directory, $patient);
 		unless(-e $patient_directory) { make_path($patient_directory); }
@@ -306,11 +325,9 @@ sub main {
 		my $cleanup_cmd = '';
 		my (@final_outputs, @patient_jobs);
 
-		my (%tumours, %normals);
-
 		foreach my $sample (sort keys %{$smp_data->{$patient}}) {
 
-			print $log "  SAMPLE: $sample\n";
+			print $log "\n  SAMPLE: $sample\n";
 
 			# determine sample type
 			my $type = $smp_data->{$patient}->{$sample}->{type};
@@ -330,6 +347,7 @@ sub main {
 
 			my (@libraries, @all_lanes, @r1_fastqs, @r2_fastqs);
 			@libraries = keys %{$smp_data->{$patient}->{$sample}->{libraries}};
+
 			foreach my $lib ( @libraries ) {
 				print $log "\n    LIBRARY: $lib\n";
 				my $lib_data = $smp_data->{$patient}->{$sample}->{libraries}->{$lib};
@@ -340,8 +358,8 @@ sub main {
 					my $r1 = $lib_data->{runlanes}->{$lane}->{fastq}->{R1};
 					my $r2 = $lib_data->{runlanes}->{$lane}->{fastq}->{R2};
 
-					print $log "      R1: $r1\n";
-					print $log "      R2: $r2\n\n";
+					print $log "        R1: $r1\n";
+					print $log "        R2: $r2\n\n";
 
 					# create a symlink for this file
 					my @tmp = split /\//, $r1;
@@ -384,16 +402,23 @@ sub main {
 				tmp_dir		=> $temp_star
 				);
 
-			my $required = join('/', $sample_directory, 'Aligned.sortedByCoord.out.bam');
+			my $genome_bam = join('/', $sample_directory, 'Aligned.sortedByCoord.out.bam');
+
+			# add output file to list
+			if ('normal' eq $type) {
+				$smp_data_out->{$patient}->{normal}->{$sample} = $genome_bam;
+				} elsif ('tumour' eq $type) {
+				$smp_data_out->{$patient}->{tumour}->{$sample} = $genome_bam;
+				}
 
 			# check if this should be run
-			if ('Y' eq missing_file($required)) {
+			if ('Y' eq missing_file($genome_bam)) {
 
 				# record command (in log directory) and then run job
-				print $log "Submitting job to run STAR...\n";
+				print $log "  >> Submitting job to run STAR...\n";
 				$run_script = write_script(
 					log_dir	=> $log_directory,
-					name	=> 'run_STAR_' . $sample,
+					name	=> 'run_star_alignment_' . $sample,
 					cmd	=> $star,
 					modules	=> [$star_version],
 					dependencies	=> $run_id,
@@ -405,7 +430,7 @@ sub main {
 
 				# initial test took 15 hours with 22G and 1 node
 				$run_id = submit_job(
-					jobname		=>'run_STAR_' . $sample,
+					jobname		=>'run_star_alignment_' . $sample,
 					shell_command	=> $run_script,
 					hpc_driver	=> $args{hpc_driver},
 					dry_run		=> $args{dry_run},
@@ -415,46 +440,82 @@ sub main {
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
 				} else {
-				print $log "Skipping alignment step because output already exists...\n";
+				print $log "  >> Skipping alignment step because output already exists...\n";
 				}
-		
+
+			# index the resulting BAM and remove intermediate SAM
+			my $index_cmd = get_index_bam_command(
+				output => $genome_bam
+				);
+
+			# check if this should be run
+			if ( ('N' eq missing_file($genome_bam)) &&  
+				('Y' eq missing_file("$genome_bam.bai")) ) {
+
+				# record command (in log directory) and then run job
+				print $log "  >> Submitting job to run BAM INDEX...\n";
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'run_bam_index_' . $sample,
+					cmd	=> $index_cmd,
+					modules	=> [$samtools],
+					dependencies	=> $run_id,
+					max_time	=> '12:00:00',
+					mem		=> '2G',
+					hpc_driver	=> $args{hpc_driver},
+					extra_args	=> [$hpc_group]
+					);
+
+				my $idx_run_id = submit_job(
+					jobname		=>'run_bam_index_' . $sample,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				push @patient_jobs, $idx_run_id;
+				push @all_jobs, $idx_run_id;
+				} else {
+				print $log "  >> Skipping index step because output already exists...\n";
+				}
+
 			## mark duplicates
-			my $input_file = join('/', $sample_directory, '/Aligned.sortedByCoord.out.bam');
 			my $dedup_bam = join('/', $patient_directory, $sample . '_sorted_markdup.bam');
 
 			if ('N' eq $parameters->{markdup}->{run}) {
 
-				if ('normal' eq $type) { $normals{$sample} = $input_file; }
-				if ('tumour' eq $type) { $tumours{$sample} = $input_file; }
-
-				print $fh "$sample\t$input_file\tRNASeq\n";
-
-				push @final_outputs, $input_file;
+				print $fh "$sample\t$genome_bam\tRNASeq\n";
+				push @final_outputs, $genome_bam;
 
 				} else {
 
 				print $fh "$sample\t$dedup_bam\tRNASeq\n";
 
 				my $markdup_cmd = get_markdup_command(
-					input		=> $input_file,
+					input		=> $genome_bam,
 					output		=> $dedup_bam,
 					java_mem	=> $parameters->{markdup}->{java_mem},
 					tmp_dir		=> $tmp_directory,
-					flowcell_type	=> $tool_data->{flowcell}
+					flowcell	=> $tool_data->{flowcell_type}
 					);
 		
-				if ('normal' eq $type) { $normals{$sample} = $dedup_bam; }
-				if ('tumour' eq $type) { $tumours{$sample} = $dedup_bam; }
+				# add output file to list
+				if ('normal' eq $type) {
+					$smp_data_out->{$patient}->{normal}->{$sample} = $dedup_bam;
+					} elsif ('tumour' eq $type) {
+					$smp_data_out->{$patient}->{tumour}->{$sample} = $dedup_bam;
+					}
 
 				# check if this should be run
 				if ('Y' eq missing_file($dedup_bam . '.md5')) {
 
 					# record command (in log directory) and then run job
-					print $log "Submitting job to merge lanes and mark duplicates...\n";
+					print $log "  >> Submitting job to merge lanes and mark duplicates...\n";
 
 					$run_script = write_script(
 						log_dir	=> $log_directory,
-						name	=> 'run_MarkDups_' . $sample,
+						name	=> 'run_picard_markdup_' . $sample,
 						cmd	=> $markdup_cmd,
 						modules	=> [$picard, $samtools],
 						dependencies	=> $run_id,
@@ -465,7 +526,7 @@ sub main {
 						);
 
 					$run_id = submit_job(
-						jobname		=> 'run_MarkDups_' . $sample,
+						jobname		=> 'run_picard_markdup_' . $sample,
 						shell_command	=> $run_script,
 						hpc_driver	=> $args{hpc_driver},
 						dry_run		=> $args{dry_run},
@@ -475,28 +536,17 @@ sub main {
 					push @patient_jobs, $run_id;
 					push @all_jobs, $run_id;
 					} else {
-					print $log "Skipping mark duplicate step because output already exists...\n";
+					print $log "  >> Skipping mark duplicate step because output already exists...\n";
 					}
 
 				push @final_outputs, $dedup_bam;
 				}
 			}
 
-		# and finally, add the final files to the output yaml
-		my $key;
-		if (scalar(keys %tumours) > 0) {
-			print $yaml "    tumour:\n";
-			foreach $key (keys %tumours) { print $yaml "        $key: $tumours{$key}\n"; }
-			}
-		if (scalar(keys %normals) > 0) {
-			print $yaml "    normal:\n";
-			foreach $key (keys %normals) { print $yaml "        $key: $normals{$key}\n"; }
-			}
-
 		# once per patient, run cleanup
 		if ( ($args{del_intermediates}) && (scalar(@patient_jobs) > 0) ) {
 
-			print $log "Submitting job to clean up temporary/intermediate files...\n";
+			print $log ">> Submitting job to clean up temporary/intermediate files...\n";
 
 			# make sure final output exists before removing intermediate files!
 			$cleanup_cmd = join("\n",
@@ -528,11 +578,10 @@ sub main {
 				);
 			}
 
-		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
+		print $log "\nFINAL OUTPUT:\n  " . join("\n  ", @final_outputs) . "\n";
 		print $log "---\n";
 		}
 
-	close $yaml;
 	close $fh;
 
 	# get command for RNASeQC
@@ -553,7 +602,7 @@ sub main {
 	$qc_cmd .= "\nfi";
 
 	# record command (in log directory) and then run job
-	print $log "\nSubmitting job for RNA-SeQC...\n";
+	print $log "\n>> Submitting job for RNA-SeQC...\n";
 
 	$run_script = write_script(
 		log_dir	=> $log_directory,
@@ -647,6 +696,10 @@ sub main {
 			check_final_status(job_id => $run_id);
 			}
 		}
+
+	# output final data config
+	local $YAML::Indent = 4;
+	DumpFile($output_yaml, $smp_data_out);
 
 	# finish up
 	print $log "\nProgramming terminated successfully.\n\n";

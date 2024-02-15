@@ -199,8 +199,8 @@ sub main {
 					my $r1 = $lib_data->{runlanes}->{$lane}->{fastq}->{R1};
 					my $r2 = $lib_data->{runlanes}->{$lane}->{fastq}->{R2};
 
-					print $log "      R1: $r1\n";
-					print $log "      R2: $r2\n\n";
+					print $log "        R1: $r1\n";
+					print $log "        R2: $r2\n\n";
 
 					# create a symlink for this file
 					my @tmp = split /\//, $r1;
@@ -239,7 +239,7 @@ sub main {
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
-					name	=> 'run_FusionCatcher_' . $sample,
+					name	=> 'run_fusionCatcher_' . $sample,
 					cmd	=> $fusion_cmd,
 					modules => [$fusioncatcher],
 					max_time	=> $parameters->{fusioncatcher}->{time},
@@ -249,7 +249,7 @@ sub main {
 					);
 
 				$run_id = submit_job(
-					jobname		=> 'run_FusionCatcher_' . $sample,
+					jobname		=> 'run_fusionCatcher_' . $sample,
 					shell_command	=> $run_script,
 					hpc_driver	=> $args{hpc_driver},
 					dry_run		=> $args{dry_run},
@@ -306,7 +306,7 @@ sub main {
 				}
 			}
 
-		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
+		print $log "\nFINAL OUTPUT:\n  " . join("\n  ", @final_outputs) . "\n";
 		print $log "---\n";
 		}
 

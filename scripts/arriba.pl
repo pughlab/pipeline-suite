@@ -326,6 +326,7 @@ sub main {
 
 			# set up commands and output
 			my $bam = join('/', $tmp_directory, 'Aligned.out.bam');
+			my $star_log = join('/', $sample_directory, 'alignments.COMPLETE');
 			my $output_stem = join('/', $sample_directory, 'fusions');
 			my $virus_output = join('/', $sample_directory, 'virus_expression.tsv');
 
@@ -337,8 +338,10 @@ sub main {
 				n_cpus		=> $parameters->{star}->{n_cpus}
 				);
 
+			$star_cmd .= "\n\necho 'alignments complete' > $star_log";
+
 			# check if this should be run
-			if ('Y' eq missing_file($bam)) {
+			if ( ('Y' eq missing_file($star_log)) ) {
 
 				# record command (in log directory) and then run job
 				print $log "Submitting job to run STAR...\n";
