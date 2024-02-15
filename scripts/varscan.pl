@@ -398,9 +398,6 @@ sub main {
 			next;
 			}
 
-		# if any normals are present
-		$should_run_pon = 1;
-
 		# create some directories
 		my $patient_directory = join('/', $output_directory, $patient);
 		unless(-e $patient_directory) { make_path($patient_directory); }

@@ -519,7 +519,7 @@ sub pon {
 				# make sure final output exists before removing intermediate files!
 				my @files_to_check;
 				foreach my $tmp ( @{$final_outputs{$patient}} ) {
-					push @files_to_check, $tmp . '.md5';
+					push @files_to_check, $tmp;
 					}
 
 				my $cleanup_cmd = join("\n",

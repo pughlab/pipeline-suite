@@ -73,7 +73,7 @@ sub create_annotate_command {
 		@_
 		);
 
-	my $cpsr_command .= "\n\n" . join(' ',
+	my $cpsr_command = join(' ',
 		"cpsr.py",
 		'--query_vcf', $args{vcf},
 		'--pcgr_dir /' ,
