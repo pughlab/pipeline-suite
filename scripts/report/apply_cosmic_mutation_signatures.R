@@ -74,7 +74,9 @@ parser$add_argument('-m', '--maf', type = 'character', help = 'mutation calls in
 parser$add_argument('-v', '--vaf_threshold', type = 'character',
 	help = 'threshold to filter variants', default = 0.1);
 parser$add_argument('-s', '--signatures', type = 'character', default = NULL,
-	help = 'path to signatures matrix (96 trinucleotide x N sigs)');
+	help = 'path to signatures matrix (96 trinucleotide x N sigs); takes priority over --cosmic_version');
+parser$add_argument('-c', '--cosmic_version', type = 'character', default = 3.2,
+	help = 'COSMIC SBS signature version to use (see R package: cosmicsig)');
 parser$add_argument('-z', '--report', type = 'character', help = 'path to report directory',
 	default = NULL);
 
@@ -82,11 +84,16 @@ arguments <- parser$parse_args();
 
 # load required libraries
 library(BoutrosLab.plotting.general);
+library(cosmicsig);
 library(xtable);
 library(deconstructSigs);
 library(BSgenome);
 
 # get genome object
+ref_type <- if (arguments$ref_type == 'hg38') { 'GRCh38'
+	} else if (arguments$ref_type == 'hg19') { 'GRCh37'
+	}
+
 BSgenome.Hsapiens.UCSC <- if (arguments$ref_type == 'hg38') {
 	getBSgenome("BSgenome.Hsapiens.UCSC.hg38");
 	} else if (arguments$ref_type == 'hg19') {
@@ -112,8 +119,20 @@ if (is.null(arguments$maf)) {
 	}
 
 # read in mutation signatures
-signatures.to.apply <- if (is.null(arguments$signatures)) { signatures.cosmic } else {
-	as.data.frame(t(read.delim(arguments$signatures, row.names = 1)));
+if (!is.null(arguments$signatures)) {
+	signatures.to.apply <- as.data.frame(t(read.delim(arguments$signatures, row.names = 1)));
+	signature.etiologies <- NULL;
+	} else if (arguments$cosmic_version %in% c('3.0','3.1','3.2','3.3')) {
+	signatures.to.apply <- get(paste0('COSMIC_v',arguments$cosmic_version))$signature[[ref_type]]$SBS96;
+	signatures.to.apply <- as.data.frame(t(signatures.to.apply));
+	colnames(signatures.to.apply) <- sapply(colnames(signatures.to.apply), function(i) {
+		i <- unlist(strsplit(i,''));
+		paste0(i[1],'[',i[2],'>',i[4],']',i[3])
+		} );
+	signature.etiologies <- data.frame(get(paste0('COSMIC_v',arguments$cosmic_version))$etiology$SBS96);
+	} else {
+	signatures.to.apply <- deconstructSigs::signatures.cosmic;
+	signature.etiologies <- NULL;
 	}
 
 # create (if necessary) and move to output directory
@@ -284,6 +303,7 @@ if (all(is.na(sig.weights))) {
 
 	save(
 		signatures.to.apply,
+		signature.etiologies,
 		assigned.sigs,
 		file = generate.filename(arguments$project, 'assignedSignatures', 'RData')
 		);
@@ -316,17 +336,35 @@ if (all(is.na(sig.weights))) {
 	sample.order <- rownames(heatmap.data);
 	sig.order <- colnames(heatmap.data);
 
+	plot.data <- merge(t(sig.weights), signature.etiologies, by = 'row.names');
+	plot.data$Count <- apply(plot.data[,sample.order],1,function(i) { length(i[which(i > 0)]) } );
+
+	plot.data$Group <- 'other';
+	plot.data[grepl('exposure',tolower(plot.data$proposed_etiology)),]$Group <- 'other exposure';
+	plot.data[grepl('ultraviolet',tolower(plot.data$proposed_etiology)),]$Group <- 'UV';
+	plot.data[grepl('tobacco',tolower(plot.data$proposed_etiology)),]$Group <- 'tobacco';
+	plot.data[grepl('AID|APOBEC',plot.data$proposed_etiology),]$Group <- 'APOBEC';
+	plot.data[grepl('treatment|chemotherapy',tolower(plot.data$proposed_etiology)),]$Group <- 'treatment';
+	plot.data[grepl('deamination',tolower(plot.data$proposed_etiology)),]$Group <- 'age';
+	plot.data[grepl('excision',tolower(plot.data$proposed_etiology)),]$Group <- 'BER';
+	plot.data[grepl('mismatch repair',tolower(plot.data$proposed_etiology)),]$Group <- 'MMR';
+	plot.data[grepl('HR|BRCA',plot.data$proposed_etiology),]$Group <- 'HRD';
+	plot.data[grepl('POLD|POLE|polymerase',plot.data$proposed_etiology),]$Group <- 'polymerase';
+	plot.data[grepl('reactive',tolower(plot.data$proposed_etiology)),]$Group <- 'ROS';
+	plot.data[grepl('artefact',tolower(plot.data$proposed_etiology)),]$Group <- 'junk';
+	plot.data[which(plot.data$proposed_etiology == ''),]$Group <- 'unknown';
+	plot.data$Group <- factor(plot.data$Group, levels = rev(c('age','APOBEC','BER','HRD','MMR','polymerase','ROS','tobacco','treatment','other exposure','UV','other','unknown','junk')));
+
+	plot.data <- plot.data[order(plot.data$Group, plot.data$Count),];
+
 	# extract top signatures
 	top.signatures <- sig.order[1:10];
 	sig.summary <- data.frame(
 		Signature = top.signatures,
-		N.Samples = NA
-		);	
-
-	for (i in 1:10) {
-		sig <- top.signatures[i];
-		sig.summary[i,2] <- nrow(sig.weights[which(sig.weights[,sig] > 0.05),]);
-		}
+		N.Samples = apply(sig.weights[,top.signatures],2,function(i) { length(i[which(i > 0.05)]) } ),
+		Etiology = if (!is.null(signature.etiologies)) { signature.etiologies[top.signatures,1]
+			} else { rep('', 10) }
+		);
 
 	should.plot <- TRUE;
 	}
@@ -340,28 +378,51 @@ if (should.plot) {
 		} else if (length(all.samples) <= 80) { 0.5
 		} else { 0 };
 
+	# make some covariates
+	sig.colours <- force.colour.scheme(scheme = 'chromosome', return.scheme = TRUE)$scheme$colours;
+	sig.colours <- rev(sig.colours[1:nlevels(plot.data$Group)]);
+
+	sig.covariates <- list(
+		rect = list(col = 'white', lwd = 0, 
+			fill = rev(sig.colours[match(plot.data$Group, levels(plot.data$Group))])
+			)
+		);
+
+	sig.legends <- legend.grob(
+		legends = list(
+			legend = list(colours = rev(sig.colours), labels = rev(levels(plot.data$Group)))
+			),
+		label.cex = 0.8,
+		size = 1.5
+		);
+
 	# make the heatmap
 	create.heatmap(
-		sig.weights[sample.order,sig.order],
+		sig.weights[sample.order,rev(plot.data$Row.names)],
 		same.as.matrix = TRUE,
 		cluster.dimensions = 'none',
 		colour.scheme = c('white','red'),
+		covariates.top = sig.covariates,
+		covariates.top.grid.border = list(col = 'black', lwd = 1),
+		covariates.top.col.lines = get.line.breaks(rev(plot.data$Group))-0.5,
+		covariates.top.grid.col = list(col = 'grey80', lwd = 2),
+		inside.legend = list(fun = sig.legends, x = 1.01, y = 1),
+		right.padding = 15,
 		xaxis.cex = 0.5,
-		xaxis.lab.top = colnames(heatmap.data),
-		x.alternating = 2,
+		xaxis.lab = rev(plot.data$Row.names),
 		yaxis.cex = axis.cex,
 		yaxis.lab = simplify.ids(rownames(heatmap.data)),
 		axes.lwd = 1,
 		yaxis.fontface = 'plain',
 		xaxis.fontface = 'plain',
 		yaxis.tck = c(0.2,0),
-		right.padding = 1,
 		grid.row = TRUE,
 		force.grid.row = TRUE,
 		row.colour = 'grey80',
 		col.colour = 'grey80',
 		row.lwd = if (length(all.samples) < 30) { 3 } else { 1 },
 		col.lwd = if (length(all.samples) < 30) { 3 } else { 1 },
+		col.lines = get.line.breaks(rev(plot.data$Group)),
 		grid.col = TRUE,
 		force.grid.col = TRUE,
 		fill.colour = 'white',

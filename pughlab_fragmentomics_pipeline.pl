@@ -37,19 +37,36 @@ sub create_downsample_command {
 	my %args = (
 		bam	=> undef,
 		id	=> undef,
-		n_reads	=> 50000000,
+		n_reads	=> undef,
+		factor	=> undef,
 		outdir	=> undef,
 		tmpdir	=> undef,
 		@_
 		);
 
-	my $downsample_command = join("\n",
-		"N_READS=" . $args{n_reads},
-		"TOTAL_READS=\$(samtools view -c $args{bam})",
-		"SCALE_FACTOR=\$(printf '%.4f\\n' \$(echo \"\$N_READS/\$TOTAL_READS\" | bc -l))",
-		"echo 'downsampling to \$N_READS from \$TOTAL_READS (scale factor = \$SCALE_FACTOR)'",
+	my $downsample_command;
+
+	if (defined($args{n_reads})) {
+
+		$downsample_command = join("\n",
+			"N_READS=" . $args{n_reads},
+			"TOTAL_READS=\$(samtools view -c $args{bam})",
+			"SCALE_FACTOR=\$(printf '%.4f\\n' \$(echo \"\$N_READS/\$TOTAL_READS\" | bc -l))"
+			);
+
+		} elsif (defined($args{factor})) {
+
+		$downsample_command = join("\n",
+			"SCALE_FACTOR=$args{factor}",
+			"TOTAL_READS=\$(samtools view -c $args{bam})",
+			"N_READS=\$(printf '%.0f\\n' \$(echo \"\$SCALE_FACTOR*\$TOTAL_READS\" | bc -l))"
+			);
+		}
+
+	$downsample_command .= "\n" . join("\n"
+		'echo "downsampling to $N_READS from $TOTAL_READS (scale factor = $SCALE_FACTOR)"' . "\n",
 		'if (( $(echo "$SCALE_FACTOR < 1" | bc -l) )); then'
-		);
+		)
 
 	$downsample_command .= "\n  " . join(' ',  
 		'java -Xmx1g',
@@ -823,7 +840,7 @@ sub main {
 
 	# get optional HPC group
 	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
-	
+
 	### RUN ###########################################################################################
 	# first, determine which steps/fragmentomics analyses to run
 	my %tool_set = (
@@ -863,6 +880,17 @@ sub main {
 
 	unless($args{dry_run}) {
 		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
+		}
+
+	# extract downsample parameters
+	my ($n_reads, $scale_factor);
+	if (defined($parameters->{downsample}->{n_reads})) {
+		$n_reads = $parameters->{downsample}->{n_reads};
+		} elsif (defined($parameters->{downsample}->{scale_factor})) {
+		$scale_factor = $parameters->{downsample}->{scale_factor};
+		} else {
+		$n_reads = 50000000;
+		print "\nNo scaling parameters defined for downsampling; will default to 50M reads. Alternatively, you can specifiy these (number of reads (n_reads) or scaling factor (scale_factor)) in your tool config.";
 		}
 
 	# initialize objects
@@ -950,7 +978,8 @@ sub main {
 				my $downsample_cmd = create_downsample_command(
 					bam	=> $smp_data->{$patient}->{tumour}->{$tumour},
 					id	=> $tumour,
-					n_reads	=> $parameters->{downsample}->{n_reads},
+					n_reads => defined($n_reads) ? $n_reads : undef,
+					factor  => defined($scale_factor) ? $scale_factor : undef,
 					outdir	=> $downsample_directory,
 					tmpdir	=> $tmp_directory
 					);

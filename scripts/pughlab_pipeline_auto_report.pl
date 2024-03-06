@@ -24,11 +24,11 @@ require "$cwd/utilities.pl";
 ### MAIN ###########################################################################################
 sub main {
 	my %args = (
-		config		=> undef,
+		tool_config	=> undef,
+		data_config	=> undef,
 		cluster		=> undef,
 		report		=> undef,
 		dry_run		=> undef,
-		run_date	=> undef,
 		no_wait		=> undef,
 		@_
 		);
@@ -38,8 +38,7 @@ sub main {
 		print "Initiating SUMMARIZE pipeline...\n";
 		}
 
-	my $tool_data = LoadFile($args{config});
-	my $run_date = $args{run_date};
+	my $tool_data = LoadFile($args{tool_config});
 	my $current_date = strftime "%F", localtime;
 
 	# check for and/or create output directories
@@ -136,7 +135,7 @@ sub main {
 		'arriba'	=> defined($tool_data->{arriba}->{run}) ? $tool_data->{arriba}->{run} : 'N',
 		'star_fusion'	=> defined($tool_data->{star_fusion}->{run}) ? $tool_data->{star_fusion}->{run} : 'N',
 		'fusioncatcher'	=> defined($tool_data->{fusioncatcher}->{run}) ? $tool_data->{fusioncatcher}->{run} : 'N',
-		'cosmic_sbs'	=> defined($tool_data->{summarize_steps}->{run_cosmic_sbs}) ? $tool_data->{summarize_steps}->{run_cosmic_sbs} : 'N',
+		'cosmic_sbs'	=> defined($tool_data->{summarize_steps}->{run_cosmic_sbs}->{run}) ? $tool_data->{summarize_steps}->{run_cosmic_sbs}->{run} : 'N',
 		'chord'		=> defined($tool_data->{summarize_steps}->{run_chord}) ? $tool_data->{summarize_steps}->{run_chord} : 'N',
 		'hrdetect'	=> defined($tool_data->{summarize_steps}->{run_hrdetect}) ? $tool_data->{summarize_steps}->{run_hrdetect} : 'N',
 		'mutsig'	=> defined($tool_data->{summarize_steps}->{run_mutsig}) ? $tool_data->{summarize_steps}->{run_mutsig} : 'N'
@@ -145,7 +144,7 @@ sub main {
 #	print Dumper \%tool_set;
 
 	# add germline-only check here?
-	if ('germline' eq $tool_data->{sample_type}) {
+	if (defined($tool_data->{sample_type}) && ('germline' eq $tool_data->{sample_type}) ) {
 
 		# skip somatic variant summarizations
 		$tool_set{mutect}		= 'N';
@@ -164,7 +163,7 @@ sub main {
 	# initiate objects
 	my @job_ids;
 	my ($qc_dir, $germ_dir, $cpsr_dir);
-	my ($correlations, $qc_data, $cb_data, $seqqc_data, $callability_data, $contest_data, $cpsr_calls) = undef;
+	my ($correlations, $qc_data, $cb_data, $seqqc_data, $callability_data, $efficiency_data, $contest_data, $cpsr_calls) = undef;
 	my ($run_script, $run_id);
 
 	### find the required input files
@@ -198,8 +197,9 @@ sub main {
 		my $qc_command = "cd $output_directory\n";
 		$qc_command .= "Rscript $cwd/report/plot_qc_metrics.R";
 		$qc_command .= " " . join(' ',
+			'-s', $args{data_config},
 			'-g', $correlations,
-			'-q', $qc_data,
+			'-v', $qc_data,
 			'-o', $plot_directory,
 			'-p', $tool_data->{project_name},
 			'-t', $tool_data->{seq_type}
@@ -509,7 +509,8 @@ sub main {
 			@seqqc_files = sort @seqqc_files;
 
 			my @qc_files = grep { /ContaminationEstimates.tsv/ } @seqqc_files;
-			my @cov_files = grep { /WGSMetrics.tsv/ } @seqqc_files;
+			my @wgs_cov_files = grep { /WGSMetrics.tsv/ } @seqqc_files;
+			my @hs_cov_files = grep { /HSMetrics.tsv/ } @seqqc_files;
 
 			closedir(QC);
 
@@ -522,12 +523,22 @@ sub main {
 			symlink($seqqc_data, join('/', $data_directory, 'ContaminationEstimates.tsv'));
 
 			if ('wgs' eq $tool_data->{seq_type}) {
-				$callability_data = join('/', $qc_dir, 'SequenceMetrics', $cov_files[-1]);
+				$callability_data = join('/', $qc_dir, 'SequenceMetrics', $wgs_cov_files[-1]);
 				if ( -l join('/', $data_directory, 'wgs_callability.tsv')) {
 					unlink join('/', $data_directory, 'wgs_callability.tsv');
 					}
 
 				symlink($callability_data, join('/', $data_directory, 'wgs_callability.tsv'));
+				}
+
+			if ( (defined($tool_data->{intervals_bed})) || 
+				(defined($tool_data->{targets_bed})) || (defined($tool_data->{baits_bed})) ) {
+				$efficiency_data = join('/', $qc_dir, 'SequenceMetrics', $hs_cov_files[-1]);
+				if ( -l join('/', $data_directory, 'hs_efficiency.tsv')) {
+					unlink join('/', $data_directory, 'hs_efficiency.tsv');
+					}
+
+				symlink($efficiency_data, join('/', $data_directory, 'hs_efficiency.tsv'));
 				}
 			}
 
@@ -579,6 +590,7 @@ sub main {
 		my $qc_command = "cd $output_directory\n";
 		$qc_command .= "Rscript $cwd/report/plot_qc_metrics.R";
 		$qc_command .= " " . join(' ',
+			'-s', $args{data_config},
 			'-g', $correlations,
 			'-o', $plot_directory,
 			'-p', $tool_data->{project_name},
@@ -589,6 +601,7 @@ sub main {
 		if (defined($seqqc_data)) { $qc_command .= " -m $seqqc_data"; }
 		if (defined($qc_data)) { $qc_command .= " -v $qc_data"; }
 		if (defined($callability_data)) { $qc_command .= " -w $callability_data"; }
+		if (defined($efficiency_data)) { $qc_command .= " -e $efficiency_data"; }
 		
 		my $qc_run_id;
 		if ('Y' eq $tool_set{'bamqc'}) {
@@ -1350,7 +1363,7 @@ sub main {
 				modules		=> [$r_version],
 				dependencies	=> $ensemble_run_id,
 				max_time	=> '24:00:00',
-				mem		=> ('wgs' eq $tool_data->{seq_type}) ? '4G' : '2G',
+				mem		=> ('wgs' eq $tool_data->{seq_type}) ? '8G' : '4G',
 				hpc_driver	=> $args{cluster},
 				extra_args	=> [$hpc_group]
 				);
@@ -1401,7 +1414,7 @@ sub main {
 					modules		=> ['MutSigCV/1.4'],
 					dependencies	=> $ensemble_run_id,
 					max_time	=> '06:00:00',
-					mem		=> '8G',
+					mem		=> '16G',
 					hpc_driver	=> $args{cluster},
 					extra_args	=> [$hpc_group]
 					);
@@ -1420,6 +1433,8 @@ sub main {
 			# plot mutation signatures
 			if ('Y' eq $tool_set{'cosmic_sbs'}) {
 
+				my $parameters = $tool_data->{summarize_steps}->{run_cosmic_sbs};
+
 				my $sbs_directory = join('/', $sig_directory, 'COSMIC_SBS');
 				unless(-e $sbs_directory) { make_path($sbs_directory); }
 
@@ -1433,8 +1448,10 @@ sub main {
 					'-t', $tool_data->{seq_type}
 					);
 
-				if (defined($tool_data->{mutation_signatures})) {
-					$sig_plot_command .= " -s $tool_data->{mutation_signatures}";
+				if (defined($parameters->{signatures})) {
+					$sig_plot_command .= " -s $parameters->{signatures}";
+					} elsif (defined($parameters->{cosmic_version})) {
+					$sig_plot_command .= " -c $parameters->{cosmic_version}";
 					}
 
 				# run command
@@ -1691,7 +1708,7 @@ sub main {
 		'-o', $report_directory,
 		'-i', $plot_directory,
 		'-t', $tool_data->{project_name},
-		'-d', $run_date
+		'-d', $current_date
 		);
 
 	# run pdflatex (twice, to ensure proper page numbering)
@@ -1778,13 +1795,13 @@ sub main {
  
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
-my ($help, $tool_config, $hpc_driver, $dry_run, $run_date, $no_wait, $create_report);
+my ($help, $tool_config, $data_config, $hpc_driver, $dry_run, $no_wait, $create_report);
 
 # get command line arguments
 GetOptions(
 	'h|help'	=> \$help,
 	't|tools=s'	=> \$tool_config,
-	'd|date=s'	=> \$run_date,
+	'd|data=s'	=> \$data_config,
 	'create_report'	=> \$create_report,
 	'c|cluster=s'	=> \$hpc_driver,
 	'dry-run'	=> \$dry_run,
@@ -1796,7 +1813,7 @@ if ($help) {
 		"Options:",
 		"\t--help|-h\tPrint this help message",
 		"\t--tools|-t\t<string> master tool config (yaml format)",
-		"\t--date|-d\t<string> Date the pipeline was initiated",
+		"\t--data|-d\t<string> data config (yaml format)",
 		"\t--create_report\t<boolean> should the final report (pdf) be created? (default: false)",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
@@ -1809,8 +1826,8 @@ if ($help) {
 
 # do some quick error checks to confirm valid arguments	
 main(
-	config		=> $tool_config,
-	run_date	=> $run_date,
+	tool_config	=> $tool_config,
+	data_config	=> $data_config,
 	report		=> $create_report,
 	cluster		=> $hpc_driver,
 	dry_run		=> $dry_run,

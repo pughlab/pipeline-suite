@@ -681,7 +681,7 @@ sub main {
 				);
 
 			if ($args{cleanup}) {
-				$_command .= " --remove";
+				$manta_command .= " --remove";
 				}
 
 			# record command (in log directory) and then run job

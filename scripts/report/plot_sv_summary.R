@@ -59,8 +59,6 @@ library(UpSetR);
 library(RCircos);
 library(xtable);
 
-# Rscript /cluster/home/sprokope/git/pipeline-suite/scripts/report/plot_sv_summary.R -p INSIGHTSDH -o /cluster/projects/pughlab/hereditary/projects/INSIGHT_SDH/pipeline_suite/SUMMARY_RESULTS/SV_Summary -r hg38 --report /cluster/projects/pughlab/hereditary/projects/INSIGHT_SDH/pipeline_suite/SUMMARY_RESULTS/Report/plots -m /cluster/projects/pughlab/hereditary/projects/INSIGHT_SDH/pipeline_suite/SUMMARY_RESULTS/data/mavis_sv_data.tsv
-
 ### READ DATA ######################################################################################
 # get data
 if (is.null(arguments$mavis)) {
@@ -193,10 +191,16 @@ if (nrow(somatic.svs) == 0) { # probably germline
 # summarize tool data
 tool.list <- c();
 if (any(somatic.svs$protocol == 'genome')) {
-	tool.list <- c(tool.list, 'Manta','Delly','SViCT','NovoBreak','Pindel');
+	tool.list <- c(tool.list, 'Manta','Delly','NovoBreak');
 	}
 if (any(somatic.svs$protocol == 'transcriptome')) {
 	tool.list <- c(tool.list,'Arriba','FusionCatcher','STAR-Fusion');
+	}
+if (any(grepl('pindel', somatic.svs$tools))) {
+	tool.list <- c(tool.list, 'Pindel');
+	}
+if (any(grepl('svict', somatic.svs$tools))) {
+	tool.list <- c(tool.list, 'SViCT');
 	}
 
 tool.summary <- data.frame(matrix(nrow = length(unique(somatic.svs$event_type))+1, ncol = length(tool.list)));

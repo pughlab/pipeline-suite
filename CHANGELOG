@@ -1,3 +1,21 @@
+2024-03-06: PughLab pipeline-suite (version 0.9.7);
+- NEW: initial add of methyldackel.pl to run mbias and extract functions on EM-Seq
+- pughlab_fragmentomics_pipeline.pl and fragmentomics_pipeline_config.yaml: added option to specify either number of reads or overall scale factor for downsample step
+- minor update to error checks for EM-Seq pipeline (bait/target no longer required [ie, for WG])
+- get_sequencing_metrics.pl: added HS metrics for all exome/targeted sequencing panels
+- collect_rsem_output.R: removed 'var' column from cbioportal output file
+- minor updates to summarize/report functions:
+	- added package cosmicsig for standardization and annotation of mutation signatures (apply_cosmic_mutation_signatures.R)
+	- added minor error checks (calculate_tmb.R, get_hrdetect_signatures.R, plot_expression_summary.R)
+	- other minor bug fixes (plot_recurrent_mutations.R, plot_rna_snv_summary.R, plot_sv_summary.R, pughlab_pipeline_auto_report.pl)
+	- added HS metrics for exome or targeted panels (plot_qc_metrics.R)
+	- added data_config argument to extract sample information (plot_qc_metrics.R, pughlab_pipeline_auto_report.pl)
+	- minor updates to generate_report.pl
+- updates to example config files:
+	- added/moved signature specification for cosmic sbs to summarize step (dna_pipeline_config)
+	- initial add of methyldackel version/parameters (emseq_pipeline_config)
+
+
 2024-02-15: PughLab pipeline-suite (version 0.9.6);
 - NEW: added code to trim adapters (used for EM-Seq pipeline only)
 - NEW: added convert_bam_to_cram.pl

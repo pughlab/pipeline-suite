@@ -69,6 +69,10 @@ if (!dir.exists(arguments$output)) {
 setwd(arguments$output);
 
 ### FORMAT DATA ####################################################################################
+if ('var' %in% colnames(input.data)) {
+	input.data <- input.data[,setdiff(colnames(input.data),'var')];
+	}
+
 # collect list of all (ordered) samples
 all.samples <- colnames(input.data)[3:ncol(input.data)];
 all.samples <- gsub('\\.','-',all.samples);

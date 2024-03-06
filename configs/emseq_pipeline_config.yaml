@@ -18,6 +18,7 @@ bwa_meth_path: /cluster/projects/pughlab/bin/bwa_meth/v0.2.7/bwameth.py
 mark_nonconverted_path: /cluster/projects/pughlab/bin/mark-nonconverted-reads/mark-nonconverted-reads.py
 bwa_version: 0.7.15
 samtools_version: 1.10
+methyldackel_version: 0.6.1
 python3_version: 3.10.9
 picard_version: 2.10.9
 sambamba_version: 0.7.0 
@@ -93,6 +94,6 @@ methyldackel:
         mbias:
             mem: 4G
             time: '24:00:00'
-        methyldackel:
+        extract:
             mem: 4G
             time: '24:00:00'

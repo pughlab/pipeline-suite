@@ -17,7 +17,7 @@ DHS_sites:
 housekeeping_sites: 
 # package directories
 fragmentomics_dir: 
-griffin_dir: /cluster/projects/pughlab/bin/Griffin/v0.1.0
+griffin_dir: 
 # tool versions
 samtools_version: 1.10
 picard_version: 2.10.9
@@ -27,7 +27,8 @@ r_version: 4.0.0
 # tool specific parameters
 parameters:
     downsample:
-        n_reads: 50000000
+        n_reads: 50000000 # takes priority over scale factor
+        scale_factor: 0.01 # scale factor = probability of selecting a read
         mem: 2G
         time: '48:00:00'
     dedup:

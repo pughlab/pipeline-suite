@@ -78,7 +78,7 @@ basechange.colours <- default.colours(8,'pastel')[-5];
 
 ### READ DATA ######################################################################################
 # get data
-if (is.null(arguments$maf)) {
+if (is.null(arguments$mutations)) {
 	stop('ERROR: No input MAF provided, please provide path to SNV calls in MAF format.');
 	} else {
 	input.data <- read.delim(arguments$mutations, stringsAsFactors = FALSE, comment.char = '#');
