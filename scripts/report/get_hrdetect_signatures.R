@@ -206,18 +206,30 @@ for (smp in all.samples) {
 
 	# get CNA data
 	cna.idx <- which(cnv.data$Sample == smp);
+	if (length(cna.idx) == 0) {
+		print(paste('No CNAs found for sample: ', smp, '. Moving to next sample.'));
+		next;
+		}
 	cnv.filename <- paste0(smp, "_seg_data.tsv");
 	names(cnv.filename) <- smp;
 	write.table(cnv.data[cna.idx,-1], file = cnv.filename, row.names = F, col.names = T, quote = F, sep = '\t');
 
 	# get SV data
 	sv.idx <- which(somatic.svs$sample == smp);
+	if (length(sv.idx) == 0) {
+		print(paste('No SVs found for sample: ', smp, '. Moving to next sample.'));
+		next;
+		}
 	sv.filename <- paste0(smp, "_sv.bedpe");
 	names(sv.filename) <- smp;
 	write.table(somatic.svs[sv.idx,], file = sv.filename, row.names = F, col.names = T, quote = F, sep = '\t');
 
 	# get SNV/INDEL data
 	snv.filename <- vcf.files[grep(smp, vcf.files)];
+	if (length(snv.filename) == 0) {
+		print(paste('No SNVs found for sample: ', smp, '. Moving to next sample.'));
+		next;
+		}
 	names(snv.filename) <- smp;
 
 	# extract substitution signatures

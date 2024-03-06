@@ -202,6 +202,8 @@ for (smp in all.samples) {
 
 		smp.data <- maf[which(maf$Tumor_Sample_Barcode == smp & maf$t_vaf >= vaf),];
 
+		if (nrow(smp.data) == 0) { next; }
+
 		snp.idx <- which(smp.data$Variant_Type == 'SNP');
 		indel.idx <- which(smp.data$Variant_Type != 'SNP');
 
