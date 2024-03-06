@@ -1,4 +1,4 @@
-# PughLab pipeline-suite (version 0.9.6)
+# PughLab pipeline-suite (version 0.9.7)
 
 ## Introduction
 This is a collection of pipelines to be used for NGS (DNA, including WGS, WXS and TS, RNA-Seq and EM-Seq) analyses, from alignment to variant calling.
@@ -22,7 +22,7 @@ Finally, a number of R packages are required:
 - for ichorCNA: ichorCNA, HMMcopy and GenomeInfoDb
 - for ASCAT: ASCAT (https://github.com/VanLoo-lab/ascat) and maftools
 - for panelCN.mops: panelcn.mops and CopyNumberPlots
-- for summarization: xtable, deconstructSigs, BSgenome
+- for summarization: xtable, deconstructSigs, BSgenome, cosmicsig
 - for visualizations: BPG (https://CRAN.R-project.org/package=BoutrosLab.plotting.general), UpSetR (https://cran.r-project.org/web/packages/UpSetR/index.html) and RCircos (https://github.com/hzhanghenry/RCircos)
 
 ## Workflow
