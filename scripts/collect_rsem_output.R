@@ -259,7 +259,7 @@ if (any(duplicated(cbio$Symbol))) {
 	if (length(dup.genes) > 0) {
 		cbio$var <- apply(cbio[,4:ncol(cbio)],1,var);
 		cbio <- cbio[order(cbio$Symbol, -cbio$var),];
-		cbio <- cbio[!duplicated(cbio$Symbol),];
+		cbio <- cbio[!duplicated(cbio$Symbol),setdiff(colnames(cbio),'var')];
 		}
 	}
 
