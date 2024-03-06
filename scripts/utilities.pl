@@ -133,7 +133,7 @@ sub error_checking {
 					$tool_data->{targets_bed} = $tool_data->{baits_bed};
 					print "Only one of target/bait intervals files provided; using for both settings.\n";
 				} elsif ( (!defined($tool_data->{targets_bed})) & (!defined($tool_data->{baits_bed})) ) {
-					die("Must provide path to target regions and/or baits bed file(s).");
+					print "No target regions and/or baits bed file(s) provided; will run on whole-genome.\n";
 				}
 			}
 		}
