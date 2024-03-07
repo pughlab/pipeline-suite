@@ -81,7 +81,7 @@ output.dir <- arguments$output_dir;
 ### MAIN ##########################################################################################
 ## read in data files
 # parse sample information from yaml file
-project.yaml <- read.yaml(arguments$sample_yaml);
+project.yaml <- read_yaml(arguments$sample_yaml);
 
 sample.info <- as.data.frame(matrix(nrow = 0, ncol = 3));
 colnames(sample.info) <- c('Patient','Sample','Type');
@@ -380,7 +380,7 @@ if (is.dna) {
 		} else { 'mean read depth (1st - 3rd quartile)'; }
 
 	cov.key <- list(fun = draw.key, args = list(key = list(
-		lines = list(cex = 1, col = 'black', pch = 19, type = (!is.null(arguments$hscoverage)) { 'p' } else { 'b' } ),
+		lines = list(cex = 1, col = 'black', pch = 19, type = if (!is.null(arguments$hscoverage)) { 'p' } else { 'b' } ),
 		text = list(lab = key.lab, cex = 1),
 		divide = 1)),
 		x = 0.5, y = 1
@@ -902,6 +902,7 @@ if (!is.null(arguments$report)) {
 				), file = tex.file, append = TRUE);
 			write("\\end{figure}\n", file = tex.file, append = TRUE);
 			write("\\pagebreak\n", file = tex.file, append = TRUE);
+			}
 
 		# for RNA
 		} else {
