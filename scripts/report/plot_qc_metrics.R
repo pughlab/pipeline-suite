@@ -430,13 +430,15 @@ if (is.dna) {
 		);		
 
 	# identify cases with poor coverage
-	poor.coverage <- qc.metrics[which(qc.metrics$percent_bases_above_targetX < 0.8),c(1,2,5)];
+	poor.coverage <- qc.metrics[which(qc.metrics$percent_bases_above_targetX < 0.8),
+		c('Sample','mean','percent_bases_above_targetX')];
 	coverage.caption <- paste0(
 		"Samples with low coverage ($<$80\\% bases with at least ", target_coverage,
 		"x coverage)."
 		);
 	if (nrow(poor.coverage) > 20) {
-		poor.coverage <- qc.metrics[which(qc.metrics$percent_bases_above_targetX < 0.5),c(1,2,5)];
+		poor.coverage <- qc.metrics[which(qc.metrics$percent_bases_above_targetX < 0.5),
+			c('Sample','mean','percent_bases_above_targetX')];
 		coverage.caption <- paste0(
 			"Samples with low coverage ($<$50\\% bases with at least ",
 			target_coverage, "x coverage)."
@@ -538,7 +540,8 @@ if (is.dna) {
 		);
 
 	# identify cases with high contamination estimates
-	high.contamination <- qc.metrics[which(qc.metrics$contamination > 3),c(1,6)];
+	high.contamination <- qc.metrics[which(qc.metrics$contamination > 3),
+		c('Sample','contamination')];
 	colnames(high.contamination) <- c('Sample','Contamination_Estimate');
 
 	# combine them!
