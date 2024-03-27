@@ -446,7 +446,7 @@ sub main {
 					modules	=> [$samtools, $novobreak, 'perl'],
 					max_time	=> $parameters->{novobreak}->{time},
 					mem		=> $parameters->{novobreak}->{mem},
-					cpus_per_task	=> $parameters->{novobreak}->{n_cpu},
+					cpus_per_task	=> $parameters->{novobreak}->{n_cpus},
 					hpc_driver	=> $args{hpc_driver},
 					extra_args	=> [$hpc_group]
 					);
