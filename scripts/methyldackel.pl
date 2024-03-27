@@ -242,9 +242,7 @@ sub main {
 				output_stem	=> join('/', $mbias_directory, $sample . '_mbias')
 				);
 
-		#	$cleanup_cmd .= "\nrm -rf " . join('/', $sample_directory, 'workspace');
-
-			my $mbias_output = join('/', $patient_directory, $sample . '_methyldackel.COMPLETE');
+			my $mbias_output = join('/', $mbias_directory, $sample . '_mbias.COMPLETE');
 	
 			$mbias_command .= "\n\n" . join(' ',
 				'echo methyldackel mbias complete',
