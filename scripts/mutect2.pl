@@ -1355,7 +1355,6 @@ sub main {
 				}
 
 			$cleanup_cmd .= "\n  rm $merged_output";
-			$cleanup_cmd .= "\n  rm $merged_output.idx";
 
 			# filter results
 			my $filtered_stem = join('/', $sample_directory, $sample . '_MuTect2_filtered');
