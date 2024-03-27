@@ -12,9 +12,10 @@ ref_type: hg38 # one of hg38, hg19, GRCh37 or GRCh38 (minimal testing with GRCh3
 reference: /cluster/tools/data/genomes/human/hg38/iGenomes/Sequence/WholeGenomeFasta/genome.fa
 baits_bed: 
 targets_bed:
+gnomad: /cluster/projects/pughlab/references/ExAC/af-only-gnomad.hg38.vcf.gz 
 # tool versions
-bwa_meth_version: # for use with module load bwa_meth/version (if available)
-bwa_meth_path: /cluster/projects/pughlab/bin/bwa_meth/v0.2.7/bwameth.py
+bwa_meth_version: 0.2.7 # for use with module load bwa_meth/version (if available)
+bwa_meth_path: #/cluster/projects/pughlab/bin/bwa_meth/v0.2.7/bwameth.py
 mark_nonconverted_path: /cluster/projects/pughlab/bin/mark-nonconverted-reads/mark-nonconverted-reads.py
 bwa_version: 0.7.15
 samtools_version: 1.10
@@ -22,6 +23,7 @@ methyldackel_version: 0.6.1
 python3_version: 3.10.9
 picard_version: 2.10.9
 sambamba_version: 0.7.0 
+gatk_cnv_version: 4.1.8.1 # for qc tools
 r_version: 4.1.0
 # tool specific parameters
 trim_adapters:
@@ -43,21 +45,21 @@ bwa:
     parameters:
         bwa:
             n_cpus:
-                normal: 4
-                tumour: 4
+                normal: 8
+                tumour: 8
             mem:
-                normal: 8G
-                tumour: 16G
+                normal: 16G
+                tumour: 20G
             time:
-                normal: '12:00:00'
-                tumour: '24:00:00'
+                normal: '5-00:00:00'
+                tumour: '5-00:00:00'
         sort:
             mem:
-                normal: 2G
-                tumour: 2G
+                normal: 4G
+                tumour: 4G
             time:
-                normal: '12:00:00'
-                tumour: '24:00:00'
+                normal: '24:00:00'
+                tumour: '48:00:00'
         index:
             mem:
                 normal: 2G
@@ -69,15 +71,15 @@ bwa:
             mem: 12G
             time: '48:00:00'
         merge:
-            tool: 'picard' # or sambamba
+            tool: 'sambamba'
             mark_dup: Y
             n_cpus: 1 # or more for sambamba
             java_mem:
-                normal: 3g
-                tumour: 3g
+                normal: 7g
+                tumour: 11g
             mem:
-                normal: 4G
-                tumour: 4G
+                normal: 8G
+                tumour: 12G
             time:
                 normal: '48:00:00'
                 tumour: '48:00:00'
@@ -92,7 +94,7 @@ methyldackel:
     run: Y
     parameters:
         mbias:
-            mem: 4G
+            mem: 2G
             time: '24:00:00'
         extract:
             mem: 4G
