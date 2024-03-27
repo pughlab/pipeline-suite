@@ -101,7 +101,7 @@ if (length(vcf.files) == 0) {
 	stop('ERROR: No VCFs found in input directory, please provide path to VCF files.');
 	}
 
-all.samples <- as.character(sapply(vcf.files,function(i) { unlist(strsplit(basename(i),'_'))[1] } ));
+snv.samples <- as.character(sapply(vcf.files,function(i) { unlist(strsplit(basename(i),'_'))[1] } ));
 
 # get mutation data
 if (is.null(arguments$sv)) {
@@ -110,11 +110,18 @@ if (is.null(arguments$sv)) {
 	sv.data <- read.delim(arguments$sv, stringsAsFactors = FALSE);
 	}
 
+if (any(sv.data$protocol == 'transcriptome')) {
+	sv.data$library <- gsub('-rna','', sv.data$library);
+	}
+sv.samples <- unique(sv.data$library);
+
 if (is.null(arguments$cnv)) {
 	stop('ERROR: No CNA segments provided, please provide path to CNA segment file from Sequenza.');
 	} else {
 	seg.data <- read.delim(arguments$cnv, stringsAsFactors = FALSE);
 	}
+
+cna.samples <- unique(seg.data$Sample);
 
 # create (if necessary) and move to output directory
 if (!dir.exists(arguments$output)) {
@@ -122,6 +129,10 @@ if (!dir.exists(arguments$output)) {
 	}
 
 setwd(arguments$output);
+
+# get list of overlapping samples (snv/indel + sv + cnv)
+all.samples <- intersect(
+	snv.samples, intersect(sv.samples, cna.samples));
 
 ### FORMAT DATA ####################################################################################
 # format CNV data
