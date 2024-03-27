@@ -77,7 +77,7 @@ sub main {
 
 	print $log "---\n";
 	print $log "Running Summarize Results Pipeline...\n";
-	print $log "\n  Tool config used: $args{config}";
+	print $log "\n  Tool config used: $args{tool_config}";
 	print $log "\n  Output directory: $output_directory";
 	print $log "\n---\n";
 
@@ -1677,7 +1677,7 @@ sub main {
 		$methods_command = "perl $cwd/report/write_targetseq_methods.pl";
 		}
 
-	$methods_command .= " -t $args{config} -d $plot_directory";
+	$methods_command .= " -t $args{tool_config} -d $plot_directory";
 
 	# run command
 	print $log "Submitting job to write methods...\n";

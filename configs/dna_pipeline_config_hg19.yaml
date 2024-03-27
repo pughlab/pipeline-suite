@@ -224,9 +224,6 @@ strelka:
         strelka:
             mem: 8G
             time: '24:00:00'
-        manta:
-            mem: 8G
-            time: '24:00:00'
         filter:
             mem: 2G
             time: '12:00:00'
@@ -329,7 +326,7 @@ gatk_cnv:
             mem: 4G
             time: '24:00:00'
 manta:
-    run: N
+    run: Y
     parameters:
         manta:
             mem: 8G
@@ -356,7 +353,7 @@ novobreak:
         novobreak:
             mem: 40G
             time: '24:00:00'
-            n_cpu: 10
+            n_cpus: 10
         group_reads:
             mem: 40G
             time: '24:00:00'

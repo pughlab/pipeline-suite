@@ -106,11 +106,11 @@ sub create_extract_command {
 	$extract_command .= "\n\n" . join(' ',
 		'cat', $args{tier_files},
 		"| grep -v 'GENOMIC_CHANGE'",
-		'| awk -F"\t"', "'\$81 >= 0' | cut -f1,81 | sort -Vk1,2",
-#		'| perl -e', "'while(<>) { \$_ =~ m/(^[0-9XY]+):g.([0-9]+)/;",
+		'| awk -F"\t"', "'\$81 >= 0' | cut -f1,81",
 		'| perl -e',	
 		"'while(<>) { \$_ =~ m/(^[0-9XY]+):g.([0-9]+)[A-Z]*>[A-Z]*\\t([-+]?[0-9]*\\.?[0-9]+)/;",
 		'print join("\t", "chr" . $1, $2, $3) . "\n" }', "'",
+		'| sort -Vk1,2 -u',
 		'> cpsr_significant.txt'
 		);
 
@@ -140,7 +140,7 @@ sub create_extract_command {
 		"| bcftools view -e 'FORMAT/GT[0]=" . '"RR"' . "'",
 		"| bcftools annotate -a cpsr_significant.txt.gz",
 		"-c CHROM,POS,CPSR_PATHOGENICITY_SCORE -h header",
-		'>', $args{output_vcf}
+		"| bcftools sort -o $args{output_vcf}"
 		);
 
 	return($extract_command);
@@ -513,6 +513,8 @@ sub main{
 					cmd     => $vcf2maf_cmd,
 					modules => ['perl', $samtools, 'tabix', $vcf2maf],
 					dependencies    => $previous_job_id,
+					max_time	=> '04:00:00',
+					mem		=> '4G',
 					hpc_driver      => $args{hpc_driver},
 					extra_args	=> [$hpc_group]
 					);

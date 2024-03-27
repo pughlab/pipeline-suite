@@ -1,3 +1,19 @@
+2024-03-27: PughLab pipeline-suite (version 0.9.8);
+- updated bwameth version/path (now available as a module on H4H)
+- minor updates to example config files:
+	- added manta step (removed from strelka) to dna pipeline config
+	- added default version for bwa_meth + increased some mem/time parameters
+- minor updates throughout scripts:
+	- annotate_germline.pl (added sort steps to prevent out of order errors in vcf2maf)
+	- collect_snv_output.R (added filtering for germline variants to remove duplicates)
+	- bwa.pl (bwameth version/path)
+	- mutect2.pl (removed non-existant file from cleanup)
+	- novobreak.pl (changed n_cpu to n_cpus for consistency)
+	- methyldackel.pl (mbias output file names)
+	- strelka.pl (code cleanup; removed manta code)
+	- trim_adapters.pl (fixed output file names for trim_galore)
+- minor updates to report functions (added error checking and conditions)
+
 2024-03-06: PughLab pipeline-suite (version 0.9.7);
 - NEW: initial add of methyldackel.pl to run mbias and extract functions on EM-Seq
 - pughlab_fragmentomics_pipeline.pl and fragmentomics_pipeline_config.yaml: added option to specify either number of reads or overall scale factor for downsample step

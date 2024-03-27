@@ -470,7 +470,9 @@ for (smp in tumour.samples) {
 		Evidence = sapply(smp.data$tools, function(i) { length(unlist(strsplit(i,';'))) } )
 		);
 
-	plot.data[which(plot.data$Evidence == 1),]$Evidence <- 0.5;
+	if (any(plot.data$Evidence == 1)) {
+		plot.data[which(plot.data$Evidence == 1),]$Evidence <- 0.5;
+		}
 	if (any(smp.data$Fusion == 'None--None')) {
 		plot.data[which(smp.data$Fusion == 'None--None'),]$Evidence <- 0.5;
 		}

@@ -380,11 +380,11 @@ sub main {
 	my $bwameth_version;
 	$bwameth_path = 'bwameth.py';
 	if (defined($tool_data->{bwa_meth_version})) {
-		$bwameth_version = 'bwa_meth/' . $tool_data->{bwa_meth};
+		$bwameth_version = 'bwa_meth/' . $tool_data->{bwa_meth_version};
 		} elsif (defined($tool_data->{bwa_meth_path})) {
 		$bwameth_path = $tool_data->{bwa_meth_path};
 		} else {
-		$bwameth_version = 'bwa_meth/git';
+		$bwameth_version = 'bwa_meth';
 		}
 
 	# indicate type of sequencing (WGS/WXS or EMSeq (WGS or targeted))

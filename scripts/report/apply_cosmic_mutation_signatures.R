@@ -176,16 +176,16 @@ assigned.sigs <- list();
 
 for (smp in all.samples) {
 
+	if (nrow(snv.data[which(snv.data$Sample == smp),]) < 50) {
+		assigned.sigs[[smp]]$weights <- rep(NA, ncol(signatures.to.apply));
+		next;
+		}
+
 	if (!dir.exists(smp)) {
 		dir.create(smp);
 		}
 
 	setwd(smp);
-
-	if (nrow(snv.data[which(snv.data$Sample == smp),]) < 50) {
-		assigned.sigs[[smp]]$weights <- rep(NA, ncol(signatures.to.apply));
-		next;
-		}
 
 	assigned.sigs[[smp]] <- whichSignatures(
 		tumor.ref = sigs.input,

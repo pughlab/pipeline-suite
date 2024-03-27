@@ -93,12 +93,22 @@ for (i in 1:length(maf.files)) {
 
 	# read in data
 	if (is.germline) {
+		# required if there are few variants (and all ref or alt alleles = T [sets to TRUE] if left alone)
 		tmp <- read.delim(file, comment.char = "#", colClasses = maf.classes);
 		} else {
 		tmp <- read.delim(file, comment.char = "#", as.is = TRUE);
 		}
 
 	## do some filtering
+	if (is.germline) {
+		if (any(tmp$Tumor_Seq_Allele2 == '*')) {
+			tmp <- tmp[which(tmp$Tumor_Seq_Allele2 != '*'),];
+			}
+		tmp <- tmp[order(tmp$Chromosome, tmp$Start_Position, tmp$End_Position, -tmp$CPSR_PATHOGENICITY_SCORE),];
+		non.dup.idx <- !duplicated(tmp[,c('Chromosome', 'Start_Position', 'End_Position','Tumor_Seq_Allele2'),]);
+		tmp <- tmp[non.dup.idx,];
+		}
+
 	# for some reason WGS:SomaticSniper output has FILTER = '.'
 	if (!(is.wgs & grepl('SomaticSniper', getwd()))) {
 		tmp <- tmp[which(tmp$FILTER == 'PASS'),];

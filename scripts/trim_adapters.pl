@@ -218,10 +218,10 @@ sub main {
 							);
 
 						$new_r1 = join('/', $output_directory, basename($r1));
-						$new_r1 =~ s/.fastq.gz/_trimmed.fastq.gz/;
+						$new_r1 =~ s/.fastq.gz/_val_1.fq.gz/;
 
 						$new_r2 = join('/', $output_directory, basename($r2));
-						$new_r2 =~ s/.fastq.gz/_trimmed.fastq.gz/;
+						$new_r2 =~ s/.fastq.gz/_val_2.fq.gz/;
 
 						} else {
 
