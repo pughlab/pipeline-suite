@@ -38,53 +38,6 @@ our ($reference, $intervals, $seq_type, $pon) = undef;
 #	--dry_run indicates that this is a dry run
 
 ### DEFINE SUBROUTINES #############################################################################
-# format command to run Manta
-sub get_manta_command {
-	my %args = (
-		tumour		=> undef,
-		normal		=> undef,
-		output_dir	=> undef,
-		intervals	=> undef,
-		tmp_dir		=> undef,
-		@_
-		);
-
-	my $manta_cmd = 'configManta.py ';
-	
-	if ('targeted' eq $seq_type) {
-		$manta_cmd = join("\n",
-			'DIRNAME=$(which configManta.py | xargs dirname)',
-			'cp $DIRNAME/configManta.py.ini ' . $args{output_dir},
-			"sed -i 's/minEdgeObservations = 3/minEdgeObservations = 2/' $args{output_dir}/configManta.py.ini",
-			"sed -i 's/minCandidateSpanningCount = 3/minCandidateSpanningCount = 2/' $args{output_dir}/configManta.py.ini",
-			"\n" . "configManta.py --config $args{output_dir}/configManta.py.ini "
-			);
-		}
-
-	if (defined($args{normal})) {
-		$manta_cmd .= join(' ',
-			'--normalBam', $args{normal},
-			'--tumorBam', $args{tumour},
-			'--referenceFasta', $reference,
-			'--runDir', $args{output_dir}
-			);
-		} else {
-		$manta_cmd .= join(' ',
-			'--tumorBam', $args{tumour},
-			'--referenceFasta', $reference,
-			'--runDir', $args{output_dir}
-			);
-		}
-
-	if (('exome' eq $seq_type) || ('targeted' eq $seq_type)) {
-		$manta_cmd .= " --exome --callRegions $args{intervals}";
-		} elsif ( ('rna' eq $seq_type) && (!defined($args{normal})) ) {
-		$manta_cmd .= " --rna";
-		}
-
-	return($manta_cmd);
-	}
-
 # format command to run Strelka Somatic Workflow
 sub get_strelka_somatic_command {
 	my %args = (
