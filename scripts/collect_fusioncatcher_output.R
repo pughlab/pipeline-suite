@@ -186,13 +186,14 @@ cbio.data$Fusion <- rep(
 	times = 2
 	);
 
-cbio.data$Frame <- factor(cbio.data$Frame, levels = c('in-frame','out-of-frame'), labels = c('in-frame','frameshift'));
+cbio.data$Frame <- factor(cbio.data$Frame, levels = c('in-frame','out-of-frame'), labels = c('inframe','frameshift'));
 
 write.table(
 	unique(cbio.data),
 	file = generate.filename(arguments$project, 'fusioncatcher_for_cbioportal', 'tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
+	quote = FALSE,
 	sep = '\t'
 	);
 
