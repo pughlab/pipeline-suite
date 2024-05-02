@@ -516,6 +516,8 @@ sub main {
 		# create an array to hold final outputs and all patient job ids
 		my (@final_outputs, @patient_jobs);
 
+		$cleanup_cmd = '';
+
 		foreach my $sample (@tumour_ids) {
 
 			my @sample_jobs;
@@ -532,7 +534,7 @@ sub main {
 			unless(-e $tmp_directory) { make_path($tmp_directory); }
 
 			# indicate this should be removed at the end
-			$cleanup_cmd .= "\n" . "rm -rf $tmp_directory";
+			$cleanup_cmd .= "\n  " . "rm -rf $tmp_directory";
 
 			# generate necessary samples.tsv
 			my $sample_sheet = join('/', $sample_directory, 'pindel_config.txt');
