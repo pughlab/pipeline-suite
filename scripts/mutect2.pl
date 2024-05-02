@@ -685,9 +685,9 @@ sub pon {
 			if (scalar(@chroms) > 1) {
 
 				my $merge_chr_command = join(' ',
-					'vcf-concat', $chr_stem . '*.vcf',
+					'vcf-concat', $chr_stem . '_*.vcf',
 					'| vcf-sort -c -t', $tmp_directory,
-					'>', $mutect_vcf
+					'| uniq >', $mutect_vcf
 					);
 
 				$merge_chr_command .= "\nmd5sum $mutect_vcf > $mutect_vcf.md5";
@@ -1310,9 +1310,9 @@ sub main {
 			if (scalar(@chroms) > 1) {
 
 				my $merge_chr_command = join(' ',
-					'vcf-concat', @chr_parts,
+					'vcf-concat', $chr_stem . '_*.vcf', #@chr_parts,
 					'| vcf-sort -c -t', $tmp_directory,
-					'>', $merged_output
+					'| uniq >', $merged_output
 					);
 
 				# this is a java-based command, so run a final check

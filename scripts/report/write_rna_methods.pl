@@ -34,7 +34,7 @@ sub main {
 	$methods .= "For all tools, default parameters were used unless otherwise indicated.\\newline\n";
 	$methods .= "\\subsection{Alignment and Quality Checks}\n";
 
-	my ($star, $rnaseqc, $gatk, $rsem, $star_fusion, $fusioncatcher, $mavis);
+	my ($star, $rnaseqc, $gatk, $rsem, $star_fusion, $arriba, $fusioncatcher, $mavis);
 	my ($samtools, $picard);
 	my ($star_ref, $ref_type, $gtf);
 	my ($k1000g, $mills, $kindels, $dbsnp, $hapmap, $omni, $cosmic);
@@ -47,6 +47,7 @@ sub main {
 		'haplotype_caller' => defined($tool_data->{haplotype_caller}->{run}) ? $tool_data->{haplotype_caller}->{run} : 'N',
 		'rsem'		=> defined($tool_data->{rsem}->{run}) ? $tool_data->{rsem}->{run} : 'N',
 		'star_fusion'	=> defined($tool_data->{star_fusion}->{run}) ? $tool_data->{star_fusion}->{run} : 'N',
+		'arriba'	=> defined($tool_data->{arriba}->{run}) ? $tool_data->{arriba}->{run} : 'N',
 		'fusioncatcher'	=> defined($tool_data->{fusioncatcher}->{run}) ? $tool_data->{fusioncatcher}->{run} : 'N',
 		'mavis'		=> defined($tool_data->{mavis}->{run}) ? $tool_data->{mavis}->{run} : 'N'
 		);
@@ -61,6 +62,7 @@ sub main {
 	$gatk = defined($tool_data->{gatk_version}) ? $tool_data->{gatk_version} : undef;
 	$rsem = defined($tool_data->{rsem_version}) ? $tool_data->{rsem_version} : undef;
 	$star_fusion = defined($tool_data->{star_fusion_version}) ? $tool_data->{star_fusion_version} : undef;
+	$arriba = defined($tool_data->{arriba_version}) ? $tool_data->{arriba_version} : undef;
 	$fusioncatcher = defined($tool_data->{fusioncatcher_version}) ? $tool_data->{fusioncatcher_version} : undef;
 	$mavis = defined($tool_data->{mavis_version}) ? $tool_data->{mavis_version} : undef;
 
@@ -130,8 +132,13 @@ sub main {
 
 		my @parts = split('\\/', $tool_data->{haplotype_caller}->{parameters}->{annotate}->{vep_path});
 		$vep = $parts[-1];
-		@parts = split('\\/', $tool_data->{haplotype_caller}->{parameters}->{annotate}->{vcf2maf_path});
-		$vcf2maf = $parts[-2];
+
+		if (defined($tool_data->{vcf2maf_version})) {
+			$vcf2maf = $tool_data->{vcf2maf_version};
+			} elsif (defined($tool_data->{haplotype_caller}->{parameters}->{annotate}->{vcf2maf_path})) {
+			@parts = split('\\/', $tool_data->{haplotype_caller}->{parameters}->{annotate}->{vcf2maf_path});
+			$vcf2maf = $parts[-2];
+			}
 
 		$methods .= "Short variants (SNVs and Indels) were identified using GATK's (v$gatk) HaplotypeCaller as per GATK's RNA-Seq variant calling best practices. HaplotypeCaller was run using a minimum confidence threshold of 20 and -dontUseSoftClippedBases. VariantFiltration was used to remove low quality variants (QD \$<2.0\$ and FS \$>30\$) with a cluster size of 3 and cluster window size of 35.\\newline\n";
 		$methods .= "\n\\noindent\nVariants were filtered and annotated using VEP (v$vep) and vcf2maf ($vcf2maf). Filters were applied to remove known common variants (ExAC nonTCGA version r1) and variants with coverage below 20x.\\newline\n";
@@ -139,6 +146,15 @@ sub main {
 
 	# how were fusions called?
 	$methods .= "\\subsection{Fusion Detection}\n";
+
+	if ('Y' eq $tool_set{'arriba'}) {
+
+		# fill in methods
+		$methods .= "For Arriba, fastq files were first aligned to the $ref_type transcriptome reference using STAR (v$star), with the following arguments: --outSAMtype BAM Unsorted, --outSAMunmapped Within, --outFilterFilterMultimapNmax 50, --peOverlapNbasesMin 10, --alignSplicedMateMapLminOverLmate 0.5, --alignSJstitchMismatchNmax 5 -1 5 5, --chimSegmentMin 10, --chimOutType WithinBAM HardClip, --chimJunctionOverhangMin 10, --chimScoreDropMax 30, --chimScoreJunctionNonGTAG 0, --chimScoreSeparation 1, --chimSegmentReadGapMax 3, --chimMultimapNmax 50. Where multiple fastq files were present (ie, multiple lanes), files were input together as a single alignment run. Arriba (v$arriba) was then run using default parameters with lists of known fusions, false fusions (blacklist) and protein domains provided ($ref_type). Viral expression was also evaluated using Arriba's quantify\_virus\_expression.sh.\\newline\\newline\n";
+
+		} else {
+		$methods .= "Arriba was not run.\\newline\n";
+		}
 
 	if ('Y' eq $tool_set{'fusioncatcher'}) {
 

@@ -331,25 +331,14 @@ sub main {
 			'-o', $plot_directory
 			);
 
-		my $tool_count = 0;
-		if ('Y' eq $tool_set{'arriba'}) {
-			my $arriba_dir = join('/', $output_directory, 'Arriba');
-			opendir(FUSION, $arriba_dir) or die "Cannot open '$arriba_dir' !";
-			my @arriba_calls = grep { /_for_cbioportal.tsv/ } readdir(FUSION);
-			@arriba_calls = sort @arriba_calls;
-			closedir(FUSION);
+		# for viral summary
+		my $rna_virus_command = join(' ',
+			"Rscript $cwd/report/plot_viral_counts.R",
+			'-p', $tool_data->{project_name},
+			'-o', $plot_directory
+			);			
 
-			my $arriba_data = join('/', $arriba_dir, $arriba_calls[-1]);
-
-			if ( -l join('/', $data_directory, 'arriba_calls.tsv')) {
-				unlink join('/', $data_directory, 'arriba_calls.tsv');
-				}
-
-			symlink($arriba_data, join('/', $data_directory, 'arriba_calls.tsv'));
-
-			$rna_fusion_command .= " -a $arriba_data";
-			$tool_count++;
-			}
+		my ($tool_count,$viral_tools) = 0;
 
 		if ('Y' eq $tool_set{'star_fusion'}) {
 			my $starfus_dir = join('/', $output_directory, 'STAR-Fusion');
@@ -368,6 +357,39 @@ sub main {
 
 			$rna_fusion_command .= " -s $starfus_data";
 			$tool_count++;
+			}
+
+		if ('Y' eq $tool_set{'arriba'}) {
+			my $arriba_dir = join('/', $output_directory, 'Arriba');
+			opendir(FUSION, $arriba_dir) or die "Cannot open '$arriba_dir' !";
+			my @arriba_files = readdir(FUSION);
+			closedir(FUSION);
+
+			my @arriba_calls = grep { /_for_cbioportal.tsv/ } @arriba_files;
+			@arriba_calls = sort @arriba_calls;
+
+			my @viral_counts = grep { /viral_expression.tsv/ } @arriba_files;
+			@viral_counts = sort @viral_counts;
+
+			my $arriba_data = join('/', $arriba_dir, $arriba_calls[-1]);
+			my $viral_data = join('/', $arriba_dir, $viral_counts[-1]);
+
+			if ( -l join('/', $data_directory, 'arriba_calls.tsv')) {
+				unlink join('/', $data_directory, 'arriba_calls.tsv');
+				}
+
+			if ( -l join('/', $data_directory, 'arriba_viral_counts.tsv')) {
+				unlink join('/', $data_directory, 'arriba_viral_counts.tsv');
+				}
+
+			symlink($arriba_data, join('/', $data_directory, 'arriba_calls.tsv'));
+			symlink($viral_data, join('/', $data_directory, 'arriba_viral_counts.tsv'));
+
+			$rna_fusion_command .= " -a $arriba_data";
+			$tool_count++;
+
+			$rna_virus_command .= " -a $viral_data";
+			$viral_tools++;
 			}
 
 		if ('Y' eq $tool_set{'fusioncatcher'}) {
@@ -400,13 +422,11 @@ sub main {
 			$rna_fusion_command .= " -f $fuscatch_data";
 			$tool_count++;
 
-			# for viral summary
-			my $rna_virus_command = join(' ',
-				"Rscript $cwd/report/plot_viral_counts.R",
-				'-p', $tool_data->{project_name},
-				'-o', $plot_directory,
-				'-v', $viral_data
-				);			
+			$rna_virus_command .= " -f $viral_data";
+			$viral_tools++;
+			}
+
+		if ($viral_tools > 0) {
 
 			# run command
 			print $log "Submitting job to summarize viral content...\n";

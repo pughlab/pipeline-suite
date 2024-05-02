@@ -147,7 +147,7 @@ cbio.data <- data.frame(
 	DNA_support = 'no',
 	RNA_support = 'yes',
 	Method = 'STAR-Fusion',
-	Frame = 'in-frame',
+	Frame = 'inframe',
 	Fusion_Status = '',
 	stringsAsFactors = FALSE
 	);
@@ -164,10 +164,11 @@ if (nrow(tmp) > 0) {
 	}
 
 write.table(
-	cbio.data,
+	unique(cbio.data),
 	file = generate.filename(arguments$project, 'star-fusion_for_cbioportal', 'tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
+	quote = FALSE,
 	sep = '\t'
 	);
 

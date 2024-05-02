@@ -384,7 +384,8 @@ sub pon {
 			$mutect_command .= "\n$java_check";
 
 			# check if this should be run
-			if ('Y' eq missing_file($output_stem . '.vcf.md5')) {
+			if ( ('Y' eq missing_file($output_stem . '.vcf.md5')) &&
+				('Y' eq missing_file($output_stem . '_filtered.vcf.md5')) ) {
 
 				# record command (in log directory) and then run job
 				print $log "  >> Submitting job for MuTect in artifact_detection_mode...\n";

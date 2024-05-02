@@ -99,3 +99,4 @@ methyldackel:
         extract:
             mem: 4G
             time: '24:00:00'
+            n_cpus: 1

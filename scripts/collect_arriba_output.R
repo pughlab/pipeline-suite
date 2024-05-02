@@ -61,6 +61,7 @@ virus.files  <- list.files(pattern = 'virus_expression.tsv', recursive = TRUE);
 fusion.data <- list();
 
 fusions.empty.samples <- c();
+viral.empty.samples <- c();
 
 for (file in fusion.files) {
 
@@ -89,7 +90,10 @@ for (file in virus.files) {
 
 	# read in data
 	tmp <- read.delim(file, stringsAsFactors = FALSE);
-	if (nrow(tmp) == 0) { next; }
+	if (nrow(tmp) == 0) {
+		viral.empty.samples <- c(viral.empty.samples, smp);
+		next;
+		}
 
 	# store it
 	tmp$Sample <- smp;
@@ -142,6 +146,22 @@ for (smp in fusions.empty.samples) {
 	formatted.fusions.by.patient[,smp] <- NA;
 	}
 
+# now for viral count data
+formatted.viral <- reshape(
+	combined.virus[,c('Sample','VIRUS','RPKM')],
+	direction = 'wide',
+	timevar = 'Sample',
+	idvar = 'VIRUS'
+	);
+
+colnames(formatted.viral) <- gsub('RPKM.','',colnames(formatted.viral));
+colnames(formatted.viral)[1] <- 'Species';
+
+# add in empty samples
+for (smp in viral.empty.samples) {
+	formatted.viral[,smp] <- NA;
+	}
+
 # save data to file
 write.table(
 	formatted.fusions,
@@ -160,7 +180,7 @@ write.table(
 	);
 
 write.table(
-	combined.virus[,c('Sample',virus.fields)],
+	formatted.viral, #combined.virus[,c('Sample',virus.fields)],
 	file = generate.filename(arguments$project, 'arriba_viral_expression', 'tsv'),
 	row.names = FALSE,
 	col.names = TRUE,
@@ -178,7 +198,7 @@ cbio.data <- data.frame(
 	Entrez_Gene_Id = NA,
 	Center = NA,
 	Tumor_Sample_Barcode = rep(tmp$Sample, times = 2),
-	Fusion = gsub('--','-',rep(tmp$Fusion, times = 2)),
+	Fusion = rep(tmp$Fusion, times = 2), # gsub('--','-',rep(tmp$Fusion, times = 2)),
 	DNA_support = 'no',
 	RNA_support = 'yes',
 	Method = 'arriba',

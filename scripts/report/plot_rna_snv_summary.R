@@ -114,6 +114,10 @@ plot.data <- reshape(
 	times = c('SNVs','INDELs')
 	);
 
+if (any(is.na(plot.data$Count))) {
+	plot.data[is.na(plot.data$Count),]$Count <- 0;
+	}
+
 plot.data$Sample <- factor(plot.data$Sample, levels = sample.counts$Sample);
 
 ### PLOT DATA ######################################################################################
@@ -132,7 +136,6 @@ create.barplot(
 	stack = TRUE,
 	groups = plot.data$Type,
 	col = default.colours(2),
-#	xaxis.lab = rep('', nrow(sample.counts)),
 	yaxis.cex = axis.cex,
 	xaxis.cex = 1,
 	xaxis.tck = c(0.5,0),
@@ -143,7 +146,6 @@ create.barplot(
 	xlab.label = 'Count',
 	xlab.cex = 1.2,
 	ylab.label = NULL,
-#	ylimits = c(0.5,nrow(all.samples)+0.5),
 	height = 10,
 	width = 8,
 	resolution = 200,
@@ -155,24 +157,26 @@ save(
 	file = generate.filename(arguments$project, 'mutation_summary', 'RData')
 	);
 
+### LATEX ##########################################################################################
+# initiate file
+tex.file <- 'snv_summary.tex';
+write("\\section{SNV Summary}", file = tex.file);
+
 # write some captions
 summary.caption <- "Summary of short somatic variants (SNVs, indels) for each sample: orange = INDELs; green = SNVs.";
 
-# write for latex
-write("\\section{SNV Summary}", file = 'snv_summary.tex');
-
-write("\\begin{figure}[h!]", file = 'snv_summary.tex', append = TRUE);
-write("\\begin{center}", file = 'snv_summary.tex', append = TRUE);
+write("\\begin{figure}[h!]", file = tex.file, append = TRUE);
+write("\\begin{center}", file = tex.file, append = TRUE);
 write(paste0(
 	"\\includegraphics[width=0.9\\textwidth]{",
 	getwd(), '/',
 	generate.filename(arguments$project, 'mutation_summary','png'), '}'
-	), file = 'snv_summary.tex', append = TRUE);
-write("\\end{center}", file = 'snv_summary.tex', append = TRUE);
+	), file = tex.file, append = TRUE);
+write("\\end{center}", file = tex.file, append = TRUE);
 write(paste0(
 	"\\caption{", summary.caption, "}"
-	), file = 'snv_summary.tex', append = TRUE);
-write("\\end{figure}\n", file = 'snv_summary.tex', append = TRUE);
+	), file = tex.file, append = TRUE);
+write("\\end{figure}\n", file = tex.file, append = TRUE);
 
 ### SAVE SESSION INFO ##############################################################################
 save.session.profile(generate.filename('MutationSummary','SessionProfile','txt'));

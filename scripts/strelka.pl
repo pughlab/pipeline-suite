@@ -1209,7 +1209,6 @@ if ($help) {
 if (!defined($tool_config)) { die("No tool config file defined; please provide -t | --tool (ie, tool_config.yaml)"); }
 if (!defined($data_config)) { die("No data config file defined; please provide -d | --data (ie, sample_config.yaml)"); }
 if (!defined($output_directory)) { die("No output directory defined; please provide -o | --out_dir"); }
-if (!defined($manta_directory)) { die("No manta output directory defined; please provide -m | --manta_dir"); }
 
 if ($create_pon) {
 	pon(
@@ -1222,6 +1221,11 @@ if ($create_pon) {
 		no_wait			=> $no_wait
 		);
 } else {
+
+	if (!defined($manta_directory)) {
+		die("No manta output directory defined; please provide -m | --manta_dir");
+		}
+
 	main(
 		tool_config		=> $tool_config,
 		data_config		=> $data_config,
