@@ -913,8 +913,8 @@ sub main {
 			if (scalar(@chroms) > 1) {
 				$cleanup_cmd .= "\nrm $output_stem\__chr*";
 				} else {
-				$cleanup_cmd .= "\nrm $merged_vcf_output\__" . $chroms[0] . ".snp.vcf";
-				$cleanup_cmd .= "\nrm $merged_vcf_output\__" . $chroms[0] . ".indel.vcf";
+				$cleanup_cmd .= "\nrm $merged_vcf_output" . ".snp.vcf";
+				$cleanup_cmd .= "\nrm $merged_vcf_output" . ".indel.vcf";
 				}
 
 			# check if this should be run
@@ -974,7 +974,7 @@ sub main {
 
 			push @germline_vcfs, $merged_vcf_output . "_germline_hc.vcf.gz";
 
-			$cleanup_cmd .= "rm $merged_vcf_output\_somatic_hc.vcf";
+			$cleanup_cmd .= "\nrm $merged_vcf_output\_somatic_hc.vcf";
 
 			# check if this should be run
 			if ('Y' eq missing_file($merged_vcf_output . '_somatic_hc.vcf.md5')) {
@@ -1104,7 +1104,7 @@ sub main {
 					"tabix -p vcf $output_stem.cns.vcf.gz"
 					);
 
-				$cleanup_cmd .= "rm $output_stem.cns.vcf.gz";
+				$cleanup_cmd .= "\nrm $output_stem.cns.vcf.gz";
 				push @germline_vcfs, "$output_stem.cns.vcf.gz";
 
 				# check if this should be run
