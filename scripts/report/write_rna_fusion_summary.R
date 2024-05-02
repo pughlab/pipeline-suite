@@ -91,12 +91,16 @@ if (!dir.exists(arguments$output)) {
 setwd(arguments$output);
 
 ### FORMAT DATA ####################################################################################
+arriba <- unique(arriba[,c('Tumor_Sample_Barcode','Fusion','Method','Frame')]);
+starfusion <- unique(starfusion[,c('Tumor_Sample_Barcode','Fusion','Method','Frame')]);
+fusioncatcher <- unique(fusioncatcher[,c('Tumor_Sample_Barcode','Fusion','Method','Frame')]);
+
 # merge tables, keeping only those events detected by both methods
 combined.fusions <- merge(
-	arriba[,c('Tumor_Sample_Barcode','Fusion','Method','Frame')],
+	arriba,
 	merge(
-		starfusion[,c('Tumor_Sample_Barcode','Fusion','Method','Frame')],
-		fusioncatcher[,c('Tumor_Sample_Barcode','Fusion','Method','Frame')],
+		starfusion,
+		fusioncatcher,
 		by = c('Tumor_Sample_Barcode','Fusion','Frame'),
 		all = TRUE
 		),
@@ -121,7 +125,7 @@ combined.fusions <- unique(combined.fusions[,!grepl('Method', colnames(combined.
 
 # collect summary stats
 summary.metrics <- data.frame(
-	Method = c('Arriba','STAR-Fusion','FusionCatcher','Both'),
+	Method = c('Arriba','STAR-Fusion','FusionCatcher','Unique'),
 	Total = c(
 		length(unique(na.omit(arriba$Fusion))),
 		length(unique(na.omit(starfusion$Fusion))),
@@ -129,27 +133,40 @@ summary.metrics <- data.frame(
 		length(unique(na.omit(combined.fusions$Fusion)))
 		),
 	InFrame = c(
-		nrow(arriba[which(arriba$Frame == 'in-frame'),])/2,
-		nrow(starfusion[which(starfusion$Frame == 'in-frame'),])/2,
-		nrow(fusioncatcher[which(fusioncatcher$Frame == 'in-frame'),])/2,
-		nrow(combined.fusions[which(combined.fusions$Frame == 'in-frame'),])
+		nrow(arriba[which(arriba$Frame == 'inframe'),]),
+		nrow(starfusion[which(starfusion$Frame == 'inframe'),]),
+		nrow(fusioncatcher[which(fusioncatcher$Frame == 'inframe'),]),
+		nrow(combined.fusions[which(combined.fusions$Frame == 'inframe'),])
 		),
 	Frameshift = c(
-		nrow(arriba[which(arriba$Frame == 'frameshift'),])/2,
-		nrow(starfusion[which(starfusion$Frame == 'frameshift'),])/2,
-		nrow(fusioncatcher[which(fusioncatcher$Frame == 'frameshift'),])/2,
+		nrow(arriba[which(arriba$Frame == 'frameshift'),]),
+		nrow(starfusion[which(starfusion$Frame == 'frameshift'),]),
+		nrow(fusioncatcher[which(fusioncatcher$Frame == 'frameshift'),]),
 		nrow(combined.fusions[which(combined.fusions$Frame == 'frameshift'),])
 		)
 	);
 
 caption <- "Number of fusions detected by TOOLS, and the overlap.";
-caption <- sub('TOOLS', paste(tool.list, ', '), caption);
+caption <- sub('TOOLS', paste(tool.list, collapse = ', '), caption);
 
-# find any recurrent fusion
-fusion.counts <- sort(table(combined.fusions$Fusion));
-recurrent.fusions <- names(fusion.counts[which(fusion.counts > 1)]);
+# find any recurrently-detected fusion (multiple tools)
+if (length(tool.list) > 1) {
+	recurrent.hits <- aggregate(
+		Tumor_Sample_Barcode ~ Fusion + Frame,
+		combined.fusions[grepl(';', combined.fusions),],
+		length
+		);
+	} else {
+	# find recurrent events (across samples)
+	recurrent.hits <- aggregate(
+		Tumor_Sample_Barcode ~ Fusion + Frame,
+		combined.fusions,
+		length
+		);
+	}
 
-combined.fusions <- combined.fusions[order(combined.fusions$Fusion),];
+colnames(recurrent.hits) <- c('Fusion','Frame','N.samples');
+recurrent.hits <- recurrent.hits[order(recurrent.hits$N.samples, decreasing = TRUE),];
 
 # add Mavis status if available
 if (!is.null(arguments$mavis)) {
@@ -187,13 +204,15 @@ print(
 	append = TRUE
 	);
 
-if (length(recurrent.fusions) > 0) {
-	to.write <- combined.fusions[which(combined.fusions$Fusion %in% recurrent.fusions),1:3];
-	colnames(to.write) <- c('Sample','Fusion','Frame');
+if (nrow(recurrent.hits) > 0) {
+	to.write <- recurrent.hits[1:min(nrow(recurrent.hits),20),];
 	print(
 		xtable(
 			to.write,
-			caption = "Fusions detected by both STAR-Fusion and Fusioncatcher in multiple samples."
+			caption = ifelse(length(tool.list) > 1,
+				"Fusions detected by multiple tools and in multiple samples.",
+				"Fusions detected in multiple samples."
+				)
 			),
 		file = 'fusion_summary.tex',
 		include.rownames = FALSE,
