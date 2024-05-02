@@ -60,21 +60,14 @@ sub get_extract_command {
 	my %args = (
 		bam		=> undef,
 		output_stem	=> undef,
+		n_cpus		=> undef,
 		@_
 		);
 
-	my $methylation_cmd = join(' ',
+	my $methylation_cmd .= "\n\n" . join(' ',
 		'MethylDackel extract',
-		'--minDepth 10 --maxVariantFrac 0.25 --mergeContext',
-#		'--OT 0,0,0,0 --OB 0,0,0,0', # bugged as of v0.5.1 (2020)
-		'-o', $args{output_stem} . '_merged',
-		$reference,
-		$args{bam}
-		);
-
-	$methylation_cmd .= "\n\n" . join(' ',
-		'MethylDackel extract',
-		'--maxVariantFrac 0.25 --CHH --CHG',
+		'-@', $args{n_cpus},
+		'--CHH --CHG',
 #		'--OT 0,0,0,0 --OB 0,0,0,0', # bugged as of v0.5.1 (2020)
 		'-o', $args{output_stem} . '_all',
 		$reference,
@@ -281,9 +274,14 @@ sub main {
 				}
 
 			# extract methylation levels
+			if (!defined($parameters->{extract}->{n_cpus})) {
+				$parameters->{extract}->{n_cpus} = 1;
+				}
+			
 			my $extract_command = get_extract_command(
 				bam		=> $smp_data->{$patient}->{$type}->{$sample},
-				output_stem	=> $output_stem 
+				output_stem	=> $output_stem,
+				n_cpus		=> $parameters->{extract}->{n_cpus}
 				);
 
 		#	$cleanup_cmd .= "\nrm -rf " . join('/', $sample_directory, 'workspace');
@@ -308,6 +306,7 @@ sub main {
 					modules	=> [$methyldackel],
 					max_time	=> $parameters->{extract}->{time},
 					mem		=> $parameters->{extract}->{mem},
+					cpus_per_task	=> $parameters->{extract}->{n_cpus},
 					hpc_driver	=> $args{hpc_driver},
 					extra_args	=> [$hpc_group]
 					);

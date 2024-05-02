@@ -89,12 +89,7 @@ sub main {
 
 	### MAIN ###########################################################################################
 
-	my ($run_script, $trim_run_id, $fastqc_run_id);
-	my ($bwa_run_id, $gatk_run_id, $contest_run_id, $qc_run_id, $coverage_run_id, $hc_run_id);
-	my ($strelka_run_id, $mutect_run_id, $mutect2_run_id, $varscan_run_id, $msi_run_id, $pindel_run_id);
-	my ($somaticsniper_run_id, $delly_run_id, $vardict_run_id, $gatk_cnv_run_id, $novobreak_run_id);
-	my ($mops_run_id, $svict_run_id, $ichor_run_id, $ascat_run_id, $mavis_run_id, $report_run_id);
-
+	my ($run_script, $trim_run_id, $fastqc_run_id, $bwa_run_id, $qc_run_id, $md_run_id);
 	my (@step1_job_ids, @step2_job_ids, @step3_job_ids, @step4_job_ids, @job_ids);
 	my $current_dependencies = '';
 
@@ -358,7 +353,55 @@ sub main {
 		unless(-e $methylD_directory) { make_path($methylD_directory); }
 
 		if ('Y' eq $tool_set{'methylD'}) {
-			# run here
+
+			# methyldackel to extract site-wise methylation
+			my $md_command = join(' ',
+				"perl $cwd/scripts/methyldackel.pl",
+				"-o", $methylD_directory,
+				"-t", $tool_config,
+				"-d", $bwa_output_yaml,
+				"-c", $args{cluster}
+				);
+
+#			if ($args{cleanup}) {
+#				$qc_command .= " --remove";
+#				}
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for methyldackel.pl\n";
+			print $log "  COMMAND: $md_command\n\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_methyldackel',
+				cmd	=> $md_command,
+				modules	=> ['perl'],
+				dependencies	=> $qc_run_id,
+				mem		=> '256M',
+				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
+
+				$md_command .= " --dry-run";
+				`$md_command`;
+				$md_run_id = 'pughlab_dna_pipeline__run_methyldackel';
+
+				} else {
+
+				$md_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> MethylDackel job id: $md_run_id\n\n";
+				push @job_ids, $md_run_id;
+				}
 			}
 		}
 
