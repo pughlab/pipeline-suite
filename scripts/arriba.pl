@@ -454,44 +454,44 @@ sub main {
 				}
 
 			push @final_outputs, "$output_stem.tsv";
+			}
 
-			# remove temporary directories (once per patient)
-			if ($args{del_intermediates}) {
+		# remove temporary directories (once per patient)
+		if ($args{del_intermediates}) {
 
-				if (scalar(@sample_jobs) == 0) {
-					`$cleanup_cmd`;
-					} else {
+			if (scalar(@patient_jobs) == 0) {
+				`$cleanup_cmd`;
+				} else {
 
-					print $log "Submitting job to clean up temporary/intermediate files...\n";
+				print $log "Submitting job to clean up temporary/intermediate files...\n";
 
-					# make sure final output exists before removing intermediate files!
-					$cleanup_cmd = join("\n",
-						"if [ -s " . join(" ] && [ -s ", @final_outputs) . " ]; then",
-						$cleanup_cmd,
-						"else",
-						'echo "FINAL OUTPUT FILE is missing; not removing intermediates"',
-						"fi"
-						);
+				# make sure final output exists before removing intermediate files!
+				$cleanup_cmd = join("\n",
+					"if [ -s " . join(" ] && [ -s ", @final_outputs) . " ]; then",
+					$cleanup_cmd,
+					"else",
+					'echo "FINAL OUTPUT FILE is missing; not removing intermediates"',
+					"fi"
+					);
 
-					$run_script = write_script(
-						log_dir => $log_directory,
-						name    => 'run_cleanup_' . $sample,
-						cmd     => $cleanup_cmd,
-						dependencies	=> join(':', @sample_jobs),
-						mem		=> '256M',
-						hpc_driver	=> $args{hpc_driver},
-						kill_on_error	=> 0,
-						extra_args	=> [$hpc_group]
-						);
+				$run_script = write_script(
+					log_dir => $log_directory,
+					name    => 'run_cleanup_' . $patient,
+					cmd     => $cleanup_cmd,
+					dependencies	=> join(':', @patient_jobs),
+					mem		=> '256M',
+					hpc_driver	=> $args{hpc_driver},
+					kill_on_error	=> 0,
+					extra_args	=> [$hpc_group]
+					);
 
-					$run_id = submit_job(
-						jobname		=> 'run_cleanup_' . $sample,
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
-						);
-					}
+				$run_id = submit_job(
+					jobname		=> 'run_cleanup_' . $patient,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{hpc_driver},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
 				}
 			}
 
