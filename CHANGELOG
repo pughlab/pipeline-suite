@@ -1,3 +1,19 @@
+2024-05-02: PughLab pipeline-suite (version 0.9.9);
+- added methyldackel to pughlab_emseq_pipeline.pl
+	- updated methyldackel command (removed filter steps which are better incorporated into downstream analyses)
+	- added n_cpus for methyldackel extract (methyldackel.pl and emseq_pipeline_config.yaml)
+- updates to RNA-Seq report:
+	- added Arriba virus counts to final report
+	- minor updates to rna-based fusion summary
+	- minor updates to rna-based snv summary
+- minor updates:
+	- fixed error in cleanup command in arriba.pl, pindel.pl, varscan.pl
+	- improved error checking and data formatting in collect_arriba_output.R
+	- minor formatting changes for consistency in collect_fusioncatcher_output.R and collect_star-fusion_output.R (in-frame to inframe)
+	- added checks for output files to avoid re-running completed steps (mutect.pl [create-panel-of-normals])
+	- minor update to vcf-concat and sort commands in mutect2.pl [when merging split-by-chr runs]
+	- removed manta requirement for strelka.pl with create-panel-of-normals setting
+
 2024-03-27: PughLab pipeline-suite (version 0.9.8);
 - updated bwameth version/path (now available as a module on H4H)
 - minor updates to example config files:
