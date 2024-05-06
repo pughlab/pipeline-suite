@@ -380,6 +380,7 @@ panelcn_mops:
             time: '24:00:00'
 ichor_cna:
     run: N # ideal for low-pass WGS
+    pon:
     parameters:
         readcounter:
             mem: 2G

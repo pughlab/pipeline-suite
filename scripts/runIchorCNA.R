@@ -22,6 +22,7 @@ option_list <- list(
   make_option(c("--WIG"), type = "character", help = "Path to tumor WIG file. Required."),
   make_option(c("--NORMWIG"), type = "character", default = NULL, help = "Path to normal WIG file. Default: [%default]"),
   make_option(c("--normal"), type = "character", default = "c(0.5,0.6,0.7,0.8,0.9,0.95)", help = "Initial normal contamination; can be more than one value if additional normal initializations are desired. Default: [%default]"),
+  make_option(c("--normalPanel"), type="character", default=NULL, help="Median corrected depth from panel of normals. Default: [%default]"),
   make_option(c("--scStates"), type = "character", default = "c(1,3)", help = "Subclonal states to consider. Default: [%default]"),
   make_option(c("--ploidy"), type = "character", default = "c(2,3)", help = "Initial tumour ploidy; can be more than one value if additional ploidy initializations are desired. Default: [%default]"),
   make_option(c("--maxCN"), type = "numeric", default = 5, help = "Total clonal CN states. Default: [%default]"),
@@ -117,6 +118,10 @@ if ('hg38' == opt$genomeBuild) {
 		'GRCh37.p13_centromere_UCSC-gapTable.txt', package = 'ichorCNA');
 	} else {
 	stop('Unrecognized genomeBuild provided. Must be one of hg38 or hg19.');
+	}
+
+if (defined(opt$normalPanel)) {
+	normal_panel <- opt$normalPanel;
 	}
 
 # based purely on built-in gc/map wigs, hg19 = NCBI and hg39 = UCSC

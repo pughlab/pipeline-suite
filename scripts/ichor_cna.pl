@@ -17,7 +17,7 @@ use IO::Handle;
 my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
-our ($reference, $ref_type, $ichor_path);
+our ($reference, $ref_type, $pon, $ichor_path);
 
 ####################################################################################################
 # version	author		comment
@@ -65,6 +65,7 @@ sub get_ichor_cna_command {
 		normal_wig	=> undef,
 		chroms		=> undef,
 		out_dir		=> undef,
+		pon		=> undef,
 		@_
 		);
 
@@ -90,6 +91,10 @@ sub get_ichor_cna_command {
 
 	if (defined($args{normal_wig})) {
 		$ichor_command .= " --NORMWIG $args{normal_wig}";
+		}
+
+	if (defined($args{pon})) {
+		$ichor_command .= " --normalPanel $args{pon}";
 		}
 
 	return($ichor_command);
@@ -156,6 +161,11 @@ sub main {
 
 	$reference = $tool_data->{reference};
 	$ref_type  = $tool_data->{ref_type};
+
+	if (defined($tool_data->{ichor_cna}->{pon})) {
+		print $log "\n    Panel of Normals: $tool_data->{ichor_cna}->{pon}";
+		$pon = $tool_data->{ichor_cna}->{pon};
+		}
 
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
@@ -379,7 +389,8 @@ sub main {
 				tumour_wig	=> $tumour_wig,
 				normal_wig	=> $normal_wig,
 				chroms		=> join("','", @chroms),
-				out_dir		=> $sample_directory
+				out_dir		=> $sample_directory,
+				pon		=> $pon
 				);
 
 			# check if this should be run
