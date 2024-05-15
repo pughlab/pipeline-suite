@@ -15,7 +15,6 @@ parser <- ArgumentParser();
 
 parser$add_argument('-d', '--directory', type = 'character', help = 'path to data directory');
 parser$add_argument('-o', '--output', type = 'character', help = 'path to output file');
-parser$add_argument('-s', '--seq_type', type = 'character', help = 'either dna or rna', default = 'dna');
 parser$add_argument('-t', '--file_type', type = 'character', help = 'either fastq or bam', default = 'fastq');
 
 arguments <- parser$parse_args();

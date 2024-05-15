@@ -735,9 +735,9 @@ if (is.dna) {
 		abline.col = 'grey80',
 		top.padding = 0.1,
 		add.rectangle = add.rectangle,
-		xleft.rectangle = -1,
+		xleft.rectangle = -100,
 		ybottom.rectangle = c(0.5, line.breaks),
-		xright.rectangle = max.cov+10,
+		xright.rectangle = max.cov+100,
 		ytop.rectangle = c(line.breaks, length(smp.names)+0.5),
 		col.rectangle = c('white', 'grey90'),
 		alpha.rectangle = 0.8,
@@ -845,7 +845,7 @@ if (!is.null(arguments$report)) {
 	if (is.dna) {
 
 		# record correlations
-		write("\\subsection{Germline Correlations}", file = tex.file);
+		write("\\subsection{Germline Correlations}", file = tex.file, append = TRUE);
 		if (nrow(suspect.cases) > 20) {
 			write("Many cases of high germline correlations detected - this is likely an artefact of using a targeted panel.", file = tex.file, append = TRUE);
 			} else if (nrow(suspect.cases) > 0) {
@@ -911,7 +911,7 @@ if (!is.null(arguments$report)) {
 		} else {
 
 		# record correlations
-		write("\\subsection{Sample Correlations}", file = tex.file);
+		write("\\subsection{Sample Correlations}", file = tex.file, append = TRUE);
 		if (nrow(suspect.cases) > 0 & nrow(suspect.cases) <= 10) {
 			suspect.cases <- xtable(
 				suspect.cases,
