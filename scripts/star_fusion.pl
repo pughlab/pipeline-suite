@@ -385,9 +385,7 @@ sub main {
 		# remove temporary directories (once per patient)
 		if ($args{del_intermediates}) {
 
-			if (scalar(@patient_jobs) == 0) {
-				`$cleanup_cmd`;
-				} else {
+			unless (scalar(@patient_jobs) == 0) {
 
 				print $log "Submitting job to clean up temporary/intermediate files...\n";
 
