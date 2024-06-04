@@ -52,13 +52,13 @@ arguments <- parser$parse_args();
 # what's the date?
 date <- Sys.Date();
 
-data.directory <- sub(basename(arguments$input), '', arguments$input);
+data.directory <- dirname(arguments$input);
 setwd(data.directory);
 
 ### MAIN ###########################################################################################
 agena <- read.delim(arguments$agena);
 
-header <- read.delim(arguments$input, nrow = 1000, header = FALSE);
+header <- read.delim(arguments$input, nrow = 5000, header = FALSE);
 header <- header[grepl('##', header[,1]),];
 smp.data <- read.delim(arguments$input, skip = length(header), stringsAsFactors = FALSE);
 if (! colnames(smp.data)[1] == 'X.CHROM') {
