@@ -37,6 +37,7 @@ option_list <- list(
 	make_option("--txnStrength", type = "numeric", default = 10000, help = "Transition pseudo-counts. Exponent should be the same as the number of decimal places of --txnE. Default: [%default]"),
 	make_option("--plotYLim", type = "character", default = "c(-2,2)", help = "ylim to use for chromosome plots. Default: [%default]"),
 	make_option("--outDir", type = "character", default = "./", help = "Output Directory. Default: [%default]"),
+	make_option("--target_bed", type = "character", default = NULL, help = "Path to target bed file (ie, for whole-exome sequencing"),
 	make_option("--make_pon", type = "logical", default = FALSE, help = "Should a panel of normals be created? Requires --normal_list (input) and --normalPanel (output)"),
 	make_option("--normal_list", type = "character", default = NULL, help = "list of normal WIG files for PoN"),
 	make_option("--normalPanel", type="character", default = NULL, help = "Median corrected depth from panel of normals. Default: [%default]")
@@ -82,7 +83,6 @@ outImage	<- paste0(outDir,"/", patientID,".RData");
 plotFileType	<- 'pdf';
 
 # other/ignored/default only
-exons.bed	<- NULL;
 minMapScore	<- 0.9;
 flankLength	<- 1e5;
 coverage	<- NULL;
@@ -144,6 +144,12 @@ seqinfo <- getSeqInfo(genomeBuild, genomeStyle);
 centromere <- read.delim(centromere);
 seqlevelsStyle(centromere$Chr) <- genomeStyle;
 
+# if target bed is provided
+targetSequences <- NULL;
+if (!is.null(opt$target_bed)) {
+	targetSequences <- read.delim(opt$target_bed, header = FALSE);
+	}
+
 ### CREATE PANEL OF NORMALS #######################################################################
 if (create_pon) {
 
@@ -164,8 +170,8 @@ if (create_pon) {
 
 		normal_reads <- wigToGRanges(normalFile);
 
-		counts <- loadReadCountsFromWig(normal_reads, chrs = chrs, gc = gc, map = map, 
-			centromere = centromere, targetedSequences = NULL, genomeStyle = genomeStyle, chrNormalize = chrNormalize);
+		counts <- loadReadCountsFromWig(normal_reads, chrs = chrs, gc = gc, map = map, genomeStyle = genomeStyle,
+			centromere = centromere, targetedSequences = targetSequences, chrNormalize = chrNormalize);
 
 		gender.normal <- counts$gender;
 
@@ -226,7 +232,7 @@ map <- wigToGRanges(mapWig);
 message("Correcting Tumour");
 counts <- loadReadCountsFromWig(tumour_reads, chrs = chrs, gc = gc, map = map, 
 		centromere = centromere, flankLength = flankLength, 
-		targetedSequences = NULL, chrXMedianForMale = chrXMedianForMale,
+		targetedSequences = targetSequences, chrXMedianForMale = chrXMedianForMale,
 		genomeStyle = genomeStyle, fracReadsInChrYForMale = fracReadsInChrYForMale,
 		chrNormalize = chrNormalize, mapScoreThres = minMapScore);
 
@@ -240,7 +246,7 @@ if (!is.null(normal_file) && normal_file != "None" && normal_file != "NULL") {
 
 	message("Correcting Normal");
 	counts <- loadReadCountsFromWig(normal_reads, chrs = chrs, gc = gc, map = map, 
-		centromere = centromere, flankLength = flankLength, targetedSequences = NULL,
+		centromere = centromere, flankLength = flankLength, targetedSequences = targetSequences,
 		genomeStyle = genomeStyle, chrNormalize = chrNormalize, mapScoreThres = minMapScore);
 
 	normal_copy <- counts$counts;
