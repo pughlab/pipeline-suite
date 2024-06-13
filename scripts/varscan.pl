@@ -360,7 +360,7 @@ sub main {
 		}
 
 	my ($run_script, $cnv_run_id, $varscan_run_id, $run_id, $link, $cleanup_cmd);
-	my ($should_run_pon, $should_run_final);
+	my ($should_run_pon, $should_run_final) = 0;
 	my (@all_jobs, @pon_vcfs, @pon_dependencies);
 
 	my $pon_directory = join('/', $output_directory, 'PanelOfNormals');

@@ -139,7 +139,7 @@ sub main {
 	print $log "Running ContEst pipeline.\n";
 	print $log "\n  Tool config used: $tool_config";
 	print $log "\n    Reference used: $tool_data->{reference}";
-	print $log "\n    Population frequencies: $tool_data->{hapmap}";
+	print $log "\n    Population frequencies: $tool_data->{contest_hapmap}";
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n---\n";
@@ -236,7 +236,7 @@ sub main {
 					output		=> $output_file,
 					level		=> $lane_type,
 					reference	=> $tool_data->{reference},
-					hapmap		=> $tool_data->{hapmap},
+					hapmap		=> $tool_data->{contest_hapmap},
 					intervals	=> $tool_data->{intervals_bed},
 					java_mem	=> $parameters->{contest}->{java_mem},
 					tmp_dir		=> $tmp_directory
