@@ -14,8 +14,19 @@ intervals_bed:
 gnomad: /cluster/projects/pughlab/references/gnomad/gnomad_v2.0.2/Exome/gnomad.exomes.r2.0.2.sites.vcf.gz
 dbsnp: /cluster/projects/pughlab/references/dbSNP/GRCh37/b151/dbSNP_GRCh37p13_b151_common_chr.vcf.gz
 cosmic: /cluster/projects/pughlab/references/COSMIC/GRCh37/v92/CosmicVariants_full_sorted_chr.vcf.gz
-hapmap: /cluster/projects/pughlab/references/hapmap/hg19_population_stratified_af_hapmap_3.3.vcf.gz
-gtf: /cluster/projects/pughlab/references/gencode/GRCh37/v36/gencode.v36lift37.annotation.gtf.gz
+snp6: /cluster/projects/pughlab/references/ASCAT_refs/GRCh37_SNP6.tsv.gz
+exclude_regions: /cluster/projects/pughlab/references/Delly/excludeTemplates/human.hg19.excl.tsv
+gatk_known_1000g: /cluster/tools/data/genomes/human/hg19/variantcallingdata/1000G_phase1.snps.high_confidence.hg19.vcf 
+gatk_known_indels: /cluster/tools/data/genomes/human/hg19/variantcallingdata/1000G_phase1.indels.hg19.vcf
+gatk_known_mills: /cluster/tools/data/genomes/human/hg19/variantcallingdata/Mills_and_1000G_gold_standard.indels.hg19.vcf
+gatk_hapmap: /cluster/tools/data/genomes/human/hg19/variantcallingdata/hapmap_3.3.hg19.vcf
+gatk_omni: /cluster/tools/data/genomes/human/hg19/variantcallingdata/1000G_omni2.5.hg19.vcf
+contest_hapmap: /cluster/projects/pughlab/references/hapmap/hg19_population_stratified_af_hapmap_3.3.vcf.gz
+svict_gtf: /cluster/projects/pughlab/references/gencode/GRCh37/v36/gencode.v36lift37.annotation.gtf.gz
+mutsig_coverage: /cluster/projects/pughlab/references/MutSigCV/exome_full192.coverage.txt
+mutsig_covariates: /cluster/projects/pughlab/references/MutSigCV/gene.covariates.txt
+mutsig_categories: /cluster/projects/pughlab/references/MutSigCV/mutation_type_dictionary_file.txt
+mutsig_refs: /cluster/projects/pughlab/references/MutSigCV/chr_files_hg19
 # tool versions
 bwa_version: 0.7.15
 samtools_version: 1.9
@@ -33,7 +44,8 @@ strelka_version: 2.9.10
 manta_version: 1.6.0
 delly_version: 0.8.1
 novobreak_version: 1.1
-svict_version: 1.0.1
+svict_version: 
+svict_path: /cluster/projects/pughlab/bin/svict
 ichor_cna_version: 0.3.2
 panelcnmops_version: 1.14.0
 pindel_version: 0.2.5b8
@@ -44,6 +56,8 @@ vcf2maf_version: 1.6.17
 msi_sensor_version: msisensor-pro/1.2.0
 ascat_r_version: 4.1.0
 r_version: 3.6.1
+mutsigcv_version: 1.4
+mcr_path: /cluster/tools/software/MCR/8.1/v81
 # tool specific parameters
 fastqc:
     run: Y
@@ -116,7 +130,8 @@ gatk:
 bamqc:
     run: Y
     parameters:
-        contest:
+        contest: # no longer necessary as gatk's calculateContamination is now included in the other 'qc' steps
+            run: N
             threshold: '3.0'
             java_mem: 1g
             mem: 2G
