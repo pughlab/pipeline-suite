@@ -68,8 +68,8 @@ sub main {
 	print $log "---\n";
 	print $log "Running PughLab RNA-Seq pipeline.\n";
 	print $log "\n  Tool config used: $tool_config";
-	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
+	print $log "\n  Output directory: $output_directory";
 	print $log "\n---\n\n";
 
 	# get optional HPC group
