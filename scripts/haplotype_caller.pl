@@ -207,10 +207,6 @@ sub main{
 	if (defined($tool_data->{dbsnp})) {
 		print $log "\n      dbSNP: $tool_data->{dbsnp}";
 		$dbsnp = $tool_data->{dbsnp};
-		} elsif ('hg38' eq $tool_data->{ref_type}) {
-		$dbsnp = '/cluster/tools/data/genomes/human/hg38/hg38bundle/dbsnp_144.hg38.vcf.gz';
-		} elsif ('hg19' eq $tool_data->{ref_type}) {
-		$dbsnp = '/cluster/tools/data/genomes/human/hg19/variantcallingdata/dbsnp_138.hg19.vcf';
 		} else {
 		print $log "\n      No dbSNP provided.";
 		}

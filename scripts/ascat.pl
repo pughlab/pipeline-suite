@@ -125,18 +125,9 @@ sub main {
 	print $log "Running ASCAT pipeline.\n";
 	print $log "\n  Tool config used: $tool_config";
 	print $log "\n    Reference used: $tool_data->{reference}";
-
 	$ref_type = $tool_data->{ref_type};
 
-	my $snp6_file;
-	if ( ('GRCh38' eq $ref_type) || ('hg38' eq $ref_type) ) {
-		$snp6_file	= '/cluster/projects/pughlab/references/ASCAT_refs/GRCh38_SNP6.tsv.gz';
-		} elsif ( ('GRCh37' eq $ref_type) || ('hg19' eq $ref_type)) {
-		$snp6_file	= '/cluster/projects/pughlab/references/ASCAT_refs/GRCh37_SNP6.tsv.gz';
-		} else {
-		die('Unrecognized reference type requested!');
-		}
-
+	my $snp6_file = $tool_data->{snp6};
 	print $log "\n      Using ASCAT reference file: $snp6_file";
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";

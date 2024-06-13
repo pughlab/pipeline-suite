@@ -394,11 +394,7 @@ sub main {
 	my @chroms = split(',', $string);
 
 	# find excludable regions
-	if ( ('hg38' eq $tool_data->{ref_type}) || ('GRCh38' eq $tool_data->{ref_type}) ) {
-		$exclude_regions = '/cluster/projects/pughlab/references/Delly/excludeTemplates/human.hg38.excl.tsv';
-		} elsif ( ('hg19' eq $tool_data->{ref_type}) || ('GRCh37' eq $tool_data->{ref_type}) ) {
-		$exclude_regions = '/cluster/projects/pughlab/references/Delly/excludeTemplates/human.hg19.excl.tsv';
-		}
+	$exclude_regions = $tool_data->{exclude_regions};
 
         # set some binaries
 	my $is_multi_slurm = ((scalar(@chroms) > 1) && ('slurm' eq $args{hpc_driver}));
