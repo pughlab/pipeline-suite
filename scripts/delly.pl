@@ -232,9 +232,9 @@ sub get_finalize_command {
 	my $tumour_id = $id_parts[2];
 	chomp($tumour_id);
 
-	my $filter = '';
+	my $filter = "| bcftools view -e 'FORMAT/FT[0]=" . '"LowQual"' . "'";
 	if ($args{germline}) {
-		$filter = "| bcftools view -e 'FORMAT/GT[0]=" . '"RR"' . "'";
+		$filter .= " | bcftools view -e 'FORMAT/GT[0]=" . '"RR"' . "'";
 		}
 
 	my $job_command;
@@ -245,8 +245,9 @@ sub get_finalize_command {
 			'bcftools view',
 			'-f PASS',
 			'-s', $tumour_id,
-			'-O v -o', $args{output},
-			$args{input}
+			$args{input},
+			$filter,
+			'-O v -o', $args{output}
 			);
 
 		if ($args{germline}) {
@@ -256,8 +257,8 @@ sub get_finalize_command {
 				'-f PASS',
 				'-s', $tumour_id,
 				$args{input},
-				"| bcftools view -e 'FORMAT/GT[0]=" . '"RR"' . "'",
-				'-O v -o', $args{output},
+				$filter,
+				'-O v -o', $args{output}
 				);
 			}
 
@@ -365,11 +366,7 @@ sub pon {
 	print $log "\n    Reference used: $tool_data->{reference}";
 
 	$reference = $tool_data->{reference};
-	if ( ('hg38' eq $tool_data->{ref_type}) || ('GRCh38' eq $tool_data->{ref_type}) ) {
-		$exclude_regions = '/cluster/projects/pughlab/references/Delly/excludeTemplates/human.hg38.excl.tsv';
-		} elsif ( ('hg19' eq $tool_data->{ref_type}) || ('GRCh37' eq $tool_data->{ref_type}) ) {
-		$exclude_regions = '/cluster/projects/pughlab/references/Delly/excludeTemplates/human.hg19.excl.tsv';
-		}
+	$exclude_regions = $tool_data->{exclude_regions};
 
 	if ( (('exome' eq $tool_data->{seq_type}) || ('targeted' eq $tool_data->{seq_type})) &&
 		(defined($tool_data->{intervals_bed}))) {
@@ -653,7 +650,7 @@ sub pon {
 			print $log "Extracting germline SVs for NORMAL: $norm\n";
 
 			# name final output file
-			my $final_output = join('/', $intermediate_directory, $norm . '_Delly_SVs_germline_hc.bcf');
+			my $final_output = join('/', $intermediate_directory, $norm . '_Delly_SVs_germline_hc.vcf');
 
 			# set up command for final filter
 			my $finalize_cmd = get_finalize_command(
@@ -889,11 +886,7 @@ sub main {
 	print $log "\n    Reference used: $tool_data->{reference}";
 
 	$reference = $tool_data->{reference};
-	if ( ('hg38' eq $tool_data->{ref_type}) || ('GRCh38' eq $tool_data->{ref_type}) ) {
-		$exclude_regions = '/cluster/projects/pughlab/references/Delly/excludeTemplates/human.hg38.excl.tsv';
-		} elsif ( ('hg19' eq $tool_data->{ref_type}) || ('GRCh37' eq $tool_data->{ref_type}) ) {
-		$exclude_regions = '/cluster/projects/pughlab/references/Delly/excludeTemplates/human.hg19.excl.tsv';
-		}
+	$exclude_regions = $tool_data->{exclude_regions};
 
 	if ( (('exome' eq $tool_data->{seq_type}) || ('targeted' eq $tool_data->{seq_type})) &&
 		(defined($tool_data->{intervals_bed}))) {
@@ -1334,7 +1327,7 @@ sub main {
 			my $sample_sheet = join('/', $sample_directory, 'sample_sheet.tsv');
 
 			my $filter_output = join('/', $sample_directory, $sample . '_Delly_SVs_somatic_filtered.bcf');
-			my $final_output = join('/', $sample_directory, $sample . '_Delly_SVs_somatic_hc.bcf');
+			my $final_output = join('/', $sample_directory, $sample . '_Delly_SVs_somatic_hc.vcf');
 
 			my $finalize_somatic_svs;
 
