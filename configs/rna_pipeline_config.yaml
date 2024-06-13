@@ -22,7 +22,8 @@ samtools_version: 1.9
 picard_version: 2.6.0
 rna_seqc_version: 1.1.8
 r_version: 3.6.1
-bwa_path: /cluster/tools/software/bwa/0.7.15/
+bwa_version: 0.7.15
+mavis_version: 2.2.5
 star_fusion_version: 1.8.1
 star_fusion_path: /cluster/projects/pughlab/bin/STAR-Fusion-1.8.1/STAR-Fusion
 rsem_version: 1.3.0
@@ -156,3 +157,16 @@ haplotype_caller:
         combine_results:
             mem: 12G
             time: '08:00:00'
+mavis:
+    run: N
+    mem: 4G # increase this if the patient has multiple tumours and/or many SV callers were run
+    mavis_mem_limit: # in Mb, default is 16000; increase if individual steps are running out of memory
+    mavis_time_limit: # in seconds, default is 57600 ; increase if individual steps are running out of time
+    mavis_max_jobs: 200 # maximum number of jobs to submit at a time; decrease if hitting slurm job cap
+    mavis_annotations: /cluster/projects/pughlab/references/MAVIS_ref/ensembl79_hg38_annotations.json
+    mavis_masking: /cluster/projects/pughlab/references/MAVIS_ref/GRCh38_masking.tab
+    mavis_dgv_anno: /cluster/projects/pughlab/references/MAVIS_ref/dgv_hg38_variants.tab
+    mavis_cytoband: /cluster/projects/pughlab/references/MAVIS_ref/cytoBand.txt
+    mavis_draw_fusions_only: true
+    mavis_aligner: 'bwa mem'
+    mavis_bwa_ref: /cluster/projects/pughlab/references/bwa_index/hg38/genome.fa 
