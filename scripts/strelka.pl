@@ -337,14 +337,20 @@ sub pon {
 			$run_id = '';
 
 			# run germline snv caller
-			my $germline_snv_command = get_strelka_germline_command(
+			my $germline_snv_command = "if [[ ! -s $germline_directory/runWorkflow.py ]]; then";
+
+			$germline_snv_command .= "\n  " . get_strelka_germline_command(
 				input		=> $smp_data->{$patient}->{normal}->{$norm},
 				out_dir		=> $germline_directory,
 				tmp_dir		=> $tmp_directory,
 				intervals	=> $intervals
 				);
 
-			$germline_snv_command .= ";\n\n$germline_directory/runWorkflow.py --quiet -m local";
+			$germline_snv_command .= "\nfi";
+			$germline_snv_command .= "\nif [[ -s $germline_directory/workspace/pyflow.data/active_pyflow_process.txt ]]; then";
+			$germline_snv_command .= "\n  rm $germline_directory/workspace/pyflow.data/active_pyflow_process.txt;";
+			$germline_snv_command .= "\nfi";
+			$germline_snv_command .= "\n\n$germline_directory/runWorkflow.py --quiet -m local";
 
 			my $germline_output = join('/', $germline_directory, 'results','variants','variants.vcf.gz');
 
@@ -794,12 +800,12 @@ sub main {
 				}
 
 			# run Strelka Somatic variant caller (T/N only)
-			my $somatic_snv_command;
+			my $somatic_snv_command = "if [[ ! -s $sample_directory/runWorkflow.py ]]; then";
 
 			# run on T/N pairs
 			if (scalar(@normal_ids) > 0) {
 
-				$somatic_snv_command = get_strelka_somatic_command(
+				$somatic_snv_command .= "\n  " . get_strelka_somatic_command(
 					tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
 					normal		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
 					out_dir		=> $sample_directory,
@@ -811,7 +817,7 @@ sub main {
 				} else {
 
 				# run germline snv caller using tumour-only bam as input (includes RNA)
-				$somatic_snv_command = get_strelka_germline_command(
+				$somatic_snv_command .= "\n  " . get_strelka_germline_command(
 					input		=> $smp_data->{$patient}->{tumour}->{$sample},
 					out_dir		=> $sample_directory,
 					tmp_dir		=> $tmp_directory,
@@ -819,7 +825,11 @@ sub main {
 					);
 				}
 
-			$somatic_snv_command .= ";\n\n$sample_directory/runWorkflow.py --quiet -m local";
+			$somatic_snv_command .= "\nfi";
+			$somatic_snv_command .= "\nif [[ -s $sample_directory/workspace/pyflow.data/active_pyflow_process.txt ]]; then";
+			$somatic_snv_command .= "\n  rm $sample_directory/workspace/pyflow.data/active_pyflow_process.txt;";
+			$somatic_snv_command .= "\nfi";
+			$somatic_snv_command .= "\n\n$sample_directory/runWorkflow.py --quiet -m local";
 
 			my $somatic_snv_output   = join('/', $sample_directory, 'results/variants/somatic.snvs.vcf.gz');
 			my $somatic_indel_output = join('/', $sample_directory, 'results/variants/somatic.indels.vcf.gz');

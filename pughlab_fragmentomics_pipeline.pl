@@ -25,6 +25,7 @@ our ($fragmentomics_code_dir, $griffin_code_dir) = undef;
 our ($reference, $reference_peaks) = undef;
 our ($delfi_healthy, $delfi_gaps, $delfi_vntrs, $delfi_tiles, $delfi_filters) = undef;
 our ($tfbs_sites, $tcga_sites, $dhs_sites, $hk_sites) = undef;
+our $griffin_sites;
 our ($griffin_mappable, $griffin_mappable_name) = undef;
 
 ####################################################################################################
@@ -63,10 +64,10 @@ sub create_downsample_command {
 			);
 		}
 
-	$downsample_command .= "\n" . join("\n"
+	$downsample_command .= "\n" . join("\n",
 		'echo "downsampling to $N_READS from $TOTAL_READS (scale factor = $SCALE_FACTOR)"' . "\n",
 		'if (( $(echo "$SCALE_FACTOR < 1" | bc -l) )); then'
-		)
+		);
 
 	$downsample_command .= "\n  " . join(' ',  
 		'java -Xmx1g',
@@ -148,6 +149,7 @@ sub get_deduplicate_command {
 		outdir		=> undef,
 		tmp_dir		=> undef,
 		java_mem	=> undef,
+		dedup_tool	=> 'picard',
 		@_
 		);
 
@@ -155,16 +157,30 @@ sub get_deduplicate_command {
 
 	# deduplicate BAM
 	my $dedup_command = "# deduplicate bam";
-	$dedup_command .= "\n" . join(' ',
-		'java -Xmx' . $args{java_mem},
-		'-Djava.io.tmpdir=' . $args{tmp_dir},
-		'-jar $picard_dir/picard.jar MarkDuplicates',
-		'I=' . $args{bam},
-		'O=' . $output_stem . '_deduped.bam',
-		'M=' . $output_stem . '_deduped.metrics',
-		'REMOVE_DUPLICATES=true',
-		'REMOVE_SEQUENCING_DUPLICATES=true'
-		);
+	if ('picard' eq $args{dedup_tool}) {
+
+		$dedup_command .= "\n" . join(' ',
+			'java -Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-jar $picard_dir/picard.jar MarkDuplicates',
+			'I=' . $args{bam},
+			'O=' . $output_stem . '_deduped.bam',
+			'M=' . $output_stem . '_deduped.metrics',
+			'REMOVE_DUPLICATES=true',
+			'REMOVE_SEQUENCING_DUPLICATES=true'
+			);
+
+		} else {
+
+		$dedup_command .= "\n" . join(' ',
+			'sambamba markdup',
+			'-t 1 -r',
+			$args{bam},
+			$output_stem . '_deduped.bam',
+			'--tmpdir=' . $args{tmp_dir},
+			'--overflow-list-size 5000000'
+			);
+		}
 
 	# sort deduplicated BAM
 	$dedup_command .= "\n\n# sort deduplicated bam";
@@ -369,7 +385,7 @@ sub get_griffin_gc_command {
 		bam	=> undef,
 		outdir	=> undef,
 		tmpdir	=> undef,
-		n_cpu	=> 8,
+		n_cpus	=> 8,
 		@_
 		);
 
@@ -386,7 +402,7 @@ sub get_griffin_gc_command {
 			'--ref_seq', $reference,
 			'--chrom_sizes', "$griffin_code_dir/Ref/hg38.standard.chrom.sizes",
 			'--out_dir', $args{outdir},
-			'--map_q 20 --size_range 15 500 --CPU', $args{n_cpu}
+			'--map_q 20 --size_range 15 500 --CPU', $args{n_cpus}
 			);
 
 		$gc_command .= "\n\n" . join(' ',
@@ -416,7 +432,7 @@ sub get_griffin_gc_command {
 			'--exclude_paths', "$griffin_code_dir/Ref/encode_unified_GRCh38_exclusion_list.bed",
 			'--chrom_sizes', "$griffin_code_dir/Ref/hg38.standard.chrom.sizes",
 			'--tmp_dir', $args{tmpdir},
-			'--map_quality 20 --CPU', $args{n_cpu}
+			'--map_quality 20 --CPU', $args{n_cpus}
 			);
 
 		$gc_command .= "\n\n" . join(' ',
@@ -427,7 +443,7 @@ sub get_griffin_gc_command {
 			'--ref_seq', $reference,
 			'--chrom_sizes', "$griffin_code_dir/Ref/hg38.standard.chrom.sizes",
 			'--out_dir', $args{outdir},
-			'--map_q 20 --size_range 15 500 --CPU', $args{n_cpu}
+			'--map_q 20 --size_range 15 500 --CPU', $args{n_cpus}
 			);
 
 		$gc_command .= "\n\n" . join(' ',
@@ -450,7 +466,7 @@ sub get_griffin_profiling_command {
 		bam		=> undef,
 		gc_bias		=> undef,
 		map_bias	=> undef,
-		n_cpu		=> 8,
+		n_cpus		=> 8,
 		tmpdir		=> undef,
 		outdir		=> undef,
 		sites		=> undef,
@@ -479,7 +495,7 @@ sub get_griffin_profiling_command {
 			'--fragment_length 165',
 			'--step 15 --size_range 90 220 --map_quality 20',
 			'--individual False --smoothing True --num_sites none',
-			'--sort_by none --ascending none --cpu', $args{n_cpu},
+			'--sort_by none --ascending none --cpu', $args{n_cpus},
 			'--erase_intermediates False'
 			);
 
@@ -504,7 +520,7 @@ sub get_griffin_profiling_command {
 			'--sites_yaml', $args{sites},
 			'--position_column position',
 			'--size_range 90 220 --map_quality 20 --number_of_sites none',
-			'--CPU', $args{n_cpu}
+			'--CPU', $args{n_cpus}
 			);
 
 		my $uncorrected_bw = join('/', $args{tmpdir}, $args{id}, 'tmp_bigWig', $args{id} . '.uncorrected.bw');
@@ -536,7 +552,7 @@ sub get_griffin_profiling_command {
 			'--exclude_zero_mappability True',
 			'--step 15',
 			'--CNA_normalization False',
-			'--CPU', $args{n_cpu},
+			'--CPU', $args{n_cpus},
 			'--individual False',
 			'--smoothing True'
 			);
@@ -786,9 +802,9 @@ sub main {
 	print $log "---\n";
 	print $log "Running Fragmentomics pipeline.\n";
 	print $log "\n  Tool config used: $tool_config";
-	print $log "\n  >> Reference used: $tool_data->{reference}";
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n  Output directory: $output_directory";
+	print $log "\n  Reference used: $tool_data->{reference}";
 	print $log "\n---";
 
 	# get user-specified tool parameters
@@ -796,6 +812,7 @@ sub main {
  
 	# set tools and versions
 	my $picard	= 'picard/' . $tool_data->{picard_version};
+	my $sambamba	= 'sambamba/' . $tool_data->{sambamba_version};
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $bedtools	= 'bedtools/' . $tool_data->{bedtools_version};
 	my $python3	= 'python3/' . $tool_data->{python3_version};
@@ -833,11 +850,25 @@ sub main {
 	$griffin_mappable_name = basename $griffin_mappable;
 	$griffin_mappable_name =~ s/\.[^.]+$//;
 
-	$tfbs_sites = defined($tool_data->{TFBS_sites}) ? $tool_data->{TFBS_sites} : "$griffin_code_dir/site_configs/TFBS_sites.yaml";
-	$tcga_sites = defined($tool_data->{TCGA_sites}) ? $tool_data->{TCGA_sites} : "$griffin_code_dir/site_configs/TCGA_sites.yaml";
-	$dhs_sites = defined($tool_data->{DHS_sites}) ? $tool_data->{DHS_sites} : "$griffin_code_dir/site_configs/DHS_sites.yaml";
-	$hk_sites = defined($tool_data->{housekeeping_sites}) ? $tool_data->{housekeeping_sites} : "$griffin_code_dir/site_configs/housekeeping_sites.yaml";
+	# use custom list of griffin sites
+	if (defined($tool_data->{griffin_sites})) {
+		$griffin_sites = $tool_data->{griffin_sites};
+		}
 
+	# or use default options (will always run TFBS/TCGA/DHS/housekeeping
+	if (!defined($griffin_sites->{TFBS})) {
+		$griffin_sites->{TFBS} = "$griffin_code_dir/site_configs/TFBS_sites.yaml";
+		}
+	if (!defined($griffin_sites->{TCGA})) {
+		$griffin_sites->{TCGA} = "$griffin_code_dir/site_configs/TCGA_sites.yaml";
+		}
+	if (!defined($griffin_sites->{DHS})) {
+		$griffin_sites->{DHS} = "$griffin_code_dir/site_configs/DHS_sites.yaml";
+		}
+	if (!defined($griffin_sites->{housekeeping})) {
+		$griffin_sites->{housekeeping} = "$griffin_code_dir/site_configs/housekeeping_sites.yaml";
+		}
+	
 	# get optional HPC group
 	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
 
@@ -849,12 +880,7 @@ sub main {
 		'ratio'		=> defined($parameters->{ratio}) ? 'Y' : 'N',
 		'score'		=> defined($parameters->{score}) ? 'Y' : 'N',
 		'insertsize'	=> defined($parameters->{insertsize}) ? 'Y' : 'N',
-		'griffin'	=> 'N',
-		'griffin_gc'	=> defined($parameters->{griffin_gc}) ? 'Y' : 'N',
-		'griffin_tfbs'	=> defined($parameters->{griffin_tfbs}) ? 'Y' : 'N',
-		'griffin_tcga'	=> defined($parameters->{griffin_tcga}) ? 'Y' : 'N',
-		'griffin_dhs'	=> defined($parameters->{griffin_dhs}) ? 'Y' : 'N',
-		'griffin_hk'	=> defined($parameters->{griffin_housekeeping}) ? 'Y' : 'N',
+		'griffin'	=> defined($parameters->{griffin}) ? 'Y' : 'N',,
 		'nucleosome'	=> defined($parameters->{nucleosome_position}) ? 'Y' : 'N',
 		'dinucleotide'	=> defined($parameters->{dinucleotide}) ? 'Y' : 'N',
 		'end_motifs'	=> defined($parameters->{end_motifs}) ? 'Y' : 'N',
@@ -864,12 +890,6 @@ sub main {
 	if ( ('Y' eq $tool_set{'nucleosome'}) || 
 		('Y' eq $tool_set{'end_motifs'}) || ('Y' eq $tool_set{'breakpoints'}) ) {
 		$tool_set{'deduplicate'} = 'Y';
-		}
-
-	if ( ('Y' eq $tool_set{'griffin_gc'}) || ('Y' eq $tool_set{'griffin_tfbs'}) ||
-		('Y' eq $tool_set{'griffin_tcga'}) || ('Y' eq $tool_set{'griffin_dhs'}) ||
-		('Y' eq $tool_set{'griffin_hk'}) ) {
-		$tool_set{'griffin'} = 'Y';
 		}
 
 	print $log "\nTools/steps to run:\n";
@@ -1033,12 +1053,15 @@ sub main {
 
 			if ('Y' eq $tool_set{'deduplicate'}) {
 
+				my $markdup_tool = ('sambamba' eq $parameters->{dedup}->{tool}) ? $sambamba : $picard;
+
 				my $dedup_cmd = get_deduplicate_command( 
 					id		=> $tumour_stem,
 					bam		=> $tumour_bam,
 					outdir		=> $downsample_directory,
 					tmp_dir		=> $tmp_directory,
-					java_mem	=> $parameters->{dedup}->{java_mem}
+					java_mem	=> $parameters->{dedup}->{java_mem},
+					dedup_tool	=> $parameters->{dedup}->{tool}
 					);
 
 				$deduped_bedpe = join('/',
@@ -1065,7 +1088,7 @@ sub main {
 						log_dir	=> $log_directory,
 						name	=> 'run_deduplicate_and_make_bedpe_' . $tumour,
 						cmd	=> $dedup_cmd,
-						modules	=> [$picard, $samtools, $bedtools],
+						modules	=> [$markdup_tool, $samtools, $bedtools],
 						dependencies	=> $downsample_run_id,
 						max_time	=> $parameters->{dedup}->{time},
 						mem		=> $parameters->{dedup}->{mem},
@@ -1272,7 +1295,7 @@ sub main {
 					bam	=> $tumour_bam,
 					outdir	=> $griffin_directory,
 					tmpdir	=> $tmp_directory,
-					n_cpu	=> $parameters->{griffin_gc}->{n_cpus}
+					n_cpus	=> $parameters->{griffin}->{gc_correction}->{n_cpus}
 					);
 
 				# check if this should be run
@@ -1287,9 +1310,9 @@ sub main {
 						cmd	=> $griffin_cmd,
 						modules	=> [$python3, $bedtools],
 						dependencies	=> $downsample_run_id,
-						cpus_per_task	=> $parameters->{griffin_gc}->{n_cpus},
-						max_time	=> $parameters->{griffin_gc}->{time},
-						mem		=> $parameters->{griffin_gc}->{mem},
+						cpus_per_task	=> $parameters->{griffin}->{gc_correction}->{n_cpus},
+						max_time	=> $parameters->{griffin}->{gc_correction}->{time},
+						mem		=> $parameters->{griffin}->{gc_correction}->{mem},
 						hpc_driver	=> $args{hpc_driver},
 						extra_args	=> [$hpc_group]
 						);
@@ -1307,238 +1330,64 @@ sub main {
 					} else {
 					print $log " >> Skipping Griffin GC Correction because this has already been completed!\n";
 					}
-				}
 
-			# run Griffin TFBS profiling
-			if ('Y' eq $tool_set{'griffin_tfbs'}) {
+				# run Griffin profiling on each site list
+				foreach my $site_name (keys %{$griffin_sites}) {
 
-				my $griffin_tfbs_dir = join('/', $griffin_directory, 'TFBS');
-				unless(-e $griffin_tfbs_dir) { make_path($griffin_tfbs_dir); }
+					my $griffin_site_dir = join('/', $griffin_directory, $site_name);
+					unless(-e $griffin_site_dir) { make_path($griffin_site_dir); }
 
-				my $griffin_cmd = get_griffin_profiling_command(
-					id	=> $tumour_stem,
-					bam	=> $tumour_bam,
-					sites	=> $tfbs_sites,
-					outdir	=> $griffin_tfbs_dir,
-					gc_bias		=> $gc_bias_out,
-					map_bias	=> $map_bias_out,
-					tmpdir	=> $tmp_directory,
-					n_cpu	=> $parameters->{griffin_tfbs}->{n_cpus}
-					);
-
-				my $tfbs_output = join('/',
-					$griffin_tfbs_dir,
-					'nucleosome_profiling.COMPLETE'
-					);
-
-				# check if this should be run
-				if ('Y' eq missing_file($tfbs_output)) {
-
-					# record command (in log directory) and then run job
-					print $log " >> Submitting job for Griffin TFBS Coverage...\n";
-
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> 'run_griffin_tfbs_coverage_' . $tumour,
-						cmd	=> $griffin_cmd,
-						modules	=> [$python3, $bedtools],
-						dependencies	=> $griffin_id,
-						cpus_per_task	=> $parameters->{griffin_tfbs}->{n_cpus},
-						max_time	=> $parameters->{griffin_tfbs}->{time},
-						mem		=> $parameters->{griffin_tfbs}->{mem},
-						hpc_driver	=> $args{hpc_driver},
-						extra_args	=> [$hpc_group]
+					my $griffin_cmd = get_griffin_profiling_command(
+						id	=> $tumour_stem,
+						bam	=> $tumour_bam,
+						sites	=> $griffin_sites->{$site_name},
+						outdir	=> $griffin_site_dir,
+						gc_bias		=> $gc_bias_out,
+						map_bias	=> $map_bias_out,
+						tmpdir	=> $tmp_directory,
+						n_cpus	=> $parameters->{griffin}->{profiling}->{n_cpus}
 						);
 
-					$run_id = submit_job(
-						jobname		=> 'run_griffin_tfbs_coverage_' . $tumour,
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
+					my $site_output = join('/',
+						$griffin_site_dir,
+						$site_name . '_profiling.COMPLETE'
 						);
 
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
-					} else {
-					print $log " >> Skipping Griffin TFBS Coverage because this has already been completed!\n";
+					# check if this should be run
+					if ('Y' eq missing_file($site_output)) {
+
+						# record command (in log directory) and then run job
+						print $log " >> Submitting job for Griffin $site_name Coverage...\n";
+
+						$run_script = write_script(
+							log_dir	=> $log_directory,
+							name	=> 'run_griffin_' . $site_name . '_coverage_' . $tumour,
+							cmd	=> $griffin_cmd,
+							modules	=> [$python3, $bedtools],
+							dependencies	=> $griffin_id,
+							cpus_per_task	=> $parameters->{griffin}->{profiling}->{n_cpus},
+							max_time	=> $parameters->{griffin}->{profiling}->{time},
+							mem		=> $parameters->{griffin}->{profiling}->{mem},
+							hpc_driver	=> $args{hpc_driver},
+							extra_args	=> [$hpc_group]
+							);
+
+						$run_id = submit_job(
+							jobname		=> 'run_griffin_' . $site_name . '_coverage_' . $tumour,
+							shell_command	=> $run_script,
+							hpc_driver	=> $args{hpc_driver},
+							dry_run		=> $args{dry_run},
+							log_file	=> $log
+							);
+
+						push @patient_jobs, $run_id;
+						push @all_jobs, $run_id;
+						} else {
+						print $log " >> Skipping Griffin $site_name Coverage because this has already been completed!\n";
+						}
+
+					push @final_outputs, $site_output;
 					}
-
-				push @final_outputs, $tfbs_output;
-				}
-
-			# run Griffin DHS profiling
-			if ('Y' eq $tool_set{'griffin_dhs'}) {
-
-				my $griffin_dhs_dir = join('/', $griffin_directory, 'DHS');
-				unless(-e $griffin_dhs_dir) { make_path($griffin_dhs_dir); }
-
-				my $griffin_cmd = get_griffin_profiling_command(
-					id	=> $tumour_stem,
-					bam	=> $tumour_bam,
-					sites	=> $dhs_sites,
-					outdir	=> $griffin_dhs_dir,
-					gc_bias		=> $gc_bias_out,
-					map_bias	=> $map_bias_out,
-					tmpdir	=> $tmp_directory,
-					n_cpu	=> $parameters->{griffin_dhs}->{n_cpus}
-					);
-
-				my $dhs_output = join('/',
-					$griffin_dhs_dir,
-					'nucleosome_profiling.COMPLETE'
-					);
-
-				# check if this should be run
-				if ('Y' eq missing_file($dhs_output)) {
-
-					# record command (in log directory) and then run job
-					print $log " >> Submitting job for Griffin DHS Coverage...\n";
-
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> 'run_griffin_dhs_coverage_' . $tumour,
-						cmd	=> $griffin_cmd,
-						modules	=> [$python3, $bedtools],
-						dependencies	=> $griffin_id,
-						cpus_per_task	=> $parameters->{griffin_dhs}->{n_cpus},
-						max_time	=> $parameters->{griffin_dhs}->{time},
-						mem		=> $parameters->{griffin_dhs}->{mem},
-						hpc_driver	=> $args{hpc_driver},
-						extra_args	=> [$hpc_group]
-						);
-
-					$run_id = submit_job(
-						jobname		=> 'run_griffin_dhs_coverage_' . $tumour,
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
-						);
-
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
-					} else {
-					print $log " >> Skipping Griffin DHS Coverage because this has already been completed!\n";
-					}
-
-				push @final_outputs, $dhs_output;
-				}
-
-			# run Griffin TCGA tumour type profiling
-			if ('Y' eq $tool_set{'griffin_tcga'}) {
-
-				my $griffin_tcga_dir = join('/', $griffin_directory, 'TCGA');
-				unless(-e $griffin_tcga_dir) { make_path($griffin_tcga_dir); }
-
-				my $griffin_cmd = get_griffin_profiling_command(
-					id	=> $tumour_stem,
-					bam	=> $tumour_bam,
-					sites	=> $tcga_sites,
-					outdir	=> $griffin_tcga_dir,
-					gc_bias		=> $gc_bias_out,
-					map_bias	=> $map_bias_out,
-					tmpdir	=> $tmp_directory,
-					n_cpu	=> $parameters->{griffin_tcga}->{n_cpus}
-					);
-
-				my $tcga_output = join('/',
-					$griffin_tcga_dir,
-					'nucleosome_profiling.COMPLETE'
-					);
-
-				# check if this should be run
-				if ('Y' eq missing_file($tcga_output)) {
-
-					# record command (in log directory) and then run job
-					print $log " >> Submitting job for Griffin TCGA Coverage...\n";
-
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> 'run_griffin_tcga_coverage_' . $tumour,
-						cmd	=> $griffin_cmd,
-						modules	=> [$python3, $bedtools],
-						dependencies	=> $griffin_id,
-						cpus_per_task	=> $parameters->{griffin_tcga}->{n_cpus},
-						max_time	=> $parameters->{griffin_tcga}->{time},
-						mem		=> $parameters->{griffin_tcga}->{mem},
-						hpc_driver	=> $args{hpc_driver},
-						extra_args	=> [$hpc_group]
-						);
-
-					$run_id = submit_job(
-						jobname		=> 'run_griffin_tcga_coverage_' . $tumour,
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
-						);
-
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
-					} else {
-					print $log " >> Skipping Griffin TCGA Coverage because this has already been completed!\n";
-					}
-
-				push @final_outputs, $tcga_output;
-				}
-
-			# run Griffin across housekeeping sites
-			if ('Y' eq $tool_set{'griffin_hk'}) {
-
-				my $griffin_hk_dir = join('/', $griffin_directory, 'housekeeping');
-				unless(-e $griffin_hk_dir) { make_path($griffin_hk_dir); }
-
-				my $griffin_cmd = get_griffin_profiling_command(
-					id	=> $tumour_stem,
-					bam	=> $tumour_bam,
-					sites	=> $hk_sites,
-					outdir	=> $griffin_hk_dir,
-					gc_bias		=> $gc_bias_out,
-					map_bias	=> $map_bias_out,
-					tmpdir	=> $tmp_directory,
-					n_cpu	=> $parameters->{griffin_housekeeping}->{n_cpus}
-					);
-
-				my $hk_output = join('/',
-					$griffin_hk_dir,
-					'nucleosome_profiling.COMPLETE'
-					);
-
-				# check if this should be run
-				if ('Y' eq missing_file($hk_output)) {
-
-					# record command (in log directory) and then run job
-					print $log " >> Submitting job for Griffin housekeeping Coverage...\n";
-
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> 'run_griffin_hk_coverage_' . $tumour,
-						cmd	=> $griffin_cmd,
-						modules	=> [$python3, $bedtools],
-						dependencies	=> $griffin_id,
-						cpus_per_task	=> $parameters->{griffin_housekeeping}->{n_cpus},
-						max_time	=> $parameters->{griffin_housekeeping}->{time},
-						mem		=> $parameters->{griffin_housekeeping}->{mem},
-						hpc_driver	=> $args{hpc_driver},
-						extra_args	=> [$hpc_group]
-						);
-
-					$run_id = submit_job(
-						jobname		=> 'run_griffin_hk_coverage_' . $tumour,
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
-						);
-
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
-					} else {
-					print $log " >> Skipping Griffin housekeeping Coverage because this has already been completed!\n";
-					}
-
-				push @final_outputs, $hk_output;
 				}
 
 

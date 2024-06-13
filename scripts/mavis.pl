@@ -43,6 +43,25 @@ our ($reference, $exclude_regions) = undef;
 #	--dry_run indicates that this is a dry run
 
 ### DEFINE SUBROUTINES #############################################################################
+# format command to pre-process manta SV files
+sub format_manta_command {
+	my %args = (
+		input	=> undef,
+		output	=> undef,
+		@_
+		);
+
+	my $format_command = join(' ',
+		'python $MANTA_CONVERT',
+		'$SAMTOOLS',
+		$reference,
+		$args{input},
+		'>', $args{output}
+		);
+
+	return($format_command);
+	}
+
 # format command to run Mavis
 sub get_mavis_command {
 	my %args = (
@@ -261,6 +280,8 @@ sub main {
 	print $log "---\n";
 	print $log "Running Mavis SV annotation pipeline.\n";
 	print $log "\n  Tool config used: $tool_config";
+	print $log "\n  Reference used: $tool_data->{reference}";
+	$reference = $tool_data->{reference};
 	print $log "\n  Output directory: $output_directory";
 
 	if (defined($args{dna_config})) {
@@ -313,6 +334,8 @@ sub main {
 	# set tools and versions
 	my $mavis	= 'mavis/' . $tool_data->{mavis_version};
 	my $bwa		= 'bwa/' . $tool_data->{bwa_version};
+	my $manta	= 'manta/' . $tool_data->{manta_version};
+	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $r_version	= 'R/' . $tool_data->{r_version};
 
 	my $mavis_export = join("\n",
@@ -421,7 +444,7 @@ sub main {
 			push @manta_files, _get_files($args{manta_dir}, 'tumorSV.vcf.gz');
 			}
 		if (defined($args{delly_dir})) {
-			@delly_files = _get_files($args{delly_dir}, 'Delly_SVs_somatic_hc.bcf');
+			@delly_files = _get_files($args{delly_dir}, 'Delly_SVs_somatic_hc.vcf');
 			}
 	}
 
@@ -485,7 +508,9 @@ sub main {
 		my (@manta_svs_formatted, @format_jobs);
 		my (@delly_svs_patient, @novobreak_svs_patient, @svict_svs_patient, @pindel_svs_patient);
 		my (@starfus_svs_patient, @fuscatch_svs_patient, @arriba_svs_patient);
-		my $format_command;
+
+		my $format_command = 'SAMTOOLS=$(which samtools)';
+		$format_command .= "\n" . 'MANTA_CONVERT=$(which convertInversion.py)';
 
 		foreach my $normal (@normal_ids) {
 
@@ -530,12 +555,9 @@ sub main {
 
 					# write command to format manta SVs
 					# (older version of Manta required for mavis)
-					$format_command .= "\n\n" . join(' ',
-						'python /cluster/tools/software/centos7/manta/1.6.0/libexec/convertInversion.py',
-						'/cluster/tools/software/centos7/samtools/1.9/bin/samtools',
-						$tool_data->{reference},
-						$file,
-						'>', $formatted_vcf
+					$format_command .= "\n\n" . format_manta_command(
+						input => $file,
+						output => $formatted_vcf
 						);
 
 					push @manta_svs_formatted, $formatted_vcf;
@@ -584,12 +606,9 @@ sub main {
 
 					# write command to format manta SVs
 					# (older version of Manta required for mavis)
-					$format_command .= "\n\n" . join(' ',
-						'python /cluster/tools/software/centos7/manta/1.6.0/libexec/convertInversion.py',
-						'/cluster/tools/software/centos7/samtools/1.9/bin/samtools',
-						$tool_data->{reference},
-						$file,
-						'>', $formatted_vcf
+					$format_command .= "\n\n" . format_manta_command(
+						input => $file,
+						output => $formatted_vcf
 						);
 
 					push @manta_svs_formatted, $formatted_vcf;
@@ -695,7 +714,7 @@ sub main {
 				log_dir	=> $log_directory,
 				name	=> 'run_format_manta_svs_for_mavis_' . $patient,
 				cmd	=> $format_command,
-				modules	=> ['python/2.7'],
+				modules	=> ['python/2.7', $samtools, $manta],
 				hpc_driver	=> $args{hpc_driver},
 				extra_args	=> [$hpc_group]
 				);
@@ -899,7 +918,10 @@ sub main {
 		# run per patient
 		if ($args{del_intermediates}) {
 
-			my $tar = 'tar -czvf intermediate_files.tar.gz pairing/ *_genome/';
+			my $tar = 'tar -czvf intermediate_files.tar.gz pairing/';
+			if ( (scalar(@tumour_ids) > 0) || (scalar(@normal_ids)) ) {
+				$tar .= ' *_genome/';
+				}
 			if (scalar(@rna_ids_patient) > 0) {
 				$tar .= ' *_transcriptome/';
 				}

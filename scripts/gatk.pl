@@ -309,41 +309,12 @@ sub main {
 	print $log "\n    Reference: $tool_data->{reference}";
 
 	$reference = $tool_data->{reference};
+	$known_1000g = $tool_data->{gatk_known_1000g};
+	$known_indels = $tool_data->{gatk_known_indels};
+	$known_mills = $tool_data->{gatk_known_mills};
 
-	if ('GRCh38' eq $tool_data->{ref_type}) {
-		die("No GATK resources available for reference GRCh38");
-		} elsif ('hg38' eq $tool_data->{ref_type}) {
-
-		print $log "\n      Using GATK's hg38bundle files: /cluster/tools/data/genomes/human/hg38/hg38bundle/";
-		$known_1000g	= '/cluster/tools/data/genomes/human/hg38/hg38bundle/1000G_phase1.snps.high_confidence.hg38.vcf.gz';
-		$known_indels	= '/cluster/tools/data/genomes/human/hg38/hg38bundle/Homo_sapiens_assembly38.known_indels.vcf.gz';
-		$known_mills	= '/cluster/tools/data/genomes/human/hg38/hg38bundle/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz';
-		$dbsnp		= '/cluster/tools/data/genomes/human/hg38/hg38bundle/dbsnp_144.hg38.vcf';
-
-		} elsif ('hg19' eq $tool_data->{ref_type}) {
-
-		print $log "\n      Using hg19 variant calling files: /cluster/tools/data/genomes/human/hg19/variantcallingdata/";
-		$known_1000g	= '/cluster/tools/data/genomes/human/hg19/variantcallingdata/1000G_phase1.snps.high_confidence.hg19.vcf';
-		$known_indels	= '/cluster/tools/data/genomes/human/hg19/variantcallingdata/1000G_phase1.indels.hg19.vcf';
-		$known_mills	= '/cluster/tools/data/genomes/human/hg19/variantcallingdata/Mills_and_1000G_gold_standard.indels.hg19.vcf';
-		$dbsnp		= '/cluster/tools/data/genomes/human/hg19/variantcallingdata/dbsnp_138.hg19.vcf';
-
-		} elsif ('GRCh37' eq $tool_data->{ref_type}) {
-		print $log "\n      Using GRCh37-lite variant calling files: /cluster/projects/pughlab/references/GRCh37_variantcalling_ref/";
-		$known_1000g	= '/cluster/projects/pughlab/references/GRCh37_variantcalling_ref/1000G_phase1.snps.high_confidence.grch37.vcf';
-		$known_indels	= '/cluster/projects/pughlab/references/GRCh37_variantcalling_ref/1000G_phase1.indels.grch37.vcf';
-		$known_mills	= '/cluster/projects/pughlab/references/GRCh37_variantcalling_ref/Mills_and_1000G_gold_standard.indels.grch37.vcf';
-		}
-
-	if (defined($tool_data->{dbsnp})) {
-		$dbsnp = $tool_data->{dbsnp};
-		}
-
-	if (defined($dbsnp)) {
-		print $log "\n      dbSNP: $dbsnp";
-		} else {
-		die("No dbSNP identified. Please define option dbsnp in tool config.");
-		}
+	$dbsnp = $tool_data->{dbsnp};
+	print $log "\n      dbSNP: $dbsnp";
 
 	if (defined($tool_data->{intervals_bed})) {
 		print $log "\n    Target intervals (exome): $tool_data->{intervals_bed}";

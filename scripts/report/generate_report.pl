@@ -156,7 +156,6 @@ sub main {
 \\title{\\Huge \\bf PughLab Pipeline-Suite Output Report@{[defined $args{title} ? ": $args{title}" : ""]}}
 
 \\date{
-	Pipeline was initiated on $args{run_date}.\\\\
 	\\centerline{This report was generated on \\today}}
 
 \\renewcommand\\thesection{\\arabic{section}}

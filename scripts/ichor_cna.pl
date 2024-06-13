@@ -17,7 +17,7 @@ use IO::Handle;
 my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
-our ($reference, $ref_type, $ichor_path);
+our ($reference, $ref_type, $pon, $ichor_path);
 
 ####################################################################################################
 # version	author		comment
@@ -65,6 +65,8 @@ sub get_ichor_cna_command {
 		normal_wig	=> undef,
 		chroms		=> undef,
 		out_dir		=> undef,
+		pon		=> undef,
+		intervals	=> undef,
 		@_
 		);
 
@@ -90,6 +92,14 @@ sub get_ichor_cna_command {
 
 	if (defined($args{normal_wig})) {
 		$ichor_command .= " --NORMWIG $args{normal_wig}";
+		}
+
+	if (defined($args{pon})) {
+		$ichor_command .= " --normalPanel $args{pon}";
+		}
+
+	if (defined($args{intervals})) {
+		$ichor_command .= " --target_bed $args{intervals}";
 		}
 
 	return($ichor_command);
@@ -156,6 +166,15 @@ sub main {
 
 	$reference = $tool_data->{reference};
 	$ref_type  = $tool_data->{ref_type};
+
+	if (defined($tool_data->{ichor_cna}->{pon})) {
+		print $log "\n    Panel of Normals: $tool_data->{ichor_cna}->{pon}";
+		$pon = $tool_data->{ichor_cna}->{pon};
+		}
+
+	if (defined($tool_data->{intervals_bed})) {
+		print $log "\n    Target intervals: $tool_data->{intervals_bed}";
+		}
 
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
@@ -253,10 +272,11 @@ sub main {
 		my (@final_outputs, @patient_jobs);
 
 		# if a normal is provided, create a WIG
-		my ($normal_wig, $normal_wig_jobid) = '';
+		my $normal_wig;
+		my $normal_wig_jobid = '';
+
 		if (scalar(@normal_ids) > 0) {
 
-			$normal_wig_jobid = '';
 			my $normal = $normal_ids[0];
 
 			print $log "\n  Collecting readcounts for NORMAL: $normal\n";
@@ -379,7 +399,9 @@ sub main {
 				tumour_wig	=> $tumour_wig,
 				normal_wig	=> $normal_wig,
 				chroms		=> join("','", @chroms),
-				out_dir		=> $sample_directory
+				out_dir		=> $sample_directory,
+				pon		=> $pon,
+				intervals	=> $tool_data->{intervals_bed}
 				);
 
 			# check if this should be run

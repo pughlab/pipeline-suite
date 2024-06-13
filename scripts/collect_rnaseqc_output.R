@@ -80,11 +80,14 @@ if (length(qc.files) == 1) {
 	smp.columns <- gsub('-', '.', unique(combined.qc$Sample));
 
 	# get correlations (these are Pearson's Correlation)
-	corr.data <- combined.qc[,c('Sample', smp.columns)];
-	corr.data$Sample <- gsub('-', '.', corr.data$Sample);
-	rownames(corr.data) <- corr.data$Sample;
-	corr.data <- corr.data[,-1];
-
+	if (length(smp.columns) > 1) {
+		corr.data <- combined.qc[,c('Sample', smp.columns)];
+		corr.data$Sample <- gsub('-', '.', corr.data$Sample);
+		rownames(corr.data) <- corr.data$Sample;
+		corr.data <- corr.data[,-1];
+		} else {
+		corr.data <- NULL;
+		}
 	}
 
 if (length(qc.files) > 1) {
@@ -131,13 +134,15 @@ colnames(formatted.qc)[which(colnames(formatted.qc) == 'Num..Gaps')] <- 'Num.Gap
 colnames(formatted.qc)[which(colnames(formatted.qc) == 'Gap..')] <- 'Gap.Percentage';
 
 # save data to file
-write.table(
-	corr.data,
-	file = generate.filename(arguments$project, 'rnaseqc_Pearson_correlations', 'tsv'),
-	row.names = TRUE,
-	col.names = NA,
-	sep = '\t'
-	);
+if (!is.null(corr.data)) {
+	write.table(
+		corr.data,
+		file = generate.filename(arguments$project, 'rnaseqc_Pearson_correlations', 'tsv'),
+		row.names = TRUE,
+		col.names = NA,
+		sep = '\t'
+		);
+	}
 
 write.table(
 	formatted.qc,

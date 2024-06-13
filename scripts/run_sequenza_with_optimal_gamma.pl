@@ -240,6 +240,8 @@ sub main {
 			my $seqz_file = $snp_files[0];
 			$seqz_file =~ s/.snp/.seqz/;
 
+			$seqz_cmd .= "\n\nmd5sum $seqz_file > $seqz_file.md5";
+
 			# cleanup/compress intermediate files
 			my $indel_file = $snp_files[0];
 			$indel_file =~ s/.snp/.indel/;
@@ -252,7 +254,7 @@ sub main {
 			$run_id = '';
 
 			# check if this should be run
-			if ('Y' eq missing_file($seqz_file)) {
+			if ('Y' eq missing_file("$seqz_file.md5")) {
 
 				# record command (in log directory) and then run job
 				print $log "\nSubmitting job for Sequenza (SEQZ)...\n";

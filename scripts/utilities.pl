@@ -179,15 +179,6 @@ sub error_checking {
 		}
 	}
 
-	# ichorCNA
-	if ('ichor' eq $pipeline) {
-		if ( 'wgs' eq $tool_data->{seq_type} ) {
-			print("IchorCNA is intended for sWGS. Current seq_type set to wgs so we will try to run this, however results may vary.");
-		} else {
-			die("IchorCNA should only be run on sWGS cohorts.");
-		} 
-	}
-
 	# ASCAT
 	if ('ascat' eq $pipeline) {
 		unless ( 'wgs' eq $tool_data->{seq_type} ) {

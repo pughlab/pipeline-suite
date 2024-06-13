@@ -699,7 +699,7 @@ if (!is.null(arguments$report)) {
 		write("\\begin{figure}[h!]", file = tex.file, append = TRUE);
 		write("\\begin{center}", file = tex.file, append = TRUE);
 		write(paste0(
-			"\\includegraphics[height=0.9\\textwidth]{",
+			"\\includegraphics[height=0.85\\textheight]{",
 			tool.overlap.plot, '}'
 			), file = tex.file, append = TRUE);
 		write("\\end{center}", file = tex.file, append = TRUE);

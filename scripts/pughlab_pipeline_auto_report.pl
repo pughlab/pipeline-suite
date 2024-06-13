@@ -85,6 +85,10 @@ sub main {
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
 	my $r_version	= 'R/' . $tool_data->{r_version};
+	my $mutsig_version;
+	unless ('rna' eq $tool_data->{seq_type}) {
+		$mutsig_version = 'MutSigCV/' . $tool_data->{mutsigcv_version};
+		}
 	my $vcf2maf	= undef;
 	if (defined($tool_data->{vcf2maf_version})) {
 		$vcf2maf = 'vcf2maf/' . $tool_data->{vcf2maf_version};
@@ -201,6 +205,7 @@ sub main {
 			'-g', $correlations,
 			'-v', $qc_data,
 			'-o', $plot_directory,
+			'-z', $plot_directory,
 			'-p', $tool_data->{project_name},
 			'-t', $tool_data->{seq_type}
 			);
@@ -607,12 +612,15 @@ sub main {
 			}
 
 		# create some QC plots
-		my $qc_command = "cd $output_directory\n";
-		$qc_command .= "Rscript $cwd/report/plot_qc_metrics.R";
+		my $qc_out_directory = join('/', $summary_directory, 'QC');
+		unless(-e $qc_out_directory) { make_path($qc_out_directory); }
+
+		my $qc_command = "Rscript $cwd/report/plot_qc_metrics.R";
 		$qc_command .= " " . join(' ',
 			'-s', $args{data_config},
 			'-g', $correlations,
-			'-o', $plot_directory,
+			'-o', $qc_out_directory,
+			'-z', $plot_directory,
 			'-p', $tool_data->{project_name},
 			'-t', $tool_data->{seq_type}
 			);
@@ -1400,23 +1408,14 @@ sub main {
 
 			# run MutSigCV
 			my $mutsig_command = join(' ',
-				'sh /cluster/tools/software/MutSigCV/1.4/run_MutSigCV.sh',
-				'/cluster/tools/software/MCR/8.1/v81',
+				'sh run_MutSigCV.sh', $tool_data->{mcr_path},
 				$ensemble_maf,
-				'/cluster/projects/pughlab/references/MutSigCV/exome_full192.coverage.txt',
-				'/cluster/projects/pughlab/references/MutSigCV/gene.covariates.txt',
+				$tool_data->{mutsig_coverage},
+				$tool_data->{mutsig_covariates},
 				join('/', $plot_directory, $tool_data->{project_name} . '_MutSigCV'),
-				'/cluster/projects/pughlab/references/MutSigCV/mutation_type_dictionary_file.txt'
+				$tool_data->{mutsig_categories},
+				$tool_data->{mutsig_refs}
 				);
-
-			if ( ('hg19' eq $tool_data->{ref_type}) || ('GRCh37' eq $tool_data->{ref_type}) ) {
-				$mutsig_command .= ' /cluster/projects/pughlab/references/MutSigCV/chr_files_hg19';
-				} elsif (('hg38' eq $tool_data->{ref_type}) || ('GRCh38' eq $tool_data->{ref_type})) {
-				$mutsig_command .= ' /cluster/projects/pughlab/references/MutSigCV/chr_files_hg38';
-				} else {
-				print $log "MutSigCV requested but unknown ref_type provided; not running.\n";
-				$tool_set{'mutsig'} = 'N';
-				}
 
 			my $significance_data = join('/',
 				$plot_directory,
@@ -1431,7 +1430,7 @@ sub main {
 					log_dir		=> $log_directory,
 					name		=> 'run_mutsigcv',
 					cmd		=> $mutsig_command,
-					modules		=> ['MutSigCV/1.4'],
+					modules		=> [$mutsig_version],
 					dependencies	=> $ensemble_run_id,
 					max_time	=> '06:00:00',
 					mem		=> '16G',

@@ -2,7 +2,7 @@
 project_name: PROJECTNAME
 output_dir: /path/to/project/directory 
 hpc_group: 
-# reference files
+# reference files; leave empty to use defaults [most likely to work!]
 ref_type: hg38 # currently only tested on hg38 
 reference: /cluster/projects/pughlab/references/TGL/hg38/hg38_random.fa
 nucleosome_peaks: 
@@ -10,17 +10,19 @@ delfi_pon:
 delfi_filters: 
 delfi_gaps: 
 delfi_vntrs: 
-delfi_tiles:  
-TFBS_sites: 
-TCGA_sites: 
-DHS_sites: 
-housekeeping_sites: 
+delfi_tiles: 
+griffin_sites: # will always run TFBS/TCGA/DHS and housekeeping, but others can be added here (NAME: path)
+    TFBS: 
+    TCGA: 
+    DHS: 
+    housekeeping: 
 # package directories
 fragmentomics_dir: 
 griffin_dir: 
 # tool versions
 samtools_version: 1.10
 picard_version: 2.10.9
+sambamba_version: 0.7.0
 bedtools_version: 2.27.1
 python3_version: 3.10.9
 r_version: 4.0.0
@@ -32,6 +34,7 @@ parameters:
         mem: 2G
         time: '48:00:00'
     dedup:
+        tool: 'picard' # or sambamba
         java_mem: 1g
         mem: 2G
         time: '48:00:00'
@@ -58,23 +61,12 @@ parameters:
         size: both
         mem: 16G
         time: '12:00:00'
-    griffin_gc:
-        n_cpus: 8
-        time: '12:00:00'
-        mem: 16G
-    griffin_tfbs:
-        n_cpus: 8
-        time: '12:00:00'
-        mem: 16G
-    griffin_tcga:
-        n_cpus: 2
-        time: '12:00:00'
-        mem: 16G
-    griffin_dhs:
-        n_cpus: 2
-        time: '12:00:00'
-        mem: 16G
-    griffin_housekeeping:
-        n_cpus: 2
-        time: '12:00:00'
-        mem: 16G
+    griffin:
+        gc_correction:
+            n_cpus: 8
+            time: '12:00:00'
+            mem: 16G
+        profiling:
+            n_cpus: 8
+            time: '12:00:00'
+            mem: 16G

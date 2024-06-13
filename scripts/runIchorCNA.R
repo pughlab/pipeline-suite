@@ -18,35 +18,43 @@
 library(optparse);
 
 option_list <- list(
-  make_option(c("--id"), type = "character", help = "Patient ID. Required."),
-  make_option(c("--WIG"), type = "character", help = "Path to tumor WIG file. Required."),
-  make_option(c("--NORMWIG"), type = "character", default = NULL, help = "Path to normal WIG file. Default: [%default]"),
-  make_option(c("--normal"), type = "character", default = "c(0.5,0.6,0.7,0.8,0.9,0.95)", help = "Initial normal contamination; can be more than one value if additional normal initializations are desired. Default: [%default]"),
-  make_option(c("--scStates"), type = "character", default = "c(1,3)", help = "Subclonal states to consider. Default: [%default]"),
-  make_option(c("--ploidy"), type = "character", default = "c(2,3)", help = "Initial tumour ploidy; can be more than one value if additional ploidy initializations are desired. Default: [%default]"),
-  make_option(c("--maxCN"), type = "numeric", default = 5, help = "Total clonal CN states. Default: [%default]"),
-  make_option(c("--estimateNormal"), type = "logical", default = TRUE, help = "Estimate normal. Default: [%default]"),
-  make_option(c("--estimateScPrevalence"), type = "logical", default = TRUE, help = "Estimate subclonal prevalence. Default: [%default]"),
-  make_option(c("--estimatePloidy"), type = "logical", default = TRUE, help = "Estimate tumour ploidy. Default: [%default]"),
-  make_option(c("--chrTrain"), type = "character", default = "c(1:22)", help = "Specify chromosomes to estimate params. Default: [%default]"),
-  make_option(c("--chrs"), type = "character", default = "c(1:22,'X')", help = "Specify chromosomes to analyze. Default: [%default]"),
-  make_option(c("--genomeBuild"), type = "character", default = "hg38", help="Geome build. Default: [%default]"),
-  make_option(c("--genomeStyle"), type = "character", default = "UCSC", help = "NCBI or UCSC chromosome naming convention; use UCSC if desired output is to have \"chr\" string. [Default: %default]"),
-  make_option(c("--includeHOMD"), type = "logical", default = FALSE, help = "If FALSE, then exclude HOMD state. Useful when using large bins (e.g. 1Mb). Default: [%default]"),
-  make_option(c("--txnE"), type = "numeric", default = 0.9999, help = "Self-transition probability. Increase to decrease number of segments. Default: [%default]"),
-  make_option(c("--txnStrength"), type = "numeric", default = 10000, help = "Transition pseudo-counts. Exponent should be the same as the number of decimal places of --txnE. Default: [%default]"),
-  make_option(c("--plotYLim"), type = "character", default = "c(-2,2)", help = "ylim to use for chromosome plots. Default: [%default]"),
-  make_option(c("--outDir"), type = "character", default = "./", help = "Output Directory. Default: [%default]")
-  );
+	make_option("--id", type = "character", help = "Patient ID. Required."),
+	make_option("--WIG", type = "character", help = "Path to tumor WIG file. Required."),
+	make_option("--NORMWIG", type = "character", default = NULL, help = "Path to normal WIG file. Default: [%default]"),
+	make_option("--normal", type = "character", default = "c(0.5,0.6,0.7,0.8,0.9,0.95,0.99)", help = "Initial normal contamination; can be more than one value if additional normal initializations are desired. Default: [%default]"),
+	make_option("--scStates", type = "character", default = "c(1,3)", help = "Subclonal states to consider. Default: [%default]"),
+	make_option("--ploidy", type = "character", default = "c(2,3)", help = "Initial tumour ploidy; can be more than one value if additional ploidy initializations are desired. Default: [%default]"),
+	make_option("--maxCN", type = "numeric", default = 5, help = "Total clonal CN states. Default: [%default]"),
+	make_option("--estimateNormal", type = "logical", default = TRUE, help = "Estimate normal. Default: [%default]"),
+	make_option("--estimateScPrevalence", type = "logical", default = TRUE, help = "Estimate subclonal prevalence. Default: [%default]"),
+	make_option("--estimatePloidy", type = "logical", default = TRUE, help = "Estimate tumour ploidy. Default: [%default]"),
+	make_option("--chrTrain", type = "character", default = "c(1:22)", help = "Specify chromosomes to estimate params. Default: [%default]"),
+	make_option("--chrs", type = "character", default = "c(1:22,'X')", help = "Specify chromosomes to analyze. Default: [%default]"),
+	make_option("--genomeBuild", type = "character", default = "hg38", help="Geome build. Default: [%default]"),
+	make_option("--genomeStyle", type = "character", default = "UCSC", help = "NCBI or UCSC chromosome naming convention; use UCSC if desired output is to have \"chr\" string. [Default: %default]"),
+	make_option("--includeHOMD", type = "logical", default = FALSE, help = "If FALSE, then exclude HOMD state. Useful when using large bins (e.g. 1Mb). Default: [%default]"),
+	make_option("--txnE", type = "numeric", default = 0.9999, help = "Self-transition probability. Increase to decrease number of segments. Default: [%default]"),
+	make_option("--txnStrength", type = "numeric", default = 10000, help = "Transition pseudo-counts. Exponent should be the same as the number of decimal places of --txnE. Default: [%default]"),
+	make_option("--plotYLim", type = "character", default = "c(-2,2)", help = "ylim to use for chromosome plots. Default: [%default]"),
+	make_option("--outDir", type = "character", default = "./", help = "Output Directory. Default: [%default]"),
+	make_option("--target_bed", type = "character", default = NULL, help = "Path to target bed file (ie, for whole-exome sequencing"),
+	make_option("--make_pon", type = "logical", default = FALSE, help = "Should a panel of normals be created? Requires --normal_list (input) and --normalPanel (output)"),
+	make_option("--normal_list", type = "character", default = NULL, help = "list of normal WIG files for PoN"),
+	make_option("--normalPanel", type="character", default = NULL, help = "Median corrected depth from panel of normals. Default: [%default]")
+	);
 
-parseobj <- OptionParser(option_list=option_list);
+parseobj <- OptionParser(option_list = option_list);
 opt <- parse_args(parseobj);
-options(scipen=0, stringsAsFactors=F);
+options(scipen = 0, stringsAsFactors = FALSE);
 
 # input files
 patientID	<- opt$id;
 tumour_file	<- opt$WIG;
 normal_file	<- opt$NORMWIG;
+
+# is this run for PoN creation?
+create_pon	<- opt$make_pon;
+normal_list	<- opt$normal_list;
 
 # genome arguments
 genomeBuild	<- opt$genomeBuild;
@@ -75,7 +83,6 @@ outImage	<- paste0(outDir,"/", patientID,".RData");
 plotFileType	<- 'pdf';
 
 # other/ignored/default only
-exons.bed	<- NULL;
 minMapScore	<- 0.9;
 flankLength	<- 1e5;
 coverage	<- NULL;
@@ -89,6 +96,8 @@ normalizeMaleX		<- TRUE;
 minTumFracToCorrect	<- 0.1;
 fracReadsInChrYForMale	<- 0.001;
 chrXMedianForMale	<- -0.1;
+maleChrXLogRThres	<- -0.80;
+ponMethod		<- 'median';
 gender		<- NULL;
 chrNormalize	<- chrs;
 
@@ -119,12 +128,15 @@ if ('hg38' == opt$genomeBuild) {
 	stop('Unrecognized genomeBuild provided. Must be one of hg38 or hg19.');
 	}
 
+if (!is.null(opt$normalPanel)) {
+	normal_panel <- opt$normalPanel;
+	}
+
 # based purely on built-in gc/map wigs, hg19 = NCBI and hg39 = UCSC
 seqlevelsStyle(chrs)		<- genomeStyle;
 seqlevelsStyle(chrNormalize)	<- genomeStyle;
 seqlevelsStyle(chrTrain)	<- genomeStyle;
 
-### MAIN ##########################################################################################
 # load seqinfo 
 seqinfo <- getSeqInfo(genomeBuild, genomeStyle);
 
@@ -132,6 +144,72 @@ seqinfo <- getSeqInfo(genomeBuild, genomeStyle);
 centromere <- read.delim(centromere);
 seqlevelsStyle(centromere$Chr) <- genomeStyle;
 
+# if target bed is provided
+targetSequences <- NULL;
+if (!is.null(opt$target_bed)) {
+	targetSequences <- read.delim(opt$target_bed, header = FALSE);
+	}
+
+### CREATE PANEL OF NORMALS #######################################################################
+if (create_pon) {
+
+	# indicate output stem
+	outfile <- gsub('_median.rds','',normal_panel);
+
+	message("Reading GC and mappability files");
+	gc <- wigToGRanges(gcWig);
+	map <- wigToGRanges(mapWig);
+
+	files <- read.delim(normal_list, header = FALSE, stringsAsFactors = FALSE)[,1];
+	normalGR <- NULL;
+
+	for (normalFile in files) {
+
+		norm.id <- gsub('.wig','',basename(normalFile));
+		message("Loading normal file:", normalFile);
+
+		normal_reads <- wigToGRanges(normalFile);
+
+		counts <- loadReadCountsFromWig(normal_reads, chrs = chrs, gc = gc, map = map, genomeStyle = genomeStyle,
+			centromere = centromere, targetedSequences = targetSequences, chrNormalize = chrNormalize);
+
+		gender.normal <- counts$gender;
+
+		message("Correcting ", norm.id);
+		if (is.null(normalGR)) {
+			normalGR <- counts$counts;
+			values(normalGR) <- values(normalGR)$copy;
+			colnames(values(normalGR)) <- norm.id;
+			} else {
+			values(normalGR)[[norm.id]] <- counts$counts$copy;
+			}
+
+		chrXMedian <- gender.normal$chrXMedian;
+		chrXStr	<- grep("X", chrs, value = TRUE);
+		chrXInd <- as.character(seqnames(normalGR)) == chrXStr;
+
+		values(normalGR)[[norm.id]][chrXInd] <- values(normalGR)[[norm.id]][chrXInd] - chrXMedian;
+
+		}
+
+	mat <- values(normalGR);
+	medianVal <- apply(mat, 1, median, na.rm = TRUE);
+	values(normalGR)[['Median']] <- medianVal;
+
+	write.table(
+		as.data.frame(normalGR[,'Median']),
+		file = paste0(outfile, '_median.txt'),
+		row.names = FALSE,
+		col.names = TRUE,
+		quote = FALSE,
+		sep = '\t'
+		);
+
+	saveRDS(normalGR, file = paste0(outfile, '_median.rds'));
+	q();
+	}
+
+### MAIN ##########################################################################################
 ## LOAD IN WIG FILES ##
 tumour_copy <- list();
 id <- patientID;
@@ -154,7 +232,7 @@ map <- wigToGRanges(mapWig);
 message("Correcting Tumour");
 counts <- loadReadCountsFromWig(tumour_reads, chrs = chrs, gc = gc, map = map, 
 		centromere = centromere, flankLength = flankLength, 
-		targetedSequences = NULL, chrXMedianForMale = chrXMedianForMale,
+		targetedSequences = targetSequences, chrXMedianForMale = chrXMedianForMale,
 		genomeStyle = genomeStyle, fracReadsInChrYForMale = fracReadsInChrYForMale,
 		chrNormalize = chrNormalize, mapScoreThres = minMapScore);
 
@@ -168,7 +246,7 @@ if (!is.null(normal_file) && normal_file != "None" && normal_file != "NULL") {
 
 	message("Correcting Normal");
 	counts <- loadReadCountsFromWig(normal_reads, chrs = chrs, gc = gc, map = map, 
-		centromere = centromere, flankLength = flankLength, targetedSequences = NULL,
+		centromere = centromere, flankLength = flankLength, targetedSequences = targetSequences,
 		genomeStyle = genomeStyle, chrNormalize = chrNormalize, mapScoreThres = minMapScore);
 
 	normal_copy <- counts$counts;

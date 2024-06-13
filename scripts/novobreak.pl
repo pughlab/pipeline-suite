@@ -550,11 +550,6 @@ sub main {
 				}
 
 			# sort and filter output
-			$cleanup_cmd .= "\nrm " . join('/',
-				$sample_directory,
-				$sample . '_novoBreak.pass_sorted.vcf;'
-				);
-
 			my $filter_command = get_filter_command(
 				sample_dir	=> $sample_directory,
 				output_file	=> $filtered_output,

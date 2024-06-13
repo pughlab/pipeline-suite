@@ -287,7 +287,7 @@ if (length(griffin.files) > 0) {
 	}
 
 ## format end motif frequencies
-if (length(motif.files) > 0) {
+if (length(motif5.files) > 0) {
 
 	# reshape frequency data
 	motifs5.wide <- reshape(
@@ -297,7 +297,9 @@ if (length(motif.files) > 0) {
 		timevar = 'Sample'
 		);
 	colnames(motifs5.wide) <- gsub('frequency.','',colnames(motifs5.wide));
+	}
 
+if (length(motif3.files) > 0) {
 	# reshape frequency data
 	motifs3.wide <- reshape(
 		motif3.data,
@@ -443,7 +445,9 @@ if (exists('motifs5.wide')) {
 		col.names = TRUE,
 		sep = '\t'
 		);
+	}
 
+if (exists('motifs3.wide')) {
 	write.table(
 		motifs3.wide,
 		file = generate.filename(arguments$project, '3prime_endmotif_frequencies', 'tsv'),

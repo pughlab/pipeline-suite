@@ -72,16 +72,16 @@ sub main {
 	print $log "---\n";
 	print $log "Running PughLab DNA-Seq pipeline.\n";
 	print $log "\n  Tool config used: $tool_config";
-	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
+	print $log "\n  Output directory: $output_directory";
 	print $log "\n---\n\n";
 
 	my $seq_type = $tool_data->{seq_type};
 
 	# indicate maximum time limit for parent jobs to wait
-	my $max_time = '7-00:00:00';
+	my $max_time = '5-00:00:00';
 	if ('wgs' eq $tool_data->{seq_type}) { $max_time = '21-00:00:00'; }
-	if ('targeted' eq $tool_data->{seq_type}) { $max_time = '5-00:00:00'; }
+	if ('targeted' eq $tool_data->{seq_type}) { $max_time = '3-00:00:00'; }
 
 	my $samtools = 'samtools/' . $tool_data->{samtools_version};
 
@@ -351,59 +351,65 @@ sub main {
 	if ($args{step2}) {
 
 		unless(-e $qc_directory) { make_path($qc_directory); }
-		unless(-e $contest_directory) { make_path($contest_directory); }
 		unless(-e $coverage_directory) { make_path($coverage_directory); }
 
 		if ('Y' eq $tool_set{'bamqc'}) {
 
 			# ContEst (GATK v3.x) pipeline
-			my $contest_command = join(' ',
-				"perl $cwd/scripts/contest.pl",
-				"-o", $contest_directory,
-				"-t", $tool_config,
-				"-d", $gatk_output_yaml,
-				"-c", $args{cluster}
-				);
+			# this tool is now optional as the per-lane runs frequently fail and overall
+			# contamination estimates are now provided as part of the general QC package below
+			if ('Y' eq $tool_data->{bamqc}->{parameters}->{contest}->{run}) {
 
-			if ($args{cleanup}) {
-				$contest_command .= " --remove";
-				}
+				unless(-e $contest_directory) { make_path($contest_directory); }
 
-			# record command (in log directory) and then run job
-			print $log "Submitting job for contest.pl\n";
-			print $log "  COMMAND: $contest_command\n\n";
-
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'pughlab_dna_pipeline__run_contest',
-				cmd	=> $contest_command,
-				modules	=> ['perl'],
-				dependencies	=> join(':', @step1_job_ids),
-				mem		=> '256M',
-				max_time	=> $max_time,
-				extra_args	=> [$hpc_group],
-				hpc_driver	=> $args{cluster}
-				);
-
-			if ($args{dry_run}) {
-
-				$contest_command .= " --dry-run";
-				`$contest_command`;
-				$contest_run_id = 'pughlab_dna_pipeline__run_contest';
-
-				} else {
-
-				$contest_run_id = submit_job(
-					jobname		=> $log_directory,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{cluster},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
+				my $contest_command = join(' ',
+					"perl $cwd/scripts/contest.pl",
+					"-o", $contest_directory,
+					"-t", $tool_config,
+					"-d", $gatk_output_yaml,
+					"-c", $args{cluster}
 					);
 
-				print $log ">>> ContEst job id: $contest_run_id\n\n";
-				push @step2_job_ids, $contest_run_id;
-				push @job_ids, $contest_run_id;
+				if ($args{cleanup}) {
+					$contest_command .= " --remove";
+					}
+
+				# record command (in log directory) and then run job
+				print $log "Submitting job for contest.pl\n";
+				print $log "  COMMAND: $contest_command\n\n";
+
+				$run_script = write_script(
+					log_dir	=> $log_directory,
+					name	=> 'pughlab_dna_pipeline__run_contest',
+					cmd	=> $contest_command,
+					modules	=> ['perl'],
+					dependencies	=> join(':', @step1_job_ids),
+					mem		=> '256M',
+					max_time	=> $max_time,
+					extra_args	=> [$hpc_group],
+					hpc_driver	=> $args{cluster}
+					);
+
+				if ($args{dry_run}) {
+
+					$contest_command .= " --dry-run";
+					`$contest_command`;
+					$contest_run_id = 'pughlab_dna_pipeline__run_contest';
+
+					} else {
+
+					$contest_run_id = submit_job(
+						jobname		=> $log_directory,
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{cluster},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					print $log ">>> ContEst job id: $contest_run_id\n\n";
+					push @step2_job_ids, $contest_run_id;
+					push @job_ids, $contest_run_id;
+					}
 				}
 
 			# QC (GATK v4.x) pipeline
@@ -716,7 +722,7 @@ sub main {
 					log_file	=> $log
 					);
 
-				print $log ">>> Strelka job id: $manta_run_id\n\n";
+				print $log ">>> Manta job id: $manta_run_id\n\n";
 				push @step3_job_ids, $manta_run_id;
 				push @job_ids, $manta_run_id;
 				}
@@ -1169,7 +1175,7 @@ sub main {
 					log_file	=> $log
 					);
 
-				print $log ">>> VarScan job id: $varscan_run_id\n\n";
+				print $log ">>> Sequenza job id: $varscan_run_id\n\n";
 				push @job_ids, $varscan_run_id;
 				}
 			}
@@ -1796,7 +1802,7 @@ sub main {
 					log_file	=> $log
 					);
 
-				print $log ">>> VarDict job id: $novobreak_run_id\n\n";
+				print $log ">>> NovoBreak job id: $novobreak_run_id\n\n";
 				push @step3_job_ids, $novobreak_run_id;
 				push @job_ids, $novobreak_run_id;
 				}

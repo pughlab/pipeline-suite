@@ -172,7 +172,6 @@ sub get_rnaseqc_cmd {
 	my %args = (
 		input		=> undef,
 		output_dir	=> undef,
-		bwa		=> '/cluster/tools/software/bwa/0.7.15/',
 		reference	=> undef,
 		gtf		=> undef,
 		java_mem	=> undef,
@@ -180,17 +179,19 @@ sub get_rnaseqc_cmd {
 		@_
 		);
 
+	my $bwa_path = 'DIRNAME=$(which bwa | xargs dirname)';
+
 	my $format_gtf_command = "cat $args{gtf}";
 	if ($args{gtf} =~ m/.gz$/) { $format_gtf_command = "zcat $args{gtf}"; }
 
 	$format_gtf_command .= " | grep -e '#' -e 'transcript_id'";
 	$format_gtf_command .= " > $args{tmp_dir}/transcript_ids.gtf";
 
-	my $qc_command = $format_gtf_command . "\n\n" . join(' ',
+	my $qc_command = $bwa_path . "\n\n" . $format_gtf_command . "\n\n" . join(' ',
 		'java -Xmx' . $args{java_mem},
 		'-Djava.io.tmpdir=' . $args{tmp_dir},
 		'-jar $rnaseqc_dir/RNA-SeQC.jar',
-		'-bwa', $args{bwa},
+		'-bwa $DIRNAME',
 		'-o', $args{output_dir},
 		'-t', "$args{tmp_dir}/transcript_ids.gtf",
 		'-r', $args{reference},
@@ -273,6 +274,7 @@ sub main {
 
 	# set tools and versions
 	my $star_version	= 'STAR/' . $tool_data->{star_version};
+	my $bwa_version		= 'bwa/' . $tool_data->{bwa_version};
 	my $samtools		= 'samtools/' . $tool_data->{samtools_version};
 	my $picard		= 'picard/' . $tool_data->{picard_version};
 	my $rnaseqc		= 'rna_seqc/' . $tool_data->{rna_seqc_version};
@@ -449,8 +451,7 @@ sub main {
 				);
 
 			# check if this should be run
-			if ( ('N' eq missing_file($genome_bam)) &&  
-				('Y' eq missing_file("$genome_bam.bai")) ) {
+			if ('Y' eq missing_file("$genome_bam.bai")) {
 
 				# record command (in log directory) and then run job
 				print $log "  >> Submitting job to run BAM INDEX...\n";
@@ -588,7 +589,6 @@ sub main {
 	my $qc_cmd = get_rnaseqc_cmd(
 		input		=> $sample_sheet,
 		output_dir	=> $qc_directory,
-		bwa		=> $tool_data->{bwa_path},
 		reference	=> $tool_data->{reference},
 		gtf		=> $tool_data->{reference_gtf},
 		java_mem	=> $parameters->{rna_seqc}->{java_mem},
@@ -608,7 +608,7 @@ sub main {
 		log_dir	=> $log_directory,
 		name	=> 'run_rna_seqc_cohort',
 		cmd	=> $qc_cmd,
-		modules	=> [$rnaseqc],
+		modules	=> [$rnaseqc, $bwa_version],
 		dependencies	=> join(':', @all_jobs),
 		max_time	=> $parameters->{rna_seqc}->{time},
 		mem		=> $parameters->{rna_seqc}->{mem},

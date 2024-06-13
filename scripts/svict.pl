@@ -17,7 +17,7 @@ use IO::Handle;
 my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
-our ($reference, $gtf, $svict_path);
+our ($reference, $gtf, $svict_path, $svict);
 
 ####################################################################################################
 # version	author		comment
@@ -46,8 +46,9 @@ sub get_svict_command {
 		@_
 		);
 
-	my $svict_command = join(' ',
-		join('/', $svict_path, 'svict'),
+	my $svict_command = defined($svict) ? 'svict' : $svict_path . '/svict';
+		
+	$svict_command .= ' ' . join(' ',
 		'-r', $reference,
 		'-i', $args{input},
 		'-o', $args{output_stem}
@@ -121,9 +122,9 @@ sub main {
 
 	$reference = $tool_data->{reference};
 
-	if (defined($tool_data->{gtf})) {
-		$gtf = $tool_data->{gtf};
-		print $log "\n    Annotation GTF: $tool_data->{gtf}";
+	if (defined($tool_data->{svict_gtf})) {
+		$gtf = $tool_data->{svict_gtf};
+		print $log "\n    Annotation GTF: $tool_data->{svict_gtf}";
 		} else {
 		print $log "\nNo annotation file provided; will not perform annotation/fusion detection.";
 		}
@@ -133,8 +134,13 @@ sub main {
 	print $log "\n---\n";
 
 	# set tools and versions
-#	my $svict = 'svict/' . $tool_data->{svict_version};
-	$svict_path = '/cluster/projects/pughlab/bin/svict';
+	if (defined($tool_data->{svict_version})) {
+		$svict = 'svict/' . $tool_data->{svict_version};
+		} elsif (defined($tool_data->{svict_path})) {
+		$svict_path = $tool_data->{svict_path};
+		} else {
+		die("Tool version/path not defined, exiting now.");
+		}
 
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $r_version   = 'R/' . $tool_data->{r_version};

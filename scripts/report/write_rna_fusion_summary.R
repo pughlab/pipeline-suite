@@ -182,10 +182,24 @@ if (!is.null(arguments$mavis)) {
 		if (length(mavis.idx) > 0) { combined.fusions[i,]$Validation <- 'mavis'; }
 		}
 
-	mavis.summary <- mavis[,c('library','event_type','Fusion','tools')];
-	if (nrow(mavis.summary) > 20) {
+	mavis.summary <- mavis;
+	if (nrow(mavis.summary) > 40) {
 		mavis.summary <- mavis.summary[!grepl('None',mavis.summary$Fusion),];
 		}
+	if (nrow(mavis.summary) > 40) {
+		mavis.summary$evidence <- apply(
+			mavis.summary[,c('spanning_reads','linking_split_reads','break1_split_reads','break2_split_reads')],
+			1, function(x) { sum(sapply(x,
+				function(i) max(as.numeric(unlist(strsplit(as.character(i),';'))))))
+				}
+			);
+		mavis.summary$n.tools <- sapply(mavis.summary$tools, function(i) {
+			length(unlist(strsplit(i,';'))) } );
+		mavis.summary <- mavis.summary[order(-mavis.summary$n.tools, -mavis.summary$evidence),];
+		mavis.summary <- mavis.summary[1:40,];
+		}
+	mavis.summary <- mavis.summary[,c('library','event_type','Fusion','n.tools')];
+	mavis.summary <- mavis.summary[order(mavis.summary$Fusion, mavis.summary$library),];
 	}
 
 ### WRITE DATA #####################################################################################

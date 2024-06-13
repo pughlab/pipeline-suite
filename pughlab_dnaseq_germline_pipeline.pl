@@ -72,16 +72,16 @@ sub main {
 	print $log "---\n";
 	print $log "Running PughLab DNA-Seq pipeline.\n";
 	print $log "\n  Tool config used: $tool_config";
-	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
+	print $log "\n  Output directory: $output_directory";
 	print $log "\n---\n\n";
 
 	my $seq_type = $tool_data->{seq_type};
 
 	# indicate maximum time limit for parent jobs to wait
-	my $max_time = '7-00:00:00';
+	my $max_time = '5-00:00:00';
 	if ('wgs' eq $tool_data->{seq_type}) { $max_time = '21-00:00:00'; }
-	if ('targeted' eq $tool_data->{seq_type}) { $max_time = '5-00:00:00'; }
+	if ('targeted' eq $tool_data->{seq_type}) { $max_time = '3-00:00:00'; }
 
 	my $samtools = 'samtools/' . $tool_data->{samtools_version};
 
