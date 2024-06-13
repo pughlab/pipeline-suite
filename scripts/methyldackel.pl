@@ -61,15 +61,19 @@ sub get_extract_command {
 		bam		=> undef,
 		output_stem	=> undef,
 		n_cpus		=> undef,
+		non_cpg		=> undef,
 		@_
 		);
 
+	my $non_cpg = if ('Y' eq $args{non_cpg}) ? '--CHH --CHG' : '';
+
+	my $methylation_cmd = "mbias=''";
 	my $methylation_cmd .= "\n\n" . join(' ',
 		'MethylDackel extract',
 		'-@', $args{n_cpus},
-		'--CHH --CHG',
-#		'--OT 0,0,0,0 --OB 0,0,0,0', # bugged as of v0.5.1 (2020)
-		'-o', $args{output_stem} . '_all',
+		$non_cpg,
+		'$mbias',
+		'-o', $args{output_stem},
 		$reference,
 		$args{bam}
 		);
@@ -281,13 +285,13 @@ sub main {
 			my $extract_command = get_extract_command(
 				bam		=> $smp_data->{$patient}->{$type}->{$sample},
 				output_stem	=> $output_stem,
+				non_cpg		=> $parameters->{extract}->{non_cpg},
 				n_cpus		=> $parameters->{extract}->{n_cpus}
 				);
 
-		#	$cleanup_cmd .= "\nrm -rf " . join('/', $sample_directory, 'workspace');
+			my $methyldackel_output = join('/',
+				$patient_directory, $sample . '_methyldackel.COMPLETE');
 
-			my $methyldackel_output = join('/', $patient_directory, $sample . '_methyldackel.COMPLETE');
-	
 			$extract_command .= "\n\n" . join(' ',
 				'echo methyldackel extraction complete',
 				'>', $methyldackel_output
@@ -325,11 +329,11 @@ sub main {
 				print $log "  >> Skipping MethylDackel EXTRACT because this has already been completed!\n";
 				}
 
-			push @final_outputs, $output_stem . '_merged_CpG.bedGraph';
-			push @final_outputs, $output_stem . '_all_CpG.bedGraph';
-			push @final_outputs, $output_stem . '_all_CHG.bedGraph';
-			push @final_outputs, $output_stem . '_all_CHH.bedGraph';
-
+			push @final_outputs, $output_stem . '_CpG.bedGraph';
+			if ('Y' eq $parameters->{extract}->{non_cpg}) {
+				push @final_outputs, $output_stem . '_CHG.bedGraph';
+				push @final_outputs, $output_stem . '_CHH.bedGraph';
+				}
 			}
 
 		# should intermediate files be removed
