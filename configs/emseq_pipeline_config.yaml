@@ -97,6 +97,7 @@ methyldackel:
             mem: 2G
             time: '24:00:00'
         extract:
+            non_cpg: Y # should CHG and CHH metrics be collected?
             mem: 4G
             time: '24:00:00'
             n_cpus: 1
