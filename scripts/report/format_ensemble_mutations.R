@@ -230,6 +230,8 @@ if (nrow(passed.variants) > 0) {
 		passed.variants,
 		all.x = TRUE
 		);
+	} else {
+	combined.data$FILTER.patient_evidence <- FALSE;
 	}
 
 combined.data$FILTER <- NA;
