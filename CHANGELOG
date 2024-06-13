@@ -1,3 +1,32 @@
+2024-06-13: PughLab pipeline-suite (version 0.9.10);
+- MAJOR update to pughlab_fragmentomics_pipeline.pl:
+	- now accepts a list of site files for use with Griffin
+	- see fragmentomics_pipeline_config.yaml for how to specify custom sites
+	- end motif function now outputs 5' and 3' end motifs separately
+	- allow specification of tool to use for deduplication steps (picard or sambamba)
+	- updated n_cpus paramters for consistency (some n_cpu, now all n_cpus)
+- MAJOR updates to ichorCNA:
+	- added functionality for targeted sequencing (exome or target panels)
+	- allow user to create or supply a custom panel of normals for ichorCNA
+	- removed WGS requirement from utilities.pl
+- update to bwa to allow specification of memory used for sort step (sets max memory per thread parameter, assuming 4 threads, based on memory available)
+- update to make contest optional
+- updates to methylDackel to indicate whether or not to test all cytosines or CpG only
+- updates to strelka to resume failed instances (rather than restart from scratch)
+- fixed final filtering step in delly to use per-sample filter (in addition to cohort filter)
+- added error handling for single sample runs in collect_rnaseqc_output.R
+- minor changes/code cleanup
+	- collect_rsem_output.R and collect_agena_output.R
+	- varscan.pl, svict.pl, star.pl, run_sequenza_with_optimal_gamma.pl (minor updates)
+	- novobreak.pl, mavis.pl, contest.pl (cleanup)
+- removed hardcoded paths and replaced with options found in tool config:
+	- pindel.pl, svict.pl, mutect2.pl, mutect.pl, haplotypecaller.pl, genotype_gvcfs.pl, gatk.pl, ascat.pl
+- updates to final reports:
+	- added output folder for QC summary
+	- removed hardcoded paths for MutSigCV
+	- added error handling for tumour-only runs (format_ensemble_mutations.R)
+	- added mavis to RNA-Seq methods
+
 2024-05-02: PughLab pipeline-suite (version 0.9.9);
 - added methyldackel to pughlab_emseq_pipeline.pl
 	- updated methyldackel command (removed filter steps which are better incorporated into downstream analyses)
