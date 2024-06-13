@@ -93,12 +93,16 @@ sub get_bwa_command {
 sub get_bwa_sort_command {
 	my %args = (
 		stem		=> undef,
-		seq_type	=> undef,
+		mem		=> undef,
 		@_
 		);
 
 	my $max_mem_per_thread = '768M';
-	if ('wgs' eq $args{seq_type}) { $max_mem_per_thread = '2G'; }
+	if ($args{mem} =~ m/(\d+)([A-Z])/) {
+		my $size = $1;
+		my $unit = $2;
+		if ( ($size >= 8) && ('G' eq $unit) ) { $max_mem_per_thread = '2G'; }
+		}
 
 	my $sort_command = join(' ',
 		'samtools sort -@4 -m', $max_mem_per_thread,
@@ -582,8 +586,8 @@ sub main {
 					# sort the resulting SAM and output BAM
 					my $sort_cmd = "cd $lane_directory;\n";
 					$sort_cmd .= get_bwa_sort_command(
-						stem		=> $filestem,
-						seq_type	=> $tool_data->{seq_type}
+						stem	=> $filestem,
+						mem	=> $parameters->{sort}->{mem}->{$type}
 						);
 
 					# check if this should be run
