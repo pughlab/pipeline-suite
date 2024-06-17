@@ -72,7 +72,7 @@ if (arguments$germline) {
 
 	} else {
 
-	input.files <- list.files(pattern = 'Delly_SVs_somatic_hc.bcf$', recursive = TRUE);
+	input.files <- list.files(pattern = 'Delly_SVs_somatic_hc.vcf$', recursive = TRUE);
 
 	# find VCF header
 	tmp <- read.delim(input.files[1], nrow = 1000, header = FALSE);
