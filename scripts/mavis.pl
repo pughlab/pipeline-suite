@@ -334,7 +334,7 @@ sub main {
 	# set tools and versions
 	my $mavis	= 'mavis/' . $tool_data->{mavis_version};
 	my $bwa		= 'bwa/' . $tool_data->{bwa_version};
-	my $manta	= 'manta/' . $tool_data->{manta_version};
+	my $manta	= defined($args{manta_dir}) ? 'manta/' . $tool_data->{manta_version} : undef;
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $r_version	= 'R/' . $tool_data->{r_version};
 
@@ -345,10 +345,15 @@ sub main {
 		"export MAVIS_TEMPLATE_METADATA=$tool_data->{mavis}->{mavis_cytoband}",
 		"export MAVIS_REFERENCE_GENOME=$tool_data->{reference}",
 		"export MAVIS_ALIGNER='$tool_data->{mavis}->{mavis_aligner}'",
-		"export MAVIS_ALIGNER_REFERENCE=$tool_data->{bwa}->{reference}",
 		"export MAVIS_DRAW_FUSIONS_ONLY=$tool_data->{mavis}->{mavis_draw_fusions_only}",
 		"export MAVIS_SCHEDULER=" . uc($args{hpc_driver})
 		);
+
+	if (defined($args{dna_config})) {
+		$mavis_export .= "\nexport MAVIS_ALIGNER_REFERENCE=$tool_data->{bwa}->{reference}";
+		} else {
+		$mavis_export .= "\nexport MAVIS_ALIGNER_REFERENCE=$tool_data->{mavis}->{mavis_bwa_ref}";
+		}
 
 	if (defined($tool_data->{mavis}->{mavis_time_limit})) {
 		$mavis_export .= "\nexport MAVIS_TIME_LIMIT=$tool_data->{mavis}->{mavis_time_limit}";
