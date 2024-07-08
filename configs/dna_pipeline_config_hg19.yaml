@@ -55,7 +55,7 @@ pcgr_version: 0.9.1
 vcf2maf_version: 1.6.17 
 msi_sensor_version: msisensor-pro/1.2.0
 ascat_r_version: 4.1.0
-r_version: 3.6.1
+r_version: 4.1.0
 mutsigcv_version: 1.4
 mcr_path: /cluster/tools/software/MCR/8.1/v81
 # tool specific parameters
