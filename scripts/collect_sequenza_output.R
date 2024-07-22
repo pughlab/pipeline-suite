@@ -306,7 +306,9 @@ for (smp in names(seg.list)) {
 	tmp <- seg.list[[smp]][,c('chromosome','start.pos','end.pos','CNt','depth.ratio')];
 	colnames(tmp) <- c('chrom','start','end','CN','depth.ratio');
 
-	ploidy <- round(ploidy.formatted[which(ploidy.formatted$Sample == smp),]$ploidy);
+	ploidy <- if (smp %in% ploidy.formatted$Sample) {
+		round(ploidy.formatted[which(ploidy.formatted$Sample == smp),]$ploidy);
+		} else { 2 }
 
 	tmp$RATIO <- log2(tmp$depth.ratio);
 	tmp$AbsCN <- get.ploidyadjusted.cn(tmp$CN, ploidy);
@@ -319,6 +321,10 @@ for (smp in names(seg.list)) {
 	# calculate PGA
 	for.pga <- tmp[which(tmp$AbsCN > 0),];
 	pga <- sum(for.pga$end - for.pga$start)/(3*10**9)*100;
+	if (!smp %in% ploidy.formatted$Sample) {
+		ploidy.formatted[nrow(ploidy.formatted)+1,] <- NA;
+		ploidy.formatted[nrow(ploidy.formatted),]$Sample <- smp;
+		}
 	ploidy.formatted[which(ploidy.formatted$Sample == smp),]$PGA <- pga;
 
 	# extract gene data
