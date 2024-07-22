@@ -571,6 +571,7 @@ sub main {
 			my $output_stem = join('/', $tmp_directory, $sample . '_pindel');
 			my $merged_file = join('/', $sample_directory, $sample . '_combined_Pindel_output.txt');
 			my $merged_vcf = join('/', $sample_directory, $sample . '_Pindel_filtered.vcf');
+			$cleanup_cmd .= "\n  rm $merged_vcf";
 
 			# create Pindel command
 			my @pindel_jobs;
