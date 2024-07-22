@@ -382,7 +382,7 @@ sub main {
 			"perl $cwd/scripts/mavis.pl",
 			"-o", $mavis_directory,
 			"-t", $tool_config,
-			"-d", $star_output_yaml,
+			"-r", $star_output_yaml,
 			"-c", $args{cluster}
 			);
 
