@@ -15,13 +15,17 @@ reference_gtf: /cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.a
 star_fusion_reference_dir: /cluster/projects/pughlab/references/STAR-Fusion/GRCh38_gencode_v31_CTAT_lib_Oct012019/ctat_genome_lib_build_dir/
 rsem_reference: /cluster/projects/pughlab/references/RSEM/GRCh38/v31/grch38.v31
 fusioncatcher_reference_dir: /cluster/tools/software/centos7/fusioncatcher/1.20/fusioncatcher/data/current/
+dbsnp: /cluster/projects/pughlab/references/dbSNP/GRCh38/b151/dbSNP_GRCh38p7_b151_common_chr.vcf.gz
+gatk_known_1000g: /cluster/tools/data/genomes/human/hg38/hg38bundle/1000G_phase1.snps.high_confidence.hg38.vcf.gz
+gatk_known_indels: /cluster/tools/data/genomes/human/hg38/hg38bundle/Homo_sapiens_assembly38.known_indels.vcf.gz
+gatk_known_mills: /cluster/tools/data/genomes/human/hg38/hg38bundle/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz
 # tool versions
 star_version: 2.7.2b
 vcftools_version: 0.1.15
 samtools_version: 1.9
 picard_version: 2.6.0
 rna_seqc_version: 1.1.8
-r_version: 3.6.1
+r_version: 4.1.0
 bwa_version: 0.7.15
 mavis_version: 2.2.5
 star_fusion_version: 1.8.1

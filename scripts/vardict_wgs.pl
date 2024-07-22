@@ -561,7 +561,7 @@ sub main {
 			}
 
 		# indicate this should be removed at the end
-		$cleanup_cmd = "\nrm -rf $tmp_directory";
+		$cleanup_cmd = "\n  rm -rf $tmp_directory";
 
 		# check to confirm splitBAM jobs are complete
 		if ('Y' eq missing_file($is_split_complete)) {
@@ -696,6 +696,8 @@ sub main {
 				input_stem	=> $output_stem,
 				output		=> $merged_stem . '.vcf'
 				);
+
+			$cleanup_cmd .= "\n  rm $merged_stem.vcf.gz";
 
 			# filter results
 			my $filter_command = get_filter_command(
@@ -868,6 +870,8 @@ sub main {
 				output		=> $merged_stem . '.vcf'
 				);
 
+			$cleanup_cmd .= "\n  rm $merged_stem.vcf.gz";
+
 			# filter results
 			my $filter_command = get_filter_command(
 				input_vcf	=> $merged_stem . '.vcf', 
@@ -875,6 +879,8 @@ sub main {
 				somatic		=> 1,
 				normal_id	=> $normal_ids[0]
 				);
+
+			$cleanup_cmd .= "\n  rm $merged_stem\_somatic_hc.vcf";
 
 			$filter_command .= "\n\n" . join(' ',
 				'md5sum', $merged_stem . '_somatic_hc.vcf',
@@ -1009,7 +1015,7 @@ sub main {
 
 		# before making the PoN, we will merge snp/indel results
 		# as well as collapsing results from multi-tumour patients
-		if ( (!defined($pon)) && (scalar(@normal_ids) > 0) ) {
+		if (scalar(@normal_ids) > 0) {
 
 			# for any germline calls from T/N pairs
 			my $merged_germline = join('/',
@@ -1032,6 +1038,10 @@ sub main {
 					@germline_vcfs,
 					'>', $merged_germline
 					);
+
+				foreach my $file (@germline_vcfs) {
+					$cleanup_cmd .= "\n  rm $file";
+					}
 
 				$format_germline_cmd .= "\n\n" . join("\n",
 					"md5sum $merged_germline > $merged_germline.md5",
@@ -1377,6 +1387,8 @@ sub main {
 				output		=> $merged_stem . '.vcf'
 				);
 
+			$cleanup_cmd .= "\nrm $merged_stem.vcf.gz";
+
 			# filter results
 			my $filter_command = get_filter_command(
 				input_vcf	=> $merged_stem . '.vcf', 
@@ -1385,6 +1397,8 @@ sub main {
 				tmp_dir		=> $tmp_directory,
 				pon		=> $pon
 				);
+
+			$cleanup_cmd .= "\nrm $merged_stem\_filtered.vcf";
 
 			$filter_command .= "\n\n" . join(' ',
 				'md5sum', $merged_stem . '_filtered.vcf',

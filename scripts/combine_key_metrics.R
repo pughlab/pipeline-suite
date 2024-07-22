@@ -23,7 +23,7 @@ reshaped$md5sum <- NA;
 
 for (i in md5_files) {
 
-	tmp <- read.table(i, header = F, col.names = c('MD5','Filename'));
+	tmp <- read.table(i, header = F, col.names = c('MD5','Filename'), stringsAsFactors = FALSE);
 	if (nrow(tmp) > 0) {
 		filepath <- tmp[1,2];
 		filename <- basename(filepath);

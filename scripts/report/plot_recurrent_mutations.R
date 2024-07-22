@@ -341,6 +341,7 @@ if (exists('driver.genes')) {
 plot.data$KEEP <- factor(plot.data$KEEP,
 	levels = c('mutsig_driver','mutsig','recurrent_driver','recurrent','driver')
 	);
+plot.data <- plot.data[order(plot.data$KEEP, -plot.data$Count),];
 
 plot.data.full <- plot.data;
 

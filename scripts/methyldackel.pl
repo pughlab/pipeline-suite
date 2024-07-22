@@ -65,10 +65,10 @@ sub get_extract_command {
 		@_
 		);
 
-	my $non_cpg = if ('Y' eq $args{non_cpg}) ? '--CHH --CHG' : '';
+	my $non_cpg = ('Y' eq $args{non_cpg}) ? '--CHH --CHG' : '';
 
 	my $methylation_cmd = "mbias=''";
-	my $methylation_cmd .= "\n\n" . join(' ',
+	$methylation_cmd .= "\n\n" . join(' ',
 		'MethylDackel extract',
 		'-@', $args{n_cpus},
 		$non_cpg,

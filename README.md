@@ -1,7 +1,12 @@
-# PughLab pipeline-suite (version 0.9.10)
+# PughLab pipeline-suite (version 0.9.11)
 
 ## Introduction
 This is a collection of pipelines to be used for NGS (DNA, including WGS, WXS and TS, RNA-Seq and EM-Seq) analyses, from alignment to variant calling.
+- pughlab_dnaseq_pipeline.pl: performs alignment, qc and variant-calling on WGS/WXS/TS data
+- pughlab_dnaseq_germline_pipeline.pl: performs alignment, qc and variant-calling on germline-only WGS/WXS/TS data
+- pughlab_rnaseq_pipeline.pl: performs alignment, qc, expression and variant-calling on WT data
+- pughlab_fragmentomics_pipeline.pl: performs fragmentomics analyses on ctDNA WGS data
+- pughlab_emseq_pipeline.pl: performs adapter trimming, alignment, qc and methylation calling on EM-Seq data
 
 Start by creating a clone of the repository:
 

@@ -55,6 +55,14 @@ annotate.with.contig <- function(hugo_symbols) {
 		);
 	}
 
+# function to extract read counts
+extract.evidence <- function(x) {
+	to.return <- if ('None' == x) { 0 } else {
+		max(as.numeric(unlist(strsplit(as.character(x),';'))), na.rm = TRUE)
+		}
+	return(to.return);
+	}
+
 ### PREPARE SESSION ################################################################################
 # import command line arguments
 library(argparse);
@@ -291,11 +299,23 @@ if (arguments$find_drawings) {
 
 	if (length(rna.smps) > 0) {
 		svs[which(svs$protocol == 'transcriptome'),]$RNA_Support <- 'Yes';
-		rna.idx <- which(apply(
-			svs[,names(rna.smps)],1,function(i) { any(i == 'expressed', na.rm = TRUE) } ));
+
+		# do any of these support DNA-based events?
+		rna.idx <- if (length(rna.smps) > 1) {
+			which(apply(svs[,names(rna.smps)],1,function(i) { any(i == 'expressed', na.rm = TRUE) } ));
+			} else {
+			which(sapply(svs[,names(rna.smps)],function(i) { any(i == 'expressed', na.rm = TRUE) } ));
+			}
 		if (length(rna.idx) > 0) { svs[rna.idx,]$RNA_Support <- 'Yes'; }
-		dna.idx <- which(apply(
-			svs[,names(tumour.smps)],1,function(i) { any(i == 'genomic support', na.rm = TRUE) } ));
+		}
+
+	# do any DNA entries support RNA-based events?
+	if (length(tumour.smps) > 0) {
+		dna.idx <- if (length(tumour.smps) > 1) {
+			which(apply(svs[,names(tumour.smps)],1,function(i) { any(i == 'genomic support', na.rm = TRUE) } ));
+			} else {
+			which(sapply(svs[,names(tumour.smps)],function(i) { any(i == 'genomic support', na.rm = TRUE) } ));
+			}
 		if (length(dna.idx) > 0) { svs[dna.idx,]$DNA_Support <- 'Yes'; }
 		}
 
@@ -352,9 +372,9 @@ if (arguments$find_drawings) {
 		}
 
 	# define thresholds
-	germline.threshold <- length(normal.smps)*0.5;
-	somatic.threshold <- length(tumour.smps)*0.8;
-	rna.threshold <- length(rna.smps)*0.8;
+	germline.threshold <- if (length(normal.smps) == 1) { 1 } else { length(normal.smps)*0.5 }
+	somatic.threshold <- if (length(tumour.smps) == 1) { 1 } else { length(tumour.smps)*0.8 }
+	rna.threshold <- if (length(rna.smps) == 1) { 1 } else { length(rna.smps)*0.8 }
 
 	tmp <- merge(svs, recurrence.data, all.x = TRUE);
 	to.remove <- unique(c(
@@ -383,10 +403,10 @@ if (arguments$find_drawings) {
 		filtered.svs$Length < 100
 		);
 
+	print(paste0('Removing ', length(short.idx), ' (', round(length(short.idx)/nrow(filtered.svs)*100),
+		'%) short DEL/INS/DUP/INV (<100bp).'));
+
 	if (length(short.idx) > 0) {
-		print(paste0('Removing ', length(short.idx), ' (',
-			round(length(short.idx)/nrow(filtered.svs)*100),
-			'%) short DEL/INS/DUP/INV (<100bp).'));
 		filtered.svs <- filtered.svs[-c(short.idx),];
 		}
 
@@ -436,16 +456,11 @@ if (arguments$find_drawings) {
 		Normal_Split_Read_Count = NA,
 		Comments = NA,
 		Fusion = paste0(filtered.svs$gene1_aliases, '--', filtered.svs$gene2_aliases),
-		Site1_Split_Read_Count = sapply(filtered.svs$break1_split_reads,
-			function(i) { max(as.numeric(unlist(strsplit(as.character(i),';'))), na.rm = TRUE) } ),
-		Site2_Split_Read_Count = sapply(filtered.svs$break2_split_reads,
-			function(i) { max(as.numeric(unlist(strsplit(as.character(i),';'))), na.rm = TRUE) } ),
-		Linking_Split_Reads = sapply(filtered.svs$linking_split_reads,
-			function(i) { max(as.numeric(unlist(strsplit(as.character(i),';'))), na.rm = TRUE) } ),
-		Spanning_Reads = sapply(filtered.svs$spanning_reads,
-			function(i) { max(as.numeric(unlist(strsplit(as.character(i),';'))), na.rm = TRUE) } ),
-		Flanking_Read_Pairs = sapply(filtered.svs$flanking_pairs,
-			function(i) { max(as.numeric(unlist(strsplit(as.character(i),';'))), na.rm = TRUE) } ),
+		Site1_Split_Read_Count = sapply(filtered.svs$break1_split_reads, extract.evidence),
+		Site2_Split_Read_Count = sapply(filtered.svs$break2_split_reads, extract.evidence),
+		Linking_Split_Reads = sapply(filtered.svs$linking_split_reads, extract.evidence),
+		Spanning_Reads = sapply(filtered.svs$spanning_reads, extract.evidence),
+		Flanking_Read_Pairs = sapply(filtered.svs$flanking_pairs, extract.evidence),
 		Tools = filtered.svs$tools,
 		Total_Evidence = filtered.svs$Evidence
 		);

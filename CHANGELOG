@@ -1,3 +1,13 @@
+2024-07-22: PughLab pipeline-suite (version 0.9.11);
+- changed input file extension from bcf to vcf in collect_delly_output.R
+- added conditional variable assignments for RNA-Seq only runs (manta version and aligner reference)
+- added stringsAsFactors = FALSE in combine_key_metrics.R
+- fixed mavis command parameters in pughlab_rnaseq_pipeline.pl
+- minor bug fixes to methyldackel.pl
+- minor updates to accomodate RNA-Seq only runs in collect_mavis_output.R
+- minor updates regarding missing data in collect_sequenza_output.R
+- updates to cleanup step for pindel.pl and vardict_wgs.pl
+
 2024-06-13: PughLab pipeline-suite (version 0.9.10);
 - MAJOR update to pughlab_fragmentomics_pipeline.pl:
 	- now accepts a list of site files for use with Griffin
