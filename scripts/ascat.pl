@@ -327,7 +327,7 @@ sub main {
 		# run per patient
 		if ($args{del_intermediates}) {
 
-			if (scalar(@patient_jobs) > 0) {
+			unless (scalar(@patient_jobs) == 0) { 
 
 				print $log ">> Submitting job to clean up temporary/intermediate files...\n";
 
