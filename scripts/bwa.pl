@@ -98,14 +98,18 @@ sub get_bwa_sort_command {
 		);
 
 	my $max_mem_per_thread = '768M';
+	my $n_threads = 4;
+
 	if ($args{mem} =~ m/(\d+)([A-Z])/) {
 		my $size = $1;
 		my $unit = $2;
-		if ( ($size >= 8) && ('G' eq $unit) ) { $max_mem_per_thread = '2G'; }
+		if ( ($size > 8) && ('G' eq $unit) ) { $max_mem_per_thread = '2G'; }
+		if ( ($size < 4) && ('G' eq $unit) ) { $n_threads = 1; }
 		}
 
 	my $sort_command = join(' ',
-		'samtools sort -@4 -m', $max_mem_per_thread,
+		'samtools sort -@' . $n_threads,
+		'-m', $max_mem_per_thread,
 		'-O bam -o', $args{stem} . '.bam',
 		'-T', $args{stem}, $args{stem} . '.sam'
 		);
@@ -671,6 +675,7 @@ sub main {
 
 						$output = join('/', $lane_directory, $filestem . '_filtered');
 						$cleanup_cmd .= "\nrm $lane_directory/$filestem.bam";
+						$cleanup_cmd .= "\nrm $lane_directory/$filestem.bam.bai";
 
 						my $filter_cmd = "cd $lane_directory;\n";
 

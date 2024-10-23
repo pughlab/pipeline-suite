@@ -106,8 +106,8 @@ sub create_extract_command {
 	$extract_command .= "\n\n" . join(' ',
 		'cat', $args{tier_files},
 		"| grep -v 'GENOMIC_CHANGE'",
-		'| awk -F"\t"', "'\$81 >= 0' | cut -f1,81",
-		'| perl -e',	
+		'| awk -F"\t"', "'\$36 == " . '"Pathogenic"' . " || \$81 >= 0'",
+		'| cut -f1,81 | perl -e',
 		"'while(<>) { \$_ =~ m/(^[0-9XY]+):g.([0-9]+)[A-Z]*>[A-Z]*\\t([-+]?[0-9]*\\.?[0-9]+)/;",
 		'print join("\t", "chr" . $1, $2, $3) . "\n" }', "'",
 		'| sort -Vk1,2 -u',
@@ -329,7 +329,7 @@ sub main{
 				sample_id	=> $sample,
 				output		=> $subset_vcf,
 				tmp_dir		=> $tmp_directory,
-				java_mem	=> '256M'
+				java_mem	=> '1g'
 				);
 
 			if ( ('Y' eq missing_file("$subset_vcf.idx")) && ('Y' eq missing_file($annotate_final)) ) {
@@ -342,8 +342,8 @@ sub main{
 					name	=> 'run_select_variants_' . $sample,
 					cmd	=> $prepare_vcf_cmd,
 					modules	=> [$gatk],
-					max_time	=> '06:00:00',
-					#mem		=> $parameters->{cpsr}->{mem},
+					max_time	=> '24:00:00',
+					mem		=> '2G', #$parameters->{cpsr}->{mem},
 					hpc_driver	=> $args{hpc_driver},
 					extra_args	=> [$hpc_group]
 					);
@@ -562,6 +562,8 @@ sub main{
 				tmp_dir		=> $sample_directory,
 				parameters	=> $tool_data->{annotate}
 				);
+
+			$vcf2maf_cmd .= ' --retain-info CPSR_PATHOGENICITY_SCORE';
 
 			# check if this should be run
 			if ('Y' eq missing_file($final_maf . '.md5')) {

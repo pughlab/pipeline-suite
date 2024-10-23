@@ -169,7 +169,7 @@ if (is.dna) {
 		pileup.contam$contamination <- pileup.contam$contamination * 100;
 		pileup.contam$confidence_interval_95_low <- pileup.contam$contamination - (pileup.contam$error*100);
 		pileup.contam$confidence_interval_95_high <- pileup.contam$contamination + (pileup.contam$error*100);
-		rownames(pileup.contam) <- pileup.contam$ID;
+		rownames(pileup.contam) <- pileup.contam$sample;
 		pileup.contam <- pileup.contam[,c('contamination','confidence_interval_95_low','confidence_interval_95_high')];
 		pileup.contam$Method <- 'pileup';
 		}

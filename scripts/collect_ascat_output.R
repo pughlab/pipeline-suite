@@ -141,7 +141,7 @@ ratio.list <- list();
 # read in metrics
 for (file in metric.files) {
 	# extract sample ID
-	smp <- unlist(strsplit(basename(file), '_'))[1];
+	smp <- unlist(strsplit(basename(file), '_ASCAT'))[1];
 	# store data in list
 	metric.list[[smp]] <- read.delim(file)[,1:4];
 	}
@@ -153,7 +153,7 @@ metric.data$PGA <- NA;
 # read in CN calls
 for (file in cn.files) {
 	# extract sample ID
-	smp <- unlist(strsplit(basename(file), '_'))[1];
+	smp <- unlist(strsplit(basename(file), '_absolute'))[1];
 	# store data in list
 	tmp <- read.delim(file);
 	tmp$ID <- smp;
@@ -164,7 +164,7 @@ for (file in cn.files) {
 # read in logR data
 for (file in gistic.files) {
 	# extract sample ID
-	smp <- unlist(strsplit(basename(file), '_'))[1];
+	smp <- unlist(strsplit(basename(file), '_Total'))[1];
 	# store data in list
 	ratio.list[[smp]] <- read.delim(file);
 	}

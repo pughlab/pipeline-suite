@@ -1,3 +1,21 @@
+2024-10-23: PughLab pipeline-suite (version 0.9.12);
+- fixed/improved samtools sort command (memory/thread arguments) in bwa.pl
+- increased runtime for select variants step in annotate_germline.pl
+- added clinvar (pathogenic) filter to annotate_germline.pl
+- increased default limits for --limitOutSJcollapsed and --limitSjdbInsertNsj in fusioncatcher.pl
+- added file checks to avoid re-running previously completed jobs in case of pipeline resume in
+	- mutect2.pl, varscan.pl, pindel.pl, vardict_wgs.pl
+- fixed cleanup step (for each patient, will only run if any jobs were submitted) in
+	- manta.pl, pindel.pl
+- fixed cleanup step for pughlab_fragmentomics_pipeline.pl
+- improved extraction of sample ID from filename in collect_ascat_output.R
+- standardized allele formatting (specifically for somaticsniper) in collect_snv_output.R
+- minor updates to report functions including:
+	- write_targetseq_methods.pl (minor updates for msi, svict)
+	- plot_qc_metrics.R (fixed issue finding sample ID from contamination data)
+	- plot_seqz_cna_summary.R (fixed issue for plot limits for incomplete (NA) data)
+	- format_ensemble_mutations.R (fixed issue of duplicate entries in final variant set)
+
 2024-07-22: PughLab pipeline-suite (version 0.9.11);
 - changed input file extension from bcf to vcf in collect_delly_output.R
 - added conditional variable assignments for RNA-Seq only runs (manta version and aligner reference)

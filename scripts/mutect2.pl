@@ -512,6 +512,13 @@ sub pon {
 			# run MuTect
 			my $mutect_vcf = join('/', $intermediate_directory, $sample . '_MuTect2.vcf');
 			my $chr_stem = join('/', $tmp_directory, $sample. '_MuTect2_');
+			my $filtered_stem = join('/', $intermediate_directory, $sample . '_MuTect2_filtered');
+
+			# check if this sample has been run before
+			if ('N' eq missing_file("$filtered_stem.vcf.md5")) {
+				print $log "  >> Skipping sample because this has already been completed!\n";
+				next;
+				}
 
 			$cleanup_cmd .= "\n  rm $mutect_vcf*";
 
@@ -721,7 +728,6 @@ sub pon {
 				}
 
 			# filter results
-			my $filtered_stem = join('/', $intermediate_directory, $sample . '_MuTect2_filtered');
 			my $filter_command = get_filter_command(
 				input		=> $mutect_vcf,
 				output_stem	=> $filtered_stem,
