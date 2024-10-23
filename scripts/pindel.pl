@@ -471,6 +471,12 @@ sub main {
 		my $link_directory = join('/', $patient_directory, 'bam_links');
 		unless(-e $link_directory) { make_path($link_directory); }
 
+		my $tmp_directory = join('/', $patient_directory, 'TEMP');
+		unless(-e $tmp_directory) { make_path($tmp_directory); }
+
+		# indicate this should be removed at the end
+		$cleanup_cmd = "rm -rf $tmp_directory";
+
 		# create some symlinks
 		foreach my $normal (@normal_ids) {
 			my @tmp = split /\//, $smp_data->{$patient}->{normal}->{$normal};
@@ -512,8 +518,6 @@ sub main {
 		# create an array to hold final outputs and all patient job ids
 		my (@final_outputs, @patient_jobs);
 
-		$cleanup_cmd = '';
-
 		foreach my $sample (@tumour_ids) {
 
 			my @sample_jobs;
@@ -525,12 +529,6 @@ sub main {
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
-
-			my $tmp_directory = join('/', $patient_directory, 'TEMP');
-			unless(-e $tmp_directory) { make_path($tmp_directory); }
-
-			# indicate this should be removed at the end
-			$cleanup_cmd .= "\n  " . "rm -rf $tmp_directory";
 
 			# generate necessary samples.tsv
 			my $sample_sheet = join('/', $sample_directory, 'pindel_config.txt');
@@ -567,11 +565,21 @@ sub main {
 
 			close $fh;
 
-			# indicate output stem
+			# indicate output files
 			my $output_stem = join('/', $tmp_directory, $sample . '_pindel');
 			my $merged_file = join('/', $sample_directory, $sample . '_combined_Pindel_output.txt');
 			my $merged_vcf = join('/', $sample_directory, $sample . '_Pindel_filtered.vcf');
 			$cleanup_cmd .= "\n  rm $merged_vcf";
+
+			my $final_vcf = join('/', $sample_directory, $sample . '_Pindel_filtered_annotated.vcf');
+			my $final_maf = join('/', $sample_directory, $sample . '_Pindel_filtered_annotated.maf');
+
+			if ('N' eq missing_file($final_maf . '.md5')) {
+				push @final_outputs, $final_maf;
+				print $log "  >> This has already been completed!\n";
+				`rm -rf $tmp_directory`;
+				next;
+				}	
 
 			# create Pindel command
 			my @pindel_jobs;
@@ -756,8 +764,6 @@ sub main {
 				}
 
 			### Run variant annotation (VEP + vcf2maf)
-			my $final_vcf = join('/', $sample_directory, $sample . '_Pindel_filtered_annotated.vcf');
-			my $final_maf = join('/', $sample_directory, $sample . '_Pindel_filtered_annotated.maf');
 
 			my $vcf2maf_cmd = get_vcf2maf_command(
 				input		=> $merged_vcf,
@@ -823,15 +829,17 @@ sub main {
 			push @final_outputs, $final_maf;
 			push @patient_jobs, @sample_jobs;
 
-			if (scalar(@sample_jobs) == 0) { `rm -rf $tmp_directory`; }
-
 			}
 
 		# should intermediate files be removed
 		# run per patient
 		if ($args{del_intermediates}) {
 
-			unless (scalar(@patient_jobs) == 0) {
+			if (scalar(@patient_jobs) == 0) { 
+
+				`rm -rf $tmp_directory`;
+
+				} else {
 
 				print $log ">> Submitting job to clean up temporary/intermediate files...\n";
 

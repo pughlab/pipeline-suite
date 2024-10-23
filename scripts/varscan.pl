@@ -564,7 +564,7 @@ sub main {
 				# check if this should be run
 				if (
 					('Y' eq missing_file(@chr_md5s)) &&
-					('Y' eq missing_file("$merged_snp_output.md5"))
+					('Y' eq missing_file("$merged_snp_output.snp.md5"))
 					) {
 
 					# record command (in log directory) and then run job
@@ -819,7 +819,7 @@ sub main {
 				# check if this should be run
 				if (
 					('Y' eq missing_file(@chr_md5s)) &&
-					('Y' eq missing_file("$merged_vcf_output.md5"))
+					('Y' eq missing_file("$merged_vcf_output.snp_and_indel.vcf.md5"))
 					) {
 
 					# record command (in log directory) and then run job
@@ -861,7 +861,7 @@ sub main {
 
 					# check if this should be run
 					if (
-						('Y' eq missing_file("$merged_vcf_output.snp.vcf.md5")) &&
+						('Y' eq missing_file("$merged_vcf_output.snp_and_indel.vcf.md5")) &&
 						('Y' eq missing_file("$output_stem\__$chr.snp.vcf.md5"))
 						) {
 
