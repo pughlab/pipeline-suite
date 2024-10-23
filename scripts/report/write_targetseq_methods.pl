@@ -36,7 +36,7 @@ sub main {
 
 	my ($gatk, $gatk4);
 	my ($mutect, $mutect2, $strelka, $pindel, $varscan, $somaticsniper, $vardict);
-	my ($manta, $delly, $mavis, $novobreak, $svict);
+	my ($manta, $delly, $mavis, $novobreak, $svict, $msi);
 	my ($ref_type, $samtools, $picard, $intervals, $bedtools, $vcftools, $bcftools);
 	my ($k1000g, $mills, $kindels, $dbsnp, $hapmap, $omni, $cosmic, $pon, $gnomad);
 	my ($vep, $vcf2maf);
@@ -195,6 +195,7 @@ sub main {
 	$vardict        = defined($tool_data->{vardict_version}) ? $tool_data->{vardict_version} : undef;
 	$varscan        = defined($tool_data->{varscan_version}) ? $tool_data->{varscan_version} : undef;
 	$gatk		= defined($tool_data->{gatk_version}) ? $tool_data->{gatk_version} : undef;
+	$vcf2maf	= defined($tool_data->{vcf2maf_version}) ? $tool_data->{vcf2maf_version} : undef;
 	$vcftools	= defined($tool_data->{vcftools_version}) ? $tool_data->{vcftools_version} : undef;
 	$samtools	= defined($tool_data->{samtools_version}) ? $tool_data->{samtools_version} : undef;
 	$bcftools	= $samtools;
@@ -207,8 +208,6 @@ sub main {
 	if (defined($tool_data->{annotate}->{vep_path})) {
 		my @parts = split('\\/', $tool_data->{annotate}->{vep_path});
 		$vep = $parts[-1];
-		@parts = split('\\/', $tool_data->{annotate}->{vcf2maf_path});
-		$vcf2maf = $parts[-2];
 		}
 
 	my @snv_tools;
@@ -431,7 +430,11 @@ sub main {
 	if ( ('Y' eq $tool_set{'strelka'}) || ('Y' eq $tool_set{'manta'}) ) { push @sv_tools, "Manta (v$manta)"; }
         if ('Y' eq $tool_set{'novobreak'}) { push @sv_tools, "NovoBreak (v$novobreak)"; }
         if ('Y' eq $tool_set{'pindel'}) { push @sv_tools, "Pindel (v$pindel)"; }
-        if ('Y' eq $tool_set{'svict'}) { push @sv_tools, "SViCT (v$svict)"; }
+	if ( ('Y' eq $tool_set{'svict'}) && (defined($svict)) ) {
+		push @sv_tools, "SViCT (v$svict)";
+		} elsif ( ('Y' eq $tool_set{'svict'}) && (!defined($svict)) ) {
+		push @sv_tools, "SViCT";
+		}
 
 	# fill in methods
 	if (scalar(@sv_tools) > 0) {
@@ -457,7 +460,7 @@ sub main {
 		}
 
 	if ('Y' eq $tool_set{'svict'}) {
-		my $gtf = $tool_data->{gtf};
+		my $gtf = $tool_data->{svict_gtf};
 		$methods .= "SViCT was run on each tumour sample, using default parameters and the following annotation file: $gtf.\\newline\n\\newline\n";
 		}
 
