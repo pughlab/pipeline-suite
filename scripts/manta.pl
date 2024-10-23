@@ -359,7 +359,7 @@ sub pon {
 
 		# should intermediate files be removed
 		# run per patient
-		if ($args{del_intermediates}) {
+		if ( ($args{del_intermediates}) && (scalar(@patient_jobs) > 0) ) {
 
 			print $log "\n>> Submitting job to clean up temporary/intermediate files...\n";
 
