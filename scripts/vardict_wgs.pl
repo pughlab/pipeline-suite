@@ -137,8 +137,8 @@ sub get_test_somatic_command_wgs {
 
 	$vardict_command .= "\n" . 'REGION=$(sed -n "$SLURM_ARRAY_TASK_ID"p ' . $args{intervals} . ')';
 
-	$vardict_command .= "\n\n" . "if [ -s $args{output_stem}" . '_${REGION}.txt.md5 ]; then';
-	$vardict_command .= "\n  echo $args{output_stem}" . '_${REGION}.txt.md5 already exists.';
+	$vardict_command .= "\n\n" . "if [ -s $args{output_stem}" . '_${REGION}.vcf.md5 ]; then';
+	$vardict_command .= "\n  echo $args{output_stem}" . '_${REGION}.vcf.md5 already exists.';
 	$vardict_command .= "\nelse";
 
 	$vardict_command .= "\n\n" . join(' ',
