@@ -496,7 +496,7 @@ sub get_griffin_profiling_command {
 			'--step 15 --size_range 90 220 --map_quality 20',
 			'--individual False --smoothing True --num_sites none',
 			'--sort_by none --ascending none --cpu', $args{n_cpus},
-			'--erase_intermediates False'
+			'--erase_intermediates True'
 			);
 
 		} else {
@@ -560,7 +560,7 @@ sub get_griffin_profiling_command {
 
 	$griffin_command .= "\n\n" . join(' ',
 		"echo 'Griffin nucleosome profiling completed successfully' >",
-		$args{outdir} . '/nucleosome_profiling.COMPLETE'
+		$args{outdir} . '/griffin_profiling.COMPLETE'
 		);
 
 	return($griffin_command);
@@ -740,7 +740,7 @@ sub get_dinucleotide_profiling_command {
 	$din_command .= "\n" . join("\n",
 		'if [[ -f ' . $output_stem . '_contexts.txt ]]; then',
 		"  echo '>>> Dinucleotide Profiling completed successfully! <<<'",
-		#'  rm ' . $output_stem . '*.bed*',
+		'  rm ' . $output_stem . '*.bed*',
 		'fi'
 		);
 
