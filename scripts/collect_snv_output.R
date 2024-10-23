@@ -114,6 +114,13 @@ for (i in 1:length(maf.files)) {
 		tmp <- tmp[which(tmp$FILTER == 'PASS'),];
 		}
 
+	if (grepl('SomaticSniper', getwd())) {
+		# convert lower case bases to upper case
+		for (field in colnames(tmp)[grepl('Allele',colnames(tmp))]) {
+			tmp[,field] <- toupper(tmp[,field]);
+			}
+		}
+
 	# add a depth filter (some 'PASS' calls (MuTect2 only) have depth = 0 
 	# 	despite depth > 0 reported by other callers at the same positions)
 	# we will only remove these low/no depth calls if the normal is also low/absent
