@@ -52,6 +52,8 @@ sub get_fusion_command {
 		'-o', $args{output_dir},
 		'-d', $args{ref_dir},
 		'--keep-viruses-alignments',
+		'--limitOutSJcollapsed 2500000',
+		'--limitSjdbInsertNsj 2000000',
 		'--tmp=' . $args{tmp_dir}
 		);
 
