@@ -556,8 +556,7 @@ sub main {
 				symlink($callability_data, join('/', $data_directory, 'wgs_callability.tsv'));
 				}
 
-			if ( (defined($tool_data->{intervals_bed})) || 
-				(defined($tool_data->{targets_bed})) || (defined($tool_data->{baits_bed})) ) {
+			if ( (defined($tool_data->{targets_bed})) || (defined($tool_data->{baits_bed})) ) {
 				$efficiency_data = join('/', $qc_dir, 'SequenceMetrics', $hs_cov_files[-1]);
 				if ( -l join('/', $data_directory, 'hs_efficiency.tsv')) {
 					unlink join('/', $data_directory, 'hs_efficiency.tsv');

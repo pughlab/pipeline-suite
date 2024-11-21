@@ -143,9 +143,9 @@ sub main {
 	# set tools and versions
 	my $trim_tool = '';
 	if (defined($tool_data->{baits_bed})) {
-		$trim_tool = 'trim_galore';
+		$trim_tool = 'trim_galore/' . $tool_data->{trim_galore_version};
 		} else {
-		$trim_tool = 'fastp';
+		$trim_tool = 'fastp/' . $tool_data->{fastp_version};
 		}
 
 	# get user-specified tool parameters

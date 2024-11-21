@@ -211,8 +211,15 @@ sub main{
 		print $log "\n      No dbSNP provided.";
 		}
 
-	if (defined($tool_data->{intervals_bed})) {
-		print $log "\n    Target intervals (exome): $tool_data->{intervals_bed}";
+	# is this WGS (will split by chromosome)
+	my $is_wgs = 0;
+	if ('wgs' eq $tool_data->{seq_type}) {
+		$is_wgs = 1;
+		$tool_data->{targets_bed} = undef;
+		}	
+
+	if (defined($tool_data->{targets_bed})) {
+		print $log "\n    Target intervals: $tool_data->{targets_bed}";
 		}
 
 	# over which intervals should this be run?
@@ -242,9 +249,11 @@ sub main{
 	my $parameters = $tool_data->{haplotype_caller}->{parameters};
 
 	# set tools and versions
+	my $perl	= 'perl/' . $tool_data->{perl_version};
 	my $gatk	= 'gatk/' . $tool_data->{gatk_version};
 	my $picard	= 'picard/' . $tool_data->{picard_version};
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
+	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
 	my $r_version	= 'R/' . $tool_data->{r_version};
 
 	# only used for RNA-seq
@@ -257,13 +266,6 @@ sub main{
 	# get optional HPC group
 	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
 
-	# is this WGS (will split by chromosome)
-	my $is_wgs = 0;
-	if ('wgs' eq $tool_data->{seq_type}) {
-		$is_wgs = 1;
-		$tool_data->{intervals_bed} = undef;
-		}
-	
 	### RUN ###########################################################################################
 	# get sample data
 	my $smp_data = LoadFile($data_config);
@@ -350,7 +352,7 @@ sub main{
 				bam		=> $smp_data->{$patient}->{$type}->{$sample},
 				output		=> $hc_vcf,
 				data_type	=> $data_type,
-				intervals	=> $tool_data->{intervals_bed},
+				intervals	=> $tool_data->{targets_bed},
 				java_mem	=> $parameters->{haplotype_call}->{java_mem},
 				tmp_dir		=> $tmp_directory
 				);
@@ -408,7 +410,7 @@ sub main{
 						log_dir	=> $log_directory,
 						name	=> 'run_haplotype_caller_' . $sample,
 						cmd	=> $call_variants_cmd,
-						modules	=> [$gatk, $samtools, 'tabix'],
+						modules	=> [$gatk, $samtools],
 						max_time	=> $parameters->{haplotype_call}->{time},
 						mem		=> $parameters->{haplotype_call}->{mem},
 						hpc_driver	=> $args{hpc_driver},
@@ -419,7 +421,7 @@ sub main{
 						log_dir	=> $log_directory,
 						name	=> 'run_haplotype_caller_' . $sample,
 						cmd	=> $call_variants_cmd,
-						modules	=> [$gatk, $samtools, 'tabix'],
+						modules	=> [$gatk, $samtools],
 						max_time	=> $parameters->{haplotype_call}->{time},
 						mem		=> $parameters->{haplotype_call}->{mem},
 						hpc_driver	=> $args{hpc_driver},
@@ -478,7 +480,7 @@ sub main{
 						log_dir	=> $log_directory,
 						name	=> 'run_merge_per_chromosome_vcfs_' . $sample,
 						cmd	=> $merge_command,
-						modules	=> ['vcftools',$samtools,'tabix'],
+						modules	=> [$vcftools, $samtools],
 						dependencies	=> $run_id,
 						max_time	=> '24:00:00',
 						mem		=> '2G',
@@ -602,7 +604,7 @@ sub main{
 						log_dir	=> $log_directory,
 						name	=> 'run_vcf2maf_and_VEP_' . $sample,
 						cmd	=> $vcf2maf_cmd,
-						modules => ['perl', $samtools, 'tabix', $vcf2maf],
+						modules => [$perl, $samtools, $vcf2maf],
 						dependencies	=> $run_id,
 						cpus_per_task	=> $parameters->{annotate}->{n_cpus},
 						max_time	=> $parameters->{annotate}->{time},

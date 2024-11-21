@@ -17,7 +17,7 @@ my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
 # define some global variables
-our ($reference, $bwa_ref, $pon, $intervals_bed) = undef;
+our ($reference, $bwa_ref, $pon) = undef;
 
 ####################################################################################################
 # version       author		comment
@@ -367,6 +367,18 @@ sub main {
 
 	unless($args{dry_run}) {
 		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
+		}
+
+	# do an initial check for normals; no normals = don't bother running
+	my @has_normals;
+	foreach my $patient (sort keys %{$smp_data}) {
+		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
+		if (scalar(@normal_ids) > 0) { push @has_normals, $patient; }
+		}
+
+	if (scalar(@has_normals) == 0) {
+		print("No normals provided. NovoBreak requires matched normals, therefore we will exit now.");
+		exit;
 		}
 
 	# process each sample in $smp_data

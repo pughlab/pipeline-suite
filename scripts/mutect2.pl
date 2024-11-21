@@ -412,8 +412,8 @@ sub pon {
 
 	my @chroms = split(',', $string); 
 
-	if (defined($tool_data->{intervals_bed})) {
-		print $log "\n    Target intervals: $tool_data->{intervals_bed}";
+	if (defined($tool_data->{targets_bed})) {
+		print $log "\n    Target intervals: $tool_data->{targets_bed}";
 		}
 
 	print $log "\n    Output directory: $output_directory";
@@ -648,7 +648,7 @@ sub pon {
 					output		=> $mutect_vcf,
 					java_mem	=> $parameters->{mutect}->{java_mem},
 					tmp_dir		=> $tmp_directory,
-					intervals	=> $tool_data->{intervals_bed}
+					intervals	=> $tool_data->{targets_bed}
 					);
 
 				$mutect_command .= "\n\nmd5sum $mutect_vcf > $mutect_vcf.md5";
@@ -1029,8 +1029,8 @@ sub main {
 		print $log "\n      No panel of normals defined! Tumour-only samples will not be run!!";
 		}
 
-	if (defined($tool_data->{intervals_bed})) {
-		print $log "\n    Target intervals: $tool_data->{intervals_bed}";
+	if (defined($tool_data->{targets_bed})) {
+		print $log "\n    Target intervals: $tool_data->{targets_bed}";
 		}
 
 	print $log "\n    Output directory: $output_directory";
@@ -1168,7 +1168,7 @@ sub main {
 						output		=> $merged_output,
 						java_mem	=> $parameters->{mutect}->{java_mem},
 						tmp_dir		=> $tmp_directory,
-						intervals	=> $tool_data->{intervals_bed}
+						intervals	=> $tool_data->{targets_bed}
 						);
 					} else {
 					$mutect_commands{$chr} = get_mutect_command(

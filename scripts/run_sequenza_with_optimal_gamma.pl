@@ -436,8 +436,8 @@ sub main {
 			);
 
 		if ( (('exome' eq $tool_data->{seq_type}) || ('targeted' eq $tool_data->{seq_type})) &&
-			(defined($tool_data->{intervals_bed})) ) {
-			$collect_output .= " -t $tool_data->{intervals_bed}";
+			(defined($tool_data->{targets_bed})) ) {
+			$collect_output .= " -t $tool_data->{targets_bed}";
 			}
 
 		$run_script = write_script(

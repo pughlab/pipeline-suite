@@ -305,16 +305,15 @@ sub main {
 	$dictionary =~ s/.fa/.dict/;
 	print $log "\n    Reference used: $tool_data->{reference}";
 
-	if ( (('exome' eq $tool_data->{seq_type}) || ('targeted' eq $tool_data->{seq_type})) &&
-		(defined($tool_data->{intervals_bed}))) {
-		$intervals_bed = $tool_data->{intervals_bed};
-		print $log "\n    Target intervals (exome): $intervals_bed";
-		}
-
 	my $is_wgs = 0;
 	if ('wgs' eq $tool_data->{seq_type}) {
 		$is_wgs = 1;
 		$tool_data->{intervals_bed} = undef;
+		}
+
+	if (defined($tool_data->{targets_bed})) {
+		$intervals_bed = $tool_data->{targets_bed};
+		print $log "\n    Target intervals: $intervals_bed";
 		}
 
 	print $log "\n    Output directory: $output_directory";

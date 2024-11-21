@@ -162,7 +162,7 @@ sub pon {
 	my @chroms = split(',', $string);
 
 	if ( ('exome' eq $seq_type) || ('targeted' eq $seq_type) ) {
-		$intervals = $tool_data->{intervals_bed};
+		$intervals = $tool_data->{targets_bed};
 		$intervals =~ s/\.bed/_padding100bp.bed.gz/;
 		print $log "\n    Target intervals: $intervals";
 		}
@@ -174,6 +174,7 @@ sub pon {
 	# set tools and versions
 	my $manta	= 'manta/' . $tool_data->{manta_version};
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
+	my $python2	= 'python2/' . $tool_data->{python2_version};
 	my $r_version	= 'R/' . $tool_data->{r_version};
 
 	# get user-specified tool parameters
@@ -331,7 +332,7 @@ sub pon {
 					log_dir	=> $log_directory,
 					name	=> 'run_manta_' . $sample,
 					cmd	=> $manta_command,
-					modules	=> [$manta],
+					modules	=> [$manta, $python2],
 					dependencies	=> $prep_run_id,
 					max_time	=> $parameters->{manta}->{time},
 					mem		=> $parameters->{manta}->{mem},
@@ -522,7 +523,7 @@ sub main {
 	my @chroms = split(',', $string);
 
 	if ( ('exome' eq $seq_type) || ('targeted' eq $seq_type) ) {
-		$intervals = $tool_data->{intervals_bed};
+		$intervals = $tool_data->{targets_bed};
 		$intervals =~ s/\.bed/_padding100bp.bed.gz/;
 		print $log "\n    Target intervals: $intervals";
 		}
@@ -534,6 +535,7 @@ sub main {
 	# set tools and versions
 	my $manta	= 'manta/' . $tool_data->{manta_version};
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
+	my $python2	= 'python2/' . $tool_data->{python2_version};
 	my $r_version	= 'R/' . $tool_data->{r_version};
 
 	# get user-specified tool parameters
@@ -715,7 +717,7 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> 'run_manta_' . $sample,
 					cmd	=> $manta_command,
-					modules	=> [$manta],
+					modules	=> [$manta, $python2],
 					dependencies	=> $prep_run_id,
 					max_time	=> $parameters->{manta}->{time},
 					mem		=> $parameters->{manta}->{mem},

@@ -302,8 +302,8 @@ sub main {
 		print $log "\n      No panel of normals defined! Additional filtering step will not be performed.";
 		}
 
-	if (defined($tool_data->{intervals_bed})) {
-		$intervals_bed = $tool_data->{intervals_bed};
+	if (defined($tool_data->{targets_bed})) {
+		$intervals_bed = $tool_data->{targets_bed};
 		$intervals_bed =~ s/\.bed/_padding100bp.bed/;
 		print $log "\n    Target intervals: $intervals_bed";
 		}
@@ -350,7 +350,8 @@ sub main {
 		}
 
 	if (scalar(@has_normals) == 0) {
-		die("No normals provided. SomaticSniper requires matched normals, therefore we will exit now.");
+		print("No normals provided. SomaticSniper requires matched normals, therefore we will exit now.");
+		exit;
 		}
 
 	# process each sample in $smp_data

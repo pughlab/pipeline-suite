@@ -172,8 +172,8 @@ sub main {
 		$pon = $tool_data->{ichor_cna}->{pon};
 		}
 
-	if (defined($tool_data->{intervals_bed})) {
-		print $log "\n    Target intervals: $tool_data->{intervals_bed}";
+	if (defined($tool_data->{targets_bed})) {
+		print $log "\n    Target intervals: $tool_data->{targets_bed}";
 		}
 
 	print $log "\n    Output directory: $output_directory";
@@ -401,7 +401,7 @@ sub main {
 				chroms		=> join("','", @chroms),
 				out_dir		=> $sample_directory,
 				pon		=> $pon,
-				intervals	=> $tool_data->{intervals_bed}
+				intervals	=> $tool_data->{targets_bed}
 				);
 
 			# check if this should be run

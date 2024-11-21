@@ -345,14 +345,12 @@ sub main {
 	$dictionary = $reference;
 	$dictionary =~ s/.fa/.dict/;
 
-#	unless ('emseq' eq $tool_data->{seq_type}) {
-		if (defined($tool_data->{gnomad})) {
-			$gnomad = $tool_data->{gnomad};
-			print $log "\n    gnomAD SNPs: $tool_data->{gnomad}";
-			} else {
-			die("No gnomAD file provided; please provide path to gnomAD VCF");
-			}
-#		}
+	if (defined($tool_data->{gnomad})) {
+		$gnomad = $tool_data->{gnomad};
+		print $log "\n    gnomAD SNPs: $tool_data->{gnomad}";
+		} else {
+		die("No gnomAD file provided; please provide path to gnomAD VCF");
+		}
 
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
@@ -393,37 +391,27 @@ sub main {
 		'hs_metrics'	=> 'N', #targeted or exome sequencing)
 		'gc_bias'	=> ('emseq' eq $tool_data->{seq_type}) ? 'Y' : 'N',
 		'artefacts'	=> ('emseq' eq $tool_data->{seq_type}) ? 'N' : 'Y',
-		'contamination'	=> 'Y' # ('emseq' eq $tool_data->{seq_type}) ? 'N' : 'Y'
+		'contamination'	=> ('emseq' eq $tool_data->{seq_type}) ? 'N' : 'Y'
 		);
 
-	if ( (defined($tool_data->{targets_bed})) || (defined($tool_data->{intervals_bed})) ) {
+	if ( (defined($tool_data->{targets_bed})) || (defined($tool_data->{targets_bed})) ) {
 		$tool_set{'wgs_metrics'} = 'N';
 		$tool_set{'hs_metrics'} = 'Y';
 		}
 
 	# use picard-style intervals list
-	if ('emseq' eq $tool_data->{seq_type}) {
-
-		if (defined($tool_data->{targets_bed})) {
-			$target_intervals = $tool_data->{targets_bed};
-			$target_intervals =~ s/\.bed/\.interval_list/;
-			$bait_intervals = $tool_data->{baits_bed};
-			$bait_intervals =~ s/\.bed/\.interval_list/;
-			} else {
-			$target_intervals = join(' -L ', @chroms);
-			}
-
-		# for every other sequencing type
+	if (defined($tool_data->{targets_bed})) {
+		$target_intervals = $tool_data->{targets_bed};
+		$target_intervals =~ s/\.bed/\.interval_list/;
 		} else {
+		$target_intervals = join(' -L ', @chroms);
+		}
 
-		if (defined($tool_data->{intervals_bed})) {
-			$target_intervals = $tool_data->{intervals_bed};
-			$target_intervals =~ s/\.bed/\.interval_list/;
-			$bait_intervals = $tool_data->{intervals_bed};
-			$bait_intervals =~ s/\.bed/\.interval_list/;
-			} else {
-			$target_intervals = join(' -L ', @chroms);
-			}
+	if (defined($tool_data->{baits_bed})) {
+		$bait_intervals = $tool_data->{baits_bed};
+		$bait_intervals =~ s/\.bed/\.interval_list/;
+		} elsif (defined($tool_data->{targets_bed})) {
+		$bait_intervals = $target_intervals;
 		}
 
 	# get sample data
