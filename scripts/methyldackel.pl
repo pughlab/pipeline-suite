@@ -17,7 +17,7 @@ my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
 # define some global variables
-our ($reference, $intervals, $seq_type, $dictionary) = undef;
+our ($reference) = undef;
 
 ####################################################################################################
 # version       author		comment
@@ -142,13 +142,6 @@ sub main {
 	print $log "\n    Reference used: $tool_data->{reference}";
 
 	$reference = $tool_data->{reference};
-
-	$seq_type = $tool_data->{seq_type};
-	if ( ('exome' eq $seq_type) || ('targeted' eq $seq_type) ) {
-		$intervals = $tool_data->{intervals_bed};
-		$intervals =~ s/\.bed/_padding100bp.bed.gz/;
-		print $log "\n    Target intervals: $intervals";
-		}
 
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
