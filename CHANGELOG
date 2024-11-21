@@ -1,3 +1,11 @@
+2024-11-21: PughLab pipeline-suite (version 0.9.13);
+- fixed bug in PGA calculation (collect_sequenza_output.R); previous only considered gains/amps
+- MINOR updates throughout:
+	- updated tool versions across pipelines (updated defaults in example config files)
+	- harmonized parameter names across pipelines (ie, intervals_bed to targets_bed)
+	- removed tool version defaults from individual steps (ie, module load perl must now be module load perl/<version>)
+	- for tools that require matched normals, added checks and will now exit successfully if no normals are available
+
 2024-10-23: PughLab pipeline-suite (version 0.9.12);
 - fixed/improved samtools sort command (memory/thread arguments) in bwa.pl
 - increased runtime for select variants step in annotate_germline.pl
