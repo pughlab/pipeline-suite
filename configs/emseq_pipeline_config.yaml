@@ -14,6 +14,10 @@ baits_bed:
 targets_bed:
 gnomad: /cluster/projects/pughlab/references/ExAC/af-only-gnomad.hg38.vcf.gz 
 # tool versions
+perl_version: 5.30.0
+trim_galore_version: 0.6.6
+fastp_version: 0.23.1
+fastqc_version: 0.11.5
 bwa_meth_version: 0.2.7 # for use with module load bwa_meth/version (if available)
 bwa_meth_path: #/cluster/projects/pughlab/bin/bwa_meth/v0.2.7/bwameth.py
 mark_nonconverted_path: /cluster/projects/pughlab/bin/mark-nonconverted-reads/mark-nonconverted-reads.py

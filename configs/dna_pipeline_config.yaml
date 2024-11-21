@@ -10,7 +10,8 @@ hpc_group:
 # reference files
 ref_type: hg38 # one of hg38, hg19, GRCh37 or GRCh38 (minimal testing with GRCh37/8)
 reference: /cluster/tools/data/genomes/human/hg38/iGenomes/Sequence/WholeGenomeFasta/genome.fa
-intervals_bed:
+baits_bed: 
+targets_bed: 
 gnomad: /cluster/projects/pughlab/references/ExAC/af-only-gnomad.hg38.vcf.gz 
 dbsnp: /cluster/projects/pughlab/references/dbSNP/GRCh38/b151/dbSNP_GRCh38p7_b151_common_chr.vcf.gz
 cosmic: /cluster/projects/pughlab/references/COSMIC/GRCh38/v91/CosmicVariants_full_sorted_chr.vcf.gz
@@ -28,6 +29,8 @@ mutsig_covariates: /cluster/projects/pughlab/references/MutSigCV/gene.covariates
 mutsig_categories: /cluster/projects/pughlab/references/MutSigCV/mutation_type_dictionary_file.txt
 mutsig_refs: /cluster/projects/pughlab/references/MutSigCV/chr_files_hg38
 # tool versions
+perl_version: 5.30.0
+fastqc_version: 0.11.5
 bwa_version: 0.7.15
 samtools_version: 1.9
 picard_version: 2.6.0
@@ -40,6 +43,7 @@ mutect_version: 1.1.5
 somaticsniper_version: bam-somaticsniper/1.0.5.0 # or SomaticSniper/1.0.4 currently available on h4h
 vardict_version: 1.7.0
 varscan_version: 2.4.2
+python2_version: 2.7.15
 strelka_version: 2.9.10
 manta_version: 1.6.0
 delly_version: 0.8.1
@@ -232,6 +236,12 @@ mutect2:
             java_mem: 3g
             mem: 4G
             time: '24:00:00'
+manta:
+    run: Y
+    parameters:
+        manta:
+            mem: 8G
+            time: '24:00:00'
 strelka:
     run: Y
     pon: /cluster/projects/pughlab/references/panel_of_normals/hg38/Strelka/v2.9.10/strelka_v2.9.10_hg38_panel_of_normals_20210330.vcf
@@ -340,12 +350,6 @@ gatk_cnv:
         model:
             java_mem: 3g
             mem: 4G
-            time: '24:00:00'
-manta:
-    run: Y
-    parameters:
-        manta:
-            mem: 8G
             time: '24:00:00'
 delly:
     run: Y

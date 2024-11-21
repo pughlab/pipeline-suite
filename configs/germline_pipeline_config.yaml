@@ -10,12 +10,23 @@ hpc_group:
 # reference files
 ref_type: hg38 # one of hg38, hg19, GRCh37 or GRCh38 (minimal testing with GRCh37/8)
 reference: /cluster/tools/data/genomes/human/hg38/iGenomes/Sequence/WholeGenomeFasta/genome.fa
-intervals_bed:
+baits_bed: 
+targets_bed: 
 gnomad: /cluster/projects/pughlab/references/ExAC/af-only-gnomad.hg38.vcf.gz 
 dbsnp: /cluster/projects/pughlab/references/dbSNP/GRCh38/b151/dbSNP_GRCh38p7_b151_common_chr.vcf.gz
 cosmic: /cluster/projects/pughlab/references/COSMIC/GRCh38/v91/CosmicVariants_full_sorted_chr.vcf.gz
-hapmap: /cluster/projects/pughlab/references/hapmap/hg38_population_stratified_af_hapmap_3.3.vcf.gz
+snp6: /cluster/projects/pughlab/references/ASCAT_refs/GRCh38_SNP6.tsv.gz
+exclude_regions: /cluster/projects/pughlab/references/Delly/excludeTemplates/human.hg38.excl.tsv
+gatk_known_1000g: /cluster/tools/data/genomes/human/hg38/hg38bundle/1000G_phase1.snps.high_confidence.hg38.vcf.gz
+gatk_known_indels: /cluster/tools/data/genomes/human/hg38/hg38bundle/Homo_sapiens_assembly38.known_indels.vcf.gz
+gatk_known_mills: /cluster/tools/data/genomes/human/hg38/hg38bundle/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz
+gatk_hapmap: /cluster/tools/data/genomes/human/hg38/hg38bundle/hapmap_3.3.hg38.vcf.gz
+gatk_omni: /cluster/tools/data/genomes/human/hg38/hg38bundle/1000G_omni2.5.hg38.vcf.gz
+contest_hapmap: /cluster/projects/pughlab/references/hapmap/hg38_population_stratified_af_hapmap_3.3.vcf.gz
+svict_gtf: /cluster/projects/pughlab/references/gencode/GRCh38/gencode.v31.annotation.gtf
 # tool versions
+perl_version: 5.30.0
+fastqc_version: 0.11.5
 bwa_version: 0.7.15
 samtools_version: 1.9
 picard_version: 2.6.0
@@ -30,11 +41,12 @@ varscan_version: 2.4.2
 strelka_version: 2.9.10
 manta_version: 1.6.0
 delly_version: 0.8.1
-svict_version: 1.0.1
+svict_version: 
+svict_path: /cluster/projects/pughlab/bin/svict
+erds_path: /cluster/projects/pughlab/bin/ERDS/v1.1/erds_pipeline.pl
 mavis_version: 2.2.5
 cpsr_version: 0.6.1
 pcgr_version: 0.9.1
-erds_path: /cluster/projects/pughlab/bin/ERDS/v1.1/erds_pipeline.pl
 vcf2maf_version: 1.6.17 
 r_version: 4.1.0
 # tool specific parameters
@@ -52,37 +64,28 @@ bwa:
         bwa:
             mem:
                 normal: 8G
-                tumour: 8G
             time:
                 normal: '24:00:00'
-                tumour: '48:00:00'
         sort:
             mem:
                 normal: 4G
-                tumour: 4G
             time:
                 normal: '24:00:00'
-                tumour: '48:00:00'
         index:
             mem:
                 normal: 2G
-                tumour: 2G
             time:
                 normal: '05:00:00'
-                tumour: '05:00:00'
         merge:
             tool: 'picard' # or sambamba
             mark_dup: Y
             n_cpus: 1 # or more for sambamba
             java_mem:
                 normal: 7g
-                tumour: 11g
             mem:
                 normal: 8G
-                tumour: 12G
             time:
                 normal: '48:00:00'
-                tumour: '48:00:00'
 gatk:
     run: Y
     parameters:
@@ -99,13 +102,11 @@ gatk:
             mem: 12G
             time:
                 normal: '48:00:00'
-                tumour: '72:00:00'
         recalibrate:
             java_mem: 11g
             mem: 12G
             time:
                 normal: '48:00:00'
-                tumour: '72:00:00'
 bamqc:
     run: Y
     parameters:
@@ -161,7 +162,6 @@ haplotype_caller:
             mem: 4G
             time: '24:00:00'
 annotate:
-    vcf2maf_path: # /cluster/projects/pughlab/bin/vcf2maf-1.6.17/vcf2maf.pl  ## provide EITHER this or vcf2maf_version above ##
     vep_path: /cluster/tools/software/centos7/vep/98
     vep_data: /cluster/projects/pughlab/references/VEP_cache/98
     filter_vcf: /cluster/projects/pughlab/references/VEP_cache/ExAC_nonTCGA.r1.sites.hg19ToHg38.vep.vcf.gz 
@@ -322,7 +322,7 @@ mavis:
     mavis_aligner: 'bwa mem'
 summarize_steps:
     lib_path: '/cluster/projects/pughlab/src/r_lib/library/4.1/'
-    run_cosmic_sbs: Y
-    run_mutsig: Y
-    run_chord: N
-    run_hrdetect: N
+    run_cosmic_sbs:
+        run: Y
+        signatures:
+        cosmic_version: 3.2
