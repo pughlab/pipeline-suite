@@ -231,8 +231,8 @@ sub main {
 	$reference = $tool_data->{reference};
 
 	if ( (('exome' eq $tool_data->{seq_type}) || ('targeted' eq $tool_data->{seq_type})) &
-		(defined($tool_data->{intervals_bed}))) {
-		$intervals_bed = $tool_data->{intervals_bed};
+		(defined($tool_data->{targets_bed}))) {
+		$intervals_bed = $tool_data->{targets_bed};
 		$intervals_bed =~ s/\.bed/_padding100bp.bed/;
 		print $log "\n    Target intervals: $intervals_bed";
 		}

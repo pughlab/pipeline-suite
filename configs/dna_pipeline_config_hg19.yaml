@@ -10,7 +10,8 @@ hpc_group:
 # reference files
 ref_type: hg19
 reference: /cluster/tools/data/genomes/human/hg19/iGenomes/Sequence/WholeGenomeFasta/genome.fa
-intervals_bed:
+baits_bed: 
+targets_bed: 
 gnomad: /cluster/projects/pughlab/references/gnomad/gnomad_v2.0.2/Exome/gnomad.exomes.r2.0.2.sites.vcf.gz
 dbsnp: /cluster/projects/pughlab/references/dbSNP/GRCh37/b151/dbSNP_GRCh37p13_b151_common_chr.vcf.gz
 cosmic: /cluster/projects/pughlab/references/COSMIC/GRCh37/v92/CosmicVariants_full_sorted_chr.vcf.gz
@@ -28,6 +29,8 @@ mutsig_covariates: /cluster/projects/pughlab/references/MutSigCV/gene.covariates
 mutsig_categories: /cluster/projects/pughlab/references/MutSigCV/mutation_type_dictionary_file.txt
 mutsig_refs: /cluster/projects/pughlab/references/MutSigCV/chr_files_hg19
 # tool versions
+perl_version: 5.30.0
+fastqc_version: 0.11.5
 bwa_version: 0.7.15
 samtools_version: 1.9
 picard_version: 2.6.0
@@ -40,6 +43,7 @@ mutect_version: 1.1.5
 somaticsniper_version: bam-somaticsniper/1.0.5.0 # or SomaticSniper/1.0.4 currently available on h4h
 vardict_version: 1.7.0
 varscan_version: 2.4.2
+python2_version: 2.7.15
 strelka_version: 2.9.10
 manta_version: 1.6.0
 delly_version: 0.8.1
@@ -47,6 +51,7 @@ novobreak_version: 1.1
 svict_version: 
 svict_path: /cluster/projects/pughlab/bin/svict
 ichor_cna_version: 0.3.2
+ascat_r_version: 4.1.0
 panelcnmops_version: 1.14.0
 pindel_version: 0.2.5b8
 mavis_version: 2.2.5
@@ -54,7 +59,6 @@ cpsr_version: 0.6.1
 pcgr_version: 0.9.1
 vcf2maf_version: 1.6.17 
 msi_sensor_version: msisensor-pro/1.2.0
-ascat_r_version: 4.1.0
 r_version: 4.1.0
 mutsigcv_version: 1.4
 mcr_path: /cluster/tools/software/MCR/8.1/v81
@@ -232,6 +236,12 @@ mutect2:
             java_mem: 3g
             mem: 4G
             time: '24:00:00'
+manta:
+    run: Y
+    parameters:
+        manta:
+            mem: 8G
+            time: '24:00:00'
 strelka:
     run: Y
     pon: /cluster/projects/pughlab/references/panel_of_normals/hg19/strelka_v2.9.10_hg38LFThg19_panel_of_normals_20210330.vcf
@@ -291,6 +301,7 @@ vardict:
     pon: /cluster/projects/pughlab/references/panel_of_normals/hg19/vardict_v1.7.0_hg38LFThg19_panel_of_normals_20210330.vcf
     parameters:
         vardict:
+            # vardict_wgs requires slightly higher mem (~16G) and more time (min 32 hours)
             mem: 12G
             java_mem: 11g
             time: '24:00:00'
@@ -340,12 +351,6 @@ gatk_cnv:
             java_mem: 3g
             mem: 4G
             time: '24:00:00'
-manta:
-    run: Y
-    parameters:
-        manta:
-            mem: 8G
-            time: '24:00:00'
 delly:
     run: Y
     parameters:
@@ -394,6 +399,7 @@ panelcn_mops:
             time: '24:00:00'
 ichor_cna:
     run: N # ideal for low-pass WGS
+    pon: 
     parameters:
         readcounter:
             mem: 2G

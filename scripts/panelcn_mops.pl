@@ -165,7 +165,7 @@ sub main {
 	$reference = $tool_data->{reference};
 	$ref_type  = $tool_data->{ref_type};
 
-	print $log "\n    Target intervals: $tool_data->{intervals_bed}";
+	print $log "\n    Target intervals: $tool_data->{targets_bed}";
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n---\n\n";
@@ -190,6 +190,18 @@ sub main {
 
 	unless($args{dry_run}) {
 		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
+		}
+
+	# do an initial check for normals; no normals = don't bother running
+	my @has_normals;
+	foreach my $patient (sort keys %{$smp_data}) {
+		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
+		if (scalar(@normal_ids) > 0) { push @has_normals, $patient; }
+		}
+
+	if (scalar(@has_normals) == 0) {
+		print("No normal BAMs provided. PanelCN.mops requires matched normals to create a PoN, therefore we will exit now.");
+		exit;
 		}
 
 	# create empty lists
@@ -240,11 +252,6 @@ sub main {
 			}
 		}
 
-	# if no normals were provided, don't bother running further
-	if (scalar(@sample_sheet_normal) == 0) {
-		die("No normal BAMs provided; can not make PoN so exiting now.");
-		}
-
 	# prepare panel of normals
 	my $pon_run_id = '';
 
@@ -264,7 +271,7 @@ sub main {
 	my $mops_pon_command = get_panelcn_mops_command(
 		sample_list	=> $sample_sheet,
 		read_length	=> $avg_read_length,
-		intervals_bed	=> $tool_data->{intervals_bed},
+		intervals_bed	=> $tool_data->{targets_bed},
 		output_dir	=> $pon_directory,
 		make_pon	=> 1
 		);

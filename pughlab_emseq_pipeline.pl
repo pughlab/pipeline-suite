@@ -81,8 +81,7 @@ sub main {
 	# indicate maximum time limit for parent jobs to wait
 	my $max_time = '5-00:00:00';
 
-	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
-#	my $python	= 'python3/' . $tool_data->{python_version};
+	my $perl = 'perl/' . $tool_data->{perl_version};
 
 	# get optional HPC group
 	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
@@ -150,7 +149,7 @@ sub main {
 				log_dir	=> $log_directory,
 				name	=> 'pughlab_dna_pipeline__run_trim_adapters',
 				cmd	=> $trim_command,
-				modules	=> ['perl'],
+				modules	=> [$perl],
 				mem		=> '256M',
 				max_time	=> '48:00:00',
 				hpc_driver	=> $args{cluster},
@@ -199,7 +198,7 @@ sub main {
 				log_dir	=> $log_directory,
 				name	=> 'pughlab_dna_pipeline__run_fastqc',
 				cmd	=> $fastqc_command,
-				modules	=> ['perl'],
+				modules	=> [$perl],
 				dependencies	=> $trim_run_id,
 				mem		=> '256M',
 				max_time	=> '48:00:00',
@@ -258,7 +257,7 @@ sub main {
 				log_dir	=> $log_directory,
 				name	=> 'pughlab_dna_pipeline__run_bwa',
 				cmd	=> $bwa_command,
-				modules	=> ['perl'],
+				modules	=> [$perl],
 				dependencies	=> $trim_run_id,
 				mem		=> '256M',
 				max_time	=> $max_time,
@@ -316,7 +315,7 @@ sub main {
 				log_dir	=> $log_directory,
 				name	=> 'pughlab_dna_pipeline__run_qc',
 				cmd	=> $qc_command,
-				modules	=> ['perl'],
+				modules	=> [$perl],
 				dependencies	=> $bwa_run_id,
 				mem		=> '256M',
 				max_time	=> $max_time,
@@ -375,7 +374,7 @@ sub main {
 				log_dir	=> $log_directory,
 				name	=> 'pughlab_dna_pipeline__run_methyldackel',
 				cmd	=> $md_command,
-				modules	=> ['perl'],
+				modules	=> [$perl],
 				dependencies	=> $qc_run_id,
 				mem		=> '256M',
 				max_time	=> $max_time,

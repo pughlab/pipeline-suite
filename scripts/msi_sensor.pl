@@ -217,7 +217,8 @@ sub main {
 		}
 
 	if (scalar(@has_normals) == 0) {
-		die("No normals provided. MSI-Sensor requires at least 1 normal to estimate baseline distributions, therefore we will exit now.");
+		print("No normals provided. MSI-Sensor requires at least 1 normal to estimate baseline distributions, therefore we will exit now.");
+		exit;
 		}
 
 	# prep MSI intervals file
@@ -375,7 +376,7 @@ sub main {
 					normal		=> $smp_data->{$patient}->{normal}->{$normal_ids[0]},
 					output_stem	=> $output_stem,
 					ref_input	=> $msi_intervals,
-					intervals	=> $tool_data->{intervals_bed},
+					intervals	=> $tool_data->{targets_bed},
 					seq_type	=> $tool_data->{seq_type}
 					);
 				$depends = $intervals_run_id;
@@ -388,7 +389,7 @@ sub main {
 					tumour		=> $smp_data->{$patient}->{tumour}->{$sample},
 					output_stem	=> $output_stem,
 					ref_input	=> $baseline_out,
-					intervals	=> $tool_data->{intervals_bed},
+					intervals	=> $tool_data->{targets_bed},
 					seq_type	=> $tool_data->{seq_type}
 					);
 				$depends = $baseline_run_id;

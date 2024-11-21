@@ -331,11 +331,7 @@ sub main {
 
 	$reference = $tool_data->{reference};
 
-	if (('exome' eq $tool_data->{seq_type}) & (defined($tool_data->{intervals_bed}))) {
-		$intervals_bed = $tool_data->{intervals_bed};
-		$intervals_bed =~ s/\.bed/_padding100bp.bed/;
-		print $log "\n    Target intervals (exome): $intervals_bed";
-		} elsif ('wgs' eq $tool_data->{seq_type}) {
+	if (defined($tool_data->{vardict}->{intervals})) {
 		$intervals_bed = $tool_data->{vardict}->{intervals};
 		print $log "\n    Target regions (WGS): $intervals_bed";
 		}

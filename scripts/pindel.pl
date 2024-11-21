@@ -368,8 +368,8 @@ sub main {
 	$ref_type  = $tool_data->{ref_type};
 
 	my $intervals_bed = undef;
-	if ( ('wgs' ne $tool_data->{seq_type}) && (defined($tool_data->{intervals_bed})) ) {
-		$intervals_bed = $tool_data->{intervals_bed};
+	if ( ('wgs' ne $tool_data->{seq_type}) && (defined($tool_data->{targets_bed})) ) {
+		$intervals_bed = $tool_data->{targets_bed};
 		$intervals_bed =~ s/\.bed/_padding100bp.bed/;
 		print $log "\n    Target intervals: $intervals_bed"; 
 		}

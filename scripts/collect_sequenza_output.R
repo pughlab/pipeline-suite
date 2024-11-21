@@ -319,7 +319,7 @@ for (smp in names(seg.list)) {
 	rownames(tmp) <- paste0('seg', 1:nrow(tmp));
 
 	# calculate PGA
-	for.pga <- tmp[which(tmp$AbsCN > 0),];
+	for.pga <- tmp[which(tmp$AbsCN != 0),]; # range -2:2, 0 = neutral
 	pga <- sum(for.pga$end - for.pga$start)/(3*10**9)*100;
 	if (!smp %in% ploidy.formatted$Sample) {
 		ploidy.formatted[nrow(ploidy.formatted)+1,] <- NA;

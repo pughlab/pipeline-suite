@@ -237,7 +237,7 @@ sub main {
 					level		=> $lane_type,
 					reference	=> $tool_data->{reference},
 					hapmap		=> $tool_data->{contest_hapmap},
-					intervals	=> $tool_data->{intervals_bed},
+					intervals	=> $tool_data->{targets_bed},
 					java_mem	=> $parameters->{contest}->{java_mem},
 					tmp_dir		=> $tmp_directory
 					);

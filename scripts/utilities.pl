@@ -107,6 +107,11 @@ sub error_checking {
 		}
 	}
 
+	# ensure compatibility with past versions
+	if ( (defined($tool_data->{intervals_bed})) && !(defined($tool_data->{targets_bed})) ) {
+		$tool_data->{targets_bed} = $tool_data->{intervals_bed};
+		}
+
 	# QC pipeline (gatk/picard functions)
 	if ('qc' eq $pipeline) {
 
@@ -118,7 +123,7 @@ sub error_checking {
 		);
 
 		if ('dna' eq $data_type) {
-			if (!defined($tool_data->{intervals_bed}) & 
+			if (!defined($tool_data->{targets_bed}) & 
 				('wgs' ne $tool_data->{seq_type}) & ('emseq' ne $tool_data->{seq_type})) {
 				print "gatk_config: WARNING: no target intervals provided.\n";
 				print ">>If this is exome data, target regions are recommended!\n";
@@ -150,7 +155,7 @@ sub error_checking {
 		);
 
 		if ('dna' eq $data_type) {
-			if (!defined($tool_data->{intervals_bed}) & ('wgs' ne $tool_data->{seq_type})) {
+			if (!defined($tool_data->{targets_bed}) & ('wgs' ne $tool_data->{seq_type})) {
 				print "gatk_config: WARNING: no target intervals provided.\n";
 				print ">>If this is exome data, target regions are recommended!\n";
 			}
@@ -192,7 +197,7 @@ sub error_checking {
 			die("panelCN.mops should only be run on targeted-panel data.");
 		}
 
-		if (!defined($tool_data->{intervals_bed})) {
+		if (!defined($tool_data->{targets_bed})) {
 			die("Must provide path to target regions bed file.");
 		}
 	}
@@ -212,10 +217,10 @@ sub error_checking {
 				( any { /$tool_data->{seq_type}/ } qw(exome targeted) )
 				) {
 
-				$intervals = $tool_data->{intervals_bed};
+				$intervals = $tool_data->{targets_bed};
 				$intervals =~ s/\.bed/_padding100bp.bed.gz/;
 
-				if (!defined($tool_data->{intervals_bed})) {
+				if (!defined($tool_data->{targets_bed})) {
 					die("Must supply path to target intervals!");
 				} elsif ('Y' eq missing_file($intervals)) {
 					die("Padded, bgzipped file: $intervals is missing. Please run format_intervals_bed.pl to ensure padding is added and file is bgzipped and tabix indexed.");
@@ -226,10 +231,10 @@ sub error_checking {
 				( any { /$tool_data->{seq_type}/ } qw(exome targeted) )
 				) {
 
-				$intervals = $tool_data->{intervals_bed};
+				$intervals = $tool_data->{targets_bed};
 				$intervals =~ s/\.bed/_padding100bp.bed/;
 
-				if (!defined($tool_data->{intervals_bed})) {
+				if (!defined($tool_data->{targets_bed})) {
 					print "WARNING: no target intervals provided.\n";
 					print ">>If this is exome data, target regions are recommend!\n";
 				} elsif ('Y' eq missing_file($intervals)) {

@@ -327,7 +327,7 @@ sub main {
 			my $cov_command = get_coverage_command(
 				input		=> $smp_data->{$patient}->{$type}->{$sample},
 				output		=> $coverage_out,
-				intervals	=> $tool_data->{intervals_bed},
+				intervals	=> $tool_data->{targets_bed},
 				java_mem	=> $parameters->{coverage}->{java_mem},
 				tmp_dir		=> $tmp_directory,
 				seq_type	=> $tool_data->{seq_type}
@@ -430,18 +430,18 @@ sub main {
 		my $cb_intersect = join('/', $patient_directory, 'CallableBases.tsv');
 		my $cb_command2 = "\ncd $tmp_directory\n\n";
 
-		if ( (scalar(@sample_ids) == 1) && (!defined($tool_data->{intervals_bed})) ) {
+		if ( (scalar(@sample_ids) == 1) && (!defined($tool_data->{targets_bed})) ) {
 
 			$cb_command2 .= "mv $patient_cb_files[0] $cb_intersect\n";
 			$cb_command2 .= "mv $patient_cb_files[0].md5 $cb_intersect.md5\n";
 	
-			} elsif ( (scalar(@sample_ids) > 1) || (defined($tool_data->{intervals_bed})) ) {
+			} elsif ( (scalar(@sample_ids) > 1) || (defined($tool_data->{targets_bed})) ) {
 
 			$cb_command2 .= find_callable_bases_step2(
 				input_files	=> \@patient_cb_files,
 				sample_names	=> \@sample_ids,
 				output		=> $cb_intersect,
-				intervals	=> $tool_data->{intervals_bed}
+				intervals	=> $tool_data->{targets_bed}
 				);
 
 			$cb_command2 .= "\n\n" . join(' ',

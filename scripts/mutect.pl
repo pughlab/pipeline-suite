@@ -270,8 +270,8 @@ sub pon {
 		$cosmic = $tool_data->{cosmic};
 		}
 
-	if (defined($tool_data->{intervals_bed})) {
-		print $log "\n    Target intervals: $tool_data->{intervals_bed}";
+	if (defined($tool_data->{targets_bed})) {
+		print $log "\n    Target intervals: $tool_data->{targets_bed}";
 		}
 
 	print $log "\n    Output directory: $output_directory";
@@ -369,7 +369,7 @@ sub pon {
 				output_stem	=> $output_stem,
 				java_mem	=> $parameters->{mutect}->{java_mem},
 				tmp_dir		=> $tmp_directory,
-				intervals	=> $tool_data->{intervals_bed}
+				intervals	=> $tool_data->{targets_bed}
 				);
 
 			# this is a java-based command, so run a final check
@@ -690,8 +690,8 @@ sub main {
 		print $log "\n      No panel of normals defined! Tumour-only samples will not be run!!";
 		}
 
-	if (defined($tool_data->{intervals_bed})) {
-		print $log "\n    Target intervals: $tool_data->{intervals_bed}";
+	if (defined($tool_data->{targets_bed})) {
+		print $log "\n    Target intervals: $tool_data->{targets_bed}";
 		}
 
 	print $log "\n    Output directory: $output_directory";
@@ -793,7 +793,7 @@ sub main {
 					output_stem	=> $output_stem,
 					java_mem	=> $parameters->{mutect}->{java_mem},
 					tmp_dir		=> $tmp_directory,
-					intervals	=> $tool_data->{intervals_bed}
+					intervals	=> $tool_data->{targets_bed}
 					);
 
 				# paired tumour/normal
@@ -807,7 +807,7 @@ sub main {
 					output_stem	=> $output_stem,
 					java_mem	=> $parameters->{mutect}->{java_mem},
 					tmp_dir		=> $tmp_directory,
-					intervals	=> $tool_data->{intervals_bed}
+					intervals	=> $tool_data->{targets_bed}
 					);
 
 				# else, skip this sample

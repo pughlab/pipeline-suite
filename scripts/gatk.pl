@@ -316,8 +316,8 @@ sub main {
 	$dbsnp = $tool_data->{dbsnp};
 	print $log "\n      dbSNP: $dbsnp";
 
-	if (defined($tool_data->{intervals_bed})) {
-		print $log "\n    Target intervals (exome): $tool_data->{intervals_bed}";
+	if (defined($tool_data->{targets_bed})) {
+		print $log "\n    Target intervals: $tool_data->{targets_bed}";
 		}
 
 	print $log "\n    Output directory: $output_directory";
@@ -429,7 +429,7 @@ sub main {
 				input		=> $input_string,
 				n_samples	=> scalar(@input_bams),
 				output		=> $target_intervals,
-				intervals	=> $tool_data->{intervals_bed},
+				intervals	=> $tool_data->{targets_bed},
 				java_mem	=> $parameters->{target_creator}->{java_mem},
 				tmp_dir		=> $tmp_directory
 				);
@@ -695,7 +695,7 @@ sub main {
 			my $stage3_cmd = create_recalibration_table(
 				input		=> $realigned_bam,
 				output		=> $bqsr_file,
-				intervals	=> $tool_data->{intervals_bed},
+				intervals	=> $tool_data->{targets_bed},
 				java_mem	=> $parameters->{bqsr}->{java_mem},
 				tmp_dir		=> $tmp_directory
 				);

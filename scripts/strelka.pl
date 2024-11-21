@@ -232,7 +232,7 @@ sub pon {
 		}
 
 	if ( ('exome' eq $seq_type) || ('targeted' eq $seq_type) ) {
-		$intervals = $tool_data->{intervals_bed};
+		$intervals = $tool_data->{targets_bed};
 		$intervals =~ s/\.bed/_padding100bp.bed.gz/;
 		print $log "\n    Target intervals: $intervals";
 		}
@@ -243,6 +243,7 @@ sub pon {
 
 	# set tools and versions
 	my $strelka	= 'strelka/' . $tool_data->{strelka_version};
+	my $python2	= 'python2/' . $tool_data->{python2_version};
 	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
 	my $gatk	= 'gatk/' . $tool_data->{gatk_version};
 
@@ -387,7 +388,7 @@ sub pon {
 					log_dir	=> $log_directory,
 					name	=> 'run_strelka_germline_variant_caller_' . $norm,
 					cmd	=> $germline_snv_command,
-					modules	=> [$strelka],
+					modules	=> [$strelka, $python2],
 					max_time	=> $parameters->{strelka}->{time},
 					mem		=> $parameters->{strelka}->{mem},
 					hpc_driver	=> $args{hpc_driver},
@@ -678,7 +679,7 @@ sub main {
 	$seq_type = $tool_data->{seq_type};
 
 	if ( ('exome' eq $seq_type) || ('targeted' eq $seq_type) ) {
-		$intervals = $tool_data->{intervals_bed};
+		$intervals = $tool_data->{targets_bed};
 		$intervals =~ s/\.bed/_padding100bp.bed.gz/;
 		print $log "\n    Target intervals: $intervals";
 		}
@@ -703,8 +704,10 @@ sub main {
 
 	# set tools and versions
 	my $strelka	= 'strelka/' . $tool_data->{strelka_version};
+	my $python2	= 'python2/' . $tool_data->{python2_version};
 	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
+	my $perl	= 'perl/' . $tool_data->{perl_version};
 	my $r_version	= 'R/' . $tool_data->{r_version};
 
 	my $vcf2maf = undef;
@@ -907,7 +910,7 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> 'run_strelka_somatic_variant_caller_' . $sample,
 					cmd	=> $somatic_snv_command,
-					modules	=> [$strelka],
+					modules	=> [$strelka, $python2],
 					max_time	=> $parameters->{strelka}->{time},
 					mem		=> $parameters->{strelka}->{mem},
 					hpc_driver	=> $args{hpc_driver},
@@ -966,8 +969,8 @@ sub main {
 			my $normal_id = undef;
 			if (scalar(@normal_ids) > 0) { $normal_id = $normal_ids[0]; }
 
-			$final_maf = join('/', $sample_directory, $sample . '_somatic_annotated.maf');
-			$final_vcf = join('/', $sample_directory, $sample . '_somatic_annotated.vcf');
+			$final_maf = join('/', $sample_directory, $sample . '_Strelka_somatic_annotated.maf');
+			$final_vcf = join('/', $sample_directory, $sample . '_Strelka_somatic_annotated.vcf');
 
 			# get tumour id used in vcf header (from bam header)
 			my $tumour_tag = $sample;
@@ -1020,7 +1023,7 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> 'run_vcf2maf_and_VEP_' . $sample,
 					cmd	=> $vcf2maf_cmd,
-					modules	=> ['perl', $samtools, 'tabix', $vcf2maf],
+					modules	=> [$perl, $samtools, $vcf2maf],
 					dependencies	=> $filter_run_id,
 					cpus_per_task	=> $tool_data->{annotate}->{n_cpus},
 					max_time	=> $tool_data->{annotate}->{time},
