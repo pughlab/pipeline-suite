@@ -17,7 +17,7 @@ use IO::Handle;
 my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
-our ($ref_type, $intervals_bed, $r_lib, $ascat_path, $ascat_ref);
+our ($ref_type, $r_lib, $ascat_path, $ascat_ref);
 
 ####################################################################################################
 # version	author		comment
