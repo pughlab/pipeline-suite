@@ -72,6 +72,8 @@ sub main {
 	print $log "\n  Output directory: $output_directory";
 	print $log "\n---\n\n";
 
+	my $perl = 'perl/' . $tool_data->{perl_version};
+
 	# get optional HPC group
 	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
 
@@ -135,7 +137,7 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'pughlab_rna_pipeline__run_fastqc',
 			cmd	=> $fastqc_command,
-			modules	=> ['perl'],
+			modules	=> [$perl],
 			mem		=> '256M',
 			max_time	=> '48:00:00',
 			hpc_driver	=> $args{cluster},
@@ -188,9 +190,9 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'pughlab_rna_pipeline__run_fusioncatcher',
 			cmd	=> $fc_command,
-			modules	=> ['perl'],
+			modules	=> [$perl],
 			mem		=> '256M',
-			max_time	=> '7-00:00:00',
+			max_time	=> '5-00:00:00',
 			extra_args	=> [$hpc_group],
 			hpc_driver	=> $args{cluster}
 			);
@@ -241,9 +243,9 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'pughlab_rna_pipeline__run_star',
 			cmd	=> $star_command,
-			modules	=> ['perl'],
+			modules	=> [$perl],
 			mem		=> '256M',
-			max_time	=> '7-00:00:00',
+			max_time	=> '5-00:00:00',
 			extra_args	=> [$hpc_group],
 			hpc_driver	=> $args{cluster}
 			);
@@ -293,10 +295,10 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'pughlab_rna_pipeline__run_star_fusion',
 			cmd	=> $starfus_command,
-			modules	=> ['perl'],
+			modules	=> [$perl],
 			dependencies	=> $star_run_id,
 			mem		=> '256M',
-			max_time	=> '7-00:00:00',
+			max_time	=> '5-00:00:00',
 			extra_args	=> [$hpc_group],
 			hpc_driver	=> $args{cluster}
 			);
@@ -346,9 +348,9 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'pughlab_rna_pipeline__run_arriba',
 			cmd	=> $arriba_command,
-			modules	=> ['perl'],
+			modules	=> [$perl],
 			mem		=> '256M',
-			max_time	=> '7-00:00:00',
+			max_time	=> '5-00:00:00',
 			extra_args	=> [$hpc_group],
 			hpc_driver	=> $args{cluster}
 			);
@@ -415,10 +417,10 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'pughlab_rna_pipeline__run_mavis',
 			cmd	=> $mavis_command,
-			modules	=> ['perl'],
+			modules	=> [$perl],
 			dependencies	=> join(':', @depends),
 			mem		=> '256M',
-			max_time	=> '7-00:00:00',
+			max_time	=> '5-00:00:00',
 			extra_args	=> [$hpc_group],
 			hpc_driver	=> $args{cluster}
 			);
@@ -463,10 +465,10 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'pughlab_rna_pipeline__run_rsem',
 			cmd	=> $rsem_command,
-			modules	=> ['perl'],
+			modules	=> [$perl],
 			dependencies	=> $star_run_id,
 			mem		=> '256M',
-			max_time	=> '7-00:00:00',
+			max_time	=> '5-00:00:00',
 			extra_args	=> [$hpc_group],
 			hpc_driver	=> $args{cluster}
 			);
@@ -518,10 +520,10 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'pughlab_rna_pipeline__run_gatk',
 			cmd	=> $gatk_command,
-			modules	=> ['perl'],
+			modules	=> [$perl],
 			dependencies	=> $star_run_id,
 			mem		=> '256M',
-			max_time	=> '7-00:00:00',
+			max_time	=> '5-00:00:00',
 			extra_args	=> [$hpc_group],
 			hpc_driver	=> $args{cluster}
 			);
@@ -572,10 +574,10 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'pughlab_rna_pipeline__run_haplotypecaller',
 			cmd	=> $vc_command,
-			modules	=> ['perl'],
+			modules	=> [$perl],
 			dependencies	=> $gatk_run_id,
 			mem		=> '256M',
-			max_time	=> '7-00:00:00',
+			max_time	=> '5-00:00:00',
 			extra_args	=> [$hpc_group],
 			hpc_driver	=> $args{cluster}
 			);
@@ -620,7 +622,7 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'pughlab_rna_pipeline__run_report',
 			cmd	=> $report_command,
-			modules	=> ['perl'],
+			modules	=> [$perl],
 			dependencies	=> join(':', @job_ids),
 			mem		=> '256M',
 			max_time	=> '24:00:00',
