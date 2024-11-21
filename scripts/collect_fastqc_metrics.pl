@@ -129,7 +129,7 @@ sub main{
 	print $log "\n---\n";
 
 	# set tools and versions
-	my $fastqc	= 'fastqc';
+	my $fastqc	= 'fastqc/' . $tool_data->{fastqc_version};
 	my $r_version   = 'R/' . $tool_data->{r_version};
 
 	# get user-specified tool parameters
@@ -157,38 +157,20 @@ sub main{
 		foreach my $sample (sort keys %{$smp_data->{$patient}}) {
 
 			my @fastqs;
+			my @libraries = keys %{$smp_data->{$patient}->{$sample}->{libraries}};
 
-			# is this DNA or RNA?
-#			unless ( 'rna' eq $tool_data->{seq_type} ) {
+			foreach my $lib ( @libraries ) {
 
-				my @libraries = keys %{$smp_data->{$patient}->{$sample}->{libraries}};
+				my @lanes = keys %{$smp_data->{$patient}->{$sample}->{libraries}->{$lib}->{runlanes}};
+				foreach my $lane ( @lanes ) {
 
-				foreach my $lib ( @libraries ) {
+					my $r1 = $smp_data->{$patient}->{$sample}->{libraries}->{$lib}->{runlanes}->{$lane}->{fastq}->{R1};
+					my $r2 = $smp_data->{$patient}->{$sample}->{libraries}->{$lib}->{runlanes}->{$lane}->{fastq}->{R2};
 
-					my @lanes = keys %{$smp_data->{$patient}->{$sample}->{libraries}->{$lib}->{runlanes}};
-					foreach my $lane ( @lanes ) {
-
-						my $r1 = $smp_data->{$patient}->{$sample}->{libraries}->{$lib}->{runlanes}->{$lane}->{fastq}->{R1};
-						my $r2 = $smp_data->{$patient}->{$sample}->{libraries}->{$lib}->{runlanes}->{$lane}->{fastq}->{R2};
-
-						push @fastqs, $r1;
-						push @fastqs, $r2;
-						}
+					push @fastqs, $r1;
+					push @fastqs, $r2;
 					}
-
-#				} else {
-
-#				my @lanes = keys %{$smp_data->{$patient}->{$sample}->{runlanes}};
-
-#				foreach my $lane ( @lanes ) {
-
-#					my $r1 = $smp_data->{$patient}->{$sample}->{runlanes}->{$lane}->{R1};
-#					my $r2 = $smp_data->{$patient}->{$sample}->{runlanes}->{$lane}->{R2};
-
-#					push @fastqs, $r1;
-#					push @fastqs, $r2;
-#					}
-#				}
+				}
 
 			my $n_fastqs = scalar(@fastqs);
 			print $log "  SAMPLE: $sample has $n_fastqs fastqs to QC\n";
