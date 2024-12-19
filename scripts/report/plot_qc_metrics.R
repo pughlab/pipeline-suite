@@ -104,9 +104,46 @@ sample.info <- sample.info[order(sample.info$Patient, sample.info$Sample),];
 smp.names <- sample.info$Sample;
 
 
-# read in correlation heatmap data
-cor.data <- read.delim(cor.file, row.names = 1);
+# read in genotype concordance file
+# account for differences in header depending on version of bcftools used
+concordance.data <- read.delim(cor.file, skip = 19);
+if (ncol(concordance.data) == 1) {
+	concordance.data <- read.delim(cor.file, skip = 32);
+	}
 
+colnames(concordance.data) <- c('Metric','Query.Sample','Genotyped.Sample','Discordance','pvalue','Total.Sites','N.matched'
+	)[1:ncol(concordance.data)];
+
+# convert N mismatches (discordance) to a proportion of total sites
+concordance.data$Proportion <- 1 - (concordance.data$Discordance / concordance.data$Total.Sites);
+
+# reshape concordance data
+cor.data <- reshape(
+	concordance.data[,c('Query.Sample','Genotyped.Sample','Proportion')],
+	direction = 'wide',
+	idvar = 'Genotyped.Sample',
+	timevar = 'Query.Sample'
+	);
+
+rownames(cor.data) <- cor.data[,1];
+colnames(cor.data) <- gsub('Proportion\\.','',colnames(cor.data));
+cor.data <- cor.data[,-1];
+
+# add in missing samples
+missing.samples <- setdiff(smp.names, rownames(cor.data));
+cor.data[missing.samples,] <- NA;
+
+missing.samples <- setdiff(smp.names, colnames(cor.data));
+cor.data[,missing.samples] <- NA;
+
+# current data is one-sided, so mirror this
+for (i in 1:nrow(concordance.data)) {
+	query.smp <- concordance.data[i,]$Query.Sample;
+	genotyped.smp <- concordance.data[i,]$Genotyped.Sample;
+	cor.data[query.smp,genotyped.smp] <- cor.data[genotyped.smp,query.smp];
+	}
+
+for (smp in smp.names) { cor.data[smp,smp] <- 1; }
 
 # read in coverage metrics
 metric.data  <- read.delim(summary.file, row.names = 1);
@@ -169,7 +206,7 @@ if (is.dna) {
 		pileup.contam$contamination <- pileup.contam$contamination * 100;
 		pileup.contam$confidence_interval_95_low <- pileup.contam$contamination - (pileup.contam$error*100);
 		pileup.contam$confidence_interval_95_high <- pileup.contam$contamination + (pileup.contam$error*100);
-		rownames(pileup.contam) <- pileup.contam$sample;
+		rownames(pileup.contam) <- pileup.contam$ID;
 		pileup.contam <- pileup.contam[,c('contamination','confidence_interval_95_low','confidence_interval_95_high')];
 		pileup.contam$Method <- 'pileup';
 		}
@@ -203,22 +240,7 @@ if (is.dna) {
 qc.metrics <- qc.metrics[order(qc.metrics$Sample),];
 qc.metrics$Order <- 1:nrow(qc.metrics);
 
-if (!any(smp.names %in% rownames(cor.data))) {
-        if ( (any(grepl('-', smp.names))) && (!any(grepl('-', rownames(cor.data)))) ) {
-		new.smps <- gsub('-', '.', smp.names);
-		}
-	if ( (any(grepl("^[[:digit:]]", smp.names))) && (any(grepl('^X',rownames(cor.data)))) ) {
-		new.smps <- paste0('X', new.smps);
-		}
-	if (!any(new.smps %in% rownames(cor.data))) {
-		stop('Correlation sample names do not match names from other tables');
-		}
-        cor.data <- cor.data[new.smps,new.smps];
-	colnames(cor.data) <- smp.names;
-	rownames(cor.data) <- smp.names;
-        } else {
-        cor.data <- cor.data[smp.names,smp.names];
-        }
+cor.data <- cor.data[smp.names,smp.names];
 
 # find line breaks (separate patients with multiple samples)
 line.breaks <- get.line.breaks(sample.info$Patient);
@@ -338,9 +360,9 @@ if (is.dna) {
 		yaxis.fontface = 'plain',
 		colourkey.cex = 1,
 		colour.scheme = c('white','black'),
-		at = seq(0.5,1,0.001),
-		colourkey.labels.at = c(0.5,0.75,0.9,0.95,1),
-		colourkey.labels = c('< 0.5', '0.75','0.90', '0.95', '1'),
+		at = seq(0.8,1,0.001),
+		colourkey.labels.at = c(0.8,0.9,0.95,1),
+		colourkey.labels = c('< 0.8','0.90', '0.95', '1'),
 		grid.row = TRUE,
 		force.grid.row = TRUE,
 		row.lines = line.breaks,
@@ -349,7 +371,8 @@ if (is.dna) {
 		grid.col = TRUE,
 		force.grid.col = TRUE,
 		col.lines = line.breaks,
-		axes.lwd = 1
+		axes.lwd = 1,
+		fill.colour = 'grey80'
 		);
 
 	# identify any suspect cases

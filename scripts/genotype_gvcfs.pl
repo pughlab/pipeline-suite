@@ -17,7 +17,8 @@ my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
 # define some global variables
-our ($reference, $ref_type, $known_1000g, $hapmap, $omni, $known_mills, $dbsnp, $use_new_gatk);
+our ($reference, $ref_type, $known_1000g, $hapmap, $omni, $known_mills, $dbsnp);
+our ($use_new_gatk, $use_new_samtools);
 
 ####################################################################################################
 # version	author		comment
@@ -168,39 +169,6 @@ sub create_apply_vqsr_command {
 	return($recal_command);
 	}
 
-sub create_filter_command {
-	my %args = (
-		input		=> undef,
-		tumour_ids	=> undef,
-		normal_ids	=> undef,
-		output		=> undef,
-		@_
-		);
-
-	my $filter_command = join(' ',
-		"perl $cwd/filter_germline_variants.pl",
-		'--vcf', $args{input},
-		'--output', $args{output},
-		'--reference', $reference
-		);
-
-	if (scalar(@{$args{tumour_ids}}) > 0) {
-		$filter_command .= " --tumour " . join(',', @{$args{tumour_ids}});
-		}
-
-	if (scalar(@{$args{normal_ids}}) > 0) {
-		$filter_command .= " --normal " . join(',', @{$args{normal_ids}});
-		}
-
-	$filter_command .= "\n\n" . join("\n",
-		"md5sum $args{output} > $args{output}.md5",
-		"bgzip -f $args{output}",
-		"tabix -p vcf $args{output}.gz"
-		);
-
-	return($filter_command);
-	}
-
 # format command to trim samples
 sub create_select_variants_command {
 	my %args = (
@@ -311,6 +279,27 @@ sub extract_agena_command {
 	return($cmd);
 	}
 
+# format command to run gtcheck
+sub create_gtcheck_command {
+	my %args = (
+		input	=> undef,
+		output	=> undef,
+		@_
+		);
+
+	my $cmd = "bcftools norm -m- $args{input}";
+
+	if ($use_new_samtools) {
+		$cmd .= ' | bcftools gtcheck -E 0';
+		} else {
+		$cmd .= ' | bcftools gtcheck -e 0';
+		}
+
+	$cmd .= " > $args{output}";
+
+	return($cmd);
+	}
+
 ### MAIN ###########################################################################################
 sub main{
 	my %args = (
@@ -388,6 +377,8 @@ sub main{
 
 	# set tools and versions
 	my $gatk	= 'gatk/' . $tool_data->{gatk_version};
+	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
+	my $r_version	= 'R/'. $tool_data->{r_version};
 
 	$use_new_gatk = 0;
 	my $needed = version->declare('4.0')->numify;
@@ -396,8 +387,12 @@ sub main{
 		$use_new_gatk = 1;
 		}
 
-	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
-	my $r_version	= 'R/'. $tool_data->{r_version};
+	$use_new_samtools = 0;
+	my $needed = version->declare('1.20')->numify;
+	my $given = version->declare($tool_data->{samtools_version})->numify;
+	if ($given >= $needed) {
+		$use_new_samtools = 1;
+		}
 
 	my $vcf2maf = undef;
 	if (defined($tool_data->{vcf2maf_version})) {
@@ -434,8 +429,8 @@ sub main{
 
 	$cleanup_cmd = "rm -rf $tmp_directory";
 
-	my $germline_directory = join('/', $cohort_directory, 'germline_variants');
-	unless (-e $germline_directory) { make_path($germline_directory); }
+	my $analysis_directory = join('/', $cohort_directory, 'sample_comparisons');
+	unless (-e $analysis_directory) { make_path($analysis_directory); }
 
 	# First step, find all of the CombineGVCF files
 	opendir(HC_OUTPUT, $output_directory) or die "Could not open $output_directory";
@@ -752,7 +747,7 @@ sub main{
 		}
 
 	# let's trim this down to only Agena SNPs for contamination analyses
-	my $agena_output = join('/', $germline_directory, 'haplotype_caller_genotypes_recalibrated__agenaOnly.vcf');
+	my $agena_output = join('/', $analysis_directory, 'haplotype_caller_genotypes_recalibrated__agenaOnly.vcf');
 
 	my $agena_cmd = extract_agena_command(
 		input	=> $processed_vcf,
@@ -790,281 +785,205 @@ sub main{
 		print $log ">> Skipping extract Agena SNPs because this has already been completed!\n";
 		}
 
-	# check if we should annotate these variants
-	my $should_run_vcf2maf = 0;
-	my $annotated_directory = join('/', $cohort_directory, 'VCF2MAF');
-	if ( (defined($parameters->{run_vcf2maf})) && ('Y' eq $parameters->{run_vcf2maf}) ) {
-		$should_run_vcf2maf = 1;
-		unless (-e $annotated_directory) { make_path($annotated_directory); }
-		}
+	# compare sample genotypes to evaluate possible relatedness (ie, for sample swaps)
+	my $gt_output = join('/', $analysis_directory, 'haplotype_caller_genotypes_recalibrated__gtcheck.tsv'); 
 
-	my (@germline_jobs, @annotate_jobs);
-
-	print $log "\n---";
-
-	# process each sample in $smp_data
-	foreach my $patient (sort keys %{$smp_data}) {
-
-		print $log "\nInitiating process for PATIENT: $patient\n";
-
-		my @tumour_ids = keys %{$smp_data->{$patient}->{tumour}};
-		my @normal_ids = keys %{$smp_data->{$patient}->{normal}};
-
-		my @final_outputs;
-
-		my @samples = @tumour_ids;
-		push @samples, @normal_ids;
-
-		my $filtered_output = join('/',
-			$germline_directory,
-			$patient . '_filtered_germline_variants.vcf'
-			);
-
-		if (scalar(@normal_ids) == 0) {
-			$filtered_output = join('/',
-				$germline_directory,
-				$patient . '_filtered_hc_variants.vcf'
-				);
-			}
-
-		my $filter_cmd = create_filter_command(
-			input		=> $processed_vcf,
-			tumour_ids	=> \@tumour_ids,
-			normal_ids	=> \@normal_ids,
-			output		=> $filtered_output
-			);
-
-		if ('Y' eq missing_file("$filtered_output.md5")) {
-
-			# record command (in log directory) and then run job
-			print $log ">> Submitting job for FILTER HC VARIANTS...\n";
-
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'run_filter_vcf_' . $patient,
-				cmd	=> $filter_cmd,
-				modules	=> ['perl', 'tabix'],
-				dependencies	=> $run_id,
-				max_time	=> $parameters->{filter_recalibrated}->{time},
-				mem		=> $parameters->{filter_recalibrated}->{mem},
-				hpc_driver	=> $args{hpc_driver},
-				extra_args	=> [$hpc_group]
-				);
-
-			my $filter_run_id = submit_job(
-				jobname		=> 'run_filter_vcf_' . $patient,
-				shell_command	=> $run_script,
-				hpc_driver	=> $args{hpc_driver},
-				dry_run		=> $args{dry_run},
-				log_file	=> $log
-				);
-
-			push @germline_jobs, $filter_run_id;
-			push @all_jobs, $filter_run_id;
-			} else {
-			print $log ">> Skipping extract-germline because this has already been completed!\n";
-			}
-
-		push @final_outputs, $filtered_output . '.gz';
-
-		unless ($should_run_vcf2maf) { next; }
-
-		# for each sample, extract and annotate variants
-		foreach my $sample ( @samples ) {
-
-			print $log "\n  Running SAMPLE: $sample\n";
-
-			my ($list, $normal) = undef;
-			if ( (any { $_ =~ m/$sample/ } @normal_ids) ) {
-				$list = $sample;
-				} else {
-				$list = $sample;
-				if (scalar(@normal_ids) > 0) {
-					$normal = $normal_ids[0];
-					$list .= ' -sn ' . $normal;
-					}
-				}
-
-			# indicate output files
-			my $tmp_output = join('/', $tmp_directory, $sample . '_recalibrated.vcf');
-
-			my $final_vcf = join('/',
-				$annotated_directory,
-				$sample . '_HaplotypeCaller_recalibrated.vep.vcf'
-				);
-			my $final_maf = join('/',
-				$annotated_directory,
-				$sample . '_HaplotypeCaller_annotated.maf'
-				);
-
-			# format command to pull out required samples
-			my $trim_variants_cmd = create_select_variants_command(
-				input		=> $processed_vcf,
-				output		=> $tmp_output,
-				samples		=> $list,
-				tmp_dir		=> $tmp_directory
-				);
-
-			$trim_variants_cmd .= "\n\nmd5sum $tmp_output > $tmp_output.md5";
-
-			# check if this should be run
-			my $subset_run_id = '';
-
-			if ( ('Y' eq missing_file($tmp_output . '.md5')) &
-				('Y' eq missing_file($final_maf . '.md5'))
-				) {
-
-				# record command (in log directory) and then run job
-				print $log "  >> Submitting job for subset step...\n";
-
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_subset_vcf_' . $sample,
-					cmd	=> $trim_variants_cmd,
-					modules	=> [$gatk],
-					dependencies	=> $run_id,
-					max_time	=> '48:00:00', 
-					hpc_driver	=> $args{hpc_driver},
-					extra_args	=> [$hpc_group]
-					);
-
-				$subset_run_id = submit_job(
-					jobname		=> 'run_subset_vcf_' . $sample, 
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{hpc_driver},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
-					);
-
-				push @all_jobs, $subset_run_id;
-				} else {
-				print $log "  >> Skipping subset step because this has already been completed!\n";
-				}
-
-			### Run variant annotation (VEP + vcf2maf)
-			my $vcf2maf_cmd = get_vcf2maf_command(
-				input		=> $tmp_output,
-				tumour_id	=> $sample,
-				normal_id	=> $normal,
-				reference	=> $tool_data->{reference},
-				ref_type	=> $tool_data->{ref_type},
-				output		=> $final_maf,
-				tmp_dir		=> $tmp_directory,
-				parameters	=> $tool_data->{annotate}
-				);
-
-			# check if this should be run
-			my $annotate_run_id = '';
-
-			if ('Y' eq missing_file($final_maf . '.md5')) {
-
-				# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
-				$vcf2maf_cmd .= "\n\n" . join("\n",
-					"if [ -s $final_maf ]; then",
-					"  md5sum $final_maf > $final_maf.md5",
-					"  mv $tmp_directory/$sample" . "_recalibrated.vep.vcf $final_vcf",
-					"  md5sum $final_vcf > $final_vcf.md5",
-					"  bgzip -f $final_vcf",
-					"  tabix -p vcf $final_vcf.gz",
-					"else",
-					'  echo "FINAL OUTPUT MAF is missing; not running md5sum/bgzip/tabix..."',
-					"fi"
-					);
-
-				# record command (in log directory) and then run job
-				print $log "  >> Submitting job for vcf2maf...\n";
-
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_vcf2maf_and_VEP_' . $sample,
-					cmd	=> $vcf2maf_cmd,
-					modules => ['perl', $samtools, 'tabix', $vcf2maf],
-					dependencies	=> $subset_run_id,
-					cpus_per_task	=> $tool_data->{annotate}->{n_cpus},
-					max_time	=> '5-00:00:00',
-					mem		=> $tool_data->{annotate}->{mem},
-					hpc_driver	=> $args{hpc_driver},
-					extra_args	=> [$hpc_group]
-					);
-
-				$annotate_run_id = submit_job(
-					jobname		=> 'run_vcf2maf_and_VEP_' . $sample,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{hpc_driver},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
-					);
-
-				push @annotate_jobs, $annotate_run_id;
-				push @all_jobs, $annotate_run_id;
-				} else {
-				print $log "  >> Skipping vcf2maf because this has already been completed!\n";
-				}
-
-			push @final_outputs, $final_maf;
-			}
-
-		print $log "\nFINAL OUTPUT:\n  " . join("\n  ", @final_outputs) . "\n";
-		print $log "\n---";
-		}
-
-	# collate results
-	my $collect_output = join(' ',
-		"Rscript $cwd/collect_germline_genotypes.R",
-		'-d', $germline_directory,
-		'-p', $tool_data->{project_name}
+	my $gtcheck_cmd = create_gtcheck_command(
+		input	=> $processed_vcf,
+		output	=> $gt_output 
 		);
 
-	$run_script = write_script(
-		log_dir	=> $log_directory,
-		name	=> 'combine_germline_genotypes',
-		cmd	=> $collect_output,
-		modules	=> [$r_version],
-		dependencies	=> join(':', @germline_jobs),
-		mem		=> '8G',
-		max_time	=> '12:00:00',
-		hpc_driver	=> $args{hpc_driver},
-		extra_args	=> [$hpc_group]
-		);
+	if ('Y' eq missing_file("$gt_output.md5")) {
 
-	$run_id = submit_job(
-		jobname		=> 'combine_germline_genotypes',
-		shell_command	=> $run_script,
-		hpc_driver	=> $args{hpc_driver},
-		dry_run		=> $args{dry_run},
-		log_file	=> $log
-		);
-
-	push @all_jobs, $run_id;
-
-	# collate results
-	if ($should_run_vcf2maf) {
-
-		$collect_output = join(' ',
-			"Rscript $cwd/collect_snv_output.R",
-			'-d', $annotated_directory,
-			'-p', $tool_data->{project_name}
-			);
+		# record command (in log directory) and then run job
+		print $log ">> Submitting job for gtcheck...\n";
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
-			name	=> 'collect_snv_output',
-			cmd	=> $collect_output,
-			modules	=> [$r_version],
-			dependencies	=> join(':', @annotate_jobs),
-			mem		=> '28G',
-			max_time	=> '24:00:00',
+			name	=> 'run_gtcheck_discordance',
+			cmd	=> $gtcheck_cmd,
+			modules	=> [$samtools],
+			dependencies	=> $run_id,
+			max_time	=> $parameters->{filter_recalibrated}->{time},
+			mem		=> $parameters->{filter_recalibrated}->{mem},
 			hpc_driver	=> $args{hpc_driver},
 			extra_args	=> [$hpc_group]
 			);
 
-		$run_id = submit_job(
-			jobname		=> 'collect_snv_output',
+		my $agena_run_id = submit_job(
+			jobname		=> 'run_gtcheck_discordance',
 			shell_command	=> $run_script,
 			hpc_driver	=> $args{hpc_driver},
 			dry_run		=> $args{dry_run},
 			log_file	=> $log
 			);
+
+		push @all_jobs, $agena_run_id;
+		} else {
+		print $log ">> Skipping extract GTCHECK because this has already been completed!\n";
+		}
+
+	# check if we should annotate these variants
+	my (@germline_jobs, @annotate_jobs);
+	my $should_run_vcf2maf = 0;
+	my $annotated_directory = join('/', $cohort_directory, 'VCF2MAF');
+	if ( (defined($parameters->{run_vcf2maf})) && ('Y' eq $parameters->{run_vcf2maf}) ) {
+		$should_run_vcf2maf = 1;
+		unless (-e $annotated_directory) { make_path($annotated_directory); }
+
+		print $log "\n---";
+
+		# process each sample in $smp_data
+		foreach my $patient (sort keys %{$smp_data}) {
+
+			print $log "\nInitiating process for PATIENT: $patient\n";
+
+			my @tumour_ids = keys %{$smp_data->{$patient}->{tumour}};
+			my @normal_ids = keys %{$smp_data->{$patient}->{normal}};
+
+			my @final_outputs;
+
+			my @samples = @tumour_ids;
+			push @samples, @normal_ids;
+
+			# for each sample, extract and annotate variants
+			foreach my $sample ( @samples ) {
+
+				print $log "\n  Running SAMPLE: $sample\n";
+
+				my ($list, $normal) = undef;
+				if ( (any { $_ =~ m/$sample/ } @normal_ids) ) {
+					$list = $sample;
+					} else {
+					$list = $sample;
+					if (scalar(@normal_ids) > 0) {
+						$normal = $normal_ids[0];
+						$list .= ' -sn ' . $normal;
+						}
+					}
+
+				# indicate output files
+				my $tmp_output = join('/', $tmp_directory, $sample . '_recalibrated.vcf');
+
+				my $final_vcf = join('/',
+					$annotated_directory,
+					$sample . '_HaplotypeCaller_recalibrated.vep.vcf'
+					);
+				my $final_maf = join('/',
+					$annotated_directory,
+					$sample . '_HaplotypeCaller_annotated.maf'
+					);
+
+				# format command to pull out required samples
+				my $trim_variants_cmd = create_select_variants_command(
+					input		=> $processed_vcf,
+					output		=> $tmp_output,
+					samples		=> $list,
+					tmp_dir		=> $tmp_directory
+					);
+
+				$trim_variants_cmd .= "\n\nmd5sum $tmp_output > $tmp_output.md5";
+
+				# check if this should be run
+				my $subset_run_id = '';
+
+				if ( ('Y' eq missing_file($tmp_output . '.md5')) &
+					('Y' eq missing_file($final_maf . '.md5'))
+					) {
+
+					# record command (in log directory) and then run job
+					print $log "  >> Submitting job for subset step...\n";
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_subset_vcf_' . $sample,
+						cmd	=> $trim_variants_cmd,
+						modules	=> [$gatk],
+						dependencies	=> $run_id,
+						max_time	=> '48:00:00', 
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group]
+						);
+
+					$subset_run_id = submit_job(
+						jobname		=> 'run_subset_vcf_' . $sample, 
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @all_jobs, $subset_run_id;
+					} else {
+					print $log "  >> Skipping subset step because this has already been completed!\n";
+					}
+
+				### Run variant annotation (VEP + vcf2maf)
+				my $vcf2maf_cmd = get_vcf2maf_command(
+					input		=> $tmp_output,
+					tumour_id	=> $sample,
+					normal_id	=> $normal,
+					reference	=> $tool_data->{reference},
+					ref_type	=> $tool_data->{ref_type},
+					output		=> $final_maf,
+					tmp_dir		=> $tmp_directory,
+					parameters	=> $tool_data->{annotate}
+					);
+
+				# check if this should be run
+				my $annotate_run_id = '';
+
+				if ('Y' eq missing_file($final_maf . '.md5')) {
+
+					# IF THIS FINAL STEP IS SUCCESSFULLY RUN,
+					$vcf2maf_cmd .= "\n\n" . join("\n",
+						"if [ -s $final_maf ]; then",
+						"  md5sum $final_maf > $final_maf.md5",
+						"  mv $tmp_directory/$sample" . "_recalibrated.vep.vcf $final_vcf",
+						"  md5sum $final_vcf > $final_vcf.md5",
+						"  bgzip -f $final_vcf",
+						"  tabix -p vcf $final_vcf.gz",
+						"else",
+						'  echo "FINAL OUTPUT MAF is missing; not running md5sum/bgzip/tabix..."',
+						"fi"
+						);
+
+					# record command (in log directory) and then run job
+					print $log "  >> Submitting job for vcf2maf...\n";
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_vcf2maf_and_VEP_' . $sample,
+						cmd	=> $vcf2maf_cmd,
+						modules => ['perl', $samtools, 'tabix', $vcf2maf],
+						dependencies	=> $subset_run_id,
+						cpus_per_task	=> $tool_data->{annotate}->{n_cpus},
+						max_time	=> '5-00:00:00',
+						mem		=> $tool_data->{annotate}->{mem},
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group]
+						);
+
+					$annotate_run_id = submit_job(
+						jobname		=> 'run_vcf2maf_and_VEP_' . $sample,
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @annotate_jobs, $annotate_run_id;
+					push @all_jobs, $annotate_run_id;
+					} else {
+					print $log "  >> Skipping vcf2maf because this has already been completed!\n";
+					}
+
+				push @final_outputs, $final_maf;
+				}
+
+			print $log "\nFINAL OUTPUT:\n  " . join("\n  ", @final_outputs) . "\n";
+			print $log "\n---";
+			}
 		}
 
 	# should intermediate files be removed?
