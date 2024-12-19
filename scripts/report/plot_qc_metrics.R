@@ -379,7 +379,7 @@ if (is.dna) {
 	suspect.cases <- data.frame(matrix(ncol = 2, nrow = 0));
 	colnames(suspect.cases) <- c('Sample','Suspect.Relation');
 	tmp <- cor.data;
-	tmp[which(tmp < 0.8, arr.ind = TRUE)] <- NA;
+	tmp[which(tmp < 0.9, arr.ind = TRUE)] <- NA;
 	colnames(tmp) <- gsub('\\.','-',colnames(tmp));
 	rownames(tmp) <- gsub('\\.','-',rownames(tmp));
 	for (patient in unique(sample.info$Patient)) {
