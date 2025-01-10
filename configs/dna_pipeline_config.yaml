@@ -78,6 +78,9 @@ bwa:
             mem:
                 normal: 8G
                 tumour: 8G
+            n_cpus:
+                normal: 4
+                tumour: 4
             time:
                 normal: '24:00:00'
                 tumour: '48:00:00'
@@ -186,7 +189,7 @@ haplotype_caller:
         filter_recalibrated:
             mem: 2G
             time: '24:00:00'
-        run_vcf2maf: Y
+        run_vcf2maf: N
         cpsr:
             known_positions: /cluster/projects/pughlab/references/CPSR/PCA_pathVar_integrated_filtered_adjusted_WITH_FANCI_hg38.tsv
             mem: 4G
@@ -392,8 +395,13 @@ svict:
             time: '24:00:00'
 panelcn_mops:
     run: Y # only for targeted panel
+    pon: # ignored if create_pon:run:Y
     parameters:
         run_cohort: Y
+        create_pon:
+            run: N
+            mem: 2G
+            time: '24:00:00'
         cn_mops:
             mem: 4G
             time: '24:00:00'

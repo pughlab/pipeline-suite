@@ -346,6 +346,7 @@ sub main {
 	print $log "\n---\n";
 
 	# set tools and versions
+	my $perl 	= 'perl/' . $tool_data->{perl_version};
 	my $novobreak	= 'novoBreak/' . $tool_data->{novobreak_version};
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
@@ -455,7 +456,7 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> 'run_novobreak_' . $sample,
 					cmd	=> $full_novo_command,
-					modules	=> [$samtools, $novobreak, 'perl'],
+					modules	=> [$novobreak, $samtools, $perl],
 					max_time	=> $parameters->{novobreak}->{time},
 					mem		=> $parameters->{novobreak}->{mem},
 					cpus_per_task	=> $parameters->{novobreak}->{n_cpus},
@@ -498,7 +499,7 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> 'run_novobreak_group_reads_' . $sample,
 					cmd	=> $group_reads_command,
-					modules	=> [$samtools, $novobreak, 'perl'],
+					modules	=> [$novobreak, $samtools, $perl],
 					dependencies	=> $run_id,
 					max_time	=> $parameters->{group_reads}->{time},
 					mem		=> $parameters->{group_reads}->{mem},
@@ -538,7 +539,7 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> 'run_novobreak_postprocess_' . $sample,
 					cmd	=> $nb_process_command,
-					modules	=> [$samtools, $novobreak, $bwa, 'perl'],
+					modules	=> [$novobreak, $samtools, $bwa, $perl],
 					dependencies	=> $run_id,
 					max_time	=> $parameters->{postprocess}->{time},
 					mem		=> $parameters->{postprocess}->{mem},
@@ -578,7 +579,7 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> 'run_sort_and_filter_' . $sample,
 					cmd	=> $filter_command,
-					modules	=> ['perl', $vcftools],
+					modules	=> [$perl, $vcftools],
 					dependencies	=> $run_id,
 					max_time	=> $parameters->{filter}->{time},
 					mem		=> $parameters->{filter}->{mem},

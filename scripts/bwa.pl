@@ -552,12 +552,7 @@ sub main {
 					my $output = join('/', $lane_directory, $filestem);
 
 					# check if this should be run
-					if ( 
-						('Y' eq missing_file(join("$output.COMPLETE"))) &&
-						# if the index is missing, then this has been run before and the 
-						# resulting sam deleted, (so don't do it again)
-						('Y' eq missing_file("$output.bam.bai"))
-						) {
+					if ('Y' eq missing_file("$output.COMPLETE")) {
 
 						# record command (in log directory) and then run job
 						print $log "      >> Submitting job for bwa...\n";
@@ -597,10 +592,9 @@ sub main {
 					# check if this should be run
 					if (
 						('Y' eq missing_file("$output.bam")) &&
-						# if the index is missing, then this has been run before and
-						# the resulting sam deleted (so don't do it again)
-						('Y' eq missing_file("$output.bam.bai"))
+						('Y' eq missing_file("$output.bam.md5"))
 						) {
+
 						# record command (in log directory) and then run job
 						print $log "      >> Submitting job to sort bam...\n";
 						$run_script = write_script(
@@ -639,7 +633,7 @@ sub main {
 
 					# check if this should be run
 					if (
-						('Y' eq missing_file("$output.bam.bai")) ||
+						('Y' eq missing_file("$output.bam.bai")) &&
 						('Y' eq missing_file("$output.bam.md5"))
 						) {
 						# record command (in log directory) and then run job

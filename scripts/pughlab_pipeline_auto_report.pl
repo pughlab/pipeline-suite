@@ -166,7 +166,7 @@ sub main {
 
 	# initiate objects
 	my @job_ids;
-	my ($qc_dir, $germ_dir, $cpsr_dir);
+	my ($qc_dir, $comp_dir, $cpsr_dir);
 	my ($correlations, $qc_data, $cb_data, $seqqc_data, $callability_data, $efficiency_data, $contest_data, $cpsr_calls) = undef;
 	my ($run_script, $run_id);
 
@@ -508,7 +508,7 @@ sub main {
 		} else {
 
 		$qc_dir		= join('/', $output_directory, 'BAMQC');
-		$germ_dir	= join('/', $output_directory, 'HaplotypeCaller/cohort/germline_variants');
+		$comp_dir	= join('/', $output_directory, 'HaplotypeCaller/cohort/sample_comparisons');
 		$cpsr_dir	= join('/', $output_directory, 'HaplotypeCaller/CPSR');
 
 		# contamination estimates (T/N, meta + readgroup)
@@ -594,20 +594,20 @@ sub main {
 			symlink($cb_data, join('/', $data_directory, 'total_bases_covered.tsv'));
 			}
 
-		# germline variant correlations
-		if (-e $germ_dir) {
-			opendir(GERMLINE, $germ_dir) or die "Cannot open '$germ_dir' !";
-			my @correlation_files = grep { /germline_correlation.tsv/ } readdir(GERMLINE);
+		# variant correlations (discordance via bcftools gtcheck)
+		if (-e $comp_dir) {
+			opendir(GTCHECK, $comp_dir) or die "Cannot open '$comp_dir' !";
+			my @correlation_files = grep { /gtcheck.tsv/ } readdir(GTCHECK);
 			@correlation_files = sort @correlation_files;
-			closedir(GERMLINE);
+			closedir(GTCHECK);
 
-			$correlations = join('/', $germ_dir, $correlation_files[-1]);
+			$correlations = join('/', $comp_dir, $correlation_files[-1]);
 
-			if ( -l join('/', $data_directory, 'germline_correlation.tsv')) {
-				unlink join('/', $data_directory, 'germline_correlation.tsv');
+			if ( -l join('/', $data_directory, 'gt_comparison.tsv')) {
+				unlink join('/', $data_directory, 'gt_comparison.tsv');
 				}
 
-			symlink($correlations, join('/', $data_directory, 'germline_correlation.tsv'));
+			symlink($correlations, join('/', $data_directory, 'gt_comparison.tsv'));
 			}
 
 		# create some QC plots

@@ -193,14 +193,30 @@ sub main {
 		}
 
 	# do an initial check for normals; no normals = don't bother running
+	my $pon_directory = join('/', $output_directory, 'PanelOfNormals');
+	my $pon_link_directory = join('/', $pon_directory, 'bam_links');
+
 	my @has_normals;
 	foreach my $patient (sort keys %{$smp_data}) {
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
 		if (scalar(@normal_ids) > 0) { push @has_normals, $patient; }
 		}
 
-	if (scalar(@has_normals) == 0) {
-		print("No normal BAMs provided. PanelCN.mops requires matched normals to create a PoN, therefore we will exit now.");
+	my ($should_run_pon, $pon_file, $new_targets_bed);
+	if ( ('Y' eq $parameters->{create_pon}->{run}) && (scalar(@has_normals) > 0) ) {
+		$should_run_pon = 1;
+		unless(-e $pon_directory) { make_path($pon_directory); }
+		unless(-e $pon_link_directory) { make_path($pon_link_directory); }
+		$pon_file = join('/', $pon_directory, 'merged_GRanges_count_obj_for_panelcn.RData');
+		$new_targets_bed = join('/', $pon_directory, 'formatted_countWindows.bed');
+		} elsif ( ('Y' eq $parameters->{create_pon}->{run}) && (defined($tool_data->{panelcn_mops}->{pon})) ) {
+		$pon_file = $tool_data->{panelcn_mops}->{pon};
+		print $log "Insufficient normals provided to create a Panel of Normals; using $pon_file instead.\n";
+		} elsif (defined($tool_data->{panelcn_mops}->{pon})) {
+		$pon_file = $tool_data->{panelcn_mops}->{pon};
+		print $log "Panel of Normals: $tool_data->{panelcn_mops}->{pon}";
+		} else {
+		print("No normal BAMs found and no panelOfNormals provided. PanelCN.mops requires normal samples and/or a PoN, therefore we will exit now.");
 		exit;
 		}
 
@@ -208,15 +224,92 @@ sub main {
 	my @sample_sheet_normal;
 	my @control_read_lengths;
 
-	# begin by creating panel of normals
-	my $pon_directory = join('/', $output_directory, 'PanelOfNormals');
-	unless(-e $pon_directory) { make_path($pon_directory); }
+	# prepare panel of normals
+	my $pon_run_id = '';
 
-	my $pon_link_directory = join('/', $pon_directory, 'bam_links');
-	unless(-e $pon_link_directory) { make_path($pon_link_directory); }
+	if ($should_run_pon) {
 
-	# find all samples in $smp_data
+		# find all samples in $smp_data
+		foreach my $patient (sort keys %{$smp_data}) {
+
+			# find bams
+			my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
+
+			# create some symlinks and add samples to sheet
+			foreach my $normal (@normal_ids) {
+				my $bam = $smp_data->{$patient}->{normal}->{$normal};
+				$link = join('/', $pon_link_directory, basename($bam));
+				symlink($bam, $link);
+
+				push @sample_sheet_normal, "$normal\tcontrol\t$bam\n";
+
+				# find average read length
+				my $read_length = 151;
+				unless($args{dry_run}) {
+					$read_length = get_read_lengths_command(input => $bam);
+					}
+				push @control_read_lengths, $read_length;
+				}
+			}
+
+		my $sample_sheet = join('/', $pon_directory, 'sample_sheet.tsv');
+		open(my $fh, '>', $sample_sheet) or die "Cannot open '$sample_sheet' !";
+
+		foreach my $i ( @sample_sheet_normal ) {
+			print $fh $i;
+			}
+
+		close $fh;
+
+		my $avg_read_length = int(sum(@control_read_lengths) / scalar(@control_read_lengths));
+
+		my $mops_pon_command = get_panelcn_mops_command(
+			sample_list	=> $sample_sheet,
+			read_length	=> $avg_read_length,
+			intervals_bed	=> $tool_data->{targets_bed},
+			output_dir	=> $pon_directory,
+			make_pon	=> 1
+			);
+
+		# check if this should be run
+		if ('Y' eq missing_file($pon_file)) {
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for panelCN.mops PanelOfNormals...\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'run_panelCN_mops_create_PoN',
+				cmd	=> $mops_pon_command,
+				modules	=> [$cnmops_r],
+				max_time	=> $parameters->{cn_mops}->{time},
+				mem		=> $parameters->{cn_mops}->{mem},
+				hpc_driver	=> $args{hpc_driver},
+				extra_args	=> [$hpc_group]
+				);
+
+			$pon_run_id = submit_job(
+				jobname		=> 'run_panelCN_mops_create_PoN',
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @all_jobs, $pon_run_id;
+			} else {
+			print $log "Skipping panelCN.mops PoN because this has already been completed!\n";
+			}
+		}
+
+	# process each tumour sample
+	my @sample_sheet_tumour;
+	my @tumour_read_lengths;
+
+	# process each sample in $smp_data
 	foreach my $patient (sort keys %{$smp_data}) {
+
+		print $log "\nInitiating process for PATIENT: $patient";
 
 		# find bams
 		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
@@ -229,99 +322,14 @@ sub main {
 		my $link_directory = join('/', $patient_directory, 'bam_links');
 		unless(-e $link_directory) { make_path($link_directory); }
 
-		# create some symlinks and add samples to sheet
-		foreach my $normal (@normal_ids) {
-			my $bam = $smp_data->{$patient}->{normal}->{$normal};
-			$link = join('/', $pon_link_directory, basename($bam));
-			symlink($bam, $link);
-
-			push @sample_sheet_normal, "$normal\tcontrol\t$bam\n";
-
-			# find average read length
-			my $read_length = 151;
-			unless($args{dry_run}) {
-				$read_length = get_read_lengths_command(input => $bam);
-				}
-			push @control_read_lengths, $read_length;
-			}
-
 		foreach my $tumour (@tumour_ids) {
 			my $bam = $smp_data->{$patient}->{tumour}->{$tumour};
 			$link = join('/', $link_directory, basename($bam));
 			symlink($bam, $link);
 			}
-		}
-
-	# prepare panel of normals
-	my $pon_run_id = '';
-
-	my $sample_sheet = join('/', $pon_directory, 'sample_sheet.tsv');
-	open(my $fh, '>', $sample_sheet) or die "Cannot open '$sample_sheet' !";
-
-	foreach my $i ( @sample_sheet_normal ) {
-		print $fh $i;
-		}
-
-	close $fh;
-
-	my $avg_read_length = int(sum(@control_read_lengths) / scalar(@control_read_lengths));
-	my $pon_file = join('/', $pon_directory, 'merged_GRanges_count_obj_for_panelcn.RData');
-	my $new_targets_bed = join('/', $pon_directory, 'formatted_countWindows.bed');
-
-	my $mops_pon_command = get_panelcn_mops_command(
-		sample_list	=> $sample_sheet,
-		read_length	=> $avg_read_length,
-		intervals_bed	=> $tool_data->{targets_bed},
-		output_dir	=> $pon_directory,
-		make_pon	=> 1
-		);
-
-	# check if this should be run
-	if ('Y' eq missing_file($pon_file)) {
-
-		# record command (in log directory) and then run job
-		print $log "Submitting job for panelCN.mops PanelOfNormals...\n";
-
-		$run_script = write_script(
-			log_dir	=> $log_directory,
-			name	=> 'run_panelCN_mops_create_PoN',
-			cmd	=> $mops_pon_command,
-			modules	=> [$cnmops_r],
-			max_time	=> $parameters->{cn_mops}->{time},
-			mem		=> $parameters->{cn_mops}->{mem},
-			hpc_driver	=> $args{hpc_driver},
-			extra_args	=> [$hpc_group]
-			);
-
-		$pon_run_id = submit_job(
-			jobname		=> 'run_panelCN_mops_create_PoN',
-			shell_command	=> $run_script,
-			hpc_driver	=> $args{hpc_driver},
-			dry_run		=> $args{dry_run},
-			log_file	=> $log
-			);
-
-		push @all_jobs, $pon_run_id;
-		} else {
-		print $log "Skipping panelCN.mops PoN because this has already been completed!\n";
-		}
-
-	# process each tumour sample
-	my @sample_sheet_tumour;
-	my @tumour_read_lengths;
-
-	# process each sample in $smp_data
-	foreach my $patient (sort keys %{$smp_data}) {
-
-		print $log "\nInitiating process for PATIENT: $patient";
 
 		# create an array to hold final outputs and all patient job ids
 		my (@final_outputs, @patient_jobs);
-
-		my $patient_directory = join('/', $output_directory, $patient);
-
-		# find bams
-		my @tumour_ids = keys %{$smp_data->{$patient}->{'tumour'}};
 
 		# now, for each tumour sample
 		foreach my $sample (@tumour_ids) {
