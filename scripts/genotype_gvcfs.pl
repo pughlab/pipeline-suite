@@ -388,8 +388,9 @@ sub main{
 		}
 
 	$use_new_samtools = 0;
-	my $needed = version->declare('1.20')->numify;
-	my $given = version->declare($tool_data->{samtools_version})->numify;
+	($needed, $given) = undef;
+	$needed = version->declare('1.20')->numify;
+	$given = version->declare($tool_data->{samtools_version})->numify;
 	if ($given >= $needed) {
 		$use_new_samtools = 1;
 		}
