@@ -1,3 +1,14 @@
+2025-01-10: PughLab pipeline-suite (version 0.9.14);
+- MAJOR update to genotype_gvcfs.pl:
+	- replaced germline correlation functions (very memory intensive) with bcftools gtcheck (compares genotypes for all germline/somatic variants and provides number of match/mismatch for each sample pair)
+	- updated pughlab_pipeline_auto_report.pl to find new concordance file
+	- updated plot_qc_metrics.R to reflect concordance (proportion of matching genotypes) rather than correlation
+	- added create panel of normals within panelCN.mops.pl
+- MINOR updates:
+	- added bwa:n_cpus and panelCN.mops:pon parameters to tool config files
+	- changed job dependencies within bwa.pl
+	- changed order of loaded modules within novobreak.pl
+
 2024-11-21: PughLab pipeline-suite (version 0.9.13);
 - fixed bug in PGA calculation (collect_sequenza_output.R); previous only considered gains/amps
 - MINOR updates throughout:
