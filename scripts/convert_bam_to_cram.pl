@@ -55,6 +55,7 @@ sub get_bamtocram_command {
 sub main {
 	my %args = (
 		reference		=> undef,
+		tool_config		=> undef,
 		data_config		=> undef,
 		output_directory	=> undef,
 		hpc_driver		=> undef,
@@ -62,6 +63,9 @@ sub main {
 		no_wait			=> undef,
 		@_
 		);
+
+	my $tool_config = $args{tool_config};
+	my $data_config = $args{data_config};
 
 	### PREAMBLE ######################################################################################
 	unless($args{dry_run}) {
@@ -100,22 +104,23 @@ sub main {
 	print $log "---\n";
 	print $log "Running BAM to CRAM pipeline.\n";
 	print $log "\n  Reference used: $args{reference}";
-	print $log "\n  BAM config used: $args{data_config}";
+	print $log "\n  Tool config used: $tool_config";
+	print $log "\n  BAM config used: $data_config";
 	print $log "\n  Output directory: $output_directory";
 	print $log "\n---";
 
 	# set tools and versions
-	my $samtools	= 'samtools/1.17';
+	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 
 	# get optional HPC group
-	my $hpc_group = '-A ovgroup'; #defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
 
 	### RUN ###########################################################################################
 	my ($run_script, $run_id, $link);
 	my (@all_jobs);
 
 	# get sample data
-	my $smp_data = LoadFile($args{data_config});
+	my $smp_data = LoadFile($data_config);
 
 	unless($args{dry_run}) {
 		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
