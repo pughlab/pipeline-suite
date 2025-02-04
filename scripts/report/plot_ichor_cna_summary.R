@@ -120,6 +120,7 @@ input.data <- input.data[which(input.data$Chromosome != 'chrY'),];
 if ('CN' == arguments$scale) {
 	tmp <- input.data[,c('Sample','Chromosome','start','end','Corrected_Copy_Number')];
 	colnames(tmp)[5] <- 'CN';
+	tmp$CN <- tmp$CN - 2;
 	} else if ('ratio' == arguments$scale) {
 	tmp <- input.data[,c('Sample','Chromosome','start','end','logR')];
 	colnames(tmp)[5] <- 'Ratio';
