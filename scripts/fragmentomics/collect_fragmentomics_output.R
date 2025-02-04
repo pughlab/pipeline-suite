@@ -108,7 +108,8 @@ if (length(fs.ratio.files) > 0) {
 		if (grepl('downsample', basename(i))) {
 			tmp$sample_id <- sub('_downsample','',tmp$sample_id);
 			}
-		return(tmp[,c('sample_id','bin','seqnames','arm','start','end','combined_centered')]);
+	#	return(tmp[,c('sample_id','bin','seqnames','arm','start','end','combined_centered')]);
+		return(tmp[,c('sample_id','bin','seqnames','arm','start','end','ratio_centered')]);
 		}));
 	}
 
@@ -256,7 +257,8 @@ if (length(fs.ratio.files) > 0) {
 		idvar = c('bin','seqnames','arm','start','end'),
 		timevar = 'sample_id'
 		);
-	colnames(ratio.data.wide) <- gsub('combined_centered.','',colnames(ratio.data.wide));
+	#colnames(ratio.data.wide) <- gsub('combined_centered.','',colnames(ratio.data.wide));
+	colnames(ratio.data.wide) <- gsub('ratio_centered.','',colnames(ratio.data.wide));
 	}
 
 ## format griffin data
