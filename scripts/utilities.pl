@@ -166,14 +166,15 @@ sub error_checking {
 	if (('novobreak' eq $pipeline)) {
 		if (!defined($tool_data->{reference})) { die("Must supply path to reference genome!"); }
 
-		if ('novobreak' eq $pipeline) {
-			$is_ref_valid = validate_ref(
-				reference	=> $tool_data->{bwa}->{reference},
-				pipeline	=> 'bwa',
-				exts		=> [qw(.fa .fa.amb .fa.ann .fa.bwt .fa.pac .fa.sa)]
-			);
+		if ('wgs' eq $tool_data->{seq_type}) {
+			print "NovoBreak is intended for WXS but this is WGS; will try to run but be prepared for failures!";
 		}
 
+		$is_ref_valid = validate_ref(
+			reference	=> $tool_data->{bwa}->{reference},
+			pipeline	=> 'bwa',
+			exts		=> [qw(.fa .fa.amb .fa.ann .fa.bwt .fa.pac .fa.sa)]
+		);
 	}
 
 	# SViCT
@@ -695,6 +696,8 @@ sub check_final_status {
 				}
 			}
 		}
+
+	print "Final accouting job: $args{job_id} finished successfully.";
 	}
 
 # format command to generate PON
