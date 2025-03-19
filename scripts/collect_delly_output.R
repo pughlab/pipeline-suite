@@ -75,7 +75,7 @@ if (arguments$germline) {
 	input.files <- list.files(pattern = 'Delly_SVs_somatic_hc.vcf$', recursive = TRUE);
 
 	# find VCF header
-	tmp <- read.delim(input.files[1], nrow = 1000, header = FALSE);
+	tmp <- read.delim(input.files[1], nrow = 4000, header = FALSE);
 	header <- max(grep('##', tmp$V1));
 	rm(tmp);
 
