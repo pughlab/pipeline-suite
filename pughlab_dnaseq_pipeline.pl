@@ -180,9 +180,9 @@ sub main {
 	if ($args{step1}) {
 
 		## run FASTQC pipeline
-		unless(-e $fastqc_directory) { make_path($fastqc_directory); }
-
 		if ('Y' eq $tool_set{'fastqc'}) {
+
+			unless(-e $fastqc_directory) { make_path($fastqc_directory); }
 
 			my $fastqc_command = join(' ',
 				"perl $cwd/scripts/collect_fastqc_metrics.pl",
