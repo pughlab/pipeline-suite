@@ -72,6 +72,8 @@ sub main {
 		print "Initiating BAM to CRAM pipeline...\n";
 		}
 
+	my $tool_data = LoadFile($tool_config);
+
 	# organize output and log directories
 	my $output_directory = $args{output_directory};
 	$output_directory =~ s/\/$//;
@@ -266,13 +268,14 @@ sub main {
 
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
-my ($reference, $data_config, $output_directory);
+my ($reference, $tool_config, $data_config, $output_directory);
 my $hpc_driver = 'slurm';
 my ($remove_junk, $dry_run, $help, $no_wait, $germline);
 
 # get command line arguments
 GetOptions(
 	'h|help'	=> \$help,
+	't|tool=s'	=> \$tool_config,
 	'd|data=s'	=> \$data_config,
 	'r|reference=s'	=> \$reference,
 	'o|out_dir=s'	=> \$output_directory,
@@ -285,6 +288,7 @@ if ($help) {
 	my $help_msg = join("\n",
 		"Options:",
 		"\t--help|-h\tPrint this help message",
+		"\t--tool|-t\t<string> tool config (yaml format)",
 		"\t--data|-d\t<string> data config (yaml format)",
 		"\t--reference|-r\t<string> path to reference fasta",
 		"\t--out_dir|-o\t<string> path to output directory",
@@ -304,6 +308,7 @@ if (!defined($output_directory)) { die("No output directory defined; please prov
 
 main(
 	reference		=> $reference,
+	tool_config		=> $tool_config,
 	data_config		=> $data_config,
 	output_directory	=> $output_directory,
 	hpc_driver		=> $hpc_driver,
