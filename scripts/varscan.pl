@@ -315,6 +315,11 @@ sub main {
 		print $log "\n    Target intervals: $intervals_bed";
 		}
 
+	if (defined($args{pon})) {
+		$pon = $args{pon};
+		print $log "\n    Panel of normals: $args{pon}";
+		}
+
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n---";
@@ -1259,13 +1264,13 @@ sub main {
 		print $log "---\n";
 		}
 
-	my $pon_job_id;
+	my $pon_job_id = '';
 	if ( (!defined($args{pon})) && ($should_run_pon) ) {
 	
 		print $log "\n---\nCreating Panel of Normals...\n";
 
 		# let's create a command and write script to combine variants for a PoN
-		my $pon		= join('/', $pon_directory, $date . "_merged_panelOfNormals.vcf");
+		$pon		= join('/', $pon_directory, $date . "_merged_panelOfNormals.vcf");
 		my $final_pon_link = join('/', $output_directory, 'panel_of_normals.vcf');
 
 		# create a trimmed (sites only) output (this is the panel of normals)
@@ -1365,7 +1370,6 @@ sub main {
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
 
-			$run_id = $pon_job_id;
 			$varscan_run_id = '';
 			my @snp_jobs;
 
@@ -1452,7 +1456,7 @@ sub main {
 						);
 
 					$varscan_run_id = submit_job(
-						jobname		=> 'run_varscan_snv_vcf_split_by_chr' . $sample,
+						jobname		=> 'run_varscan_snv_vcf_split_by_chr_' . $sample,
 						shell_command	=> $run_script,
 						hpc_driver	=> $args{hpc_driver},
 						dry_run		=> $args{dry_run},
@@ -1541,7 +1545,7 @@ sub main {
 						extra_args	=> [$hpc_group]
 						);
 
-					$run_id = submit_job(
+					$varscan_run_id = submit_job(
 						jobname		=> "run_combine_chromosome_output\_$sample",
 						shell_command	=> $run_script,
 						hpc_driver	=> $args{hpc_driver},
@@ -1549,9 +1553,9 @@ sub main {
 						log_file	=> $log
 						);
 
-					push @snp_jobs, $run_id;
-					push @patient_jobs, $run_id;
-					push @all_jobs, $run_id;
+					push @snp_jobs, $varscan_run_id;
+					push @patient_jobs, $varscan_run_id;
+					push @all_jobs, $varscan_run_id;
 					} else {
 					print $log "  >> Skipping Merge VCF because this has already been completed!\n";
 					}
@@ -1581,7 +1585,7 @@ sub main {
 					name	=> 'run_vcf_filter_' . $sample,
 					cmd	=> $filter_command,
 					modules	=> [$samtools, $vcftools],
-					dependencies	=> $varscan_run_id,
+					dependencies	=> join(':',$varscan_run_id,$pon_job_id),
 					max_time	=> $parameters->{filter}->{time},
 					mem		=> $parameters->{filter}->{mem},
 					hpc_driver	=> $args{hpc_driver},

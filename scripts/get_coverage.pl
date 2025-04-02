@@ -579,13 +579,16 @@ sub main {
 		# record command (in log directory) and then run job
 		print $log ">> Submitting job to collect callable bases...\n";
 
+		my $tmp_mem = '4G';
+		if ('wgs' eq $tool_data->{seq_type}) { $tmp_mem = '16G'; }
+
 		$run_script = write_script(
 			log_dir	=> $log_directory,
 			name	=> 'combine_callable_base_output',
 			cmd	=> $collect_cb_output,
 			modules	=> [$r_version],
 			dependencies	=> join(':', @callable_base_jobs),
-			mem		=> '4G',
+			mem		=> $tmp_mem,
 			max_time	=> '12:00:00',
 			hpc_driver	=> $args{hpc_driver},
 			extra_args	=> [$hpc_group]

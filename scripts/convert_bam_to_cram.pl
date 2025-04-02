@@ -55,6 +55,7 @@ sub get_bamtocram_command {
 sub main {
 	my %args = (
 		reference		=> undef,
+		tool_config		=> undef,
 		data_config		=> undef,
 		output_directory	=> undef,
 		hpc_driver		=> undef,
@@ -63,10 +64,15 @@ sub main {
 		@_
 		);
 
+	my $tool_config = $args{tool_config};
+	my $data_config = $args{data_config};
+
 	### PREAMBLE ######################################################################################
 	unless($args{dry_run}) {
 		print "Initiating BAM to CRAM pipeline...\n";
 		}
+
+	my $tool_data = LoadFile($tool_config);
 
 	# organize output and log directories
 	my $output_directory = $args{output_directory};
@@ -100,22 +106,23 @@ sub main {
 	print $log "---\n";
 	print $log "Running BAM to CRAM pipeline.\n";
 	print $log "\n  Reference used: $args{reference}";
-	print $log "\n  BAM config used: $args{data_config}";
+	print $log "\n  Tool config used: $tool_config";
+	print $log "\n  BAM config used: $data_config";
 	print $log "\n  Output directory: $output_directory";
 	print $log "\n---";
 
 	# set tools and versions
-	my $samtools	= 'samtools/1.17';
+	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 
 	# get optional HPC group
-	my $hpc_group = '-A ovgroup'; #defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
+	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
 
 	### RUN ###########################################################################################
 	my ($run_script, $run_id, $link);
 	my (@all_jobs);
 
 	# get sample data
-	my $smp_data = LoadFile($args{data_config});
+	my $smp_data = LoadFile($data_config);
 
 	unless($args{dry_run}) {
 		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
@@ -261,13 +268,14 @@ sub main {
 
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
-my ($reference, $data_config, $output_directory);
+my ($reference, $tool_config, $data_config, $output_directory);
 my $hpc_driver = 'slurm';
 my ($remove_junk, $dry_run, $help, $no_wait, $germline);
 
 # get command line arguments
 GetOptions(
 	'h|help'	=> \$help,
+	't|tool=s'	=> \$tool_config,
 	'd|data=s'	=> \$data_config,
 	'r|reference=s'	=> \$reference,
 	'o|out_dir=s'	=> \$output_directory,
@@ -280,6 +288,7 @@ if ($help) {
 	my $help_msg = join("\n",
 		"Options:",
 		"\t--help|-h\tPrint this help message",
+		"\t--tool|-t\t<string> tool config (yaml format)",
 		"\t--data|-d\t<string> data config (yaml format)",
 		"\t--reference|-r\t<string> path to reference fasta",
 		"\t--out_dir|-o\t<string> path to output directory",
@@ -299,6 +308,7 @@ if (!defined($output_directory)) { die("No output directory defined; please prov
 
 main(
 	reference		=> $reference,
+	tool_config		=> $tool_config,
 	data_config		=> $data_config,
 	output_directory	=> $output_directory,
 	hpc_driver		=> $hpc_driver,

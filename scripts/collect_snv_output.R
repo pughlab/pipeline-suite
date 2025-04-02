@@ -46,6 +46,8 @@ parser <- ArgumentParser();
 parser$add_argument('-d', '--directory', type = 'character', help = 'path to data directory',
 	default = getwd());
 parser$add_argument('-p', '--project', type = 'character', help = 'project name');
+parser$add_argument('-s', '--seq_type', type = 'character', default = 'wgs', 
+	help = 'type of sequencing done (ie, WGS/WXS/RNA)');
 parser$add_argument('-t', '--t_depth', type = 'integer', 
 	help = 'minimum tumour depth required (rna-seq only)', default = 20);
 
@@ -65,9 +67,16 @@ maf.classes <- rep('character',132);
 maf.classes[c(2,6,7,40:45,58,60,77:85,100:107,112:122,124:132)] <- 'numeric';
 
 # determine type of experiment that was run
-is.rnaseq <- grepl('RNASeq', arguments$directory);
-is.exome <- grepl('Exome|WEX|WXS|ctDNA', arguments$directory);
-is.wgs <- grepl('WGS', arguments$directory);
+seq_type <- tolower(arguments$seq_type);
+
+is.rnaseq <- FALSE;
+is.exome <- FALSE;
+is.wgs <- FALSE;
+
+if (grepl('rna', seq_type)) { is.rnaseq <- TRUE; 
+	} else if (grepl('wg', seq_type)) { is.wgs <- TRUE;
+	} else { is.exome <- TRUE; } 
+
 is.germline <- grepl('CPSR', arguments$directory);
 
 # if this is RNA-Seq, only keep variants in coding regions

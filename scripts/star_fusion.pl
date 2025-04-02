@@ -152,7 +152,7 @@ sub main {
 		}
 	my $star	= 'STAR/' . $tool_data->{star_version};
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
-	my $perl	= 'perl/5.30.0';
+	my $perl	= 'perl/' . $tool_data->{perl_version};
 	my $r_version	= 'R/' . $tool_data->{r_version};
 
 	# get user-specified tool parameters

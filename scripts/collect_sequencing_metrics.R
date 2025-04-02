@@ -131,6 +131,7 @@ for (file in alignment.files) {
 	tmp <- read.delim(file, skip = 6);
 	tmp$LEVEL <- apply(
 		tmp[,c('SAMPLE','LIBRARY','READ_GROUP')], 1, function(i) {
+			i[is.na(i)] <- '';
 			if (i[1] == '') { 'ALL_READS' } else if (i[2] == '') { 'SAMPLE'
 			} else if (i[3] == '') { 'LIBRARY' } else { 'READ_GROUP' }
 			}

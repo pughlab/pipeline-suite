@@ -17,7 +17,7 @@ use IO::Handle;
 my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
-our ($reference);
+our ($reference, $use_new_msi_sensor_version);
 
 ####################################################################################################
 # version	author		comment
@@ -108,7 +108,7 @@ sub get_msi_sensor_command {
 		'-o', $args{output_stem}
 		);
 
-	if (defined($args{intervals})) {
+	if ($use_new_msi_sensor_version & (defined($args{intervals}))) {
 		$msi_command .= " -e $args{intervals}";
 		}
 
@@ -189,7 +189,15 @@ sub main {
 	print $log "\n---\n";
 
 	# set tools and versions
-	my $msi_pro	= $tool_data->{msi_sensor_version};
+	my $msi_pro	= 'msisensor-pro/' . $tool_data->{msi_sensor_version};
+
+	$use_new_msi_sensor_version = 1;
+	my $suggested = version->declare('1.2.0')->numify;
+	my $given = version->declare($tool_data->{msi_sensor_version})->numify;
+	if ($given > $suggested) {
+		$use_new_msi_sensor_version = 0;
+		}
+
 	my $r_version	= 'R/' . $tool_data->{r_version};
 
 	# get user-specified tool parameters
@@ -200,7 +208,7 @@ sub main {
 
 	### RUN ###########################################################################################
 	my ($run_script, $run_id, $link, $intervals_run_id, $baseline_run_id, $should_run_final);
-	my @all_jobs;
+	my (@all_jobs, @baseline_jobs);
 
 	# get sample data
 	my $smp_data = LoadFile($data_config);
@@ -253,6 +261,7 @@ sub main {
 			log_file	=> $log
 			);
 
+		push @baseline_jobs, $intervals_run_id;
 		push @all_jobs, $intervals_run_id;
 		} else {
 		print $log "Skipping SCAN as this has already been completed!\n";
@@ -283,7 +292,9 @@ sub main {
 			my @tmp = split /\//, $smp_data->{$patient}->{normal}->{$normal};
 			$link = join('/', $link_directory, $tmp[-1]);
 			symlink($smp_data->{$patient}->{normal}->{$normal}, $link);
-			print $fh "$normal\t$smp_data->{$patient}->{normal}->{$normal}\n";
+			if ($use_new_msi_sensor_version) {
+				print $fh "$normal\t$smp_data->{$patient}->{normal}->{$normal}\n";
+				}
 			}
 		foreach my $tumour (@tumour_ids) {
 			my @tmp = split /\//, $smp_data->{$patient}->{tumour}->{$tumour};
@@ -301,19 +312,93 @@ sub main {
 
 	# if there are any tumour-only cases; prep the baseline file(s)
 	my $baseline_dir = join('/', $output_directory, 'baseline');
-	my $baseline_out;
+	my ($baseline_out, $baseline_cmd);
+
 	if ($tumour_only > 0) {
 
 		unless(-e $baseline_dir) { make_path($baseline_dir); }
-
 		$baseline_out = join('/', $baseline_dir, 'msi_reference.list_baseline');
 
-		my $baseline_cmd = get_baseline_command(
-			input_list	=> $sample_sheet,
-			output_dir	=> $baseline_dir,
-			intervals	=> $msi_intervals,
-			seq_type	=> $tool_data->{seq_type}
-			);
+		if ($use_new_msi_sensor_version) {
+
+			$baseline_cmd = get_baseline_command(
+				input_list	=> $sample_sheet,
+				output_dir	=> $baseline_dir,
+				intervals	=> $msi_intervals,
+				seq_type	=> $tool_data->{seq_type}
+				);
+
+		} else {
+
+			# open sample sheet for writing
+			open(my $fh, '>', $sample_sheet) or die "Cannot open '$sample_sheet' !";
+
+			# check each patient for a normal sample
+			foreach my $patient (sort keys %{$smp_data}) {
+
+				# find bams
+				my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
+				next if (scalar(@normal_ids) == 0);
+
+				foreach my $sample (@normal_ids) {
+
+					print $log "\n  PROCESSING BASELINE SAMPLE: $sample\n";
+					my $output_stem = join('/', $baseline_dir, 'details', 
+						$sample . '_msi_output');
+
+					print $fh "$sample\t$output_stem\_all\n";
+
+					my $msi_command = get_msi_sensor_command(
+						tumour		=> $smp_data->{$patient}->{normal}->{$sample},
+						output_stem	=> $output_stem,
+						ref_input	=> $msi_intervals,
+						intervals	=> $tool_data->{targets_bed},
+						seq_type	=> $tool_data->{seq_type}
+						);
+
+					# check if this should be run
+					if ('Y' eq missing_file($output_stem . '_all')) {
+
+						# record command (in log directory) and then run job
+						print $log "  >> Submitting job for msi-sensor...\n";
+
+						$run_script = write_script(
+							log_dir	=> $log_directory,
+							name	=> 'run_msi_sensor_' . $sample,
+							cmd	=> $msi_command,
+							modules	=> [$msi_pro],
+							dependencies	=> $intervals_run_id,
+							max_time	=> $parameters->{sensor}->{time},
+							mem		=> $parameters->{sensor}->{mem},
+							hpc_driver	=> $args{hpc_driver},
+							extra_args	=> [$hpc_group]
+							);
+
+						$run_id = submit_job(
+							jobname		=> 'run_msi_sensor_' . $sample,
+							shell_command	=> $run_script,
+							hpc_driver	=> $args{hpc_driver},
+							dry_run		=> $args{dry_run},
+							log_file	=> $log
+							);
+
+						push @baseline_jobs, $run_id;
+						push @all_jobs, $run_id;
+						} else {
+						print $log "  >> Skipping msi-sensor because this has already been completed!\n";
+						}
+					}
+				}
+		
+			close $fh;
+
+			$baseline_cmd = get_baseline_command(
+				input_list	=> $sample_sheet,
+				output_dir	=> $baseline_dir,
+				intervals	=> $msi_intervals,
+				seq_type	=> $tool_data->{seq_type}
+				);
+			}
 
 		# check if this should be run
 		if ('Y' eq missing_file($baseline_out)) {
@@ -326,7 +411,7 @@ sub main {
 				name	=> 'run_msi_sensor_baseline',
 				cmd	=> $baseline_cmd,
 				modules	=> [$msi_pro],
-				dependencies	=> $intervals_run_id,
+				dependencies	=> join(':', @baseline_jobs),
 				max_time	=> $parameters->{baseline}->{time},
 				mem		=> $parameters->{baseline}->{mem},
 				hpc_driver	=> $args{hpc_driver},

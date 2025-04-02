@@ -29,6 +29,7 @@ option_list <- list(
 	make_option("--estimateScPrevalence", type = "logical", default = TRUE, help = "Estimate subclonal prevalence. Default: [%default]"),
 	make_option("--estimatePloidy", type = "logical", default = TRUE, help = "Estimate tumour ploidy. Default: [%default]"),
 	make_option("--chrTrain", type = "character", default = "c(1:22)", help = "Specify chromosomes to estimate params. Default: [%default]"),
+	make_option("--chrNormalize", type = "character", default = "c(1:22,'X')", help = "Specify chromosomes to normalize GC/mappability biases. Default: [%default]"),
 	make_option("--chrs", type = "character", default = "c(1:22,'X')", help = "Specify chromosomes to analyze. Default: [%default]"),
 	make_option("--genomeBuild", type = "character", default = "hg38", help="Geome build. Default: [%default]"),
 	make_option("--genomeStyle", type = "character", default = "UCSC", help = "NCBI or UCSC chromosome naming convention; use UCSC if desired output is to have \"chr\" string. [Default: %default]"),
@@ -61,6 +62,7 @@ genomeBuild	<- opt$genomeBuild;
 genomeStyle	<- opt$genomeStyle;
 chrs		<- as.character(eval(parse(text = opt$chrs)));
 chrTrain	<- as.character(eval(parse(text = opt$chrTrain)));
+chrNormalize	<- as.character(eval(parse(text = opt$chrNormalize)));
 
 # goals
 normal		<- eval(parse(text = opt$normal));
@@ -99,7 +101,6 @@ chrXMedianForMale	<- -0.1;
 maleChrXLogRThres	<- -0.80;
 ponMethod		<- 'median';
 gender		<- NULL;
-chrNormalize	<- chrs;
 
 # load required libraries
 library(HMMcopy);
@@ -269,9 +270,16 @@ if (!is.null(normal_copy)) {
 
 message("Gender: ", gender$gender);
 
-if ('female' == gender$gender) {
-	chrs <- setdiff(chrs,'chrY');
-	}
+### there is a bug in normalizeByPanelOrMatchedNormal for male samples
+# if tumour_copy has different intervals than the normal_panel, both are filtered to
+# overlapping regions and then chrX normalization is applied (but the chrX indices are created
+# on the unfiltered tumour_copy. To fix this, we will filter first.
+chrs <- setdiff(chrs, 'chrY');
+panel <- readRDS(normal_panel);
+seqlevelsStyle(panel) <- genomeStyle;
+
+hits <- findOverlaps(tumour_copy[[id]], panel, type="equal");
+tumour_copy[[id]] <- tumour_copy[[id]][queryHits(hits),];
 
 ## NORMALIZE GENOME-WIDE BY MATCHED NORMAL OR NORMAL PANEL (MEDIAN) ##
 tumour_copy[[id]] <- normalizeByPanelOrMatchedNormal(tumour_copy[[id]], chrs = chrs, 
