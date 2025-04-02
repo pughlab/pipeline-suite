@@ -1,3 +1,17 @@
+2025-04-02: PughLab pipeline-suite (version 0.9.15);
+- MAJOR updates:
+	- added functionality for MSI-Sensor v1.3.0
+- MINOR updates:
+	- changed how collect_snv_output.R determines sequencing type
+	- fixed use of PoN for VarScan with tumour-only cases
+	- increased memory required for count_callable_bases.R for WGS (get_coverage.pl)
+	- removed default parameters from star_fusion.pl, convert_bam_to_cram.pl
+	- added fix to runIchorCNA.R for male samples (normalizing by matched normal)
+	- rescaled CN value for IchorCNA plots (from 0:N to -2:N)
+	- added NA handling to collect_sequencing_metrics.R
+	- added tool_config to convert_bam_to_cram.pl (removed default paths/paramters)
+	- changed feature collected for DELFI in collect_fragmentomics_output.R (from combined_centered to ratio_centered; this removes per-sample/per-bin coverage correction)
+
 2025-01-10: PughLab pipeline-suite (version 0.9.14);
 - MAJOR update to genotype_gvcfs.pl:
 	- replaced germline correlation functions (very memory intensive) with bcftools gtcheck (compares genotypes for all germline/somatic variants and provides number of match/mismatch for each sample pair)
