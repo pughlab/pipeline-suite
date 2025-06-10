@@ -106,28 +106,49 @@ smp.names <- sample.info$Sample;
 
 # read in genotype concordance file
 # account for differences in header depending on version of bcftools used
-concordance.data <- read.delim(cor.file, skip = 19);
+concordance.data <- if (is.dna) { 
+	read.delim(cor.file, skip = 19);
+	} else {
+	read.delim(cor.file, row.names = 1);
+	}
+
 if (ncol(concordance.data) == 1) {
 	concordance.data <- read.delim(cor.file, skip = 32);
 	}
 
-colnames(concordance.data) <- c('Metric','Query.Sample','Genotyped.Sample','Discordance','pvalue','Total.Sites','N.matched'
-	)[1:ncol(concordance.data)];
+if (is.dna) {
+	colnames(concordance.data) <- c('Metric','Query.Sample','Genotyped.Sample','Discordance',
+		'pvalue','Total.Sites','N.matched')[1:ncol(concordance.data)];
 
-# convert N mismatches (discordance) to a proportion of total sites
-concordance.data$Proportion <- 1 - (concordance.data$Discordance / concordance.data$Total.Sites);
+	# convert N mismatches (discordance) to a proportion of total sites
+	concordance.data$Proportion <- 1 - (concordance.data$Discordance / concordance.data$Total.Sites);
 
-# reshape concordance data
-cor.data <- reshape(
-	concordance.data[,c('Query.Sample','Genotyped.Sample','Proportion')],
-	direction = 'wide',
-	idvar = 'Genotyped.Sample',
-	timevar = 'Query.Sample'
-	);
+	# reshape concordance data
+	cor.data <- reshape(
+		concordance.data[,c('Query.Sample','Genotyped.Sample','Proportion')],
+		direction = 'wide',
+		idvar = 'Genotyped.Sample',
+		timevar = 'Query.Sample'
+		);
 
-rownames(cor.data) <- cor.data[,1];
-colnames(cor.data) <- gsub('Proportion\\.','',colnames(cor.data));
-cor.data <- cor.data[,-1];
+	rownames(cor.data) <- cor.data[,1];
+	colnames(cor.data) <- gsub('Proportion\\.','',colnames(cor.data));
+	cor.data <- cor.data[,-1];
+
+	# current data is one-sided, so mirror this
+	for (i in 1:nrow(concordance.data)) {
+		query.smp <- concordance.data[i,]$Query.Sample;
+		genotyped.smp <- concordance.data[i,]$Genotyped.Sample;
+		cor.data[query.smp,genotyped.smp] <- cor.data[genotyped.smp,query.smp];
+		}
+
+	for (smp in smp.names) { cor.data[smp,smp] <- 1; }
+
+	} else {
+	cor.data <- concordance.data;
+	rownames(cor.data) <- gsub('\\.','-',rownames(cor.data));
+	colnames(cor.data) <- gsub('\\.','-',colnames(cor.data));
+	}
 
 # add in missing samples
 missing.samples <- setdiff(smp.names, rownames(cor.data));
@@ -136,14 +157,6 @@ cor.data[missing.samples,] <- NA;
 missing.samples <- setdiff(smp.names, colnames(cor.data));
 cor.data[,missing.samples] <- NA;
 
-# current data is one-sided, so mirror this
-for (i in 1:nrow(concordance.data)) {
-	query.smp <- concordance.data[i,]$Query.Sample;
-	genotyped.smp <- concordance.data[i,]$Genotyped.Sample;
-	cor.data[query.smp,genotyped.smp] <- cor.data[genotyped.smp,query.smp];
-	}
-
-for (smp in smp.names) { cor.data[smp,smp] <- 1; }
 
 # read in coverage metrics
 metric.data  <- read.delim(summary.file, row.names = 1);
