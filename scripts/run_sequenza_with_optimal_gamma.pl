@@ -171,6 +171,7 @@ sub main {
 
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{varscan}->{parameters};
+	my $r_version	= 'R/'. $tool_data->{r_version};
 
 	# is this exome or whole-genome seq?
 	my $is_wgs = 0;
@@ -263,7 +264,7 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> 'run_sequenza_prep_' . $tumour,
 					cmd	=> $seqz_cmd,
-					modules	=> ['R/3.3.0'],
+					modules	=> [$r_version],
 					max_time	=> $parameters->{sequenza}->{time},
 					mem		=> $parameters->{sequenza}->{mem},
 					hpc_driver	=> $args{hpc_driver},
