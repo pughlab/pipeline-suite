@@ -47,6 +47,7 @@ sub get_coverage_command {
 		tmp_dir		=> undef,
 		intervals	=> undef,
 		seq_type	=> undef,
+		n_cpus		=> 1,
 		@_
 		);
 
@@ -70,7 +71,8 @@ sub get_coverage_command {
 			'-Djava.io.tmpdir=' . $args{tmp_dir},
 			'-jar $gatk_dir/GenomeAnalysisTK.jar -T DepthOfCoverage',
 			'-o', $args{output},
-			'-ct', $target_depth
+			'-ct', $target_depth,
+			'-nt', $args{n_cpus}
 			);
 
 		if ('targeted' eq $args{seq_type}) {
@@ -330,7 +332,8 @@ sub main {
 				intervals	=> $tool_data->{targets_bed},
 				java_mem	=> $parameters->{coverage}->{java_mem},
 				tmp_dir		=> $tmp_directory,
-				seq_type	=> $tool_data->{seq_type}
+				seq_type	=> $tool_data->{seq_type},
+				n_cpus		=> $parameters->{coverage}->{n_cpus}
 				);
 				
 			my $md5_cmds = "  " . join("\n  ",
@@ -355,7 +358,7 @@ sub main {
 					name	=> 'run_depth_of_coverage_' . $sample,
 					cmd	=> $cov_command,
 					modules	=> [$gatk],
-					cpus_per_taks	=> 2,
+					cpus_per_task	=> $parameters->{coverage}->{n_cpus},
 					max_time	=> $parameters->{coverage}->{time},
 					mem		=> $parameters->{coverage}->{mem},
 					hpc_driver	=> $args{hpc_driver},
@@ -486,9 +489,9 @@ sub main {
 		# run per patient
 		if ($args{del_intermediates}) {
 
-			if (scalar(@patient_jobs) == 0) {
-				`rm -rf $tmp_directory`;
-				} else {
+#			if (scalar(@patient_jobs) == 0) {
+#				`rm -rf $tmp_directory`;
+#				} else {
 
 				print $log ">> Submitting job to clean up temporary/intermediate files...\n";
 
@@ -526,7 +529,7 @@ sub main {
 					);
 
 				push @all_jobs, $run_id;
-				}
+#				}
 			}
 
 		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";

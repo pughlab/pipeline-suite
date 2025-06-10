@@ -148,6 +148,7 @@ bamqc:
             java_mem: 3g
             mem: 4G
             time: '48:00:00'
+            n_cpus: 2
         callable_bases:
             min_depth:
                 tumour: 20
