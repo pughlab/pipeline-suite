@@ -29,11 +29,11 @@ mutsig_covariates: /cluster/projects/pughlab/references/MutSigCV/gene.covariates
 mutsig_categories: /cluster/projects/pughlab/references/MutSigCV/mutation_type_dictionary_file.txt
 mutsig_refs: /cluster/projects/pughlab/references/MutSigCV/chr_files_hg38
 # tool versions
-perl_version: 5.30.0
+perl_version: 5.40.0
 fastqc_version: 0.11.5
 bwa_version: 0.7.15
-samtools_version: 1.9
-picard_version: 2.6.0
+samtools_version: 1.20
+picard_version: 2.10.9
 sambamba_version: 0.7.0 
 bedtools_version: 2.27.1
 gatk_version: 3.8
@@ -58,8 +58,8 @@ mavis_version: 2.2.5
 cpsr_version: 0.6.1
 pcgr_version: 0.9.1
 vcf2maf_version: 1.6.17 
-msi_sensor_version: msisensor-pro/1.2.0
-r_version: 4.1.0
+msi_sensor_version: 1.2.0
+r_version: 4.2.1
 mutsigcv_version: 1.4
 mcr_path: /cluster/tools/software/MCR/8.1/v81
 # tool specific parameters
@@ -197,16 +197,16 @@ haplotype_caller:
             time: '24:00:00'
 annotate:
     vcf2maf_path: # /cluster/projects/pughlab/bin/vcf2maf-1.6.17/vcf2maf.pl  ## provide EITHER this or vcf2maf_version above ##
-    vep_path: /cluster/tools/software/centos7/vep/98
+    vep_path: /cluster/projects/pughlab/bin/vep
     vep_data: /cluster/projects/pughlab/references/VEP_cache/98
     filter_vcf: /cluster/projects/pughlab/references/VEP_cache/ExAC_nonTCGA.r1.sites.hg19ToHg38.vep.vcf.gz 
-    buffer_size: 1000
-    n_cpus: 4
+    buffer_size: 500
+    n_cpus: 6
     mem: 16G
-    time: '12:00:00'
+    time: '24:00:00'
 mutect:
     run: Y
-    pon: /cluster/projects/pughlab/references/panel_of_normals/hg38/MuTect/v1.1.5/mutect_v1.1.5_hg38_panel_of_normals_20210330.vcf
+    pon: /cluster/projects/pughlab/references/panel_of_normals/hg38/MuTect/v1.1.5/mutect_v1.1.5_wgs_hg38_panel_of_normals_20250509.vcf.gz
     parameters:
         mutect:
             java_mem: 11g
@@ -222,8 +222,8 @@ mutect:
             time: '24:00:00'
 mutect2:
     run: Y
-    pon: /cluster/projects/pughlab/references/panel_of_normals/hg38/Mutect2/v3.8/mutect2_v3.8_hg38_panel_of_normals_20210330.vcf
-#    chromosomes: chr1,chr2,chr3,chr4,chr5,chr6,chr7,chr8,chr9,chr10,chr11,chr12,chr13,chr14,chr15,chr16,chr17,chr18,chr19,chr20,chr21,chr22,chrX,chrY
+    pon: /cluster/projects/pughlab/references/panel_of_normals/hg38/Mutect2/v3.8/mutect2_v3.8_wgs_hg38_panel_of_normals_20250509.vcf.gz
+    chromosomes: #chr1,chr2,chr3,chr4,chr5,chr6,chr7,chr8,chr9,chr10,chr11,chr12,chr13,chr14,chr15,chr16,chr17,chr18,chr19,chr20,chr21,chr22,chrX,chrY
     parameters:
         mutect:
             java_mem: 3g
@@ -248,7 +248,7 @@ manta:
             time: '24:00:00'
 strelka:
     run: Y
-    pon: /cluster/projects/pughlab/references/panel_of_normals/hg38/Strelka/v2.9.10/strelka_v2.9.10_hg38_panel_of_normals_20210330.vcf
+    pon: /cluster/projects/pughlab/references/panel_of_normals/hg38/Strelka/v2.9.10/strelka_v2.9.10_wgs_hg38_panel_of_normals_20250509.vcf.gz
     parameters:
         strelka:
             mem: 8G
@@ -260,11 +260,11 @@ strelka:
             minN: 2
             java_mem: 3g
             mem: 4G
-            time: '96:00:00'
+            time: '24:00:00'
 varscan:
     run: Y
-    pon: /cluster/projects/pughlab/references/panel_of_normals/hg38/VarScan/v2.4.2/varscan_v2.4.2_hg38_panel_of_normals_20210330.vcf
-#    chromosomes: chr1,chr2,chr3,chr4,chr5,chr6,chr7,chr8,chr9,chr10,chr11,chr12,chr13,chr14,chr15,chr16,chr17,chr18,chr19,chr20,chr21,chr22,chrX,chrY
+    pon: /cluster/projects/pughlab/references/panel_of_normals/hg38/VarScan/v2.4.2/varscan_v2.4.2_wgs_hg38_panel_of_normals_20250509.vcf.gz
+    chromosomes: #chr1,chr2,chr3,chr4,chr5,chr6,chr7,chr8,chr9,chr10,chr11,chr12,chr13,chr14,chr15,chr16,chr17,chr18,chr19,chr20,chr21,chr22,chrX,chrY
     parameters:
         varscan:
             java_mem: 3g
@@ -302,13 +302,12 @@ somaticsniper:
 vardict:
     run: Y
     intervals: /cluster/projects/pughlab/references/intervals/whole_genome_intervals/hg38_wgs_intervals_for_vardict_no_centromere.txt # only for WGS
-    pon: /cluster/projects/pughlab/references/panel_of_normals/hg38/VarDict/v1.7.0/vardict_v1.7.0_hg38_panel_of_normals_20210330.vcf 
+    pon: /cluster/projects/pughlab/references/panel_of_normals/hg38/VarDict/v1.7.0/vardict_v1.7.0_wgs_hg38_panel_of_normals_20250509.vcf.gz
     parameters:
         vardict:
-            # vardict_wgs requires slightly higher mem (~16G) and more time (min 32 hours)
-            mem: 12G
-            java_mem: 11g
-            time: '12:00:00'
+            mem: 16G
+            java_mem: 15g
+            time: '24:00:00'
         test_somatic:
             mem: 16G
             time: '24:00:00'
@@ -327,7 +326,7 @@ pindel:
         pindel:
             mem: 6G
             time: '48:00:00'
-            n_cpu: 1
+            n_cpu: 4
         convert:
             filter_depth: 5
             mem: 2G
@@ -335,6 +334,7 @@ pindel:
 gatk_cnv:
     run: Y
     chromosomes:
+    pon: /cluster/projects/pughlab/references/panel_of_normals/hg38/GATKCNV/gatkcnv_wgs_hg38_panel_of_normals_20250509.hdf5
     parameters:
         readcounts:
             mem: 1G
@@ -371,7 +371,7 @@ delly:
             mem: 2G
             time: '12:00:00'
 novobreak:
-    run: Y
+    run: N # not recommended for WGS
     chromosomes:
     parameters:
         novobreak:
@@ -407,36 +407,33 @@ panelcn_mops:
             mem: 4G
             time: '24:00:00'
 ichor_cna:
-    run: N # ideal for low-pass WGS
-    pon:
+    run: Y # ideal for low-pass WGS
+    pon: /cluster/projects/pughlab/references/panel_of_normals/hg38/IchorCNA/pon_ichorCNA__CHARM__median.rds # ignored if create_pon:run:Y
     parameters:
+        downsample:
+            run: N
+            n_reads: 50000000 # takes priority over scale factor
+            scale_factor: 0.01 # scale factor = probability of selecting a read
+            mem: 2G
+            time: '48:00:00'
         readcounter:
+            mem: 2G
+            time: '24:00:00'
+        create_pon:
+            run: N
             mem: 2G
             time: '24:00:00'
         ichor_cna:
             mem: 2G
             time: '24:00:00'
 ascat:
-    run: N # only for WGS
+    run: Y # only for WGS
     parameters:
         ascat_lib_path: '/cluster/projects/pughlab/src/r_lib/library/4.1/'
         ascat:
             mem: 4G
             time: '24:00:00'
             n_cpus: 1
-mavis:
-    run: Y
-    mem: 4G # increase this if the patient has multiple tumours and/or many SV callers were run
-    mavis_mem_limit: # in Mb, default is 16000; increase if individual steps are running out of memory
-    mavis_time_limit: # in seconds, default is 57600 ; increase if individual steps are running out of time
-    mavis_max_jobs: # maximum number of jobs to submit at a time; decrease if hitting slurm job cap
-#    mavis_queue: # if the above mavis_mem_limit or mavis_time_limit require a non-default queue/partition
-    mavis_annotations: /cluster/projects/pughlab/references/MAVIS_ref/ensembl79_hg38_annotations.json
-    mavis_masking: /cluster/projects/pughlab/references/MAVIS_ref/GRCh38_masking.tab
-    mavis_dgv_anno: /cluster/projects/pughlab/references/MAVIS_ref/dgv_hg38_variants.tab
-    mavis_cytoband: /cluster/projects/pughlab/references/MAVIS_ref/cytoBand.txt
-    mavis_draw_fusions_only: false
-    mavis_aligner: 'bwa mem'
 msi_sensor:
     run: Y
     parameters:
@@ -449,12 +446,25 @@ msi_sensor:
         sensor: # some WGS require up to 36G, but most (WXS/WGS/targeted) are fine with 4G
             mem: 4G
             time: '24:00:00'
+mavis:
+    run: Y
+    mem: 8G # increase this if the patient has multiple tumours and/or many SV callers were run
+    mavis_mem_limit: # in Mb, default is 16000; increase if individual steps are running out of memory
+    mavis_time_limit: # in seconds, default is 57600 ; increase if individual steps are running out of time
+    mavis_max_jobs: # maximum number of jobs to submit at a time; decrease if hitting slurm job cap
+#    mavis_queue: # if the above mavis_mem_limit or mavis_time_limit require a non-default queue/partition
+    mavis_annotations: /cluster/projects/pughlab/references/MAVIS_ref/ensembl79_hg38_annotations.json
+    mavis_masking: /cluster/projects/pughlab/references/MAVIS_ref/GRCh38_masking.tab
+    mavis_dgv_anno: /cluster/projects/pughlab/references/MAVIS_ref/dgv_hg38_variants.tab
+    mavis_cytoband: /cluster/projects/pughlab/references/MAVIS_ref/cytoBand.txt
+    mavis_draw_fusions_only: true
+    mavis_aligner: 'bwa mem'
 summarize_steps:
     lib_path: '/cluster/projects/pughlab/src/r_lib/library/4.1/'
     run_cosmic_sbs: # note that signatures (path) takes priority over cosmic_version
         run: Y
         signatures: #/cluster/projects/pughlab/references/COSMIC/Mutational_Sigatures/COSMIC_v3.2_SBS_GRCh38.txt
         cosmic_version: 3.2 # one of 3.0, 3.1, 3.2, 3.3
-    run_mutsig: Y
+    run_mutsig: N # only recommended if you many samples
     run_chord: N
     run_hrdetect: N
