@@ -1,3 +1,18 @@
+2025-07-10: PughLab pipeline-suite (version 0.9.16);
+- removed filter_germline_variants.pl and collect_germline_genotypes.R as these are no longer used
+- MAJOR updates:
+	- added option to downsample BAM for ichorCNA analyses
+	- added UMI extraction commands to trim_adapters.pl for use with capHLA-seq
+- MINOR updates:
+	- added multi-threading to get_coverage.pl
+	- allowed splitting by chromosome for target panels (mutect2)
+	- added VarScan2seqz function to prepare_seqz.R (removes dependency on sequenza v2.1.2 [required for use on H4H2])
+	- removed default R version from run_sequenza_with_optimal_gamma.pl
+	- updated report/plot_qc_metrics.R to use new germline concordance method
+	- changed default python3 version in fragmentomics_pipeline_config.yaml (required for use on H4H)
+	- fixed issue with specification of markdup tool in pughlab_fragmentomics_pipeline.pl
+	- fixed issue of job completion (specifically griffin) not being detected on re-run in pughlab_fragmentomics_pipeline.pl
+
 2025-04-02: PughLab pipeline-suite (version 0.9.15);
 - MAJOR updates:
 	- added functionality for MSI-Sensor v1.3.0
