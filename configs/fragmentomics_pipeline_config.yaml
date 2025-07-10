@@ -24,7 +24,7 @@ samtools_version: 1.20
 picard_version: 2.10.9
 sambamba_version: 0.7.0
 bedtools_version: 2.27.1
-python3_version: 3.10.9
+python3_version: 3.7.2
 r_version: 4.1.0
 # tool specific parameters
 parameters:
