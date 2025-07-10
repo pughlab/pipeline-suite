@@ -1053,6 +1053,10 @@ sub main {
 
 			if ('Y' eq $tool_set{'deduplicate'}) {
 
+				if (!defined($parameters->{dedup}->{tool})) {
+					$parameters->{dedup}->{tool} = 'picard';
+					}
+
 				my $markdup_tool = ('sambamba' eq $parameters->{dedup}->{tool}) ? $sambamba : $picard;
 
 				my $dedup_cmd = get_deduplicate_command( 
@@ -1350,7 +1354,7 @@ sub main {
 
 					my $site_output = join('/',
 						$griffin_site_dir,
-						$site_name . '_profiling.COMPLETE'
+						'griffin_profiling.COMPLETE'
 						);
 
 					# check if this should be run
@@ -1452,7 +1456,7 @@ sub main {
 
 				my $motifs_output = join('/',
 					$motif_directory,
-					$tumour_stem . '_motifs.txt'
+					$tumour_stem . '_5prime_motifs.txt'
 					);
 
 				# check if this should be run
@@ -1584,10 +1588,6 @@ sub main {
  					$size_dedup_cmd = $dedup_cmd_part1 . "\n\n" . $dedup_cmd_part2;
 					$required_bedpe = $short_bedpe;
 					}
-
-				# add to cleanup
-				$cleanup_cmd .= "\n  rm $normal_bedpe;";
-				$cleanup_cmd .= "\n  rm $short_bedpe;";
 
 				# check if this should be run
 				if ('Y' eq missing_file($required_bedpe)) {
