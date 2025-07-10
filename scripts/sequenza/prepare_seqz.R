@@ -46,10 +46,12 @@ BedBedOverlap <- function(bed.frame1, bed.frame2, pad = 0) {
 
 # varscan2seqz function (source: sequenza v2.1.2)
 VarScan2seqz <- function (varscan.somatic, varscan.copynumber = NULL, normal_var_freq = 0.25) {
-	iupac.nucs <- setNames(c("A", "C", "G", "GT", "AC", "AG", "CG", "T", "AT", "CT"),
+	iupac.nucs <- setNames(
+		c("A", "C", "G", "GT", "AC", "AG", "CG", "T", "AT", "CT"),
 		c("A", "C", "G", "K", "M", "R", "S", "T", "W", "Y"));
 
-	zygosity.vect <- setNames(c("hom", "hom", "hom", "het", "het", "het", "het", "hom", "het", "het"),
+	zygosity.vect <- setNames(
+		c("hom", "hom", "hom", "het", "het", "het", "het", "hom", "het", "het"),
 		c("A", "C", "G", "K", "M", "R", "S", "T", "W", "Y"));
 
 	varscan.somatic <- varscan.somatic[varscan.somatic$somatic_status != "Unknown", ];
@@ -165,6 +167,7 @@ VarScan2seqz <- function (varscan.somatic, varscan.copynumber = NULL, normal_var
 
 		res <- do.call(rbind, l.cnv[chrom.order]);
 		}
+
 	return(res);
 	}
 
@@ -215,9 +218,6 @@ cnv <- read.delim(cnv.file);
 
 # remove any non-canonical chromosomes
 chr_list <- c(paste0("chr",1:22),"chrX");
-
-#snp <- subset(snp,chrom %in% chr_list);
-#cnv <- subset(cnv,chrom %in% chr_list);
 
 # remove centromeric regions
 if (opt$remove_centromeres) {
