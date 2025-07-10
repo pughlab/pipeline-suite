@@ -73,8 +73,7 @@ sub main {
 		@parts		= split($star . '_', $parts[-1]);
 		$star_ref	= $parts[-1];
 		$gtf		= basename($tool_data->{reference_gtf});
-		@parts		= split('\\/', $tool_data->{bwa_path});
-		$bwa		= $parts[-1];
+		$bwa		= $tool_data->{bwa_version};
 
 		$methods .= "Fastq files were aligned to the $ref_type transcriptome reference using STAR (v$star), with the following arguments: --twopassMode Basic, --outSAMtype BAM SortedByCoordinate, --outSAMunmapped Within, --outSAMprimaryFlag AllBestScore, --outFilterIntronMotifs RemoveNoncanonical, --alignSJDBoverhangMin 10, --alignMatesGapMax 100000, --alignIntronMax 100000, --alignSJstitchMismatchNmax 5 -1 5 5, --peOverlapNbasesMin 12, --peOverlapMMp 0.1, --chimOutType WithinBAM, --chimSegmentMin 10, --chimScoreJunctionNonGTAG -4, --chimMultimapNmax 20, --chimMultimapScoreRange 3, --chimNonchimScoreDropMin 10, --chimOutJunctionFormat 1, --chimJunctionOverhangMin 10, --quantMode GeneCounts TranscriptomeSAM. Where multiple fastq files were present (ie, multiple lanes), files were input together as a single alignment run.\\newline\n";
 		$methods .= join("\n",

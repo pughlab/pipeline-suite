@@ -160,6 +160,7 @@ sub get_mutect_command {
 		output		=> undef,
 		java_mem	=> undef,
 		tmp_dir		=> undef,
+		targets		=> undef,
 		intervals	=> undef,
 		@_
 		);
@@ -171,7 +172,8 @@ sub get_mutect_command {
 			'gatk Mutect2',
 			'-R', $reference,
 			'-I', $args{tumour},
-			'-O', $args{output}
+			'-O', $args{output},
+			'--interval_padding 100'
 			);
 
 		if (defined($args{normal})) {
@@ -196,7 +198,8 @@ sub get_mutect_command {
 			'-R', $reference,
 			'-I:tumor', $args{tumour},
 			'--out', $args{output},
-			'--enable_strand_artifact_filter'
+			'--enable_strand_artifact_filter',
+			'--interval_padding 100 --interval_set_rule INTERSECTION'
 			);
 
 		if (defined($args{normal})) {
@@ -216,11 +219,12 @@ sub get_mutect_command {
 			}
 		}
 
+	if (defined($args{targets})) {
+		$mutect_command .= " --intervals $args{targets}";
+		}
+
 	if (defined($args{intervals})) {
-		$mutect_command .= ' ' . join(' ',
-			'--intervals', $args{intervals},
-			'--interval_padding 100'
-			);
+		$mutect_command .= " --intervals $args{intervals}";
 		}
 
 	return($mutect_command);
@@ -234,6 +238,7 @@ sub get_mutect_split_command {
 		output_stem	=> undef,
 		java_mem	=> undef,
 		tmp_dir		=> undef,
+		targets		=> undef,
 		@_
 		);
 
@@ -262,6 +267,10 @@ sub get_mutect_split_command {
 
 	if (defined($pon)) {
 		$mutect_command .= " --normal_panel $pon";
+		}
+
+	if (defined($args{targets})) {
+		$mutect_command .= " --intervals $args{targets}";
 		}
 
 	return($mutect_command);
@@ -990,9 +999,7 @@ sub main {
 
 	# over which intervals should this be run?
 	my $string;
-	if ('targeted' eq $tool_data->{seq_type}) {
-		$string = 'panel';
-		} elsif (defined($tool_data->{mutect2}->{chromosomes})) {
+	if (defined($tool_data->{mutect2}->{chromosomes})) {
 		$string = $tool_data->{mutect2}->{chromosomes}; 
 		} elsif ( ('hg38' eq $tool_data->{ref_type}) || ('hg19' eq $tool_data->{ref_type})) {
 		$string = 'chr' . join(',chr', 1..22) . ',chrX,chrY';
@@ -1168,7 +1175,7 @@ sub main {
 						output		=> $merged_output,
 						java_mem	=> $parameters->{mutect}->{java_mem},
 						tmp_dir		=> $tmp_directory,
-						intervals	=> $tool_data->{targets_bed}
+						targets		=> $tool_data->{targets_bed}
 						);
 					} else {
 					$mutect_commands{$chr} = get_mutect_command(
@@ -1177,6 +1184,7 @@ sub main {
 						output		=> "$chr_stem\_$chr.vcf",
 						java_mem	=> $parameters->{mutect}->{java_mem},
 						tmp_dir		=> $tmp_directory,
+						targets		=> $tool_data->{targets_bed},
 						intervals	=> $chr
 						);
 					}
@@ -1206,7 +1214,8 @@ sub main {
 					normal		=> $normal_bam,
 					output_stem	=> $chr_stem,
 					java_mem	=> $parameters->{mutect}->{java_mem},
-					tmp_dir		=> $tmp_directory
+					tmp_dir		=> $tmp_directory,
+					targets		=> $tool_data->{targets_bed}
 					);
 
 				$mutect_command .= "\n\n" . join(' ',

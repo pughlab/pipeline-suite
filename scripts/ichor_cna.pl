@@ -36,6 +36,69 @@ our ($reference, $ref_type, $pon, $ichor_path);
 # 	--dry_run indicates that this is a dry run
 
 ### DEFINE SUBROUTINES #############################################################################
+# run downsample bam
+sub create_downsample_command {
+	my %args = (
+		bam	=> undef,
+		id	=> undef,
+		n_reads	=> undef,
+		factor	=> undef,
+		outdir	=> undef,
+		tmpdir	=> undef,
+		@_
+		);
+
+	my $downsample_command;
+
+	if (defined($args{n_reads})) {
+
+		$downsample_command = join("\n",
+			"N_READS=" . $args{n_reads},
+			"TOTAL_READS=\$(samtools view -c $args{bam})",
+			"SCALE_FACTOR=\$(printf '%.4f\\n' \$(echo \"\$N_READS/\$TOTAL_READS\" | bc -l))"
+			);
+
+		} elsif (defined($args{factor})) {
+
+		$downsample_command = join("\n",
+			"SCALE_FACTOR=$args{factor}",
+			"TOTAL_READS=\$(samtools view -c $args{bam})",
+			"N_READS=\$(printf '%.0f\\n' \$(echo \"\$SCALE_FACTOR*\$TOTAL_READS\" | bc -l))"
+			);
+		}
+
+	$downsample_command .= "\n" . join("\n",
+		'echo "downsampling to $N_READS from $TOTAL_READS (scale factor = $SCALE_FACTOR)"' . "\n",
+		'if (( $(echo "$SCALE_FACTOR < 1" | bc -l) )); then'
+		);
+
+	$downsample_command .= "\n  " . join(' ',  
+		'java -Xmx1g',
+		'-Djava.io.tmpdir=' . $args{tmpdir},
+		'-jar $picard_dir/picard.jar DownsampleSam',
+		'I=' . $args{bam},
+		'O=' . $args{outdir} . '/' . $args{id} . '_downsampled.bam',
+		'P=$SCALE_FACTOR',
+		'VALIDATION_STRINGENCY=LENIENT;'
+		);
+
+	$downsample_command .= "\nelse\n  " . join(' ',
+		'ln -s',
+		$args{bam},
+		$args{outdir} . '/' . $args{id} . '_downsampled.bam;'
+		);
+
+	$downsample_command .= "\nfi";
+
+	$downsample_command .= "\n" . join(' ',
+		'samtools index',
+		'-o', $args{outdir} . '/' . $args{id} . '_downsampled.bam.bai',
+		$args{outdir} . '/' . $args{id} . '_downsampled.bam;'
+		);
+
+	return($downsample_command);
+	}
+
 # format command to get read counts
 sub get_readcount_command {
 	my %args = (
@@ -67,16 +130,31 @@ sub get_ichor_cna_command {
 		out_dir		=> undef,
 		pon		=> undef,
 		intervals	=> undef,
+		create_pon	=> undef,
+		normal_list	=> undef,
 		@_
 		);
 
 	my $ichor_command = "cd $args{out_dir}";
-	$ichor_command .= "\n\n". join(' ',
-		'Rscript', $ichor_path,
-		'--WIG', $args{tumour_wig},
-		'--id', $args{tumour_id},
-		'--chrs "c(' . "'" . $args{chroms} . "'" . ')"'
-		);
+
+	if ('Y' eq $args{create_pon}) {
+
+		$ichor_command .= "\n\n". join(' ',
+			'Rscript', $ichor_path,
+			'--make_pon',
+			'--normal_list', $args{normal_list}
+			);
+
+		} else {
+
+		$ichor_command .= "\n\n". join(' ',
+			'Rscript', $ichor_path,
+			'--WIG', $args{tumour_wig},
+			'--id', $args{tumour_id}
+			);
+		}
+
+#	$ichor_command .= '--chrs "c(' . "'" . $args{chroms} . "'" . ')"';
 
 	if ( ('hg38' eq $ref_type) || ('hg19' eq $ref_type) ) {
 		$ichor_command .= " --genomeStyle UCSC";
@@ -129,6 +207,7 @@ sub main {
 	# load tool config
 	my $tool_data_orig = LoadFile($tool_config);
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'ichor');
+	my $date = strftime "%F", localtime;
 
 	# organize output and log directories
 	my $output_directory = $args{output_directory};
@@ -167,11 +246,6 @@ sub main {
 	$reference = $tool_data->{reference};
 	$ref_type  = $tool_data->{ref_type};
 
-	if (defined($tool_data->{ichor_cna}->{pon})) {
-		print $log "\n    Panel of Normals: $tool_data->{ichor_cna}->{pon}";
-		$pon = $tool_data->{ichor_cna}->{pon};
-		}
-
 	if (defined($tool_data->{targets_bed})) {
 		print $log "\n    Target intervals: $tool_data->{targets_bed}";
 		}
@@ -207,6 +281,8 @@ sub main {
 		}
 
 	my $hmmcopy	= 'hmmcopy_utils/170718';
+	my $picard	= 'picard/' . $tool_data->{picard_version};
+	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $r_version	= 'R/'. $tool_data->{r_version};
 
 	# get user-specified tool parameters
@@ -216,14 +292,61 @@ sub main {
 	my $hpc_group = defined($tool_data->{hpc_group}) ? "-A $tool_data->{hpc_group}" : undef;
 
 	### RUN ###########################################################################################
-	my ($run_script, $run_id, $link, $cleanup_cmd, $should_run_final);
-	my @all_jobs;
+	my ($run_script, $run_id, $link, $should_run_final, $should_run_pon, $should_downsample);
+	my (@all_jobs, @pon_jobs, @normal_wigs);
+	my (%final_outputs, %normal_jobs, %patient_jobs, %cleanup);
 
 	# get sample data
 	my $smp_data = LoadFile($data_config);
 
 	unless($args{dry_run}) {
 		print "Processing " . scalar(keys %{$smp_data}) . " patients.\n";
+		}
+
+	my @normal_samples;
+	foreach my $patient (sort keys %{$smp_data}) {
+		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
+		push @normal_samples, @normal_ids;
+		}
+
+	my @tumour_samples;
+	foreach my $patient (sort keys %{$smp_data}) {
+		my @tumour_ids = keys %{$smp_data->{$patient}->{'tumour'}};
+		push @tumour_samples, @tumour_ids;
+		}
+
+	if (scalar(@tumour_samples) > 0) { $should_run_final = 1; }
+
+	# are there any normals available to make a PoN?
+	my $pon_directory = join('/', $output_directory, 'PanelOfNormals');
+
+	if ( ('Y' eq $parameters->{create_pon}->{run}) && (scalar(@normal_samples) > 1) ) {
+		$should_run_pon = 1;
+		unless(-e $pon_directory) { make_path($pon_directory); }
+		$pon = join($pon_directory, $date . "_" . $ref_type . "_panelOfNormals_median.rds");
+		} elsif ( ('Y' eq $parameters->{create_pon}->{run}) && (defined($tool_data->{ichor_cna}->{pon})) ) {
+		$pon = $tool_data->{ichor_cna}->{pon};
+		print $log "Insufficient normals provided to create a Panel of Normals; using $pon instead.\n";
+		} elsif (defined($tool_data->{ichor_cna}->{pon})) {
+		$pon = $tool_data->{ichor_cna}->{pon};
+		print $log "Panel of Normals: $tool_data->{ichor_cna}->{pon}";
+		} else {
+		print $log "No Panel of Normals defined; will use default provided by IchorCNA.\n";
+		}
+
+	# should we be downsampling our bams?
+	my ($n_reads, $scale_factor);
+	if ('Y' eq $parameters->{downsample}->{run}) {
+		$should_downsample = 1;
+
+		if (defined($parameters->{downsample}->{n_reads})) {
+			$n_reads = $parameters->{downsample}->{n_reads};
+			} elsif (defined($parameters->{downsample}->{scale_factor})) {
+			$scale_factor = $parameters->{downsample}->{scale_factor};
+			} else {
+			$n_reads = 50000000;
+			print "\nNo scaling parameters defined for downsampling; will default to 50M reads. Alternatively, you can specifiy these (number of reads (n_reads) or scaling factor (scale_factor)) in your tool config.";
+			}
 		}
 
 	# process each sample in $smp_data
@@ -242,101 +365,209 @@ sub main {
 		my $tmp_directory = join('/', $patient_directory, 'TEMP');
 		unless(-e $tmp_directory) { make_path($tmp_directory); }
 
-		# indicate this should be removed at the end
-		$cleanup_cmd = "rm -rf $tmp_directory";
-
 		my $link_directory = join('/', $patient_directory, 'bam_links');
 		unless(-e $link_directory) { make_path($link_directory); }
 
-		# create some symlinks
-		foreach my $normal (@normal_ids) {
+		# create an array to hold final outputs and all patient job ids
+		$run_id = '';
+		@normal_jobs{$patient} = [];
+		@patient_jobs{$patient} = [];
+		@final_outputs{$patient} = [];
+		$cleanup{$patient} = "rm -rf $tmp_directory";
+
+		# if a normal is provided, create a WIG
+		next if (scalar(@normal_ids) == 0);
+		my $normal = $normal_ids[0];
+		print $log "\n  NORMAL: $normal\n";
+
+		# find input bam
+		# because readCounter needs an index with the suffix .bam.bai (rather
+		# than the .bai I have generated, we need to use the renamed symlinks
+		# for this step)
+		my $normal_bam = basename($smp_data->{$patient}->{normal}->{$normal});
+
+		# downsample if requested
+		unless ($should_downsample) {
+
 			my $bam = $smp_data->{$patient}->{normal}->{$normal};
 			my $index = $bam;
 			$index =~ s/bam$/bai/;
 
 			$link = join('/', $link_directory, basename($bam));
 			symlink($bam, $link);
-			symlink($index, $link . '.bai');
-			}
-		foreach my $tumour (@tumour_ids) {
-			my $bam = $smp_data->{$patient}->{tumour}->{$tumour};
-			my $index = $bam;
-			$index =~ s/bam$/bai/;
+			symlink($index, $link . '.bai');	
+			$normal_bam = $link;
 
-			$link = join('/', $link_directory, basename($bam));
-			symlink($bam, $link);
-			symlink($index, $link . '.bai');
-			}
+			} else {
 
-		# create an array to hold final outputs and all patient job ids
-		my (@final_outputs, @patient_jobs);
-
-		# if a normal is provided, create a WIG
-		my $normal_wig;
-		my $normal_wig_jobid = '';
-
-		if (scalar(@normal_ids) > 0) {
-
-			my $normal = $normal_ids[0];
-
-			print $log "\n  Collecting readcounts for NORMAL: $normal\n";
-
-			# find input bam
-			# because readCounter needs an index with the suffix .bam.bai (rather
-			# than the .bai I have generated, we need to use the renamed symlinks
-			# for this step)
-			my $normal_bam = basename($smp_data->{$patient}->{normal}->{$normal});
-			$normal_wig = join('/', $patient_directory, $normal . '.wig');
-
-			my $make_wig_command = get_readcount_command(
-				chroms	=> join(',', @chroms),
-				bam	=> join('/', $link_directory, $normal_bam),
-				wig	=> $normal_wig
+			my $downsample_cmd = create_downsample_command(
+				bam	=> $smp_data->{$patient}->{normal}->{$normal},
+				id	=> $normal,
+				n_reads => defined($n_reads) ? $n_reads : undef,
+				factor  => defined($scale_factor) ? $scale_factor : undef,
+				outdir	=> $tmp_directory,
+				tmpdir	=> $tmp_directory
 				);
 
-			$make_wig_command .= "\n\necho 'COMPLETE' > $normal_wig.COMPLETE";
-
-			$cleanup_cmd .= "\nrm $normal_wig";
+			$normal_bam = join('/',
+				$tmp_directory,
+				$normal . '_downsampled.bam'
+				);
 
 			# check if this should be run
-			if ('Y' eq missing_file($normal_wig . '.COMPLETE')) {
+			if ('Y' eq missing_file("$normal_bam.bai")) {
 
 				# record command (in log directory) and then run job
-				print $log "  >> Submitting job for readCounter...\n";
+				print $log "  >> Submitting job for DownsampleBAM...\n";
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
-					name	=> 'run_readCounter_' . $normal,
-					cmd	=> $make_wig_command,
-					modules	=> [$hmmcopy],
-					max_time	=> $parameters->{readcounter}->{time},
-					mem		=> $parameters->{readcounter}->{mem},
+					name	=> 'run_downsample_bam_' . $normal,
+					cmd	=> $downsample_cmd,
+					modules	=> [$picard, $samtools],
+					max_time	=> $parameters->{downsample}->{time},
+					mem		=> $parameters->{downsample}->{mem},
 					hpc_driver	=> $args{hpc_driver},
 					extra_args	=> [$hpc_group]
 					);
 
-				$normal_wig_jobid = submit_job(
-					jobname		=> 'run_readCounter_' . $normal,
+				$run_id = submit_job(
+					jobname		=> 'run_downsample_bam_' . $normal,
 					shell_command	=> $run_script,
 					hpc_driver	=> $args{hpc_driver},
 					dry_run		=> $args{dry_run},
 					log_file	=> $log
 					);
 
-				push @patient_jobs, $normal_wig_jobid;
-				push @all_jobs, $normal_wig_jobid;
+				push @{$normal_jobs{$patient}}, $run_id;
+				push @{$patient_jobs{$patient}}, $run_id;
+				push @pon_jobs, $run_id;
+				push @all_jobs, $run_id;
 				} else {
-				print $log "  >> Skipping readCounter because this has already been completed!\n";
+				print $log "  >> Skipping DownsampleBAM because this has already been completed!\n";
 				}
 			}
 
-		# now, for each tumour sample
+		# generate command to collect readcounts
+		my $normal_wig = join('/', $tmp_directory, $normal . '.wig');
+
+		my $make_wig_command = get_readcount_command(
+			chroms	=> join(',', @chroms),
+			bam	=> $normal_bam,
+			wig	=> $normal_wig
+			);
+
+		push @normal_wigs, $normal_wig;
+
+		# check if this should be run
+		if ('Y' eq missing_file($normal_wig)) {
+
+			# record command (in log directory) and then run job
+			print $log "  >> Submitting job for readCounter...\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'run_readCounter_' . $normal,
+				cmd	=> $make_wig_command,
+				modules	=> [$hmmcopy],
+				dependencies	=> $run_id,
+				max_time	=> $parameters->{readcounter}->{time},
+				mem		=> $parameters->{readcounter}->{mem},
+				hpc_driver	=> $args{hpc_driver},
+				extra_args	=> [$hpc_group]
+				);
+
+			$run_id = submit_job(
+				jobname		=> 'run_readCounter_' . $normal,
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @{$normal_jobs{$patient}}, $run_id;
+			push @pon_jobs, $run_id;
+			push @all_jobs, $run_id;
+			} else {
+			print $log "  >> Skipping readCounter because this has already been completed!\n";
+			}
+		}
+
+	# create a panel of normals
+	my $pon_job_id = '';
+
+	if ($should_run_pon) {
+
+		my $sample_sheet = join('/', $pon_directory, 'normal_wig_files.txt');
+		open(my $fh, '>', $sample_sheet) or die "Cannot open '$sample_sheet' !";
+
+		foreach my $wig (@normal_wigs) {
+			print $fh "$wig\n";
+			}
+
+		# run IchorCNA on provided WIG files
+		my $pon_command = get_ichor_cna_command(
+			out_dir		=> $pon_directory,
+			pon		=> $pon,
+			intervals	=> $tool_data->{targets_bed},
+			create_pon	=> 'Y',
+			normal_list	=> $sample_sheet
+			);
+		
+		# check if this should be run
+		if ('Y' eq missing_file($pon)) {
+
+			# record command (in log directory) and then run job
+			print $log ">> Submitting job to create Panel of Normals...\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'run_ichor_cna__create_pon',
+				cmd	=> $pon_command,
+				modules	=> [$ichor_r],
+				dependencies	=> join(':', @pon_jobs),
+				max_time	=> $parameters->{create_pon}->{time},
+				mem		=> $parameters->{create_pon}->{mem},
+				hpc_driver	=> $args{hpc_driver},
+				extra_args	=> [$hpc_group]
+				);
+
+			$pon_job_id = submit_job(
+				jobname		=> 'run_ichor_cna__create_pon',
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{hpc_driver},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @all_jobs, $pon_job_id;
+			} else {
+			print $log ">> Skipping CreatePoN step because this has already been completed!\n";
+			}
+		}
+
+	# continue processing each sample in $smp_data
+	foreach my $patient (sort keys %{$smp_data}) {
+
+		# find sample ids
+		my @normal_ids = keys %{$smp_data->{$patient}->{'normal'}};
+		my @tumour_ids = keys %{$smp_data->{$patient}->{'tumour'}};
+
+		# create some directories
+		my $patient_directory = join('/', $output_directory, $patient);
+		my $link_directory = join('/', $patient_directory, 'bam_links');
+		my $tmp_directory = join('/', $patient_directory, 'TEMP');
+
+		# indicate normal to use
+		my $normal_wig;
+		if (scalar(@normal_ids) > 0) {
+			$normal_wig = join('/', $tmp_directory, $normal_ids[0] . '.wig');
+			}
+
+		# for each tumour sample
 		foreach my $sample (@tumour_ids) {
 
-			# if there are any samples to run, we will run the final combine job
-			$should_run_final = 1;
-
-			print $log "\n  Collecting readcounts for SAMPLE: $sample\n";
+			print $log "\n  TUMOUR: $sample\n";
 
 			my $sample_directory = join('/', $patient_directory, $sample);
 			unless(-e $sample_directory) { make_path($sample_directory); }
@@ -347,23 +578,79 @@ sub main {
 			# for this step)
 			my $input_bam = basename($smp_data->{$patient}->{tumour}->{$sample});
 
+			# downsample if requested
+			$run_id = '';
+			unless ($should_downsample) {
+
+				my $bam = $smp_data->{$patient}->{tumour}->{$sample};
+				my $index = $bam;
+				$index =~ s/bam$/bai/;
+
+				$link = join('/', $link_directory, basename($bam));
+				symlink($bam, $link);
+				symlink($index, $link . '.bai');
+				$input_bam = $link;
+
+				} else {
+
+				my $downsample_cmd = create_downsample_command(
+					bam	=> $smp_data->{$patient}->{tumour}->{$sample},
+					id	=> $sample,
+					n_reads => defined($n_reads) ? $n_reads : undef,
+					factor  => defined($scale_factor) ? $scale_factor : undef,
+					outdir	=> $tmp_directory,
+					tmpdir	=> $tmp_directory
+					);
+
+				$input_bam = join('/',
+					$tmp_directory,
+					$sample . '_downsampled.bam'
+					);
+
+				# check if this should be run
+				if ('Y' eq missing_file("$input_bam.bai")) {
+
+					# record command (in log directory) and then run job
+					print $log "  >> Submitting job for DownsampleBAM...\n";
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_downsample_bam_' . $sample,
+						cmd	=> $downsample_cmd,
+						modules	=> [$picard, $samtools],
+						max_time	=> $parameters->{downsample}->{time},
+						mem		=> $parameters->{downsample}->{mem},
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group]
+						);
+
+					$run_id = submit_job(
+						jobname		=> 'run_downsample_bam_' . $sample,
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @{$patient_jobs{$patient}}, $run_id;
+					push @all_jobs, $run_id;
+					} else {
+					print $log "  >> Skipping DownsampleBAM because this has already been completed!\n";
+					}
+				}
+
 			# indicate output stem
 			my $tumour_wig = join('/', $tmp_directory, $sample . '.wig');
 
-			# indicate final IchorCNA output file
-			my $final_file = join('/', $sample_directory, $sample . '_final_metrics.txt');
-
 			# create readCounter command
-			$run_id = '';
-
 			my $make_wig_command = get_readcount_command(
 				chroms	=> join(',', @chroms),
-				bam	=> join('/', $link_directory, $input_bam),
+				bam	=> $input_bam,
 				wig	=> $tumour_wig
 				);
 
 			# check if this should be run
-			if ( ('Y' eq missing_file($tumour_wig)) && ('Y' eq missing_file($final_file)) ) {
+			if ('Y' eq missing_file($tumour_wig)) {
 
 				# record command (in log directory) and then run job
 				print $log "  >> Submitting job for readCounter...\n";
@@ -373,6 +660,7 @@ sub main {
 					name	=> 'run_readCounter_' . $sample,
 					cmd	=> $make_wig_command,
 					modules	=> [$hmmcopy],
+					dependencies	=> $run_id,
 					max_time	=> $parameters->{readcounter}->{time},
 					mem		=> $parameters->{readcounter}->{mem},
 					hpc_driver	=> $args{hpc_driver},
@@ -387,11 +675,14 @@ sub main {
 					log_file	=> $log
 					);
 
-				push @patient_jobs, $run_id;
+				push @{$patient_jobs{$patient}}, $run_id;
 				push @all_jobs, $run_id;
 				} else {
 				print $log "  >> Skipping readCounter because this has already been completed!\n";
 				}
+
+			# indicate final IchorCNA output file
+			my $final_file = join('/', $sample_directory, $sample . '_final_metrics.txt');
 
 			# run IchorCNA on provided WIG files
 			my $ichor_command = get_ichor_cna_command(
@@ -415,7 +706,7 @@ sub main {
 					name	=> 'run_ichor_cna_' . $sample,
 					cmd	=> $ichor_command,
 					modules	=> [$ichor_r],
-					dependencies	=> join(':', $run_id, $normal_wig_jobid),
+					dependencies	=> join(':', $run_id, @{$normal_jobs{$patient}}, $pon_job_id),
 					max_time	=> $parameters->{ichor_cna}->{time},
 					mem		=> $parameters->{ichor_cna}->{mem},
 					hpc_driver	=> $args{hpc_driver},
@@ -430,29 +721,30 @@ sub main {
 					log_file	=> $log
 					);
 
-				push @patient_jobs, $run_id;
+				push @{$patient_jobs{$patient}}, $run_id;
 				push @all_jobs, $run_id;
 				} else {
 				print $log "  >> Skipping ichorCNA step because this has already been completed!\n";
 				}
 
-			push @final_outputs, $final_file;
+			push @{$patient_jobs{$patient}}, @{$normal_jobs{$patient}};
+			push @{$final_outputs{$patient}}, $final_file;
 			}
 
 		# should intermediate files be removed
 		# run per patient
 		if ($args{del_intermediates}) {
 
-			if (scalar(@patient_jobs) == 0) {
+			if (scalar(@{$patient_jobs{$patient}}) == 0) {
 				`rm -rf $tmp_directory`;
 				} else {
 
 				print $log ">> Submitting job to clean up temporary/intermediate files...\n";
 
 				# make sure final output exists before removing intermediate files!
-				$cleanup_cmd = join("\n",
-					"if [ -s " . join(" ] && [ -s ", @final_outputs) . " ]; then",
-					"  $cleanup_cmd",
+				my $cleanup_cmd = join("\n",
+					"if [ -s " . join(" ] && [ -s ", @{$final_outputs{$patient}}) . " ]; then",
+					"  $cleanup{$patient}",
 					"else",
 					'  echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
 					"fi"
@@ -462,7 +754,7 @@ sub main {
 					log_dir	=> $log_directory,
 					name	=> 'run_cleanup_' . $patient,
 					cmd	=> $cleanup_cmd,
-					dependencies	=> join(':', @patient_jobs),
+					dependencies	=> join(':', @{$patient_jobs{$patient}}),
 					mem		=> '256M',
 					hpc_driver	=> $args{hpc_driver},
 					kill_on_error	=> 0,
@@ -479,7 +771,7 @@ sub main {
 				}
 			}
 
-		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @final_outputs) . "\n";
+		print $log "\nFINAL OUTPUT:\n" . join("\n  ", @{$final_outputs{$patient}}) . "\n";
 		print $log "---\n";
 		}
 

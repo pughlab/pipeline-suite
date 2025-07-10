@@ -399,7 +399,7 @@ sub write_script {
 		if ($args{mem} =~ m/(\d+)([A-Z])/) {
 			$size = $1;
 			$unit = $2;
-			if (($size > 28) && ($size < 61) && ('G' eq $unit)) {
+			if (($size > 30) && ($size < 61) && ('G' eq $unit)) {
 				$job_params .= "\n#SBATCH -p himem";
 			} elsif (($size >= 61) && ($size < 184) && ('G' eq $unit)) {
 				$job_params .= "\n#SBATCH -p veryhimem";

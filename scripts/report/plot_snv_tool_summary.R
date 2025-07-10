@@ -119,8 +119,8 @@ plot.data$per_tool <- aggregate(
 
 # find overlap
 plot.data$overlap <- merge(
-	aggregate(Hugo_Symbol ~ Tumor_Sample_Barcode + Count, combined.data, length),
-	aggregate(Hugo_Symbol ~ Tumor_Sample_Barcode, combined.data, length),
+	aggregate(Chromosome ~ Tumor_Sample_Barcode + Count, combined.data, length),
+	aggregate(Chromosome ~ Tumor_Sample_Barcode, combined.data, length),
 	by = 'Tumor_Sample_Barcode'
 	);
 colnames(plot.data$overlap) <- c('ID','Overlap','Count','Total');

@@ -273,7 +273,7 @@ for (tool in names(mutation.data)) {
 
 	# extract calls from the tool
 	keep.data[[tool]] <- merge(
-		tmp[!is.na(tmp[,tool]),c('Chromosome','Start_Position','Variant_Type','Tumor_Sample_Barcode','Called_By')],
+		tmp[!is.na(tmp[,tool]),c('Chromosome','Start_Position','Tumor_Seq_Allele2','Variant_Type','Tumor_Sample_Barcode','Called_By')],
 		mutation.data[[tool]],
 		all.x = TRUE
 		);

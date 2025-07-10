@@ -79,6 +79,26 @@ sub get_fastp_command {
 	return($trim_command);
 	}
 
+# format command to run custom UMI trimming (ConcensusCruncher)
+sub get_extractUMI_command {
+	my %args = (
+		r1	=> undef,
+		r2	=> undef,
+		stem	=> undef,
+		@_
+		);
+
+	my $trim_command = join(' ',
+		'python3 /cluster/projects/pughlab/src/ConsensusCruncher/scripts/extract_barcodes.py',
+		'--blist /cluster/projects/pughlab/src/UMI-tools/idt_dual_index_barcodes.txt',
+		'--read1', $args{r1},
+		'--read2', $args{r2},
+		'--outfile', $args{stem}
+		);
+
+	return($trim_command);
+	}
+
 ### MAIN ###########################################################################################
 sub main {
 	my %args = (
@@ -138,15 +158,21 @@ sub main {
 	print $log "\n  Tool config used: $tool_config";
 	print $log "\n  Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
-	print $log "\n---";
 
 	# set tools and versions
 	my $trim_tool = '';
-	if (defined($tool_data->{baits_bed})) {
+	if ('caphla' eq $tool_data->{seq_type}) {
+		print $log "\n\n  Trimming using tool: ConsensusCruncher";
+		$trim_tool = 'python3/3.7.2';
+		} elsif (defined($tool_data->{baits_bed})) {
+		print $log "\n\n  Trimming using tool: trim_galore";
 		$trim_tool = 'trim_galore/' . $tool_data->{trim_galore_version};
 		} else {
+		print $log "\n\n  Trimming using tool: fastq";
 		$trim_tool = 'fastp/' . $tool_data->{fastp_version};
 		}
+
+	print $log "\n---";
 
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{trim_adapters}->{parameters};
@@ -209,7 +235,18 @@ sub main {
 					my $output_stem = join('/', $output_directory, $stem);
 					my ($trim_command, $new_r1, $new_r2);
 
-					if (defined($tool_data->{baits_bed})) {
+					if ('caphla' eq $tool_data->{seq_type}) {
+
+						$trim_command = get_extractUMI_command(
+							r1	=> $r1,
+							r2	=> $r2,
+							stem	=> $output_stem
+							);
+
+						$new_r1 = $output_stem . '_barcode_R1.fastq';
+						$new_r2 = $output_stem . '_barcode_R2.fastq';
+
+						} elsif (defined($tool_data->{baits_bed})) {
 
 						$trim_command = get_trim_galore_command(
 							r1	=> $r1,
@@ -222,6 +259,7 @@ sub main {
 
 						$new_r2 = join('/', $output_directory, basename($r2));
 						$new_r2 =~ s/.fastq.gz/_val_2.fq.gz/;
+
 
 						} else {
 
