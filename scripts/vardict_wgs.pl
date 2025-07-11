@@ -1215,7 +1215,7 @@ sub main {
 
 			@sample_jobs = ();
 			$run_id = '';
-			my $cleanup_cmd = "rm -rf $tmp_directory";
+			$cleanup_cmd = "rm -rf $tmp_directory";
 
 			# create some symlinks
 			my @tmp = split /\//, $smp_data->{$patient}->{tumour}->{$sample};
