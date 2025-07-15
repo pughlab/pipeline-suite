@@ -34,7 +34,6 @@ fasta$V4 <- toupper(fasta$V4)
 fasta <- as.data.table(fasta)
 fasta <- fasta[!(fasta$V4 %like% "N"), ]
 fasta$length <- nchar(fasta$V4)
-fasta <- fasta[fasta$length == 267, ]
 
 #fasta <- fasta[1:1000, ] ### Use this for quick tests
 # get dinucleotides for each row in fasta

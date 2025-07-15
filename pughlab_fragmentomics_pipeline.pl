@@ -694,7 +694,7 @@ sub get_profile_breakpoints_command {
 	return($bkpt_command);
 	}
 
-# format command to run dinucleotide profiling
+# format command to run dinucleotide profiling on 'normal' size fragments
 sub get_dinucleotide_profiling_command {
 	my %args = (
 		id		=> undef,
@@ -730,6 +730,59 @@ sub get_dinucleotide_profiling_command {
 	$din_command .= "\necho '>>> Running dinucleotide_get_contexts.R <<<'";
 	$din_command .= "\n\n" . join(' ',
 		"Rscript $fragmentomics_code_dir/dinucleotide/scripts/dinucleotide_get_contexts.R",
+		"--id", $args{id},
+		"--fasta", $output_stem . '_fasta.bed',
+		"--outdir", $args{outdir}
+		);
+
+	# remove intermediate files
+	$din_command .= "\n\n# check for completeness and remove intermediates";
+	$din_command .= "\n" . join("\n",
+		'if [[ -f ' . $output_stem . '_contexts.txt ]]; then',
+		"  echo '>>> Dinucleotide Profiling completed successfully! <<<'",
+		'  rm ' . $output_stem . '*.bed*',
+		'fi'
+		);
+
+	return($din_command);
+	}
+
+# format command to run dinucleotide profiling on 'short' fragments
+sub get_dinucleotide_profiling_short_command {
+	my %args = (
+		id		=> undef,
+		bedpe		=> undef,
+		outdir		=> undef,
+		@_
+		);
+
+	my $output_stem = join('/', $args{outdir}, $args{id});
+
+	# format bedpe to bed
+	my $din_command = "# convert bedpe to bed";
+	$din_command .= "\necho '>>> Running dinucleotide_format_bedpe.R <<<'";
+	$din_command .= "\n\n" . join(' ',
+		"Rscript $fragmentomics_code_dir/dinucleotide/scripts/dinucleotide_format_bedpe.R",
+		'--id', $args{id},
+		'--bedpe', $args{bedpe},
+		'--outdir', $args{outdir}
+		);
+
+	# get fasta sequences
+	$din_command .= "\n\n# extract fasta sequences";
+	$din_command .= "\necho '>>> Running bedtools getfasta <<<'";
+	$din_command .= "\n\n" . join(' ',
+		'bedtools getfasta',
+		'-bedOut -fi', $reference,
+		'-bed', $output_stem . '.bed',
+		'>', $output_stem . '_fasta.bed'
+		);
+
+	# convert fasta to end motif context frequencies
+	$din_command .= "\n\n# run dinucleotide context profiling";
+	$din_command .= "\necho '>>> Running dinucleotide_get_contexts.R <<<'";
+	$din_command .= "\n\n" . join(' ',
+		"Rscript $fragmentomics_code_dir/dinucleotide/scripts/dinucleotide_get_contexts_short.R",
 		"--id", $args{id},
 		"--fasta", $output_stem . '_fasta.bed',
 		"--outdir", $args{outdir}
@@ -1628,7 +1681,7 @@ sub main {
 					outdir	=> $di_directory
 					);
 
-				my $dinucleotide_cmd_part2 = get_dinucleotide_profiling_command(
+				my $dinucleotide_cmd_part2 = get_dinucleotide_profiling_short_command(
 					id	=> $tumour_stem . '_len150',
 					bedpe	=> $short_bedpe,
 					outdir	=> $di_directory
