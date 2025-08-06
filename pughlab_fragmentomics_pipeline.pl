@@ -80,7 +80,7 @@ sub create_downsample_command {
 		);
 
 	$downsample_command .= "\nelse\n  " . join(' ',
-		'ln -s',
+		'ln -fs',
 		$args{bam},
 		$args{outdir} . '/' . $args{id} . '_downsampled.bam;'
 		);
@@ -322,7 +322,7 @@ sub create_nucleosome_position_command {
 	my $output_stem = join('/', $args{outdir}, $args{id});
 	my $linked_bedpe = join('/', $args{outdir}, $args{id} . '.bedpe' );
 
-	my $nuc_pos_command = "ln -s $args{bedpe} $linked_bedpe";
+	my $nuc_pos_command = "ln -fs $args{bedpe} $linked_bedpe";
 
 	$nuc_pos_command .= "\n\n# split bedpe by chromosome";
 	$nuc_pos_command .= "\necho '>>> Running splitBedpe.sh <<<'";
@@ -376,6 +376,32 @@ sub get_insert_sizes_command {
 		);
 
 	return($fs_command);
+	}
+
+# format command to extract alignment metrics
+sub get_alignment_metrics_command {
+	my %args = (
+		id		=> undef,
+		bam		=> undef,
+		outdir		=> undef,
+		java_mem	=> undef,
+		tmp_dir		=> undef,
+		@_
+		);
+
+	my $output_stem = join('/', $args{outdir}, $args{id});
+
+	my $qc_command = join(' ',
+		'java -Xmx' . $args{java_mem},
+		'-Djava.io.tmpdir=' . $args{tmp_dir},
+		'-jar $picard_dir/picard.jar CollectAlignmentSummaryMetrics',
+		'R=' . $reference,
+		'I=' . $args{bam},
+		'O=' . $output_stem . '_alignmentMetrics.txt',
+		'LEVEL=ALL_READS'
+		);
+
+	return($qc_command);
 	}
 
 # format command to run Griffin GC functions
@@ -578,7 +604,7 @@ sub get_end_motif_command {
 	my $output_stem = join('/', $args{outdir}, $args{id});
 	my $linked_bedpe = join('/', $args{outdir}, $args{id} . '.bedpe' );
 
-	my $motif_command = "ln -s $args{bedpe} $linked_bedpe";
+	my $motif_command = "ln -fs $args{bedpe} $linked_bedpe";
 
 	# format bedpe to bed
 	$motif_command .= "\n\n# convert bedpe to bed";
@@ -642,7 +668,7 @@ sub get_profile_breakpoints_command {
 	my $output_stem = join('/', $args{outdir}, $args{id});
 	my $linked_bedpe = join('/', $args{outdir}, $args{id} . '.bedpe' );
 
-	my $bkpt_command = "ln -s $args{bedpe} $linked_bedpe";
+	my $bkpt_command = "ln -fs $args{bedpe} $linked_bedpe";
 
 	# format bedpe to bed
 	$bkpt_command .= "\n\n# convert bedpe to bed";
@@ -888,11 +914,11 @@ sub main {
 
 	$reference_peaks = defined($tool_data->{nucleosome_peaks}) ? $tool_data->{nucleosome_peaks} : "$fragmentomics_code_dir/nucleosome_peak/ref/hg38";
 
-	$delfi_filters	= defined($tool_data->{delfi_filters}) ? $tool_data->{delfi_filters} : "$fragmentomics_code_dir/ratio/extdata/filters.hg38.rda";
-	$delfi_gaps	= defined($tool_data->{delfi_gaps}) ? $tool_data->{delfi_gaps} : "$fragmentomics_code_dir/ratio/extdata/gaps.hg38.rda";
-	$delfi_vntrs	= defined($tool_data->{delfi_vntrs}) ? $tool_data->{delfi_vntrs} : "$fragmentomics_code_dir/ratio/extdata/VNTRs.hg38.rda";
-	$delfi_tiles	= defined($tool_data->{delfi_tiles}) ? $tool_data->{delfi_tiles} : "$fragmentomics_code_dir/ratio/extdata/hg38_tiles.bed";
-	$delfi_healthy	= defined($tool_data->{delfi_pon}) ? $tool_data->{delfi_pon} : "$fragmentomics_code_dir/ratio/extdata/healthy.median.hg38.rda";
+	$delfi_filters	= defined($tool_data->{delfi}->{filters}) ? $tool_data->{delfi}->{filters} : "$fragmentomics_code_dir/ratio/extdata/filters.hg38.rda";
+	$delfi_gaps	= defined($tool_data->{delfi}->{gaps}) ? $tool_data->{delfi}->{gaps} : "$fragmentomics_code_dir/ratio/extdata/gaps.hg38.rda";
+	$delfi_vntrs	= defined($tool_data->{delfi}->{vntrs}) ? $tool_data->{delfi}->{vntrs} : "$fragmentomics_code_dir/ratio/extdata/VNTRs.hg38.rda";
+	$delfi_tiles	= defined($tool_data->{delfi}->{tiles}) ? $tool_data->{delfi}->{tiles} : "$fragmentomics_code_dir/ratio/extdata/hg38_tiles.bed";
+	$delfi_healthy	= defined($tool_data->{delfi}->{pon}) ? $tool_data->{delfi}->{pon} : "$fragmentomics_code_dir/ratio/extdata/healthy.median.hg38.rda";
 
 	if (defined($tool_data->{griffin_ref_mappable})) {
 		$griffin_mappable = $tool_data->{griffin_ref_mappable};
@@ -1279,6 +1305,17 @@ sub main {
 					tmp_dir		=> $tmp_directory
 					);
 
+				if ('Y' eq $parameters->{insertsize}->{do_qc}) {
+
+					$insertsize_cmd .= "\n\n" . get_alignment_metrics_command(
+						id		=> $tumour_stem,
+						bam		=> $tumour_bam,
+						outdir		=> $insertsize_directory,
+						java_mem	=> $parameters->{insertsize}->{java_mem},
+						tmp_dir		=> $tmp_directory
+						);
+					}
+
 				my $insert_sizes = join('/',
 					$insertsize_directory,
 					$tumour_stem . '_picard.txt'
@@ -1630,20 +1667,33 @@ sub main {
 					$tumour_stem . '_len150.bedpe'
 					);
 
-				my ($size_dedup_cmd, $required_bedpe);
+				my $dinucleotide_normal = join('/',
+					$di_directory,
+					$tumour_stem . '_len167_contexts.txt'
+					);
+
+				my $dinucleotide_short = join('/',
+					$di_directory,
+					$tumour_stem . '_len150_contexts.txt'
+					);
+
+				my ($size_dedup_cmd, $required_bedpe, $required_out);
 				if ('genome' eq $parameters->{dinucleotide}->{size}) {
  					$size_dedup_cmd = $dedup_cmd_part1;
 					$required_bedpe = $normal_bedpe;
+					$required_out = $dinucleotide_normal;
 					} elsif ('short' eq $parameters->{dinucleotide}->{size}) {
  					$size_dedup_cmd = $dedup_cmd_part2;
 					$required_bedpe = $short_bedpe;
+					$required_out = $dinucleotide_short;
 					} elsif ('both' eq $parameters->{dinucleotide}->{size}) {
  					$size_dedup_cmd = $dedup_cmd_part1 . "\n\n" . $dedup_cmd_part2;
 					$required_bedpe = $short_bedpe;
+					$required_out = $dinucleotide_short;
 					}
 
 				# check if this should be run
-				if ('Y' eq missing_file($required_bedpe)) {
+				if ( ('Y' eq missing_file($required_bedpe)) && ('Y' eq missing_file($required_out)) ) {
 
 					# record command (in log directory) and then run job
 					print $log " >> Submitting job for DeduplicateBAM...\n";
@@ -1687,26 +1737,14 @@ sub main {
 					outdir	=> $di_directory
 					);
 
-				my $dinucleotide_normal = join('/',
-					$di_directory,
-					$tumour_stem . '_len167_contexts.txt'
-					);
 
-				my $dinucleotide_short = join('/',
-					$di_directory,
-					$tumour_stem . '_len150_contexts.txt'
-					);
-
-				my ($dinucleotide_cmd, $required_out);
+				my ($dinucleotide_cmd);
 				if ('genome' eq $parameters->{dinucleotide}->{size}) {
  					$dinucleotide_cmd = $dinucleotide_cmd_part1;
-					$required_out = $dinucleotide_normal;
 					} elsif ('short' eq $parameters->{dinucleotide}->{size}) {
  					$dinucleotide_cmd = $dinucleotide_cmd_part2;
-					$required_out = $dinucleotide_short;
 					} elsif ('both' eq $parameters->{dinucleotide}->{size}) {
  					$dinucleotide_cmd = $dinucleotide_cmd_part1 . "\n\n" . $dinucleotide_cmd_part2;
-					$required_out = $dinucleotide_short;
 					}
 
 				# check if this should be run

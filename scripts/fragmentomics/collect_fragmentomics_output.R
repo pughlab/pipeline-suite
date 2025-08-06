@@ -54,6 +54,7 @@ setwd(arguments$directory);
 # find data files
 score.files		<- list.files(pattern = 'score.txt', recursive = TRUE);
 insertsize.files	<- list.files(pattern = 'picard.txt', recursive = TRUE);
+alignment.files		<- list.files(pattern = 'alignmentMetrics.txt', recursive = TRUE);
 fs.ratio.files		<- list.files(pattern = '5Mb_bins.txt', recursive = TRUE);
 nucleosome.files	<- list.files(pattern = 'peak_distance.txt', recursive = TRUE);
 griffin.files		<- list.files(pattern = 'all_sites.coverage.txt', recursive = TRUE);
@@ -101,6 +102,21 @@ if (length(insertsize.files) > 0) {
 		}));
 	}
 
+# read in alignment metrics
+if (length(alignment.files) > 0) {
+
+	qc.data <- do.call(rbind, lapply(alignment.files, function(i) {
+		tmp <- read.delim(i, skip = 6);
+		tmp$Sample <- sub('_alignmentMetrics.txt','',basename(i));
+		if (grepl('downsample', basename(i))) {
+			tmp$Sample <- gsub('_downsample','',tmp$Sample);
+			}
+		idx <- which(colnames(tmp) == 'SAMPLE')-1;
+		tmp <- tmp[,c('Sample',colnames(tmp)[1:idx])];
+		return(tmp);
+		}));
+	}
+
 # read in fragment ratios
 if (length(fs.ratio.files) > 0) {
 	ratio.data <- do.call(rbind, lapply(fs.ratio.files, function(i) { 
@@ -129,11 +145,7 @@ if (length(nucleosome.files) > 0) {
 if (length(griffin.files) > 0) {
 	griffin.data <- do.call(rbind, lapply(griffin.files, function(i) {
 		tmp <- read.delim(i);
-		type <- if (grepl('TFBS', i)) { 
-			'TFBS' } else if (grepl('DHS', i)) { 
-			'DHS' } else if (grepl('TCGA', i)) { 
-			'TCGA' } else if (grepl('housekeeping', i)) {
-			'housekeeping' } else { 'unknown' };
+		type <- basename(gsub('/coverage/all_sites','',dirname(i)));
 		tmp$site_type <- type;
 		return(tmp);
 		}));
@@ -332,22 +344,21 @@ if (length(breakpoint.files) > 0) {
 if (length(dinucleotide.short) > 0) {
 
 	# reshape short data
-	dinucleotide.data <- reshape(
+	dinucleotide.data.short <- reshape(
 		dinucleotide.150,
-		direction = 'long',
-		varying = list(grep('X',colnames(dinucleotide.150))),
-		v.names = 'Frequency',
-		timevar = 'Position'
+		direction = 'wide',
+		idvar = 'context',
+		timevar = 'Sample'
 		);
 
-	colnames(dinucleotide.data)[5] <- 'Group';
-	dinucleotide.data$Group <- '150bp';
+	colnames(dinucleotide.data.short) <- gsub('freq.','',colnames(dinucleotide.data.short));
+	colnames(dinucleotide.150) <- gsub('freq','Frequency',colnames(dinucleotide.150));
 	}
 
 # reshape long data
 if (length(dinucleotide.long) > 0) {
 
-	dinucleotide.data.tmp <- reshape(
+	dinucleotide.data.normal <- reshape(
 		dinucleotide.167,
 		direction = 'long',
 		varying = list(grep('X',colnames(dinucleotide.167))),
@@ -355,17 +366,18 @@ if (length(dinucleotide.long) > 0) {
 		timevar = 'Position'
 		);
 
-	colnames(dinucleotide.data.tmp)[5] <- 'Group';
-	dinucleotide.data.tmp$Group <- '167bp';
+	colnames(dinucleotide.data.normal)[5] <- 'Group';
+	dinucleotide.data.normal$Group <- '167bp';
+
+	dinucleotide.167.mean <- aggregate(
+		Frequency ~ Sample + context, dinucleotide.data.normal, mean);
+
 	}
 
 # combine
 if ( (length(dinucleotide.short) > 0) & (length(dinucleotide.long) > 0) ) {
-	dinucleotide.data <- rbind(dinucleotide.data,dinucleotide.data.tmp);
-#	} else if (length(dinucleotide.short) > 0) {
-#	dinucleotide.data <- dinucleotide.data;
-	} else if (length(dinucleotide.long) > 0) {
-	dinucleotide.data <- dinucleotide.data.tmp;
+	average.dinucleotide <- merge(dinucleotide.150,dinucleotide.167.mean,
+		by = c('Sample','context'), suffixes = c('.len150','.len167'));
 	}
 
 ### SAVE DATA ######################################################################################
@@ -401,6 +413,17 @@ if (exists('fragment.size.summary')) {
 		);
 	}
 
+if (exists('qc.data')) {
+
+	write.table(
+		qc.data,
+		file = generate.filename(arguments$project, 'alignmentMetrics', 'tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+	}
+
 # save per-bin fragment ratios
 if (exists('ratio.data.wide')) {
 
@@ -430,7 +453,7 @@ if (exists('griffin.long')) {
 
 	write.table(
 		griffin.long,
-		file = generate.filename(arguments$project, 'nucleosome_accessibility_distances', 'tsv'),
+		file = generate.filename(arguments$project, 'chromatin_accessibility_distances', 'tsv'),
 		row.names = FALSE,
 		col.names = TRUE,
 		sep = '\t'
@@ -472,11 +495,33 @@ if (exists('breakpoint.long')) {
 	}
 
 # save dinucleotide frequencies
-if (exists('dinucleotide.data')) {
+if (exists('dinucleotide.data.short')) {
 
 	write.table(
-		dinucleotide.data[,c('Sample','Group','context','Position','Frequency')],
-		file = generate.filename(arguments$project, 'dinucleotide_frequencies', 'tsv'),
+		dinucleotide.data.short,
+		file = generate.filename(arguments$project, 'dinucleotide_frequencies__len150', 'tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+	}
+
+if (exists('dinucleotide.data.normal')) {
+
+	write.table(
+		dinucleotide.data.normal[,c('Sample','Group','context','Position','Frequency')],
+		file = generate.filename(arguments$project, 'dinucleotide_frequencies__len167', 'tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+	}
+
+if (exists('average.dinucleotide')) {
+
+	write.table(
+		average.dinucleotide,
+		file = generate.filename(arguments$project, 'average_dinucleotide_frequencies', 'tsv'),
 		row.names = FALSE,
 		col.names = TRUE,
 		sep = '\t'
