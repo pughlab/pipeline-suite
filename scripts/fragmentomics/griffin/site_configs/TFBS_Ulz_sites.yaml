@@ -503,4 +503,3 @@ site_files:
   ZSCAN5A: /cluster/projects/pughlab/bin/Griffin/sites/TFBS_Ulz/ZSCAN5A_Top1000_hg38.high_mapability.txt
   ZSCAN5D: /cluster/projects/pughlab/bin/Griffin/sites/TFBS_Ulz/ZSCAN5D_Top1000_hg38.high_mapability.txt
   ZXDC: /cluster/projects/pughlab/bin/Griffin/sites/TFBS_Ulz/ZXDC_Top1000_hg38.high_mapability.txt
-  stop: /cluster/projects/pughlab/bin/Griffin/sites/stop.txt

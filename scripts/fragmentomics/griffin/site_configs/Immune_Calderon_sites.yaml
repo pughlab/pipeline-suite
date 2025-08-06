@@ -39,4 +39,3 @@ site_files:
   Th17_precursors: /cluster/projects/pughlab/bin/Griffin/sites/Immune_Calderon/Th17_precursors_hg38.high_mapability.txt
   Th1_precursors: /cluster/projects/pughlab/bin/Griffin/sites/Immune_Calderon/Th1_precursors_hg38.high_mapability.txt
   Th2_precursors: /cluster/projects/pughlab/bin/Griffin/sites/Immune_Calderon/Th2_precursors_hg38.high_mapability.txt
-  stop: /cluster/projects/pughlab/bin/Griffin/sites/stop.txt

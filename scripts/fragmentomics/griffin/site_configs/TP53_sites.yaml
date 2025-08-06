@@ -9,4 +9,3 @@ site_files:
   TP53_targets_StopCodon: /cluster/projects/pughlab/bin/Griffin/sites/TP53/tp53_StopCodon_hg38.high_mapability.txt
   TP53_targets_TSS: /cluster/projects/pughlab/bin/Griffin/sites/TP53/tp53_TSS_hg38.high_mapability.txt
   TP53_targets_TSE: /cluster/projects/pughlab/bin/Griffin/sites/TP53/tp53_TSE_hg38.high_mapability.txt
-  stop: /cluster/projects/pughlab/bin/Griffin/stop.txt

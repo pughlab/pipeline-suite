@@ -12,4 +12,3 @@ site_files:
   T_helper1_cell: /cluster/projects/pughlab/bin/Griffin/sites/Immune/T_helper1_cell_hg38.txt
   T_helper2_cell: /cluster/projects/pughlab/bin/Griffin/sites/Immune/T_helper2_cell_hg38.txt
   T_reg_cell: /cluster/projects/pughlab/bin/Griffin/sites/Immune/T_reg_cell_hg38.txt
-  stop: /cluster/projects/pughlab/bin/Griffin/stop.txt
