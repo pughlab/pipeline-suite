@@ -203,6 +203,8 @@ for (i in 1:length(cov.list)) {
 
 		smp.idx <- which(callable.bases$Sample == smp);
 
+		if (all(tmp[,smp] == 0)) { next; }
+
 		# make a genomic ranges object
 		smp.gr <- GRanges(tmp[which(tmp[,smp] == 1),c('chrom','start','end')]);
 
@@ -243,7 +245,8 @@ for (i in 1:length(cov.list)) {
 	# make a genomic ranges object
 	patient.gr <- if (length(these.smps) > 1) {
 		GRanges(tmp[which(apply(tmp[,these.smps],1,sum) == length(these.smps)),c('chrom','start','end')]);
-		 } else {
+		} else {
+		if (all(tmp[,these.smps] == 0)) { next; }
 		GRanges(tmp[which(tmp[,these.smps] == 1),c('chrom','start','end')]);
 		}
 
@@ -272,6 +275,9 @@ for (i in 1:length(cov.list)) {
 		callable.bases[patient.idx,]$Patient.cds.targeted <- sum(data.frame(intersect(target.patient.gr, cds.gr))$width);
 		}
 	}
+
+# set all NA's to 0
+callable.bases[is.na(callable.bases)] <- 0;
 
 # save data to file
 save(
