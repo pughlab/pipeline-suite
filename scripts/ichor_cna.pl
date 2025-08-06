@@ -130,7 +130,7 @@ sub get_ichor_cna_command {
 		out_dir		=> undef,
 		pon		=> undef,
 		intervals	=> undef,
-		create_pon	=> undef,
+		create_pon	=> 'N',
 		normal_list	=> undef,
 		@_
 		);
