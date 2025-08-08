@@ -1,3 +1,14 @@
+2025-08-08: PughLab pipeline-suite (version 0.9.17);
+- MAJOR updates:
+	- added fastq adapter trimming using fastp to DNAseq pipeline (WGS/WXS/targeted panel)
+	- added optional QC step to fragmentomics pipeline (picard CollectAlignmentSummaryMetrics)
+- MINOR updates:
+	- fixed a bug in the tumour-only cleanup step in vardict_wgs.pl
+	- fixed dinucleotide profiling for short fragments
+	- fixed a bug in msi_sensor that confused tool versions
+	- fixed a bug in PoN creation for ichorCNA
+	- cleaned up unused code/files
+
 2025-07-10: PughLab pipeline-suite (version 0.9.16);
 - removed filter_germline_variants.pl and collect_germline_genotypes.R as these are no longer used
 - MAJOR updates:

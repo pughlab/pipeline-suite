@@ -31,6 +31,7 @@ mutsig_refs: /cluster/projects/pughlab/references/MutSigCV/chr_files_hg19
 # tool versions
 perl_version: 5.40.0
 fastqc_version: 0.11.5
+fastp_version: 0.23.1
 bwa_version: 0.7.15
 samtools_version: 1.20
 picard_version: 2.10.9
@@ -63,6 +64,12 @@ r_version: 4.1.0
 mutsigcv_version: 1.4
 mcr_path: /cluster/tools/software/MCR/8.1/v81
 # tool specific parameters
+trim_adapters:
+    run: Y
+    parameters:
+        trim:
+            mem: 4G
+            time: '24:00:00'
 fastqc:
     run: Y
     parameters:

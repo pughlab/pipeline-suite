@@ -91,7 +91,7 @@ sub main {
 
 	### MAIN ###########################################################################################
 
-	my ($run_script, $fastqc_run_id);
+	my ($run_script, $fastqc_run_id, $trim_run_id);
 	my ($bwa_run_id, $gatk_run_id, $contest_run_id, $qc_run_id, $coverage_run_id, $hc_run_id);
 	my ($manta_run_id, $strelka_run_id);
 	my ($mutect_run_id, $mutect2_run_id, $varscan_run_id, $msi_run_id, $pindel_run_id);
@@ -102,6 +102,7 @@ sub main {
 	my $current_dependencies = '';
 
 	# prepare directory structure
+	my $trim_directory = join('/', $output_directory, 'fastq_trimmed');
 	my $fastqc_directory = join('/', $output_directory, 'fastqc');
 	my $bwa_directory = join('/', $output_directory, 'BWA');
 	my $gatk_directory = join('/', $output_directory, 'GATK');
@@ -129,6 +130,7 @@ sub main {
 
 	# check which tools have been requested
 	my %tool_set = (
+		'trim_adapters' => defined($tool_data->{trim_adapters}->{run}) ? $tool_data->{trim_adapters}->{run} : 'N',
 		'fastqc' => defined($tool_data->{fastqc}->{run}) ? $tool_data->{fastqc}->{run} : 'N',
 		'bwa'	=> defined($tool_data->{bwa}->{run}) ? $tool_data->{bwa}->{run} : 'N',
 		'gatk'	=> defined($tool_data->{gatk}->{run}) ? $tool_data->{gatk}->{run} : 'N',
@@ -163,6 +165,7 @@ sub main {
 	print $log "\n";
 
 	# indicate YAML files for processed BAMs
+	my $fastq_trimmed_output_yaml = join('/', $trim_directory, 'fastq_trimmed_config.yaml');
 	my $bwa_output_yaml = join('/', $bwa_directory, 'bwa_bam_config_' . $timestamp . '.yaml');
 	my $gatk_output_yaml = join('/', $gatk_directory, 'gatk_bam_config_' . $timestamp . '.yaml');
 
@@ -176,8 +179,62 @@ sub main {
 		$args{step4} = 1;
 		}
 
-	# Should pre-processing (alignment + GATK indel realignment/recalibration + QC) be performed?
+	# Should pre-processing (adapter trimming/alignment/GATK processing/QC) be performed?
 	if ($args{step1}) {
+
+		## run AdapterTrim pipeline
+		if ('Y' eq $tool_set{'trim_adapters'}) {
+
+			unless(-e $trim_directory) { make_path($trim_directory); }
+
+			my $trim_command = join(' ',
+				"perl $cwd/scripts/trim_adapters.pl",
+				"-o", $trim_directory,
+				"-t", $tool_config,
+				"-d", $data_config,
+				"-b", $fastq_trimmed_output_yaml,
+				"-c", $args{cluster}
+				);
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for trim_adapters.pl\n";
+			print $log "  COMMAND: $trim_command\n\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_trim_adapters',
+				cmd	=> $trim_command,
+				modules	=> [$perl],
+				mem		=> '256M',
+				max_time	=> '48:00:00',
+				hpc_driver	=> $args{cluster},
+				extra_args	=> [$hpc_group]
+				);
+
+			if ($args{dry_run}) {
+
+				$trim_command .= " --dry-run";
+				`$trim_command`;
+				$trim_run_id = 'pughlab_dna_pipeline__run_trim_adapters';
+
+				} else {
+
+				$trim_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> AdapterTrim job id: $trim_run_id\n\n";
+				push @step1_job_ids, $trim_run_id;
+				push @job_ids, $trim_run_id;
+				}
+
+			} else {
+			$fastq_trimmed_output_yaml = $data_config;
+			}
 
 		## run FASTQC pipeline
 		if ('Y' eq $tool_set{'fastqc'}) {
@@ -188,7 +245,7 @@ sub main {
 				"perl $cwd/scripts/collect_fastqc_metrics.pl",
 				"-o", $fastqc_directory,
 				"-t", $tool_config,
-				"-d", $data_config,
+				"-d", $fastq_trimmed_output_yaml,
 				"-c", $args{cluster}
 				);
 
@@ -201,6 +258,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_fastqc',
 				cmd	=> $fastqc_command,
 				modules	=> [$perl],
+				dependencies	=> $trim_run_id,
 				mem		=> '256M',
 				max_time	=> '48:00:00',
 				hpc_driver	=> $args{cluster},
@@ -224,20 +282,21 @@ sub main {
 					);
 
 				print $log ">>> FASTQC job id: $fastqc_run_id\n\n";
+				push @step1_job_ids, $fastqc_run_id;
 				push @job_ids, $fastqc_run_id;
 				}
 			}
 
 		## run BWA-alignment pipeline
-		unless(-e $bwa_directory) { make_path($bwa_directory); }
-
 		if ('Y' eq $tool_set{'bwa'}) {
+
+			unless(-e $bwa_directory) { make_path($bwa_directory); }
 
 			my $bwa_command = join(' ',
 				"perl $cwd/scripts/bwa.pl",
 				"-o", $bwa_directory,
 				"-t", $tool_config,
-				"-d", $data_config,
+				"-d", $fastq_trimmed_output_yaml,
 				"-b", $bwa_output_yaml,
 				"-c", $args{cluster}
 				);
@@ -255,6 +314,7 @@ sub main {
 				name	=> 'pughlab_dna_pipeline__run_bwa',
 				cmd	=> $bwa_command,
 				modules	=> [$perl],
+				dependencies	=> $trim_run_id,
 				mem		=> '256M',
 				max_time	=> $max_time,
 				hpc_driver	=> $args{cluster},
@@ -284,9 +344,9 @@ sub main {
 			}
 
 		## run GATK indel realignment/recalibration pipeline
-		unless(-e $gatk_directory) { make_path($gatk_directory); }
-
 		if ('Y' eq $tool_set{'gatk'}) {
+
+			unless(-e $gatk_directory) { make_path($gatk_directory); }
 
 			my $gatk_command = join(' ',
 				"perl $cwd/scripts/gatk.pl",
@@ -1901,7 +1961,7 @@ sub main {
 			"perl $cwd/scripts/pughlab_pipeline_auto_report.pl",
 			"-t", $tool_config,
 			"-c", $args{cluster},
-			"-d", $date
+			"-d", $gatk_output_yaml
 			);
 
 		if ($args{step5}) {

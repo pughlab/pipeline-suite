@@ -1,3 +1,0 @@
-site_files:
-  hematopoietic: /cluster/projects/pughlab/bin/Griffin/sites/hematopoietic/Hematopoietic_hg38.txt
-  stop: /cluster/projects/pughlab/bin/Griffin/sites/stop.high_mapability.txt

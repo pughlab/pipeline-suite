@@ -33,7 +33,13 @@ chrs <- paste0("chr", c(1:22))
 bedpe <- bedpe[bedpe$V1 %in% chrs, ]
 bedpe <- bedpe[bedpe$V1 == bedpe$V4, ]
 bedpe$length <- bedpe$V6 - bedpe$V2
-bedpe <- bedpe[bedpe$length == 167, ]
+if (grepl('167', id)) {
+	bedpe <- bedpe[bedpe$length == 167, ];
+	} else if (grepl('150', id)) {
+	bedpe <- bedpe[bedpe$length == 150, ];
+	} else {
+	warning('Could not determine desired fragment size; using all fragments.');
+	}
 bedpe <- bedpe[, c("V1", "V2", "V6")]
 bedpe <- bedpe[order(factor(bedpe$V1, levels = chrs),
                      bedpe$V2), ]

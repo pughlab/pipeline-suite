@@ -5,20 +5,20 @@ hpc_group:
 # reference files; leave empty to use defaults [most likely to work!]
 ref_type: hg38 # currently only tested on hg38 
 reference: /cluster/projects/pughlab/references/TGL/hg38/hg38_random.fa
-nucleosome_peaks: 
-delfi_pon: 
-delfi_filters: 
-delfi_gaps: 
-delfi_vntrs: 
-delfi_tiles: 
-griffin_sites: # will always run TFBS/TCGA/DHS and housekeeping, but others can be added here (NAME: path)
-    TFBS: 
-    TCGA: 
-    DHS: 
-    housekeeping: 
 # package directories
-fragmentomics_dir: 
-griffin_dir: 
+fragmentomics_dir: # leave blank to use default (pipeline-suite/scripts/fragmentomics)
+griffin_dir: # leave blank to use default (pipeline-suite/scripts/fragmentomics/griffin)
+nucleosome_peaks: # leave blank to use default (pipeline-suite/scripts/fragmentomics/nucleosome_peak/ref/hg38)
+delfi: # leave blank to use default (pipeline-suite/scripts/fragmentomics/ratio/extdata)
+    pon: 
+    filters: 
+    gaps: 
+    vntrs: 
+    tiles: 
+griffin_sites: # add custom site lists using set_name: /path/to/set_sites.yaml
+    TFBS: #/path/to/pipeline-suite/scripts/fragmentomics/griffin/site_configs/TFBS_sites.yaml 
+    TCGA: #/path/to/pipeline-suite/scripts/fragmentomics/griffin/site_configs/TCGA_sites.yaml
+    housekeeping: #/path/to/pipeline-suite/scripts/fragmentomics/griffin/site_configs/housekeeping_sites.yaml
 # tool versions
 samtools_version: 1.20
 picard_version: 2.10.9
@@ -45,6 +45,7 @@ parameters:
         mem: 2G
         time: '24:00:00'
     insertsize:
+        do_qc: N # run Picard's CollectAlignmentSummaryMetrics
         java_mem: 7g
         mem: 8G
         time: '24:00:00'
@@ -55,7 +56,7 @@ parameters:
         mem: 16G
         time: '12:00:00'
     breakpoints:
-        mem: 64G
+        mem: 64G # for 30xWGS, this can take up to 240G!
         time: '12:00:00'
     dinucleotide:
         size: both

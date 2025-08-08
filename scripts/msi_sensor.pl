@@ -191,11 +191,11 @@ sub main {
 	# set tools and versions
 	my $msi_pro	= 'msisensor-pro/' . $tool_data->{msi_sensor_version};
 
-	$use_new_msi_sensor_version = 1;
+	$use_new_msi_sensor_version = 0;
 	my $suggested = version->declare('1.2.0')->numify;
 	my $given = version->declare($tool_data->{msi_sensor_version})->numify;
 	if ($given > $suggested) {
-		$use_new_msi_sensor_version = 0;
+		$use_new_msi_sensor_version = 1;
 		}
 
 	my $r_version	= 'R/' . $tool_data->{r_version};
@@ -292,7 +292,7 @@ sub main {
 			my @tmp = split /\//, $smp_data->{$patient}->{normal}->{$normal};
 			$link = join('/', $link_directory, $tmp[-1]);
 			symlink($smp_data->{$patient}->{normal}->{$normal}, $link);
-			if ($use_new_msi_sensor_version) {
+			if (! $use_new_msi_sensor_version) {
 				print $fh "$normal\t$smp_data->{$patient}->{normal}->{$normal}\n";
 				}
 			}
@@ -314,12 +314,17 @@ sub main {
 	my $baseline_dir = join('/', $output_directory, 'baseline');
 	my ($baseline_out, $baseline_cmd);
 
+	if ($use_new_msi_sensor_version) {
+		my $tmp_dir = join('/', $baseline_dir, 'details');
+		unless(-e $tmp_dir) { make_path($tmp_dir); }
+		}
+
 	if ($tumour_only > 0) {
 
 		unless(-e $baseline_dir) { make_path($baseline_dir); }
 		$baseline_out = join('/', $baseline_dir, 'msi_reference.list_baseline');
 
-		if ($use_new_msi_sensor_version) {
+		if (! $use_new_msi_sensor_version) {
 
 			$baseline_cmd = get_baseline_command(
 				input_list	=> $sample_sheet,
