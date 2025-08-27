@@ -1,0 +1,4 @@
+DHS_sites: Tissue-specific DNase-Hypersensitivity sites from Meuleman et al. (doi: 10.1038/s41586-020-2559-3)
+TCGA_sites: Cancer-specific chromatin accessibility maps (ATAC-seq) from 23 cancer types (TCGA)
+TFBS_sites: Location of transcription factor binding sites for 335 TFs identified by ChiP-seq (doi: 10.1093/nar/gkw951)
+housekeeping_sites: Genomic coordinates of gene elements for genes with consistent RNA expression across tissue types (https://www.tau.ac.il/~elieis/HKG/)
