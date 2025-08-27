@@ -492,7 +492,6 @@ sub main {
 	if ('Y' eq $tool_set{'delly'}) { push @sv_tools, "Delly (v$delly)"; }
 	if ( ('Y' eq $tool_set{'strelka'}) || ('Y' eq $tool_set{'manta'}) ) { push @sv_tools, "Manta (v$manta)"; }
 	if ('Y' eq $tool_set{'novobreak'}) { push @sv_tools, "NovoBreak (v$novobreak)"; }
-	if ('Y' eq $tool_set{'pindel'}) { push @sv_tools, "Pindel (v$pindel)"; }
 
 	if (scalar(@sv_tools) > 0) {
 		$methods .= "Structural variants (SVs) including large insertions/deletions, duplications, inversions and translocations were identified using the following tools: " . join(', ', @sv_tools) . "\\newline\n";
