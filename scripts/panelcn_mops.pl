@@ -172,8 +172,8 @@ sub main {
 
 	# set tools and versions
 	$cnmops_path = "$cwd/run_panelCN_mops.R";
-	my $cnmops_r = 'R/4.1.0'; # . $tool_data->{mops_r_version};
-	my $r_version	= 'R/'. $tool_data->{r_version};
+	my $cnmops_r = 'R/' . $tool_data->{mops_r_version};
+	my $r_version = 'R/'. $tool_data->{r_version};
 
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{panelcn_mops}->{parameters};
