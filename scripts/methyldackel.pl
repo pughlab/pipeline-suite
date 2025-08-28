@@ -368,6 +368,38 @@ sub main {
 		print $log "---\n";
 		}
 
+	# collate results
+	my $collect_output = join(' ',
+		"Rscript $cwd/collect_methyldackel_output.R",
+		'-d', $output_directory,
+		'-p', $tool_data->{project_name},
+		'-t', $tool_data->{targets_bed},
+		'-r', $tool_data->{ref_type},
+		'-s', $data_config
+		);
+
+	$run_script = write_script(
+		log_dir	=> $log_directory,
+		name	=> 'combine_methyldackel_output',
+		cmd	=> $collect_output,
+		modules	=> [$r_version],
+		dependencies	=> join(':', @all_jobs),
+		mem		=> '16G',
+		max_time	=> '24:00:00',
+		hpc_driver	=> $args{hpc_driver},
+		extra_args	=> [$hpc_group]
+		);
+
+	$run_id = submit_job(
+		jobname		=> 'combine_methyldackel_output',
+		shell_command	=> $run_script,
+		hpc_driver	=> $args{hpc_driver},
+		dry_run		=> $args{dry_run},
+		log_file	=> $log
+		);
+
+	push @all_jobs, $run_id;
+
 	# if this is not a dry run OR there are jobs to assess (run or resumed with jobs submitted) then
 	# collect job metrics (exit status, mem, run time)
 	unless ( ($args{dry_run}) || (scalar(@all_jobs) == 0) ) {

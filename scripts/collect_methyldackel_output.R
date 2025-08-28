@@ -45,28 +45,18 @@ parser$add_argument('-p', '--project', type = 'character', help = 'project name'
 parser$add_argument('-d', '--directory', type = 'character', help = 'path to data directory');
 parser$add_argument('-s', '--sample_yaml', type = 'character', help = 'path to sample (BAM) yaml');
 parser$add_argument('-t', '--target_bed', type = 'character', help = 'path to target regions (BED)');
-parser$add_argument('-w', '--is_wgs', type = 'character', help = 'is this WGS?',
-	default = FALSE);
+parser$add_argument('-r', '--ref_type', type = 'character', help = 'reference type', default = 'hg38');
 
 arguments <- parser$parse_args();
 
 setwd(arguments$directory);
 
-###
-arguments$target_bed <- '/cluster/projects/pughlab/references/intervals/MultiMMR_panel/version2/MTE/target_covered_by_probes_sorted.bed';
-arguments$sample_yaml <- '/cluster/projects/pughlab/pughlab/projects/MultiMMR/EMSeq/BWA/bwa_bam_config_2025-08-26_10-54-54.yaml';
-###
-
-
 # load libraries/functions
-#library(BoutrosLab.plotting.general);
 library(yaml);
 library(GenomicRanges);
 library(BiocParallel);
 library(parallel);
 library(bsseq);
-#library(methylSig);
-#library(data.table);
 
 ### READ DATA ######################################################################################
 # parse sample information from yaml file
@@ -102,11 +92,21 @@ sample.info$Sample <- factor(sample.info$Sample, levels = sample.order);
 sample.info <- sample.info[order(sample.info$Sample),];
 rownames(sample.info) <- sample.info$Sample;
 
+# determine reference genome to use
+if ('hg38' == arguments$ref_type) {
+	library(BSgenome.Hsapiens.UCSC.hg38);
+	genomedb <- BSgenome.Hsapiens.UCSC.hg38::BSgenome.Hsapiens.UCSC.hg38;
+	} else if ('hg19' == arguments$ref_type) {
+	library(BSgenome.Hsapiens.UCSC.hg19);
+	genomedb <- BSgenome.Hsapiens.UCSC.hg19::BSgenome.Hsapiens.UCSC.hg19;
+	} else {
+	stop('Unrecognized ref_type; must be one of hg38 or hg19');
+	}
 
 # first find all candidate loci
 cpg.loci <- findLoci(
 	pattern = 'CG',
-	subject = BSgenome.Hsapiens.UCSC.hg38::BSgenome.Hsapiens.UCSC.hg38,
+	subject = genomedb,
 	include = paste0('chr',1:22)
 	);
 
@@ -123,27 +123,15 @@ if (!is.null(arguments$target_bed)) {
 	}
 
 # read in files using bsseq (runs in parallel so quite a bit faster)
-if (arguments$is_wgs) {
-
-	BSobj <- bsseq::read.bismark(
-		files = data.files,
-		loci = target.loci,
-		BPPARAM = MulticoreParam(workers = 3, progressbar = TRUE),
-		colData = sample.info,
-		strandCollapse = FALSE,
-		nThread = ifelse(detectCores() > 16,  4, 1),
-		verbose = TRUE
-		);
-
-	} else {
-
-	BSobj <- bsseq::read.bismark(
-		files = data.files,
-		loci = target.loci,
-		colData = sample.info,
-		strandCollapse = FALSE
-		);
-	}
+BSobj <- bsseq::read.bismark(
+	files = data.files,
+	loci = target.loci,
+	BPPARAM = MulticoreParam(workers = 3, progressbar = TRUE),
+	colData = sample.info,
+	strandCollapse = FALSE,
+	#nThread = ifelse(detectCores() > 16,  4, 1),
+	verbose = TRUE
+	);
 
 save(BSobj, target.loci, sample.info,
 	file = generate.filename(arguments$project, 'collected_CpG_objects','RData')
@@ -164,7 +152,7 @@ save(
 	);
 
 # aggregate over chromosomes (WGS) or genes of interested (MultiMMR)
-if (arguments$is_wgs) {
+if (is.null(arguments$target_bed)) {
 
 	# extract average methylation for each chromosome/sample
 	per.chrom.methylation <- aggregate(
