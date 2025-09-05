@@ -127,7 +127,7 @@ if (length(idx) > 0) {
 ##################################
 
 # indicate key fields
-keep.fields <- c('Tumor_Sample_Barcode','Hugo_Symbol','Chromosome','Variant_Classification','Reference_Allele','Tumor_Seq_Allele2', 't_depth','t_ref_count','n_depth','n_ref_count');
+keep.fields <- c('Tumor_Sample_Barcode','Hugo_Symbol','Chromosome','Variant_Classification','Reference_Allele','Tumor_Seq_Allele2','HGVSc','HGVSp_Short','CLIN_SIG','CPSR_PATHOGENICITY_SCORE', 't_depth','t_ref_count','n_depth','n_ref_count');
 
 mutation.data <- input.data[,keep.fields];
 
@@ -154,8 +154,68 @@ mutation.data <- mutation.data[which(
 	(is.na(mutation.data$n_vaf) & mutation.data$t_vaf > 0.4) | 
 	(mutation.data$n_vaf > 0.4)),];
 
+# extract clinvar pathogenic hits
+mutation.data$ClinVar <- sapply(mutation.data$CLIN_SIG, function(i) { 
+	if (is.na(i)) { return(NA) 
+		} else {
+		tmp <- unlist(strsplit(i,','));
+		x <- if (any(tmp == 'pathogenic')) { 'pathogenic'
+			} else if (any(tmp == 'likely_pathogenic')) { 'likely_pathogenic'
+			} else if (any(tmp %in% c('uncertain_significance','conflicting_interpretations_of_pathogenicity'))) { 'VUS'
+			} else if (any(tmp == 'likely_benign')) { 'likely_benign'
+			} else if (any(tmp == 'benign')) { 'benign'
+			} else { NA }
+		return(x);
+		}
+	});
+
+mutation.data$Variant <- apply(mutation.data[,c('HGVSc','HGVSp_Short','Variant_Classification')], 1, 
+	function(i) {
+		j <- setdiff(i[1:2],'');
+		if (length(j) == 2) { return(paste0(j[1], ' (', j[2], ')'));
+			} else if (length(j) == 1) { return(j[1]);
+			} else { return(i[3]) }
+		}
+	);
+
+# select pathogenic hits	
+signif.data <- mutation.data[which(mutation.data$ClinVar %in% c('pathogenic','likely_pathogenic')),c('Tumor_Sample_Barcode','Hugo_Symbol','Variant','ClinVar','t_vaf','n_vaf')];
+colnames(signif.data) <- c('Sample','Symbol','Variant','ClinVar','TumourVAF','NormalVAF');
+
+# save significant results for each sample
+for (smp in all.samples) {
+
+	if (!dir.exists(smp)) {
+		dir.create(smp);
+		}
+
+	smp.data <- signif.data[which(signif.data$Sample == smp),];
+	if (nrow(smp.data) == 0) { next; }
+
+	setwd(smp);
+
+	write.table(
+		smp.data,
+		file = generate.filename('CPSR', 'pathogenic_germline_variants','tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+
+	print(
+		xtable(
+			smp.data[,-1],
+			caption = 'List of high-confidence, pathogenic germline mutations.'
+			),
+		file = 'pathogenic_germline_variants.tex',
+		include.rownames = FALSE
+		);
+
+	setwd(arguments$output);
+	}
+
 # if there are fewer than 5 germline variants here, write a table to output
-show.germline <- mutation.data[,c('Tumor_Sample_Barcode','Hugo_Symbol','Variant_Classification','t_vaf','n_vaf')];
+show.germline <- mutation.data[,c('Tumor_Sample_Barcode','Hugo_Symbol','Variant','t_vaf','n_vaf')];
 colnames(show.germline) <- c('Sample','Symbol','Class','TumourVAF','NormalVAF');
 
 if (nrow(mutation.data) == 0) {
