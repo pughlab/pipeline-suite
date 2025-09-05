@@ -1,3 +1,7 @@
+2025-09-05: PughLab pipeline-suite (version 0.9.19);
+- MINOR updates:
+	- added pughlab_pipeline_auto_report.pl stage to pughlab_emseq_pipeline.pl
+
 2025-09-05: PughLab pipeline-suite (version 0.9.18);
 - MAJOR updates:
 	- added collect_methyldackel_output.R
