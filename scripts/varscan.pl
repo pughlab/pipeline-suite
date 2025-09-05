@@ -194,6 +194,16 @@ sub get_filter_command {
 			'-O v',
 			'-o', $args{output_stem} . "_germline_hc.vcf"
 			);
+
+		$filter_command .= "\n\n" . join(' ',
+			'md5sum', $args{output_stem} . "_germline_hc.vcf",
+			'>', $args{output_stem} . "_germline_hc.vcf.md5"
+			);
+
+		$filter_command .= "\n\n" . join("\n",
+			"bgzip -f $args{output_stem}\_germline_hc.vcf",
+			"tabix -p vcf $args{output_stem}\_germline_hc.vcf.gz",
+			);
  
 		$filter_command .= "\n\n" . join(' ',
 			"awk 'NR>1 { print \$1" . '"\t"' . "\$2 }'", "$args{input_snp}.Somatic.hc",
@@ -203,6 +213,11 @@ sub get_filter_command {
 			"$args{input_vcf}.gz",
 			'-O v',
 			'-o', $args{output_stem} . "_somatic_hc.vcf"
+			);
+
+		$filter_command .= "\n\n" . join(' ',
+			'md5sum', $args{output_stem} . "_somatic_hc.vcf",
+			'>', $args{output_stem} . "_somatic_hc.vcf.md5",
 			);
 
 	# else, for tumour-only, split into snp/indel
@@ -220,6 +235,11 @@ sub get_filter_command {
 			}
 
 		$filter_command .= ' > ' . $args{output_stem} . ".vcf";
+
+		$filter_command .= "\n\n" . join(' ',
+			"md5sum $args{output_stem}.vcf",
+			'>', "$args{output_stem}.vcf.md5"
+			);
 		}
 
 	return($filter_command);
@@ -366,7 +386,7 @@ sub main {
 
 	my ($run_script, $cnv_run_id, $varscan_run_id, $run_id, $link, $cleanup_cmd);
 	my ($should_run_pon, $should_run_final) = 0;
-	my (@all_jobs, @pon_vcfs, @pon_dependencies);
+	my (@all_jobs, @pon_vcfs, @pon_dependencies, @final_jobs);
 
 	my $pon_directory = join('/', $output_directory, 'PanelOfNormals');
 	my $pon_intermediates = join('/', $pon_directory, 'intermediate_files');
@@ -962,21 +982,6 @@ sub main {
 				somatic		=> 1
 				);
 
-			$filter_command .= "\n\n" . join(' ',
-				'md5sum', $merged_vcf_output . "_germline_hc.vcf",
-				'>', $merged_vcf_output . "_germline_hc.vcf.md5"
-				);
-
-			$filter_command .= "\n\n" . join(' ',
-				'md5sum', $merged_vcf_output . "_somatic_hc.vcf",
-				'>', $merged_vcf_output . "_somatic_hc.vcf.md5"
-				);
-
-			$filter_command .= "\n\n" . join("\n",
-				"bgzip -f $merged_vcf_output\_germline_hc.vcf",
-				"tabix -p vcf $merged_vcf_output\_germline_hc.vcf.gz"
-				);
-
 			push @germline_vcfs, $merged_vcf_output . "_germline_hc.vcf.gz";
 
 			$cleanup_cmd .= "\nrm $merged_vcf_output\_somatic_hc.vcf";
@@ -1075,6 +1080,7 @@ sub main {
 
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
+				push @final_jobs, $run_id;
 				} else {
 				print $log "  >> Skipping vcf2maf because this has already been completed!\n";
 				}
@@ -1569,11 +1575,6 @@ sub main {
 				tmp_dir		=> $tmp_directory
 				);
 
-			$filter_command .= "\n\n" . join(' ',
-				"md5sum $output_stem\_filtered.vcf",
-				'>', "$output_stem\_filtered.vcf.md5"
-				);
-
 			# check if this should be run
 			if ('Y' eq missing_file("$output_stem\_filtered.vcf.md5")) {
 
@@ -1670,6 +1671,7 @@ sub main {
 
 				push @patient_jobs, $run_id;
 				push @all_jobs, $run_id;
+				push @final_jobs, $run_id;
 				} else {
 				print $log "  >> Skipping vcf2maf because this has already been completed!\n";
 				}
@@ -1740,7 +1742,7 @@ sub main {
 			name	=> 'combine_variant_calls',
 			cmd	=> $collect_output,
 			modules	=> [$r_version],
-			dependencies	=> join(':', @all_jobs),
+			dependencies	=> join(':', @final_jobs),
 			mem		=> '4G',
 			max_time	=> '24:00:00',
 			hpc_driver	=> $args{hpc_driver},

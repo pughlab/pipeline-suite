@@ -3,6 +3,8 @@
 # Script to take in a set of test bams and reference ('normal') bams along
 # with a target bed file and output figures and copy-number calls
 
+.libPaths(.libPaths()[!grepl('home', .libPaths())]);
+
 ### PREAMBLE #######################################################################################
 # load required libraries
 library(optparse);
@@ -44,15 +46,6 @@ option_list <- list(
 # set arguments
 opt <- parse_args(OptionParser(option_list=option_list));
 
-####################################
-### Set variables with test data for development
-#opt$sample_list <- '/cluster/projects/pughlab/projects/M4/Pipeline_suite/Backbone/PanelCNmops/CA-01-01/M4_CA-01-01_BM_cells/sample_sheet.tsv';
-#opt$bed_file <- '/cluster/projects/pughlab/projects/M4/Pipeline_suite/Backbone/PanelCNmops/PanelOfNormals/formatted_countWindows.bed';
-#opt$output_directory <- '/cluster/projects/pughlab/projects/M4/Pipeline_suite/Backbone/PanelCNmops/CA-01-01/M4_CA-01-01_BM_cells/';
-#opt$pon	<- '/cluster/projects/pughlab/projects/M4/Pipeline_suite/Backbone/PanelCNmops/PanelOfNormals/merged_GRanges_count_obj_for_panelcn.Rdata';
-#opt$read_length		<- 151;
-####################################
-
 sample_file		<- opt$sample_list;
 bed_file		<- opt$bed_file;
 output_directory	<- opt$output_directory;
@@ -74,7 +67,7 @@ if (make_pon) {
 	tmp_bed <- read.delim(bed_file, header = FALSE);
         colnames(tmp_bed)[1:3] <- c('Chromosome','Start','End');
 	has_chr <- grepl('chr', tmp_bed[1,1]);
-        target.gr <- GRanges(tmp_bed);
+        target.gr <- reduce(GRanges(tmp_bed));
 
 	if ('hg19' == ref_type) {
 		library('TxDb.Hsapiens.UCSC.hg19.knownGene');
@@ -118,7 +111,8 @@ if (make_pon) {
 	gene.gr <- makeGRangesFromDataFrame(gene.data,
 		seqnames.field = 'TXCHROM',
 		start.field = 'TXSTART',
-		end.field = 'TXEND'
+		end.field = 'TXEND',
+		keep.extra.columns = TRUE
 		);
 	exon.gr <- makeGRangesFromDataFrame(exon.data,
 		seqnames.field = 'TXCHROM',
@@ -132,8 +126,10 @@ if (make_pon) {
 	# panelcn.mops expects gene 'names' to be in the format
 	# SYMBOL.exon.chr.start.end
 	# so fill in as much as possible
-	tmp_bed$V4 <- NA;
-	for (i in 1:nrow(tmp_bed)) {
+	annotated_bed <- as.data.frame(target.gr);
+	annotated_bed$seqnames <- as.character(annotated_bed$seqnames);
+	annotated_bed$V4 <- NA;
+	for (i in 1:nrow(annotated_bed)) {
 		if (i %in% gene.overlaps$subjectHits) {
 			gene.idx <- gene.overlaps[which(gene.overlaps$subjectHits == i),]$queryHits;
 			gene <- sort(unique(gene.data[gene.idx,]$Symbol))[1];
@@ -142,26 +138,30 @@ if (make_pon) {
 		if (i %in% exon.overlaps$subjectHits) {
 			exon.idx <- exon.overlaps[which(exon.overlaps$subjectHits == i),]$queryHits;
 			exon <- paste0('E',unique(exon.data[exon.idx,]$EXONRANK)[1]);
-			} else { exon <- 'EXON';
+			} else { exon <- 'other';
 			}
 
-		tmp_bed[i,]$V4 <- paste(c(gene, exon, tmp_bed[i,1:3]), collapse = '.');
+		annotated_bed[i,]$V4 <- paste(c(gene, exon, annotated_bed[i,1:3]), collapse = '.');
 		}
 
-	bed_file <- sub('.bed','_annotated.bed',basename(bed_file));
+	new_bed_file <- sub('.bed','_annotated.bed',basename(bed_file));
 	write.table(
-		tmp_bed,
-		file = bed_file,
+		annotated_bed[,c('seqnames', 'start', 'end', 'V4')],
+		file = new_bed_file,
 		row.names = FALSE,
 		col.names = FALSE,
 		quote = FALSE,
 		sep = '\t'
 		);
 
-	countWindows <- getWindows(bed_file, chr = has_chr);
-	countWindows[which(countWindows$gene == 'GENE'),]$gene <- NA;
-	countWindows[which(countWindows$exon == 'EXON'),]$exon <- NA;
-	countWindows$name <- make.unique(countWindows$gene);
+	countWindows <- getWindows(new_bed_file, chr = has_chr);
+	if (any(countWindows$gene == 'GENE')) {
+		countWindows[which(countWindows$gene == 'GENE'),]$gene <- NA;
+		}
+	if (any(countWindows$exon == 'other')) {
+		countWindows[which(countWindows$exon == 'other'),]$exon <- NA;
+		}
+	countWindows$name <- gsub('GENE.other','region',countWindows$name);
 
 	write.table(
 		countWindows,

@@ -297,6 +297,8 @@ sub create_gtcheck_command {
 
 	$cmd .= " > $args{output}";
 
+	$cmd .= "\n\nmd5sum $args{output} > $args{output}.md5;";
+
 	return($cmd);
 	}
 

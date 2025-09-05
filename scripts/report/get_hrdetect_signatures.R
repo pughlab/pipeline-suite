@@ -170,7 +170,9 @@ sv.data <- sv.data[which(sv.states == 'somatic'),];
 
 # remove short SVs (INDELs)
 sv.data$Length <- abs(sv.data$break2_position_end - sv.data$break1_position_start);
-sv.data[grepl('translocation', sv.data$event_type),]$Length <- NA;
+if (any(grepl('translocation', sv.data$event_type))) {
+	sv.data[grepl('translocation', sv.data$event_type),]$Length <- NA;
+	}
 sv.data <- sv.data[which(is.na(sv.data$Length) | sv.data$Length > 200),];
 
 # add evidence filter
@@ -271,7 +273,7 @@ for (smp in all.samples) {
 	indel_class <- vcfToIndelsClassification(snv.filename, smp, genome.v = arguments$ref_type);
 
 	# calculate HRD LOH count
-	hrdloh <- ascatToHRDLOH(cnv.data[cna.idx,-1], smp);
+	hrdloh <- ascatToHRDLOH(na.omit(cnv.data[cna.idx,-1]), smp);
 
 	# initialise feature matrix
 	input_matrix <- matrix(nrow = 1, ncol = length(hrdetect.features), dimnames = list(smp,hrdetect.features));
@@ -302,10 +304,12 @@ for (smp in all.samples) {
 
 	# output HRDetect scores
 	output <- as.data.frame(hrd.results$hrdetect_output);
-	output$Sample <- smp;
-	output <- output[,c("Sample", "intercept", hrdetect.features, "Probability")];
+	if (nrow(output) > 0) {
+		output$Sample <- smp;
+		output <- output[,c("Sample", "intercept", hrdetect.features, "Probability")];
 
-	hrdetect.outputs[[smp]] <- output;
+		hrdetect.outputs[[smp]] <- output;
+		}
 
 	rm(hrd.results,output,input_matrix,cna.idx,cnv.filename,sv.idx,sv.filename,snv.filename,res,SNV_catalogues,subs_fit_res,snv_exp,indel_class,hrdloh);
 

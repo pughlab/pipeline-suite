@@ -123,50 +123,45 @@ if (any(is.na(sv.data$Break2_Chromosome))) {
 	sv.data[is.na(sv.data$Break2_Chromosome),]$Break2_Chromosome <- sv.data[is.na(sv.data$Break2_Chromosome),]$Break1_Chromosome;
 	}
 
-# annotate regions
-if ('hg38' == arguments$ref_type) {
+### FORMAT ANNOTATION ##############################################################################
+if (arguments$ref_type %in% c('hg38','GRCh38')) {
 	library(TxDb.Hsapiens.UCSC.hg38.knownGene);
 	txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene;
-	} else if ('hg19' == arguments$ref_type) {
+	} else if (arguments$ref_type %in% c('hg19','GRCh37')) {
 	library(TxDb.Hsapiens.UCSC.hg19.knownGene);
 	txdb <- TxDb.Hsapiens.UCSC.hg19.knownGene;
 	} else {
 	stop('Unrecognized ref_type; must be one of hg38 or hg19');
 	}
-
-gene.gr <- transcriptsBy(txdb, by = 'gene');
-gene.info <- select(txdb,
-	keys = names(gene.gr),
-	keytype = 'GENEID',
-	columns = c('TXNAME','TXCHROM','TXSTART','TXEND')
+ 
+# extract gene positions and annotations
+gene.positions <- data.frame(genes(txdb));
+gene.annotations <- select(
+	org.Hs.eg.db,
+	keys = gene.positions$gene_id,
+	keytype = 'ENTREZID',
+	columns = c('SYMBOL','GENETYPE')
 	);
 
-gene.info <- gene.info[order(gene.info$TXCHROM, gene.info$TXSTART),];
+gene.data <- merge(gene.annotations,gene.positions,by.y = 'gene_id', by.x = 'ENTREZID');
+gene.data$seqnames <- factor(gene.data$seqnames, levels = paste0('chr',c(1:22,'X','Y')));
+gene.data <- gene.data[!is.na(gene.data$seqnames),1:6];
 
-gene.info$Symbol <- mapIds(org.Hs.eg.db,
-	keys = gene.info$GENEID,
-	keytype = "ENTREZID",
-	column = "SYMBOL",
-	multiVals = "first"
-	);
-
-gene.info$GeneType <- mapIds(org.Hs.eg.db,
-	keys = gene.info$GENEID,
-	keytype = "ENTREZID",
-	column = "GENETYPE",
-	multiVals = "first"
-	);
-
-gene.info$GeneType <- factor(gene.info$GeneType,
+gene.data$GENETYPE <- factor(gene.data$GENETYPE,
 	levels = c('protein-coding','rRNA','scRNA','snRNA','snoRNA','ncRNA','pseudo')
 	);
 
-gene.gr <- makeGRangesFromDataFrame(gene.info,
-	seqnames.field = 'TXCHROM',
-	start.field = 'TXSTART',
-	end.field = 'TXEND'
-	);
+gene.data <- gene.data[!is.na(gene.data$SYMBOL),];
+gene.data <- gene.data[order(gene.data$seqnames, gene.data$start),];
 
+gene.gr <- GRanges(gene.data);
+
+colnames(gene.data)[which(colnames(gene.data) == 'seqnames')] <- 'Chromosome';
+colnames(gene.data)[which(colnames(gene.data) == 'start')] <- 'Start';
+colnames(gene.data)[which(colnames(gene.data) == 'end')] <- 'End';
+
+
+### ANNOTATE BREAKPOINTS ###########################################################################
 break1.gr <- makeGRangesFromDataFrame(sv.data,
 	seqnames.field = 'Break1_Chromosome',
 	start.field = 'Break1_Position',
@@ -183,14 +178,14 @@ break2.overlaps <- as.data.frame(findOverlaps(gene.gr, break2.gr));
 
 for (i in unique(break1.overlaps$subjectHits)) {
 	gene.idx <- break1.overlaps[which(break1.overlaps$subjectHits == i),]$queryHits;
-	tmp <- gene.info[gene.idx,];
-	gene <- as.character(tmp[order(tmp$GeneType, tmp$TXSTART),]$Symbol[1]);
+	tmp <- gene.data[gene.idx,];
+	gene <- as.character(tmp[order(tmp$GENETYPE, tmp$Start),]$SYMBOL[1]);
 	sv.data[i,]$Break1_Gene <- gene;
 	}
 for (i in unique(break2.overlaps$subjectHits)) {
 	gene.idx <- break2.overlaps[which(break2.overlaps$subjectHits == i),]$queryHits;
-	tmp <- gene.info[gene.idx,];
-	gene <- as.character(tmp[order(tmp$GeneType, tmp$TXSTART),]$Symbol[1]);
+	tmp <- gene.data[gene.idx,];
+	gene <- as.character(tmp[order(tmp$GENETYPE, tmp$Start),]$SYMBOL[1]);
 	sv.data[i,]$Break2_Gene <- gene;
 	}
 
