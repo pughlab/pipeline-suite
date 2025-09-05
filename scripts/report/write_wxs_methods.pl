@@ -117,7 +117,7 @@ sub main {
 	if ('Y' eq $tool_set{'gatk'}) {
 
 		$gatk = $tool_data->{gatk_version};
-		my @parts = split('\\/', $tool_data->{intervals_bed});
+		my @parts = split('\\/', $tool_data->{targets_bed});
 		$intervals = $parts[-1];
 
 		# find reference files
@@ -202,7 +202,7 @@ sub main {
 		$gatk = $tool_data->{gatk_version};
 		my $cpsr = $tool_data->{cpsr_version};
 		my $pcgr = $tool_data->{pcgr_version};
-		my @parts = split('\\/', $tool_data->{intervals_bed});
+		my @parts = split('\\/', $tool_data->{targets_bed});
 		$intervals = $parts[-1];
 
 		# find reference files

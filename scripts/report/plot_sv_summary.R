@@ -100,7 +100,9 @@ sv.data$Status <- apply(
 
 # remove short SVs (INDELs)
 sv.data$Length <- abs(sv.data$break2_position_end - sv.data$break1_position_start);
-sv.data[grepl('translocation', sv.data$event_type),]$Length <- NA;
+if (any(grepl('translocation', sv.data$event_type))) {
+	sv.data[grepl('translocation', sv.data$event_type),]$Length <- NA;
+	}
 sv.data <- sv.data[which(is.na(sv.data$Length) | sv.data$Length > 200),];
 
 # add evidence filter

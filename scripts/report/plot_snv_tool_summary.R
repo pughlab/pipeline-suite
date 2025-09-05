@@ -88,7 +88,8 @@ if (!dir.exists(arguments$output)) {
 setwd(arguments$output);
 
 ### FORMAT DATA ####################################################################################
-all.tools <- c('MuTect2','MuTect','Strelka','VarScan','SomaticSniper','VarDict','Pindel');
+all.tools <- intersect(colnames(combined.data),
+	c('MuTect2','MuTect','Strelka','VarScan','SomaticSniper','VarDict','Pindel'));
 tool.list <- c();
 for (tool in all.tools) {
 	if (tool %in% colnames(combined.data)) { tool.list <- c(tool.list, tool); }
@@ -228,7 +229,7 @@ create.multipanelplot(
 	right.legend.padding = 0,
 	top.legend.padding = 0,
 	bottom.legend.padding = 0,
-	y.spacing = c(rep(-2.5,6),-1),
+	y.spacing = c(rep(-2.5,tool.count),-1),
 	ylab.label = paste(
 		paste(rep(' ', 50), collapse = ''),
 		'Somatic Variant Count (SNVs and INDELs)'

@@ -602,7 +602,7 @@ msi.plot <- create.dotmap(
 	yaxis.cex = 0.8,
 	colour.scheme = c('white','grey50','black'),
 	total.colours = 4,
-#	at = seq(0,2,1),
+	at = seq(0,2,1),
 	bg.alpha = 1,
 	lwd = 1, row.lwd = c(1.5,1), col.lwd = 1,
 	row.colour = c('black','grey90'),

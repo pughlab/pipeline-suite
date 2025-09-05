@@ -201,7 +201,9 @@ sv.data <- sv.data[!is.na(sv.data$sv_type),];
 
 # calculate variant lengths
 sv.data$Length <- abs(sv.data$break2_position_start - sv.data$break1_position_start);
-sv.data[which(sv.data$sv_type == 'TRA'),]$Length <- NA;
+if (any(sv.data$sv_type == 'TRA')) {
+	sv.data[which(sv.data$sv_type == 'TRA'),]$Length <- NA;
+	}
 sv.data <- sv.data[which(sv.data$Length > 100 | is.na(sv.data$Length)),];
 
 # get signature weights for each sample
