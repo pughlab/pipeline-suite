@@ -71,8 +71,10 @@ library(xtable);
 date <- Sys.Date();
 
 # clarify input files
-is.dna <- !(arguments$seq_type == 'rna');
-summary.file <- ifelse(!is.null(arguments$wgscoverage), arguments$wgscoverage, arguments$coverage);
+is.dna <- !(arguments$seq_type %in% c('emseq','rna'));
+is.rna <- (arguments$seq_type == 'rna');
+summary.file <- ifelse(!is.null(arguments$wgscoverage), arguments$wgscoverage, 
+	ifelse(!is.null(arguments$hscoverage), arguments$hscoverage, arguments$coverage));
 contest.file <- arguments$contest;
 other.contamination <- arguments$contamination;
 cor.file <- arguments$correlations;
@@ -108,11 +110,11 @@ smp.names <- sample.info$Sample;
 # account for differences in header depending on version of bcftools used
 concordance.data <- if (is.dna) { 
 	read.delim(cor.file, skip = 19);
-	} else {
+	} else if (is.rna) {
 	read.delim(cor.file, row.names = 1);
-	}
+	} else { NULL; }
 
-if (ncol(concordance.data) == 1) {
+if (!is.null(concordance.data) && (ncol(concordance.data) == 1)) {
 	concordance.data <- read.delim(cor.file, skip = 32);
 	}
 
@@ -144,10 +146,12 @@ if (is.dna) {
 
 	for (smp in smp.names) { cor.data[smp,smp] <- 1; }
 
-	} else {
+	} else if (is.rna) {
 	cor.data <- concordance.data;
 	rownames(cor.data) <- gsub('\\.','-',rownames(cor.data));
 	colnames(cor.data) <- gsub('\\.','-',colnames(cor.data));
+	} else {
+	cor.data <- data.frame();
 	}
 
 # add in missing samples
@@ -156,6 +160,8 @@ cor.data[missing.samples,] <- NA;
 
 missing.samples <- setdiff(smp.names, colnames(cor.data));
 cor.data[,missing.samples] <- NA;
+
+cor.data <- cor.data[smp.names,smp.names];
 
 
 # read in coverage metrics
@@ -173,6 +179,19 @@ if (!is.null(arguments$wgscoverage)) {
 
 	cov.method <- "Picard's WGSMetrics was used to estimate coverage.";
 
+	} else if (!is.null(arguments$hscoverage)) {
+
+	target_coverage <- '100';
+	metric.data$percent_on_bait <- metric.data$ON_BAIT_BASES / metric.data$PF_BASES_ALIGNED;
+	metric.data$percent_off_bait <- metric.data$OFF_BAIT_BASES / metric.data$PF_BASES_ALIGNED;
+	metric.data$percent_near_bait <- metric.data$NEAR_BAIT_BASES / metric.data$PF_BASES_ALIGNED;
+
+	metric.data <- metric.data[,c('MEAN_TARGET_COVERAGE','PCT_TARGET_BASES_100X','percent_on_bait','percent_off_bait','percent_near_bait')];
+	colnames(metric.data)[1:2] <- c('mean','percent_bases_above_targetX');
+	metric.data[,c('lower_cov','upper_cov')] <- NA;
+
+	cov.method <- "Picard's HSMetrics was used to estimate coverage.";
+
 	} else if (is.dna) {
 
 	target_coverage <- as.numeric(unlist(
@@ -188,20 +207,6 @@ if (!is.null(arguments$wgscoverage)) {
 	cov.method <- "GATK's depthOfCoverage was used to estimate coverage.";
 	} else {
 	cov.method <- NULL;
-	}
-
-if (!is.null(arguments$hscoverage)) {
-
-	hs.data <- read.delim(arguments$hscoverage, row.names = 1);
-	hs.data$percent_on_bait <- hs.data$ON_BAIT_BASES / hs.data$PF_BASES_ALIGNED;
-	hs.data$percent_off_bait <- hs.data$OFF_BAIT_BASES / hs.data$PF_BASES_ALIGNED;
-	hs.data$percent_near_bait <- hs.data$NEAR_BAIT_BASES / hs.data$PF_BASES_ALIGNED;
-
-	metric.data <- merge(metric.data, hs.data[,c('percent_on_bait','percent_off_bait','percent_near_bait')],
-		by = 'row.names', all.x = TRUE);
-	rownames(metric.data) <- metric.data$Row.names;
-	metric.data <- metric.data[,-1];
-
 	}
 
 # read in contamination metrics
@@ -231,10 +236,10 @@ if (is.dna) {
 		}
 
 	contam.method <- if (!is.null(other.contamination)) {
-		"GATK's GetPileupSummaries and CalculateContamination were used to estimate contamination."; } else if (!is.null(contest.file)) {
-		"GATK's ContEst was used to estimate contamination for T/N pairs only."; } else {
-		NULL;
-		}
+		"GATK's GetPileupSummaries and CalculateContamination were used to estimate contamination.";
+		} else if (!is.null(contest.file)) {
+		"GATK's ContEst was used to estimate contamination for T/N pairs only.";
+		} else { NULL; }
 	}
 
 # format data for plotting
@@ -242,18 +247,20 @@ if (is.dna) {
 	qc.metrics <- merge(metric.data, contam.data, by = 'row.names', all.x = TRUE);
 	qc.metrics <- qc.metrics[which(qc.metrics$Row.names %in% smp.names),];
 	qc.metrics$Sample <- factor(qc.metrics$Row.names, levels = smp.names);
-	} else {
+	} else if (is.rna) {
 	keep.metrics <- c('Total.Purity.Filtered.Reads.Sequenced','Mapping.Rate','Exonic.Rate','Intronic.Rate','Intergenic.Rate','rRNA.rate','Mean.Per.Base.Cov','Mean.CV','Duplication.Rate.of.Mapped','Base.Mismatch.Rate');
 	qc.metrics <- metric.data[intersect(rownames(metric.data), smp.names),keep.metrics];
 	qc.metrics$Sample <- factor(rownames(qc.metrics), levels = smp.names);
 	qc.metrics$min <- qc.metrics$Mean.Per.Base.Cov - qc.metrics$Mean.CV/2;
 	qc.metrics$max <- qc.metrics$Mean.Per.Base.Cov + qc.metrics$Mean.CV/2;
+	} else {
+	qc.metrics <- metric.data;
+	qc.metrics$Sample <- rownames(metric.data);
 	}
 
 qc.metrics <- qc.metrics[order(qc.metrics$Sample),];
 qc.metrics$Order <- 1:nrow(qc.metrics);
 
-cor.data <- cor.data[smp.names,smp.names];
 
 # find line breaks (separate patients with multiple samples)
 line.breaks <- get.line.breaks(sample.info$Patient);
@@ -272,7 +279,7 @@ axis.cex <- if (nrow(cor.data) <= 30) { 1
 
 if (is.dna) {
 
-	max.cov <- max(qc.metrics$upper_cov, na.rm = TRUE);
+	max.cov <- max(c(qc.metrics$upper_cov,qc.metrics$mean), na.rm = TRUE);
 	if ( (max.cov == 1) || (max.cov == 500) ) { max.cov <- max(qc.metrics$mean, na.rm = TRUE); }
 
 	if (max.cov <= 100) {
@@ -284,8 +291,17 @@ if (is.dna) {
 		} else if (max.cov <= 400) {
 		total.cov.limits <- c(0, 400);
 		total.cov.at <- seq(0, 400, 100);
+		} else if (max.cov > 400 & max.cov < 850) {
+		total.cov.limits <- c(0, ceiling(max.cov/100)*100);
+		total.cov.at <- seq(0, total.cov.limits[2], length.out = 5);
+		} else if (max.cov <= 1000) {
+		total.cov.limits <- c(0, 1000);
+		total.cov.at <- seq(0, 1000, 250);
+		} else if (max.cov <= 2000) {
+		total.cov.limits <- c(0, 2000);
+		total.cov.at <- seq(0, 2000, 500);
 		} else {
-		total.cov.limits <- c(0, ceiling(max.cov/10)*10);
+		total.cov.limits <- c(0, ceiling(max.cov/1000)*1000);
 		total.cov.at <- seq(0, total.cov.limits[2], length.out = 5);
 		}
 
@@ -304,7 +320,7 @@ if (is.dna) {
 		contest.at <- TRUE;
 		}
 
-	} else {
+	} else if (is.rna) {
 
 	total.reads <- max(qc.metrics$Total.Purity.Filtered.Reads.Sequenced, na.rm = TRUE)/10**6;
 
@@ -351,13 +367,49 @@ if (is.dna) {
 		cov.limits <- NULL;
 		cov.at <- TRUE;
 		}
+
+	} else {
+
+	max.cov <- max(c(qc.metrics$upper_cov,qc.metrics$mean), na.rm = TRUE);
+	if ( (max.cov == 1) || (max.cov == 500) ) { max.cov <- max(qc.metrics$mean, na.rm = TRUE); }
+
+	if (max.cov <= 100) {
+		total.cov.limits <- c(0, 100);
+		total.cov.at <- seq(0, 100, 25);
+		} else if (max.cov <= 200) {
+		total.cov.limits <- c(0, 200);
+		total.cov.at <- seq(0, 200, 50);
+		} else if (max.cov <= 400) {
+		total.cov.limits <- c(0, 400);
+		total.cov.at <- seq(0, 400, 100);
+		} else if (max.cov > 400 & max.cov < 850) {
+		total.cov.limits <- c(0, ceiling(max.cov/100)*100);
+		total.cov.at <- seq(0, total.cov.limits[2], length.out = 5);
+		} else if (max.cov <= 1000) {
+		total.cov.limits <- c(0, 1000);
+		total.cov.at <- seq(0, 1000, 250);
+		} else if (max.cov <= 2000) {
+		total.cov.limits <- c(0, 2000);
+		total.cov.at <- seq(0, 2000, 500);
+		} else {
+		total.cov.limits <- c(0, ceiling(max.cov/1000)*1000);
+		total.cov.at <- seq(0, total.cov.limits[2], length.out = 5);
+		}
 	}
 
 # move to output directory
 setwd(output.dir);
 
+qc.output.file <- if (is.dna) {
+	generate.filename(arguments$project, 'dnaseqc_metrics','png');
+	} else if (is.rna) {
+	generate.filename(arguments$project, 'rnaseqc_metrics','png');
+	} else {
+	generate.filename(arguments$project, 'coverage_metrics','png');
+	}
+
 # plot results
-if (is.dna) {
+if (!is.rna) {
 
 	# plot the results (correlations of germline genotypes)
 	cor.heatmap <- create.heatmap(
@@ -465,6 +517,21 @@ if (is.dna) {
 		legend = list(top = cov.key)
 		);		
 
+	if (!is.dna) {
+
+		total.coverage.plot$x.scales$labels <- smp.names;
+		total.coverage.plot$x.scales$rot <- c(90,0);
+		total.coverage.plot$x.scales$cex <- 1.2;
+
+		write.plot(
+			total.coverage.plot,
+			filename = qc.output.file,
+			height = 4,
+			width = 11,
+			resolution = 200
+			);
+		}
+
 	# identify cases with poor coverage
 	poor.coverage <- qc.metrics[which(qc.metrics$percent_bases_above_targetX < 0.8),
 		c('Sample','mean','percent_bases_above_targetX')];
@@ -542,83 +609,86 @@ if (is.dna) {
 		}
 
 	# plot contamination estimates
-	contest.plot <- create.segplot(
-		Order ~ confidence_interval_95_low + confidence_interval_95_high,
-		qc.metrics,
-		yaxis.lab = rep('',nrow(qc.metrics)),
-		yaxis.tck = 0,
-		ylimits = c(0.5, length(smp.names)+0.5),
-		yat = seq(1,length(smp.names)),
-		xaxis.tck = c(0.5,0),
-		xaxis.cex = 1.3,
-		xlab.label = if (axis.cex > 0) {
-			'Contamination\nEstimate (%)' } else {
-			'\nContamination\nEstimate (%)' },
-		xlab.cex = 1.5,
-		ylab.label = NULL,
-		xaxis.fontface = 'plain',
-		yaxis.fontface = 'plain',
-		xlimits = contest.limits,
-		xat = contest.at,
-		centers = qc.metrics$contamination,
-		symbol.cex = max(c(axis.cex,0.2)),
-		abline.h = line.breaks,
-		abline.col = 'grey80',
-		top.padding = 0.1,
-		add.rectangle = add.rectangle,
-		xleft.rectangle = -1,
-		ybottom.rectangle = c(0.5, line.breaks),
-		xright.rectangle = 100,
-		ytop.rectangle = c(line.breaks, length(smp.names)+0.5),
-		col.rectangle = c('white', 'grey90'),
-		alpha.rectangle = 0.8,
-		axes.lwd = 1
-		);
+	if (is.dna) {
 
-	# identify cases with high contamination estimates
-	high.contamination <- qc.metrics[which(qc.metrics$contamination > 3),
-		c('Sample','contamination')];
-	colnames(high.contamination) <- c('Sample','Contamination_Estimate');
+		contest.plot <- create.segplot(
+			Order ~ confidence_interval_95_low + confidence_interval_95_high,
+			qc.metrics,
+			yaxis.lab = rep('',nrow(qc.metrics)),
+			yaxis.tck = 0,
+			ylimits = c(0.5, length(smp.names)+0.5),
+			yat = seq(1,length(smp.names)),
+			xaxis.tck = c(0.5,0),
+			xaxis.cex = 1.3,
+			xlab.label = if (axis.cex > 0) {
+				'Contamination\nEstimate (%)' } else {
+				'\nContamination\nEstimate (%)' },
+			xlab.cex = 1.5,
+			ylab.label = NULL,
+			xaxis.fontface = 'plain',
+			yaxis.fontface = 'plain',
+			xlimits = contest.limits,
+			xat = contest.at,
+			centers = qc.metrics$contamination,
+			symbol.cex = max(c(axis.cex,0.2)),
+			abline.h = line.breaks,
+			abline.col = 'grey80',
+			top.padding = 0.1,
+			add.rectangle = add.rectangle,
+			xleft.rectangle = -1,
+			ybottom.rectangle = c(0.5, line.breaks),
+			xright.rectangle = 100,
+			ytop.rectangle = c(line.breaks, length(smp.names)+0.5),
+			col.rectangle = c('white', 'grey90'),
+			alpha.rectangle = 0.8,
+			axes.lwd = 1
+			);
 
-	# combine them!
-	create.multipanelplot(
-		plot.objects = list(total.coverage.plot, cor.heatmap, contest.plot),
-		filename = generate.filename(arguments$project, 'dnaseqc_metrics','png'),
-		height = 12,
-		width = 12,
-		resolution = 200,
-		layout.width = 2,
-		layout.height = 2,
-		layout.skip = c(FALSE,TRUE,FALSE,FALSE),
-		plot.objects.widths = c(5,1),
-		plot.objects.heights = c(1,4.5),
-		left.legend.padding = 0,
-		right.legend.padding = 1.5,
-		top.legend.padding = 0,
-		bottom.legend.padding = 0,
-		xlab.axis.padding = -4,
-		y.spacing = 1,
-		x.spacing = -4,
-		legend = list(
-			inside = list(
-				fun = draw.key,
-				args = list(
-					key = list(
-						rect = list(col = 'red', alpha = 0.5, size = 1),
-						text = list(
-							lab = paste0('Percent bases\nabove ', 
-								target_coverage, 'x'),
-							cex = 1
+		# identify cases with high contamination estimates
+		high.contamination <- qc.metrics[which(qc.metrics$contamination > 3),
+			c('Sample','contamination')];
+		colnames(high.contamination) <- c('Sample','Contamination_Estimate');
+
+		# combine them!
+		create.multipanelplot(
+			plot.objects = list(total.coverage.plot, cor.heatmap, contest.plot),
+			filename = qc.output.file,
+			height = 12,
+			width = 12,
+			resolution = 200,
+			layout.width = 2,
+			layout.height = 2,
+			layout.skip = c(FALSE,TRUE,FALSE,FALSE),
+			plot.objects.widths = c(5,1),
+			plot.objects.heights = c(1,4.5),
+			left.legend.padding = 0,
+			right.legend.padding = 1.5,
+			top.legend.padding = 0,
+			bottom.legend.padding = 0,
+			xlab.axis.padding = -4,
+			y.spacing = 1,
+			x.spacing = -4,
+			legend = list(
+				inside = list(
+					fun = draw.key,
+					args = list(
+						key = list(
+							rect = list(col = 'red', alpha = 0.5, size = 1),
+							text = list(
+								lab = paste0('Percent bases\nabove ', 
+									target_coverage, 'x'),
+								cex = 1
+								)
 							)
-						)
-					),
-				x = 0.93,
-				y = 0.9
+						),
+					x = 0.93,
+					y = 0.9
+					)
 				)
-			)
-		);
+			);
+		}
 
-	} else {
+	} else if (is.rna) {
 
 	# plot the results (correlations of genes.rpkm.gct)
 	cor.heatmap <- create.heatmap(
@@ -786,7 +856,7 @@ if (is.dna) {
 	# combine them!
 	create.multipanelplot(
 		plot.objects = list(library.plot, cor.heatmap, cov.plot),
-		filename = generate.filename(arguments$project, 'rnaseqc_metrics','png'),
+		filename = qc.output.file,
 		height = 12,
 		width = 12,
 		resolution = 200,
@@ -834,12 +904,16 @@ if (!is.null(arguments$report)) {
 	caption <- if (arguments$seq_type == 'rna') {
 		"Top plot: Breakdown of total reads across the genome (including total mapped to exonic, intronic and intergenic regions, rRNA sequences and total unmapped and/or duplicate reads). Right plot: Mean per-base coverage across the middle 1000 expressed transcripts. Central heatmap: Pearson's correlation of RPKM values for all genes across all samples.";
 		} else if (!is.null(arguments$wgscoverage)) {
-		"Top plot: Summary of coverage across the genome. Points indicate mean read depth while red bars show percent of bases with $>$15x coverage. Right plot: Contamination estimate (as a percent $\\pm$ 95\\% CI if ContEst [available for T/N pairs only] or $\\pm$ error if GATK:Pileup was used). Central heatmap: Spearman's correlation ($\\rho$) of germline variant genotypes across all samples.";
+		"Top plot: Summary of coverage across the genome. Points indicate mean read depth while red bars show percent of bases with $>$TARGETx coverage. Right plot: Contamination estimate (as a percent $\\pm$ 95\\% CI if ContEst [available for T/N pairs only] or $\\pm$ error if GATK:Pileup was used). Central heatmap: Spearman's correlation ($\\rho$) of germline variant genotypes across all samples.";
 		} else if (arguments$seq_type == 'targeted') {
-		"Top plot: Summary of coverage across target bases. Points indicate mean read depth while red bars show percent of target bases with $>$200x coverage. Right plot: Contamination estimate (as a percent $\\pm$ 95\\% CI if ContEst [available for T/N pairs only] or $\\pm$ error if GATK:Pileup was used). Central heatmap: Spearman's correlation ($\\rho$) of germline variant genotypes across all samples.";
+		"Top plot: Summary of coverage across target bases. Points indicate mean read depth while red bars show percent of target bases with $>$TARGETx coverage. Right plot: Contamination estimate (as a percent $\\pm$ 95\\% CI if ContEst [available for T/N pairs only] or $\\pm$ error if GATK:Pileup was used). Central heatmap: Spearman's correlation ($\\rho$) of germline variant genotypes across all samples.";
 		} else if (arguments$seq_type == 'exome') {
-		"Top plot: Summary of coverage across target bases. Points indicate median read depth (range from first to third quartiles) while red bars show percent of target bases with $>$15x coverage. Right plot: Contamination estimate (as a percent $\\pm$ 95\\% CI if ContEst [available for T/N pairs only] or $\\pm$ error if GATK:Pileup was used). Central heatmap: Spearman's correlation ($\\rho$) of germline variant genotypes across all samples.";
-		} 
+		"Top plot: Summary of coverage across target bases. Points indicate median read depth (range from first to third quartiles) while red bars show percent of target bases with $>$TARGETx coverage. Right plot: Contamination estimate (as a percent $\\pm$ 95\\% CI if ContEst [available for T/N pairs only] or $\\pm$ error if GATK:Pileup was used). Central heatmap: Spearman's correlation ($\\rho$) of germline variant genotypes across all samples.";
+		} else {
+		"Summary of total coverage. Points indicate mean read depth while red bars show percent of bases with $>$TARGETx coverage."
+		}
+
+	caption <- sub('TARGET',target_coverage,caption);
 
 	# initiate report object
 	tex.file <- paste0(arguments$report, '/qc_summary.tex');
@@ -847,10 +921,7 @@ if (!is.null(arguments$report)) {
 	# create symlinks for plots
 	unlink(paste0(arguments$report, '/', 'qc_metrics.png'));
 	file.symlink(
-		paste0(output.dir, '/', ifelse (is.dna,
-			generate.filename(arguments$project, 'dnaseqc_metrics','png'),
-			generate.filename(arguments$project, 'rnaseqc_metrics','png')
-			)),
+		paste0(output.dir, '/', qc.output.file),
 		paste0(arguments$report, '/', 'qc_metrics.png')
 		);
 
@@ -875,12 +946,12 @@ if (!is.null(arguments$report)) {
 		"\\caption{", caption, "}"
 		), file = tex.file, append = TRUE);
 	write("\\end{figure}\n", file = tex.file, append = TRUE);
-	write("\\pagebreak\n", file = tex.file, append = TRUE);
 
 	# write concerning metrics to file
 	if (is.dna) {
 
 		# record correlations
+		write("\\pagebreak\n", file = tex.file, append = TRUE);
 		write("\\subsection{Germline Correlations}", file = tex.file, append = TRUE);
 		if (nrow(suspect.cases) > 20) {
 			write("Many cases of high germline correlations detected - this is likely an artefact of using a targeted panel.", file = tex.file, append = TRUE);
@@ -944,9 +1015,10 @@ if (!is.null(arguments$report)) {
 			}
 
 		# for RNA
-		} else {
+		} else if (is.rna) {
 
 		# record correlations
+		write("\\pagebreak\n", file = tex.file, append = TRUE);
 		write("\\subsection{Sample Correlations}", file = tex.file, append = TRUE);
 		if (nrow(suspect.cases) > 0 & nrow(suspect.cases) <= 10) {
 			suspect.cases <- xtable(
@@ -1004,6 +1076,38 @@ if (!is.null(arguments$report)) {
 			print(rate.data2, file = tex.file, append = TRUE, latex.environments = "", table.placement = 'h!');
 			} else {
 			write("No samples had unusual coverage metrics.", file = tex.file, append = TRUE);
+			}
+
+		} else {
+
+		# add HS efficiency if available
+		if (!is.null(arguments$hscoverage)) {
+			write("\\subsection{HS Efficiency}", file = tex.file, append = TRUE);
+			write("\\begin{figure}[h!]", file = tex.file, append = TRUE);
+			write("\\begin{center}", file = tex.file, append = TRUE);
+			write(paste0(
+				"\\includegraphics[width=0.9\\textwidth]{",
+				paste0(arguments$report, '/', 'hs_efficiency_plot.png'), '}'
+				), file = tex.file, append = TRUE);
+			write("\\end{center}", file = tex.file, append = TRUE);
+			write(paste0(
+				"\\caption{Fraction of bases aligned to on-target, near-target or off-target regions as determined using Picard's CollectHsMetrics tool.}"
+				), file = tex.file, append = TRUE);
+			write("\\end{figure}\n", file = tex.file, append = TRUE);
+			}
+
+		# record coverage
+		write("\\subsection{Coverage}", file = tex.file, append = TRUE);
+		if (nrow(poor.coverage) > 0) {
+			poor.coverage <- xtable(
+				poor.coverage,
+				caption = paste0(coverage.caption, " Low coverage of either a tumour or normal sample may affect variant callablility."),
+				align = rep('c',ncol(poor.coverage)+1),
+				digits = c(0,0,1,1)
+				);
+			print(poor.coverage, file = tex.file, append = TRUE, include.rownames = FALSE, latex.environments = "");
+			} else {
+			write("No samples had unusually low coverage.", file = tex.file, append = TRUE);
 			}
 		}
 	}

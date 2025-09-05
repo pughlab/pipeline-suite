@@ -83,7 +83,10 @@ sub main {
 
 	# get tool versions
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
-	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
+	my $vcftools;
+	if (defined($tool_data->{vcftools_version})) {
+		$vcftools = 'vcftools/' . $tool_data->{vcftools_version};
+		}
 	my $r_version	= 'R/' . $tool_data->{r_version};
 	my $mutsig_version;
 	if (defined($tool_data->{summarize_steps}->{run_mutsig})) {
@@ -142,10 +145,9 @@ sub main {
 		'cosmic_sbs'	=> defined($tool_data->{summarize_steps}->{run_cosmic_sbs}->{run}) ? $tool_data->{summarize_steps}->{run_cosmic_sbs}->{run} : 'N',
 		'chord'		=> defined($tool_data->{summarize_steps}->{run_chord}) ? $tool_data->{summarize_steps}->{run_chord} : 'N',
 		'hrdetect'	=> defined($tool_data->{summarize_steps}->{run_hrdetect}) ? $tool_data->{summarize_steps}->{run_hrdetect} : 'N',
-		'mutsig'	=> defined($tool_data->{summarize_steps}->{run_mutsig}) ? $tool_data->{summarize_steps}->{run_mutsig} : 'N'
+		'mutsig'	=> defined($tool_data->{summarize_steps}->{run_mutsig}) ? $tool_data->{summarize_steps}->{run_mutsig} : 'N',
+		'methyldackel'	=> defined($tool_data->{methyldackel}->{run}) ? $tool_data->{methyldackel}->{run} : 'N'
 		);
-
-#	print Dumper \%tool_set;
 
 	# add germline-only check here?
 	if (defined($tool_data->{sample_type}) && ('germline' eq $tool_data->{sample_type}) ) {
@@ -166,12 +168,136 @@ sub main {
 
 	# initiate objects
 	my @job_ids;
-	my ($qc_dir, $comp_dir, $cpsr_dir);
+	my ($qc_dir, $comp_dir, $cpsr_dir, $methyldackel);
 	my ($correlations, $qc_data, $cb_data, $seqqc_data, $callability_data, $efficiency_data, $contest_data, $cpsr_calls) = undef;
 	my ($run_script, $run_id);
 
 	### find the required input files
-	if ('rna' eq $tool_data->{seq_type}) {
+	if ('emseq' eq $tool_data->{seq_type}) {
+
+		$qc_dir = join('/', $output_directory, 'BAMQC');
+
+		opendir(QC, $qc_dir);
+		my @seqqc_files = grep { /tsv/ } readdir(QC);
+		@seqqc_files = sort @seqqc_files;
+
+		my @wgs_cov_files = grep { /WGSMetrics.tsv/ } @seqqc_files;
+		my @hs_cov_files = grep { /HSMetrics.tsv/ } @seqqc_files;
+
+		closedir(QC);
+
+		if ( (defined($tool_data->{targets_bed})) || (defined($tool_data->{baits_bed})) ) {
+			$efficiency_data = join('/', $qc_dir, $hs_cov_files[-1]);
+			if ( -l join('/', $data_directory, 'hs_efficiency.tsv')) {
+				unlink join('/', $data_directory, 'hs_efficiency.tsv');
+				}
+
+			symlink($efficiency_data, join('/', $data_directory, 'hs_efficiency.tsv'));
+			} else {
+			$callability_data = join('/', $qc_dir, $wgs_cov_files[-1]);
+			if ( -l join('/', $data_directory, 'wgs_callability.tsv')) {
+				unlink join('/', $data_directory, 'wgs_callability.tsv');
+				}
+
+			symlink($callability_data, join('/', $data_directory, 'wgs_callability.tsv'));
+			}
+
+		# create some QC plots
+		my $qc_out_directory = join('/', $summary_directory, 'QC');
+		unless(-e $qc_out_directory) { make_path($qc_out_directory); }
+
+		my $qc_command = "Rscript $cwd/report/plot_qc_metrics.R";
+		$qc_command .= " " . join(' ',
+			'-s', $args{data_config},
+			'-o', $qc_out_directory,
+			'-z', $plot_directory,
+			'-p', $tool_data->{project_name},
+			'-t', $tool_data->{seq_type}
+			);
+
+		if (defined($efficiency_data)) { $qc_command .= " -e $efficiency_data"; }
+
+		my $qc_run_id;
+		if ('Y' eq $tool_set{'bamqc'}) {
+
+			# run command
+			print $log "Submitting job to create QC plots...\n";
+			$run_script = write_script(
+				log_dir		=> $log_directory,
+				name		=> 'create_qc_plots',
+				cmd		=> $qc_command,
+				modules		=> [$r_version],
+				mem		=> '2G',
+				hpc_driver	=> $args{cluster},
+				extra_args	=> [$hpc_group]
+				);
+
+			$qc_run_id = submit_job(
+				jobname		=> 'create_qc_plots',
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @job_ids, $qc_run_id;
+			}
+
+		# rna methylation values
+		if ('Y' eq $tool_set{'methyldackel'}) {
+
+			# create some Methylation plots
+			my $methyl_out_directory = join('/', $summary_directory, 'Methylation');
+			unless(-e $methyl_out_directory) { make_path($methyl_out_directory); }
+
+			my $methylD_dir = join('/', $output_directory, 'MethylDackel');
+			opendir(METHYLATION, $methylD_dir) or die "Cannot open '$methylD_dir' !";
+			my @methylD_calls = grep { /methylation_per_gene.tsv/ } readdir(METHYLATION);
+			@methylD_calls = sort @methylD_calls;
+			closedir(METHYLATION);
+
+			my $methylD_data = join('/', $methylD_dir, $methylD_calls[-1]);
+
+			if ( -l join('/', $data_directory, 'gene_methylation.tsv')) {
+				unlink join('/', $data_directory, 'gene_methylation.tsv');
+				}
+
+			symlink($methylD_data, join('/', $data_directory, 'gene_methylation.tsv'));
+
+			# plot methylation profile
+			my $methyl_plot_command = join(' ',
+				"Rscript $cwd/report/plot_methylation_summary.R",
+				'-p', $tool_data->{project_name},
+				'-o', $methyl_out_directory,
+				'-z', $plot_directory,
+				'-m', $methylD_data
+				);
+
+			# run command
+			print $log "Submitting job to plot methylation levels...\n";
+			$run_script = write_script(
+				log_dir		=> $log_directory,
+				name		=> 'plot_methylation_summary',
+				cmd		=> $methyl_plot_command,
+				modules		=> [$r_version],
+				max_time	=> '04:00:00',
+				mem		=> '2G',
+				hpc_driver	=> $args{cluster},
+				extra_args	=> [$hpc_group]
+				);
+
+			$run_id = submit_job(
+				jobname		=> 'plot_methylation_summary',
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			push @job_ids, $run_id;
+			}
+
+		} elsif ('rna' eq $tool_data->{seq_type}) {
 
 		$qc_dir = join('/', $output_directory, 'STAR');
 
@@ -1695,6 +1821,8 @@ sub main {
 		$methods_command = "perl $cwd/report/write_rna_methods.pl";
 		} elsif ('targeted' eq $tool_data->{seq_type}) {
 		$methods_command = "perl $cwd/report/write_targetseq_methods.pl";
+		} elsif ('emseq' eq $tool_data->{seq_type}) {
+		$methods_command = "perl $cwd/report/write_ems_methods.pl";
 		}
 
 	$methods_command .= " -t $args{tool_config} -d $plot_directory";
