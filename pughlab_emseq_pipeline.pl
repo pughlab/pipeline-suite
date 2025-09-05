@@ -88,7 +88,7 @@ sub main {
 
 	### MAIN ###########################################################################################
 
-	my ($run_script, $trim_run_id, $fastqc_run_id, $bwa_run_id, $qc_run_id, $md_run_id);
+	my ($run_script, $trim_run_id, $fastqc_run_id, $bwa_run_id, $qc_run_id, $md_run_id, $report_run_id);
 	my (@step1_job_ids, @step2_job_ids, @step3_job_ids, @step4_job_ids, @job_ids);
 	my $current_dependencies = '';
 
@@ -400,6 +400,49 @@ sub main {
 			}
 		}
 
+	########################################################################################
+	# Create a final report for the project.
+	########################################################################################
+	if ($args{step5}) {
+
+		my $report_command = join(' ',
+			"perl $cwd/scripts/pughlab_pipeline_auto_report.pl",
+			"-t", $tool_config,
+			"-c", $args{cluster},
+			"-d", $bwa_output_yaml
+			);
+
+		# record command (in log directory) and then run job
+		print $log "Submitting job for pughlab_pipeline_auto_report.pl\n";
+		print $log "  COMMAND: $report_command\n\n";
+
+		$run_script = write_script(
+			log_dir	=> $log_directory,
+			name	=> 'pughlab_dna_pipeline__summarize_output',
+			cmd	=> $report_command,
+			modules	=> [$perl],
+			dependencies	=> join(':', @job_ids),
+			mem		=> '256M',
+			max_time	=> '5-00:00:00',
+			extra_args	=> [$hpc_group],
+			hpc_driver	=> $args{cluster}
+			);
+
+		if ($args{dry_run}) {
+			$report_run_id = 'pughlab_dna_pipeline__summarize_output';
+			} else {
+			$report_run_id = submit_job(
+				jobname		=> $log_directory,
+				shell_command	=> $run_script,
+				hpc_driver	=> $args{cluster},
+				dry_run		=> $args{dry_run},
+				log_file	=> $log
+				);
+
+			print $log ">>> Report job id: $report_run_id\n\n";
+			}
+		}
+
 	# finish up
 	print $log "\nProgramming terminated successfully.\n\n";
 	close $log;
@@ -409,7 +452,7 @@ sub main {
 ### GETOPTS AND DEFAULT VALUES #####################################################################
 # declare variables
 my ($tool_config, $data_config);
-my ($fastq_prep, $alignment, $qc, $analysis, $summarize, $create_report);
+my ($fastq_prep, $alignment, $qc, $analysis, $create_report);
 my $hpc_driver = 'slurm';
 my ($remove_junk, $dry_run);
 my $help;
@@ -423,8 +466,7 @@ GetOptions(
 	'alignment'		=> \$alignment,
 	'qc'			=> \$qc,
 	'analysis'		=> \$analysis,
-#	'summarize'		=> \$summarize,
-#	'create_report'		=> \$create_report,
+	'create_report'		=> \$create_report,
 	'c|cluster=s'		=> \$hpc_driver,
 	'remove'		=> \$remove_junk,
 	'dry-run'		=> \$dry_run
@@ -440,8 +482,7 @@ if ($help) {
 		"\t--alignment\t<boolean> should read alignment be performed? (default: false)",
 		"\t--qc\t\t<boolean> should QC metrics be generated on the BAMs? (default: false)",
 		"\t--analysis\t<boolean> should methylation analyses be performed? (default: false)",
-#		"\t--summarize\t<boolean> should output be summarized? (default: false)",
-#		"\t--create_report\t<boolean> should a report be generated? (default: false)",
+		"\t--create_report\t<boolean> should a report be generated? (default: false)",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
 		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
 		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)"
@@ -451,7 +492,7 @@ if ($help) {
 	exit;
 	}
 
-if ( (!$alignment) && (!$analysis) && (!$summarize) && (!$qc) && (!$create_report) ) {
+if ( (!$alignment) && (!$analysis) && (!$qc) && (!$create_report) ) {
 	die("Please choose a step to run (at least one of --alignment, --qc, --analysis, --summarize, --create_report )");
 	}
 if (!defined($tool_config)) {
@@ -475,8 +516,7 @@ main(
 	step2		=> $alignment,
 	step3		=> $qc,
 	step4		=> $analysis,
-#	step4		=> $summarize,
-#	step5		=> $create_report,
+	step5		=> $create_report,
 	cluster		=> $hpc_driver,
 	cleanup		=> $remove_junk,
 	dry_run		=> $dry_run
