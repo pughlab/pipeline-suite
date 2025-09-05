@@ -112,71 +112,29 @@ if (arguments$ref_type %in% c('hg38','GRCh38')) {
 	txdb <- TxDb.Hsapiens.UCSC.hg19.knownGene;
 	}
  
-# organize all transcripts by GeneID
-txdb_table <- transcriptsBy(txdb, by = 'gene');
-
-# extract GeneIDs
-tx_ids <- names(txdb_table);
-
-# extract 
-transcript_table <- select(
-	TxDb.Hsapiens.UCSC.hg38.knownGene,
-	keys = tx_ids,
-	columns = c('GENEID','TXNAME','TXCHROM','TXSTART','TXEND'),
-	keytype = 'GENEID'
-	);
-colnames(transcript_table)[1] <- 'ENTREZID';
-
-# pull in extra annotations
-transcript_table$SYMBOL <- mapIds(
+# extract gene positions and annotations
+gene.positions <- data.frame(genes(txdb));
+gene.annotations <- select(
 	org.Hs.eg.db,
-	keys = transcript_table$TXNAME,
-	keytype = 'UCSCKG',
-	column = 'SYMBOL'
+	keys = gene.positions$gene_id,
+	keytype = 'ENTREZID',
+	columns = c('SYMBOL','GENETYPE')
 	);
 
-transcript_table$ENSEMBL <- mapIds(
-	org.Hs.eg.db,
-	keys = transcript_table$TXNAME,
-	keytype = 'UCSCKG',
-	column = 'ENSEMBL'
-	);
+gene.data <- merge(gene.annotations,gene.positions,by.y = 'gene_id', by.x = 'ENTREZID');
+gene.data$seqnames <- factor(gene.data$seqnames, levels = paste0('chr',c(1:22,'X','Y')));
+gene.data <- gene.data[!is.na(gene.data$seqnames),1:6];
+gene.data <- gene.data[!is.na(gene.data$SYMBOL),];
+gene.data <- gene.data[order(gene.data$seqnames, gene.data$start),];
 
-transcript_table$MAP <- mapIds(
-	org.Hs.eg.db,
-	keys = transcript_table$TXNAME,
-	keytype = 'UCSCKG',
-	column = 'MAP'
-	);
+gene.gr <- GRanges(gene.data);
 
-transcript_table$GENETYPE <- mapIds(
-	org.Hs.eg.db,
-	keys = transcript_table$TXNAME,
-	keytype = 'UCSCKG',
-	column = 'GENETYPE'
-	);
-
-# remove unmatching cases
-transcript_table$MAPCHROM <- sapply(
-	transcript_table$MAP,
-	function(i) { paste0('chr', unlist(strsplit(i, 'p|q'))[1]) }
-	);
-
-transcript_table <- transcript_table[which(transcript_table$TXCHROM == transcript_table$MAPCHROM),];
-
-# squish it to 1 entry per gene
-gene.annotation <- merge(
-	aggregate(TXSTART ~ ENTREZID + SYMBOL + ENSEMBL + GENETYPE + TXCHROM, transcript_table, min),
-	aggregate(TXEND ~ ENTREZID + SYMBOL + ENSEMBL + GENETYPE + TXCHROM, transcript_table, max),
-	);
-colnames(gene.annotation)[5:7] <- c('Chromosome','Start','End');
-gene.annotation$Chromosome <- factor(gene.annotation$Chromosome, levels = paste0('chr',c(1:22,'X','Y')));
-gene.annotation <- gene.annotation[order(gene.annotation$Chromosome, gene.annotation$Start),];
-
-gene.gr <- GRanges(gene.annotation);
+colnames(gene.data)[which(colnames(gene.data) == 'seqnames')] <- 'Chromosome';
+colnames(gene.data)[which(colnames(gene.data) == 'start')] <- 'Start';
+colnames(gene.data)[which(colnames(gene.data) == 'end')] <- 'End';
 
 # if provided, filter to target intervals
-gene.annotation$Target <- NA;
+gene.data$Target <- NA;
 if (!is.null(arguments$targets)) {
 
 	target.intervals <- read.delim(arguments$targets, header = F, comment.char = '#');
@@ -186,8 +144,8 @@ if (!is.null(arguments$targets)) {
 
 	overlaps <- as.data.frame(findOverlaps(gene.gr, target.gr));
 
-	gene.annotation$Target <- 0;
-	gene.annotation[unique(overlaps$queryHits),]$Target <- 1;
+	gene.data$Target <- 0;
+	gene.data[unique(overlaps$queryHits),]$Target <- 1;
 	}
 
 ### MAIN ###########################################################################################
@@ -236,7 +194,6 @@ for (file in seg.files) {
 	# store data in list
 	if (smp %in% names(seg.list)) { next; }
 	segs <- read.delim(file);
-#	segs <- fillgaps(segs[!is.na(segs$CNt),]);
 	seg.list[[smp]] <- segs;
 	}
 
@@ -296,7 +253,7 @@ write.table(
 	);
 
 # format gene tables; ploidy-adjusted AbsCN and ratio files
-gene.data.cn <- gene.annotation;
+gene.data.cn <- gene.data;
 gene.data.cn[,names(seg.list)] <- 0;
 gene.data.ratio <- gene.data.cn;
 
@@ -312,8 +269,6 @@ for (smp in names(seg.list)) {
 
 	tmp$RATIO <- log2(tmp$depth.ratio);
 	tmp$AbsCN <- get.ploidyadjusted.cn(tmp$CN, ploidy);
-#	tmp$AbsCN <- log2(tmp$CN / ploidy);
-#	if (any(tmp$CN == 0)) {	tmp[which(tmp$CN == 0),]$AbsCN <- -2; }
 
 	if (nrow(tmp) == 0) { next; }
 	rownames(tmp) <- paste0('seg', 1:nrow(tmp));
