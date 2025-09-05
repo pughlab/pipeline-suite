@@ -1,3 +1,14 @@
+2025-09-05: PughLab pipeline-suite (version 0.9.18);
+- MAJOR updates:
+	- added collect_methyldackel_output.R
+	- added step to collect/format methyldackel output to pughlab_emseq_pipeline.pl
+	- added preliminary methylation report to pughlab_pipeline_auto_report.pl
+- MINOR updates:
+	- collapsed overlapping target regions for panelCNmops windows
+	- minor updates throughout to aid with error checks and/or code cleanup
+	- minor updates to report functions to improve compatibility with target panel data
+	- added extraction of clinVar variants (germline and somatic)
+
 2025-08-08: PughLab pipeline-suite (version 0.9.17);
 - MAJOR updates:
 	- added fastq adapter trimming using fastp to DNAseq pipeline (WGS/WXS/targeted panel)
