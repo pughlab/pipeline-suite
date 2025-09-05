@@ -86,7 +86,7 @@ sub main {
 	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
 	my $r_version	= 'R/' . $tool_data->{r_version};
 	my $mutsig_version;
-	unless ('rna' eq $tool_data->{seq_type}) {
+	if (defined($tool_data->{summarize_steps}->{run_mutsig})) {
 		$mutsig_version = 'MutSigCV/' . $tool_data->{mutsigcv_version};
 		}
 	my $vcf2maf	= undef;
@@ -597,7 +597,7 @@ sub main {
 		# variant correlations (discordance via bcftools gtcheck)
 		if (-e $comp_dir) {
 			opendir(GTCHECK, $comp_dir) or die "Cannot open '$comp_dir' !";
-			my @correlation_files = grep { /gtcheck.tsv/ } readdir(GTCHECK);
+			my @correlation_files = grep { /gtcheck.tsv$/ } readdir(GTCHECK);
 			@correlation_files = sort @correlation_files;
 			closedir(GTCHECK);
 
@@ -1406,22 +1406,24 @@ sub main {
 			push @job_ids, $tmb_run_id;
 
 			# run MutSigCV
-			my $mutsig_command = join(' ',
-				'sh run_MutSigCV.sh', $tool_data->{mcr_path},
-				$ensemble_maf,
-				$tool_data->{mutsig_coverage},
-				$tool_data->{mutsig_covariates},
-				join('/', $plot_directory, $tool_data->{project_name} . '_MutSigCV'),
-				$tool_data->{mutsig_categories},
-				$tool_data->{mutsig_refs}
-				);
-
-			my $significance_data = join('/',
-				$plot_directory,
-				$tool_data->{project_name} . '_MutSigCV.sig_genes.txt'
-				);
+			my $significance_data;
 
 			if ('Y' eq $tool_set{'mutsig'}) {
+
+				my $mutsig_command = join(' ',
+					'sh run_MutSigCV.sh', $tool_data->{mcr_path},
+					$ensemble_maf,
+					$tool_data->{mutsig_coverage},
+					$tool_data->{mutsig_covariates},
+					join('/', $plot_directory, $tool_data->{project_name} . '_MutSigCV'),
+					$tool_data->{mutsig_categories},
+					$tool_data->{mutsig_refs}
+					);
+
+				$significance_data = join('/',
+					$plot_directory,
+					$tool_data->{project_name} . '_MutSigCV.sig_genes.txt'
+					);
 
 				# run command
 				print $log "Submitting job to check mutation significance...\n";

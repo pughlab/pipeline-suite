@@ -383,7 +383,10 @@ sub main {
 		$python	= 'python3/' . $tool_data->{python3_version};
 		}
 	my $picard	= 'picard/' . $tool_data->{picard_version};
-	my $sambamba	= 'sambamba/' . $tool_data->{sambamba_version};
+	my $sambamba;
+	if ('sambamba' eq $tool_data->{bwa}->{parameters}->{merge}->{tool}) {
+		$sambamba	= 'sambamba/' . $tool_data->{sambamba_version};
+		}
 
 	my $bwameth_version;
 	$bwameth_path = 'bwameth.py';
