@@ -57,6 +57,7 @@ library(GenomicRanges);
 library(BiocParallel);
 library(parallel);
 library(bsseq);
+library(org.Hs.eg.db);
 
 ### READ DATA ######################################################################################
 # parse sample information from yaml file
@@ -137,6 +138,64 @@ save(BSobj, target.loci, sample.info,
 	file = generate.filename(arguments$project, 'collected_CpG_objects','RData')
 	);
 
+### FORMAT ANNOTATION ##############################################################################
+if (arguments$ref_type %in% c('hg38','GRCh38')) {
+	library(TxDb.Hsapiens.UCSC.hg38.knownGene);
+	txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene;
+	} else if (arguments$ref_type %in% c('hg19','GRCh37')) {
+	library(TxDb.Hsapiens.UCSC.hg19.knownGene);
+	txdb <- TxDb.Hsapiens.UCSC.hg19.knownGene;
+	}
+ 
+# extract gene positions and annotations
+gene.positions <- data.frame(genes(txdb));
+gene.annotations <- select(
+	org.Hs.eg.db,
+	keys = gene.positions$gene_id,
+	keytype = 'ENTREZID',
+	columns = c('SYMBOL','GENETYPE')
+	);
+
+gene.data <- merge(gene.annotations,gene.positions,by.y = 'gene_id', by.x = 'ENTREZID');
+gene.data$seqnames <- factor(gene.data$seqnames, levels = paste0('chr',c(1:22,'X','Y')));
+gene.data <- gene.data[!is.na(gene.data$seqnames),1:6];
+gene.data <- gene.data[!is.na(gene.data$SYMBOL),];
+gene.data <- gene.data[order(gene.data$seqnames, gene.data$start),];
+
+gene.gr <- GRanges(gene.data);
+
+colnames(gene.data)[which(colnames(gene.data) == 'seqnames')] <- 'Chromosome';
+colnames(gene.data)[which(colnames(gene.data) == 'start')] <- 'Start';
+colnames(gene.data)[which(colnames(gene.data) == 'end')] <- 'End';
+
+# get promoter annotations
+promoter.data <- merge(gene.annotations,gene.positions,by.y = 'gene_id', by.x = 'ENTREZID');
+
+promoter.data$Promoter.start <- promoter.data$start - 2000;
+promoter.data$Promoter.end <- promoter.data$start + 200;
+
+rev.idx <- which(promoter.data$strand == '-');
+promoter.data[rev.idx,]$Promoter.end <- promoter.data[rev.idx,]$end + 2000;
+promoter.data[rev.idx,]$Promoter.start <- promoter.data[rev.idx,]$end - 200;
+
+promoter.data$seqnames <- factor(promoter.data$seqnames, levels = paste0('chr',c(1:22,'X','Y')));
+promoter.data <- promoter.data[!is.na(promoter.data$seqnames),c(1:4,9:10)];
+promoter.data <- promoter.data[!is.na(promoter.data$SYMBOL),];
+promoter.data <- promoter.data[order(promoter.data$seqnames, promoter.data$Promoter.start),];
+
+promoter.gr <- makeGRangesFromDataFrame(promoter.data,
+	seqnames.field = 'seqnames',
+	start.field = 'Promoter.start',
+	end.field = 'Promoter.end',
+	keep.extra.columns = TRUE
+	);
+
+colnames(promoter.data)[which(colnames(promoter.data) == 'seqnames')] <- 'Chromosome';
+colnames(promoter.data)[which(colnames(promoter.data) == 'Promoter.start')] <- 'Start';
+colnames(promoter.data)[which(colnames(promoter.data) == 'Promoter.end')] <- 'End';
+
+
+
 ### FORMAT DATA ####################################################################################
 # extract per-sample per-base methylation metrics
 full.methylation.data <- getMeth(BSobj, type = 'raw', what = 'perBase');
@@ -149,6 +208,40 @@ full.methylation.data <- cbind(
 save(
 	full.methylation.data,
 	file = generate.filename(arguments$project, 'CpG_methylation_matrix','RData')
+	);
+
+# extract average methylation for each gene/sample
+average.methylation.per.gene <- getMeth(
+	BSobj, regions = gene.gr, type = 'raw', what = 'perRegion');
+colnames(average.methylation.per.gene) <- rownames(pData(BSobj));
+average.methylation.per.gene <- cbind(
+	as.data.frame(gene.data),
+	average.methylation.per.gene
+	);
+
+write.table(
+	average.methylation.per.gene,
+	file = generate.filename(arguments$project, 'methylation_per_gene','tsv'),
+	row.names = FALSE,
+	col.names = TRUE,
+	sep = '\t'
+	);
+
+# extract average methylation for each gene promoter region
+average.methylation.per.promoter <- getMeth(
+	BSobj, regions = promoter.gr, type = 'raw', what = 'perRegion');
+colnames(average.methylation.per.promoter) <- rownames(pData(BSobj));
+average.methylation.per.promoter <- cbind(
+	as.data.frame(promoter.data),
+	average.methylation.per.promoter
+	);
+
+write.table(
+	average.methylation.per.promoter,
+	file = generate.filename(arguments$project, 'methylation_per_promoter','tsv'),
+	row.names = FALSE,
+	col.names = TRUE,
+	sep = '\t'
 	);
 
 # aggregate over chromosomes (WGS) or genes of interested (MultiMMR)

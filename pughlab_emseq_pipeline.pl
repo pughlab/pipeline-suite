@@ -362,10 +362,6 @@ sub main {
 				"-c", $args{cluster}
 				);
 
-#			if ($args{cleanup}) {
-#				$qc_command .= " --remove";
-#				}
-
 			# record command (in log directory) and then run job
 			print $log "Submitting job for methyldackel.pl\n";
 			print $log "  COMMAND: $md_command\n\n";

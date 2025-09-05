@@ -88,7 +88,6 @@ sub main {
 		data_config		=> undef,
 		output_directory	=> undef,
 		hpc_driver		=> undef,
-		del_intermediates	=> undef,
 		dry_run			=> undef,
 		no_wait			=> undef,
 		@_
@@ -329,41 +328,6 @@ sub main {
 				}
 			}
 
-		# should intermediate files be removed
-		# run per patient
-		if ($args{del_intermediates}) {
-
-			print $log "\n>> Submitting job to clean up temporary/intermediate files...\n";
-
-			# make sure final output exists before removing intermediate files!
-			$cleanup_cmd = join("\n",
-				"if [ -s " . join(" ] && [ -s ", @final_outputs) . " ]; then",
-				"  $cleanup_cmd",
-				"else",
-				'  echo "One or more FINAL OUTPUT FILES is missing; not removing intermediates"',
-				"fi"
-				);
-
-			$run_script = write_script(
-				log_dir	=> $log_directory,
-				name	=> 'run_cleanup_' . $patient,
-				cmd	=> $cleanup_cmd,
-				dependencies	=> join(':', @patient_jobs),
-				mem		=> '256M',
-				hpc_driver	=> $args{hpc_driver},
-				kill_on_error	=> 0,
-				extra_args	=> [$hpc_group]
-				);
-
-			$run_id = submit_job(
-				jobname		=> 'run_cleanup_' . $patient,
-				shell_command	=> $run_script,
-				hpc_driver	=> $args{hpc_driver},
-				dry_run		=> $args{dry_run},
-				log_file	=> $log
-				);
-			}
-
 		print $log "\nFINAL OUTPUT:\n  " . join("\n  ", @final_outputs) . "\n";
 		print $log "---\n";
 		}
@@ -453,7 +417,7 @@ sub main {
 # declare variables
 my ($tool_config, $data_config, $output_directory);
 my $hpc_driver = 'slurm';
-my ($remove_junk, $dry_run, $help, $no_wait);
+my ($dry_run, $help, $no_wait);
 
 # get command line arguments
 GetOptions(
@@ -462,7 +426,6 @@ GetOptions(
 	't|tool=s'	=> \$tool_config,
 	'o|out_dir=s'	=> \$output_directory,
 	'c|cluster=s'	=> \$hpc_driver,
-	'remove'	=> \$remove_junk,
 	'dry-run'	=> \$dry_run,
 	'no-wait'	=> \$no_wait
 	);
@@ -475,7 +438,6 @@ if ($help) {
 		"\t--tool|-t\t<string> tool config (yaml format)",
 		"\t--out_dir|-o\t<string> path to output directory",
 		"\t--cluster|-c\t<string> cluster scheduler (default: slurm)",
-		"\t--remove\t<boolean> should intermediates be removed? (default: false)",
 		"\t--dry-run\t<boolean> should jobs be submitted? (default: false)",
 		"\t--no-wait\t<boolean> should we exit after job submission (true) or wait until all jobs have completed (false)? (default: false)"
 		);
@@ -494,7 +456,6 @@ main(
 	data_config		=> $data_config,
 	output_directory	=> $output_directory,
 	hpc_driver		=> $hpc_driver,
-	del_intermediates	=> $remove_junk,
 	dry_run			=> $dry_run,
 	no_wait			=> $no_wait
 	);
