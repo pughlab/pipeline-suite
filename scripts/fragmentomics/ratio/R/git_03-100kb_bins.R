@@ -92,17 +92,16 @@ w		<- width(fragments);
 frag.list	<- split(fragments, w);
 
 counts <- sapply(frag.list, function(x) { countOverlaps(AB, x) } );
-if (min(w) > 90) {
-	m0 <- matrix(0, ncol = min(w) - 90, nrow = nrow(counts),
-		dimnames = list(rownames(counts), 90:(min(w)-1)));
+frag.sizes <- 90:220;
+missing.sizes <- setdiff(frag.sizes, colnames(counts));
+
+if (length(missing.sizes) > 0) {
+	m0 <- matrix(0, ncol = length(missing.sizes), nrow = nrow(counts),
+		dimnames = list(rownames(counts), missing.sizes));
 	counts <- cbind(m0, counts);
 	}
 
-if (max(w) < 220) {
-	m1 <- matrix(0, ncol = 220 - max(w), nrow = nrow(counts),
-		dimnames=list(rownames(counts), (max(w)+1):220));
-	counts <- cbind(counts, m1);
-	}
+counts <- counts[,as.character(frag.sizes)];
 
 olaps <- findOverlaps(fragments, AB);
 bin.list <- split(fragments[queryHits(olaps)], subjectHits(olaps));
@@ -131,8 +130,8 @@ medians	<- median(w);
 q25	<- quantile(w, 0.25);
 q75	<- quantile(w, 0.75);
 
-short	<- rowSums(counts[,1:61]);
-long	<- rowSums(counts[,62:121]);
+short	<- rowSums(counts[,1:61]);	# frag size = 90:150
+long	<- rowSums(counts[,62:121]);	# frag size = 151:210
 ratio	<- short/long;
 ratio[is.nan(ratio)] <- NA;
 ratio[is.infinite(ratio)] <- NA;
