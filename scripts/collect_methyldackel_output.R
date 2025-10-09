@@ -113,8 +113,8 @@ cpg.loci <- findLoci(
 
 # read in target regions file
 if (!is.null(arguments$target_bed)) {
-	target.bed <- read.table(arguments$target_bed, header = F);
-	colnames(target.bed) <- c('chrom','start','end','annotation');
+	target.bed <- read.table(arguments$target_bed, header = FALSE);
+	colnames(target.bed)[1:3] <- c('chrom','start','end');
 	target.bed <- makeGRangesFromDataFrame(target.bed, starts.in.df.are.0based = TRUE,
 		keep.extra.columns = TRUE);
 	
@@ -124,15 +124,27 @@ if (!is.null(arguments$target_bed)) {
 	}
 
 # read in files using bsseq (runs in parallel so quite a bit faster)
-BSobj <- bsseq::read.bismark(
-	files = data.files,
-	loci = target.loci,
-	BPPARAM = MulticoreParam(workers = 3, progressbar = TRUE),
-	colData = sample.info,
-	strandCollapse = FALSE,
-	#nThread = ifelse(detectCores() > 16,  4, 1),
-	verbose = TRUE
-	);
+# for some reason, this occasionally fails (but will subsequently succeed with no changes)
+# typically for MultiMMR (targeted-panel), k = 1 (nThread = 1) is sufficient but for 
+# WGS, parallelization is strongly recommended (k > 1 and nThread > 1)
+BSobj <- NULL;
+k <- c(16,8,4,2,1);
+attempt <- 0;
+
+while (is.null(BSobj) && attempt <= 5) {
+	attempt <- attempt + 1;
+	try(
+		BSobj <- bsseq::read.bismark(
+			files = data.files,
+			loci = target.loci,
+			BPPARAM = MulticoreParam(workers = k[attempt], progressbar = TRUE),
+			colData = sample.info,
+			strandCollapse = FALSE,
+			nThread = ifelse(detectCores() > 16,  4, 1),
+			verbose = TRUE
+			)
+		);
+	}
 
 save(BSobj, target.loci, sample.info,
 	file = generate.filename(arguments$project, 'collected_CpG_objects','RData')
@@ -285,4 +297,3 @@ if (is.null(arguments$target_bed)) {
 
 ### SAVE SESSION INFO ##############################################################################
 save.session.profile(generate.filename('CollectMethylDackelData','SessionProfile','txt'));
-
