@@ -37,6 +37,25 @@ save.session.profile <- function(file.name) {
 
 	}
 
+# function to trim sample IDs
+simplify.ids <- function(x) {
+	match <- TRUE;
+	if (length(x) == 1) {
+		match <- FALSE;
+		new.ids <- x;
+		}
+	index <- 1;
+	while (match) {
+		if (length(unique(sapply(x,function(i) { unlist(strsplit(i,''))[index] } ))) == 1) {
+			index <- index + 1;
+			} else {
+			new.ids <- sapply(x,function(i) { substring(i,index,nchar(i)) } );
+			match <- FALSE;
+			}
+		}
+	return(new.ids);
+	}
+
 ### PREPARE SESSION ################################################################################
 # import command line arguments
 library(argparse);
@@ -110,7 +129,7 @@ axis.cex <- if (ncol(plot.data) <= 30) { 1
 create.heatmap(
 	t(plot.data),
 	cluster.dimensions = 'rows',
-	xaxis.lab = NA,
+	xaxis.lab = simplify.ids(colnames(plot.data)),
 	yaxis.lab = rep('', nrow(plot.data)),
 	xaxis.cex = axis.cex,
 	yaxis.tck = 0,
@@ -134,8 +153,8 @@ plot.data.mmr <- plot.data[mmr.genes,];
 
 create.heatmap(
 	t(plot.data.mmr),
-	cluster.dimensions = 'both',
-	xaxis.lab = NA, 
+	cluster.dimensions = 'none',
+	xaxis.lab = simplify.ids(colnames(plot.data.mmr)), 
 	yaxis.lab = NA,
 	xaxis.cex = axis.cex,
 	yaxis.cex = axis.cex,

@@ -39,6 +39,26 @@ save.session.profile <- function(file.name) {
 
 	}
 
+# function to trim sample IDs
+simplify.ids <- function(x) {
+	match <- TRUE;
+	if (length(x) == 1) {
+		match <- FALSE;
+		new.ids <- x;
+		}
+	index <- 1;
+	while (match) {
+		if (length(unique(sapply(x,function(i) { unlist(strsplit(i,''))[index] } ))) == 1) {
+			index <- index + 1;
+			} else {
+			new.ids <- sapply(x,function(i) { substring(i,index,nchar(i)) } );
+			match <- FALSE;
+			}
+		}
+	return(new.ids);
+	}
+
+
 ### PREPARE SESSION ################################################################################
 # import command line arguments
 library(argparse);
@@ -519,7 +539,7 @@ if (!is.rna) {
 
 	if (!is.dna) {
 
-		total.coverage.plot$x.scales$labels <- smp.names;
+		total.coverage.plot$x.scales$labels <- simplify.ids(smp.names);
 		total.coverage.plot$x.scales$rot <- c(90,0);
 		total.coverage.plot$x.scales$cex <- 1.2;
 
@@ -584,7 +604,7 @@ if (!is.rna) {
 			xlab.label = NULL,
 			ylab.label = '% Aligned Bases',
 			ylab.cex = 1.5,
-			xaxis.lab = NA,
+			xaxis.lab = simplify.ids(stacked.data$Sample),
 			xaxis.rot = 90,
 			xaxis.tck = c(0.5,0),
 			yaxis.tck = c(0.5,0),
