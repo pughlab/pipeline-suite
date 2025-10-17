@@ -700,6 +700,23 @@ sub main {
 			print $log "> Found " . scalar(@arriba_svs_patient) . " arriba files for $patient.\n";
 			}
 
+		# add a check to see if any variant files are available for this patient
+		my @all_svs = (
+			@delly_svs_patient,
+			@manta_svs_formatted,
+			@novobreak_svs_patient,
+			@pindel_svs_patient,
+			@svict_svs_patient,
+			@starfus_svs_patient,
+			@fuscatch_svs_patient,
+			@arriba_svs_patient
+			);
+
+		if (scalar(@all_svs) == 0) {
+			print $log "\n No SVs provided for $patient; not running mavis.";
+			next;
+			}
+
 		# indicate expected mavis output file
 		my $mavis_output = join('/',
 			$patient_directory,
