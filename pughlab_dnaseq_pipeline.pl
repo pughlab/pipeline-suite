@@ -400,6 +400,9 @@ sub main {
 				push @step1_job_ids, $gatk_run_id;
 				push @job_ids, $gatk_run_id;
 				}
+
+			} else {
+			$gatk_output_yaml = $bwa_output_yaml;
 			}
 		}
 
