@@ -1,3 +1,20 @@
+2025-10-21: PughLab pipeline-suite (version 0.9.20);
+- MAJOR updates:
+	- new file to filter transcripts by MANE select (data/mane_select_transcript_ids.tsv)
+	- added MANE select transcript filtering to methyldackel outputs
+- MINOR updates:
+	- added timestamp to fastq_trimmed yaml in pughlab_dnaseq_pipeline.pl
+	- added timestamp to fastq_trimmed yaml in pughlab_emseq_pipeline.pl
+	- added behaviour for BWA-only alignments (ie, where GATK isn't necessary) in pughlab_dnaseq_pipeline.pl
+	- attempt to improve parallelization in collect_methyldackel_output.R
+	- added per-target coverage collection to collect_sequencing_metrics.R
+	- added some error handling to DELFI scripts
+	- added function to simply sample IDs to plotting scripts
+	- added code to skip patient if no SV files are detected in mavis.pl
+	- updated method for calculating read-evidence in collect_mavis_output.R
+	- added gnomAD filter for germline variants in collect_snv_output.R 
+	- minor updates to report-generation scripts to improve summarization/visualization of targeted-panel based data (incl. the multiMMR panel)
+
 2025-09-05: PughLab pipeline-suite (version 0.9.19);
 - MINOR updates:
 	- added pughlab_pipeline_auto_report.pl stage to pughlab_emseq_pipeline.pl
