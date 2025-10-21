@@ -105,25 +105,41 @@ if (any(grepl('translocation', sv.data$event_type))) {
 	}
 sv.data <- sv.data[which(is.na(sv.data$Length) | sv.data$Length > 200),];
 
-# add evidence filter
-sv.data$Evidence <- apply(
-	sv.data[,c('break1_split_reads','break2_split_reads','spanning_reads','linking_split_reads')],
-	1, function(i) {
-	if (any(i == 'None')) { i[which(i == 'None')] <- 0; }
-	i <- sapply(i, function(j) { max(as.numeric(unlist(strsplit(as.character(j),';')))); });
-	# if call method uses spanning reads
-	if (i[3] >= 20) { return('PASS')
-		# if call method uses split reads
-		} else if (i[1] >= 20 & i[2] >= 20) { return('PASS')
-		} else if (i[3] >= 20) { return('PASS')
-		} else if (i[4] >= 20) { return('PASS')
-		} else { return('FAIL');
-		}
-	});
+# add evidence filters
+format.readcounts <- function(x) {
+	x <- unlist(strsplit(as.character(x),';'));
+	if (any(x == 'None')) { x[which(x == 'None')] <- 0; }
+	x <- as.numeric(x);
+	max(x);
+	};
+
+sv.data$Evidence <- 'FAIL';
+
+spanning.idx <- grepl('spanning', sv.data$call_method);
+spanning.counts <- sapply(sv.data$spanning_reads, format.readcounts);
+if (any(spanning.idx)) {
+	sv.data[which(spanning.idx & (spanning.counts >= 20)),]$Evidence <- 'PASS';
+	}
+
+flanking.idx <- grepl('flanking', sv.data$call_method);
+flanking.counts <- sapply(sv.data$flanking_pairs, format.readcounts);
+if (any(flanking.idx)) {
+	sv.data[which(flanking.idx & (flanking.counts >= 20)),]$Evidence <- 'PASS';
+	}
+
+split.idx <- grepl('split', sv.data$call_method);
+split1.counts <- sapply(sv.data$break1_split_reads, format.readcounts);
+split2.counts <- sapply(sv.data$break2_split_reads, format.readcounts);
+linking.counts <- sapply(sv.data$linking_split_reads, format.readcounts);
+if (any(split.idx)) {
+	sv.data[which(split.idx & (split1.counts >= 20) & (split2.counts >= 20)),]$Evidence <- 'PASS';
+	sv.data[which(split.idx & (linking.counts >= 20)),]$Evidence <- 'PASS';
+	}
 
 if (any(grepl(';', sv.data$tools))) {
 	sv.data[grepl(';', sv.data$tools),]$Evidence <- 'PASS';
 	}
+
 sv.data <- sv.data[which(sv.data$Evidence == 'PASS'),];
 
 print(paste0('Total SVs after filter: ', nrow(sv.data)));

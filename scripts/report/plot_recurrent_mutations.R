@@ -35,6 +35,25 @@ save.session.profile <- function(file.name) {
 
 	}
 
+# function to trim sample IDs
+simplify.ids <- function(x) {
+	match <- TRUE;
+	if (length(x) == 1) {
+		match <- FALSE;
+		new.ids <- x;
+		}
+	index <- 1;
+	while (match) {
+		if (length(unique(sapply(x,function(i) { unlist(strsplit(i,''))[index] } ))) == 1) {
+			index <- index + 1;
+			} else {
+			new.ids <- sapply(x,function(i) { substring(i,index,nchar(i)) } );
+			match <- FALSE;
+			}
+		}
+	return(new.ids);
+	}
+
 ### VARIANT CODING
 # 1 = missense, 2 = stop gain, 3 = stop loss, 4 = splicing, 5 = frameshift, 6 = in frame indel, 7 = tss
 # 8 = RNA, 9 = other (up/downstream, UTR, intergenic, silent, intron), 10 = ITD
@@ -129,8 +148,6 @@ setwd(arguments$output);
 
 ### FORMAT DATA ####################################################################################
 # indicate key fields
-#keep.fields <- c('Tumor_Sample_Barcode','Hugo_Symbol','Chromosome','Variant_Classification','Reference_Allele','Tumor_Seq_Allele2');
-
 keep.fields <- c('Tumor_Sample_Barcode','Hugo_Symbol','Chromosome','Variant_Classification','Reference_Allele','Tumor_Seq_Allele2','HGVSc','HGVSp_Short','CLIN_SIG','dbSNP_RS','t_vaf','n_vaf');
 
 print(paste0("Total variants: ", nrow(input.data), " among ", length(all.samples), " samples."));
@@ -190,21 +207,7 @@ print(paste0(
 	" variants with low coverage" 
 	));
 
-mutation.data <- mutation.data[which(mutation.data$t_depth >= 20),keep.fields];
-
-# apply variant coding
-mutation.data$Code <- variant.codes$Code[match(mutation.data$Variant_Classification, variant.codes$Classification)];
-mutation.data <- mutation.data[which(mutation.data$Code != 8),];
-
-# remove silent mutations
-remove.idx <- which(mutation.data$Variant_Classification %in% c('Silent','Intron','IGR'));
-print(paste0(
-	"Removing ", length(remove.idx), " (",
-	round(length(remove.idx) / nrow(mutation.data) * 100, digits = 2), " %)",
-	" variants with classifications of silent/intron/IGR."
-	));
-
-mutation.data <- mutation.data[-remove.idx,];
+mutation.data <- mutation.data[which(mutation.data$t_depth >= 20),];
 
 # extract clinvar pathogenic hits
 mutation.data$ClinVar <- sapply(mutation.data$CLIN_SIG, function(i) { 
@@ -220,6 +223,34 @@ mutation.data$ClinVar <- sapply(mutation.data$CLIN_SIG, function(i) {
 		return(x);
 		}
 	});
+
+# remove common mutations (high population frequency in gnomad | not pathogenic)
+remove.idx <- setdiff(
+	which(mutation.data$FLAG.high_pop),
+	which(mutation.data$ClinVar %in% c('pathogenic','likely_pathogenic'))
+	);
+
+print(paste0(
+	"Removing ", length(remove.idx), " (",
+	round(length(remove.idx) / nrow(mutation.data) * 100, digits = 2), " %)",
+	" non-pathogenic (clinvar) variants with high population frequency (gnomAD)."
+	));
+
+mutation.data <- mutation.data[-remove.idx,];
+
+# apply variant coding
+mutation.data$Code <- variant.codes$Code[match(mutation.data$Variant_Classification, variant.codes$Classification)];
+mutation.data <- mutation.data[which(mutation.data$Code != 8),];
+
+# remove silent mutations
+remove.idx <- which(mutation.data$Variant_Classification %in% c('Silent','Intron','IGR'));
+print(paste0(
+	"Removing ", length(remove.idx), " (",
+	round(length(remove.idx) / nrow(mutation.data) * 100, digits = 2), " %)",
+	" variants with classifications of silent/intron/IGR."
+	));
+
+mutation.data <- mutation.data[-remove.idx,c(keep.fields, 'ClinVar','Code')];
 
 # if there are fewer than 5 germline variants here, write a table to output
 mutation.data$Variant <- apply(mutation.data[,c('HGVSc','HGVSp_Short','Variant_Classification')], 1, 
@@ -505,7 +536,7 @@ recurrence.plot <- create.heatmap(
 	plot.data[,sample.order],
 	cluster.dimensions = 'none',
 	same.as.matrix = TRUE,
-	xaxis.lab = if (length(all.samples) == 1) { all.samples } else { sample.order },
+	xaxis.lab = if (length(all.samples) == 1) { all.samples } else { simplify.ids(sample.order) },
 	xat = if (length(all.samples) == 1) { 1.5 } else { TRUE },
 	yaxis.lab = plot.data$Label,
 	xaxis.cex = axis.cex,

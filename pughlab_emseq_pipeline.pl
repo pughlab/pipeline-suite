@@ -111,7 +111,10 @@ sub main {
 	print $log Dumper \%tool_set;
 
 	# indicate YAML files for processed files
-	my $fastq_trimmed_output_yaml = join('/', $trim_directory, 'fastq_trimmed_config.yaml');
+	my $fastq_trimmed_output_yaml = join('/', 
+		$trim_directory, 
+		'fastq_trimmed_config_' . $timestamp . '.yaml'
+		);
 	my $bwa_output_yaml = join('/', $bwa_directory, 'bwa_bam_config_' . $timestamp . '.yaml');
 
 	# are we running step1 (fastq prep)?

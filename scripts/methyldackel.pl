@@ -333,13 +333,19 @@ sub main {
 		}
 
 	# collate results
+	my $mane_transcripts = "$cwd/../data/mane_select_transcript_ids.tsv";
+	if (defined($tool_data->{mane_transcript_ids})) {
+		$mane_transcripts = $tool_data->{mane_transcript_ids};
+		}
+
 	my $collect_output = join(' ',
 		"Rscript $cwd/collect_methyldackel_output.R",
 		'-d', $output_directory,
 		'-p', $tool_data->{project_name},
 		'-t', $tool_data->{targets_bed},
 		'-r', $tool_data->{ref_type},
-		'-s', $data_config
+		'-s', $data_config,
+		'-m', $mane_transcripts
 		);
 
 	$run_script = write_script(

@@ -252,11 +252,14 @@ sub main {
 
 			my $methylD_dir = join('/', $output_directory, 'MethylDackel');
 			opendir(METHYLATION, $methylD_dir) or die "Cannot open '$methylD_dir' !";
-			my @methylD_calls = grep { /methylation_per_gene.tsv/ } readdir(METHYLATION);
+			my @methylD_calls = grep { /tsv/ } readdir(METHYLATION);
 			@methylD_calls = sort @methylD_calls;
 			closedir(METHYLATION);
 
-			my $methylD_data = join('/', $methylD_dir, $methylD_calls[-1]);
+			my @methyl_genes = grep { /methylation_per_gene.tsv/ } @methylD_calls;
+			my @methyl_promoters = grep { /methylation_per_promoter.tsv/ } @methylD_calls;
+
+			my $methylD_data = join('/', $methylD_dir, $methyl_genes[-1]);
 
 			if ( -l join('/', $data_directory, 'gene_methylation.tsv')) {
 				unlink join('/', $data_directory, 'gene_methylation.tsv');
@@ -264,13 +267,22 @@ sub main {
 
 			symlink($methylD_data, join('/', $data_directory, 'gene_methylation.tsv'));
 
+			$methylD_data = join('/', $methylD_dir, $methyl_promoters[-1]);
+
+			if ( -l join('/', $data_directory, 'promoter_methylation.tsv')) {
+				unlink join('/', $data_directory, 'promoter_methylation.tsv');
+				}
+
+			symlink($methylD_data, join('/', $data_directory, 'promoter_methylation.tsv'));
+
 			# plot methylation profile
 			my $methyl_plot_command = join(' ',
 				"Rscript $cwd/report/plot_methylation_summary.R",
 				'-p', $tool_data->{project_name},
 				'-o', $methyl_out_directory,
 				'-z', $plot_directory,
-				'-m', $methylD_data
+				'-m', join('/', $data_directory, 'gene_methylation.tsv'),
+				'-r', join('/', $data_directory, 'promoter_methylation.tsv')
 				);
 
 			# run command
@@ -853,7 +865,7 @@ sub main {
 		# find ENSEMBLE mutations
 		my @somatic_files;
 
-		my $ensemble_command .= join(' ',
+		my $ensemble_command = join(' ',
 			"Rscript $cwd/report/format_ensemble_mutations.R",
 			'-p', $tool_data->{project_name},
 			'-o', join('/', $data_directory, 'ENSEMBLE'),
@@ -1288,7 +1300,7 @@ sub main {
 				cmd		=> $cnv_plot_command,
 				modules		=> [$r_version],
 				max_time	=> '04:00:00',
-				mem		=> '2G',
+				mem		=> '4G',
 				hpc_driver	=> $args{cluster},
 				extra_args	=> [$hpc_group]
 				);

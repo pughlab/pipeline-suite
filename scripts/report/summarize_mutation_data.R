@@ -35,6 +35,25 @@ save.session.profile <- function(file.name) {
 
 	}
 
+# function to trim sample IDs
+simplify.ids <- function(x) {
+	match <- TRUE;
+	if (length(x) == 1) {
+		match <- FALSE;
+		new.ids <- x;
+		}
+	index <- 1;
+	while (match) {
+		if (length(unique(sapply(x,function(i) { unlist(strsplit(i,''))[index] } ))) == 1) {
+			index <- index + 1;
+			} else {
+			new.ids <- sapply(x,function(i) { substring(i,index,nchar(i)) } );
+			match <- FALSE;
+			}
+		}
+	return(new.ids);
+	}
+
 ### VARIANT CODING
 # 1 = missense, 2 = stop gain, 3 = stop loss, 4 = splicing, 5 = frameshift, 6 = in frame indel, 7 = tss
 # 8 = RNA, 9 = other (up/downstream, UTR, intergenic, silent, intron), 10 = ITD
@@ -380,6 +399,9 @@ if (!is.null(msi.smps)) { sig.data$call[msi.smps,]$MSI <- 0; }
 if (!is.null(chord.smps)) { sig.data$call[chord.smps,]$CHORD <- 0; }
 if (!is.null(hrdetect.smps)) { sig.data$call[hrdetect.smps,]$HRDetect <- 0; }
 
+sig.data$call[which(is.na(sig.data$call),arr.ind = TRUE)] <- 1;
+
+
 ### MAKE LEGENDS ###################################################################################
 # make the plot legend (mutation type/consequence)
 functional.legend <- legend.grob(
@@ -683,7 +705,7 @@ basechange.plot <- create.barplot(
 	groups = basechange.summary$overall$Basechange,
 	stack = TRUE,
 	col = rev(basechange.colours),
-	xaxis.lab = all.samples,
+	xaxis.lab = simplify.ids(all.samples),
 	xaxis.rot = if (length(all.samples) == 1) { 0 } else { 90 },
 	xlimits = c(0.5, length(all.samples)+0.5),
 	xat = seq(1,length(all.samples)),

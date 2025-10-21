@@ -262,6 +262,13 @@ if (any(full.maf.data$dbSNP_RS == 'rs2293607' & full.maf.data$SYMBOL == 'ACTRT3'
 # there are most likely more wierd cases and I will add them as I find them
 ###
 
+# indicate high population frequency [CPSR pulls out many non-pathogenic hits in repetitive regions
+if (is.germline) {
+	af.fields <- colnames(full.maf.data)[grepl('AF', colnames(full.maf.data))];
+	full.maf.data$FLAG.high_pop <- apply(full.maf.data[,af.fields],1,
+		function(i) { max(i,na.rm = TRUE) > 0.01 } );
+	}
+
 # save to file
 write.table(
 	full.maf.data[,!exclude.field],

@@ -38,6 +38,7 @@ save.session.profile <- function(file.name) {
 ### PREPARE SESSION ################################################################################
 # import libraries
 library(argparse);
+library(plyr);
 
 # import command line arguments
 parser <- ArgumentParser();
@@ -62,6 +63,7 @@ gc.bias.files <- list.files(pattern = 'gc_bias_metrics_summary.txt', recursive =
 alignment.files <- list.files(pattern = 'alignment_metrics.txt', recursive = TRUE);
 wgs.files <- list.files(pattern = 'wgs_metrics.txt', recursive = TRUE);
 hs.files <- list.files(pattern = 'hs_metrics.txt', recursive = TRUE);
+target.files <- list.files(pattern = 'hs_metrics_targetcoverage.txt', recursive = TRUE);
 
 insert.files <- list.files(pattern = 'insert_size.txt', recursive = TRUE);
 
@@ -164,6 +166,17 @@ for (file in hs.files) {
 	hs.list$counts[[smp]] <- counts;
 	}
 
+for (file in target.files) {
+	# extract sample ID
+	smp <- sub('_hs_metrics_targetcoverage.txt','',basename(file));
+	# read in data
+	metrics <- read.delim(file);
+	metrics <- metrics[,c('chrom','start','end','mean_coverage')];
+	colnames(metrics)[4] <- smp;
+	# store data in list
+	hs.list$pertarget[[smp]] <- metrics;
+	}
+
 # reshape/format data
 artefact.data <- do.call(rbind, artefact.list);
 if (any(grepl('fastq', artefact.data$SAMPLE_ALIAS))) {
@@ -244,8 +257,6 @@ if (!is.null(insert.data)) {
 if (length(wgs.files) > 0) {
 
 	wgs.metrics <- do.call(rbind, wgs.list$metrics);
-
-	library(plyr);
 	wgs.histogram <- join_all(wgs.list$counts);
 
 	write.table(
@@ -282,6 +293,20 @@ if (length(hs.files) > 0) {
 	write.table(
 		hs.histogram,
 		file = generate.filename(arguments$project, 'HShistogram','tsv'),
+		row.names = FALSE,
+		col.names = TRUE,
+		sep = '\t'
+		);
+	}
+
+# format per-target coverage if available
+if (length(target.files) > 0) {
+
+	target.cov <- join_all(hs.list$pertarget);
+
+	write.table(
+		target.cov,
+		file = generate.filename(arguments$project, 'pertarget_coverage','tsv'), 
 		row.names = FALSE,
 		col.names = TRUE,
 		sep = '\t'

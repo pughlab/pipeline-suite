@@ -39,6 +39,26 @@ save.session.profile <- function(file.name) {
 
 	}
 
+# function to trim sample IDs
+simplify.ids <- function(x) {
+	match <- TRUE;
+	if (length(x) == 1) {
+		match <- FALSE;
+		new.ids <- x;
+		}
+	index <- 1;
+	while (match) {
+		if (length(unique(sapply(x,function(i) { unlist(strsplit(i,''))[index] } ))) == 1) {
+			index <- index + 1;
+			} else {
+			new.ids <- sapply(x,function(i) { substring(i,index,nchar(i)) } );
+			match <- FALSE;
+			}
+		}
+	return(new.ids);
+	}
+
+
 ### PREPARE SESSION ################################################################################
 # import command line arguments
 library(argparse);
@@ -315,6 +335,9 @@ if (is.dna) {
 		} else if (max.contamination <= 12)  {
 		contest.limits <- c(0, 12);
 		contest.at <- seq(0, 12, 4);
+		} else if (max.contamination > 90)  {
+		contest.limits <- c(0, 100);
+		contest.at <- seq(0, 100, 25);
 		} else {
 		contest.limits <- NULL;
 		contest.at <- TRUE;
@@ -415,8 +438,8 @@ if (!is.rna) {
 	cor.heatmap <- create.heatmap(
 		cor.data,
 		cluster.dimensions = 'none',
-		xaxis.lab = NA,
-		yaxis.lab = NA,
+		xaxis.lab = simplify.ids(rownames(cor.data)),
+		yaxis.lab = simplify.ids(colnames(cor.data)),
 		xaxis.cex = axis.cex,
 		yaxis.cex = axis.cex,
 		xaxis.tck = if (nrow(cor.data) <= 50) { 0.2 } else { 0 },
@@ -519,7 +542,7 @@ if (!is.rna) {
 
 	if (!is.dna) {
 
-		total.coverage.plot$x.scales$labels <- smp.names;
+		total.coverage.plot$x.scales$labels <- simplify.ids(smp.names);
 		total.coverage.plot$x.scales$rot <- c(90,0);
 		total.coverage.plot$x.scales$cex <- 1.2;
 
@@ -584,7 +607,7 @@ if (!is.rna) {
 			xlab.label = NULL,
 			ylab.label = '% Aligned Bases',
 			ylab.cex = 1.5,
-			xaxis.lab = NA,
+			xaxis.lab = simplify.ids(as.character(stacked.data$Sample)),
 			xaxis.rot = 90,
 			xaxis.tck = c(0.5,0),
 			yaxis.tck = c(0.5,0),
@@ -637,7 +660,7 @@ if (!is.rna) {
 			add.rectangle = add.rectangle,
 			xleft.rectangle = -1,
 			ybottom.rectangle = c(0.5, line.breaks),
-			xright.rectangle = 100,
+			xright.rectangle = 101,
 			ytop.rectangle = c(line.breaks, length(smp.names)+0.5),
 			col.rectangle = c('white', 'grey90'),
 			alpha.rectangle = 0.8,
@@ -694,8 +717,8 @@ if (!is.rna) {
 	cor.heatmap <- create.heatmap(
 		cor.data,
 		cluster.dimensions = 'none',
-		xaxis.lab = smp.names,
-		yaxis.lab = smp.names,
+		xaxis.lab = simplify.ids(smp.names),
+		yaxis.lab = simplify.ids(smp.names),
 		xaxis.cex = axis.cex,
 		yaxis.cex = axis.cex,
 		xaxis.tck = if (nrow(cor.data) <= 50) { 0.2 } else { 0 },
@@ -904,11 +927,11 @@ if (!is.null(arguments$report)) {
 	caption <- if (arguments$seq_type == 'rna') {
 		"Top plot: Breakdown of total reads across the genome (including total mapped to exonic, intronic and intergenic regions, rRNA sequences and total unmapped and/or duplicate reads). Right plot: Mean per-base coverage across the middle 1000 expressed transcripts. Central heatmap: Pearson's correlation of RPKM values for all genes across all samples.";
 		} else if (!is.null(arguments$wgscoverage)) {
-		"Top plot: Summary of coverage across the genome. Points indicate mean read depth while red bars show percent of bases with $>$TARGETx coverage. Right plot: Contamination estimate (as a percent $\\pm$ 95\\% CI if ContEst [available for T/N pairs only] or $\\pm$ error if GATK:Pileup was used). Central heatmap: Spearman's correlation ($\\rho$) of germline variant genotypes across all samples.";
+		"Top plot: Summary of coverage across the genome. Points indicate mean read depth while red bars show percent of bases with $>$TARGETx coverage. Right plot: Contamination estimate (as a percent $\\pm$ 95\\% CI if ContEst [available for T/N pairs only] or $\\pm$ error if GATK:Pileup was used). Central heatmap: proportion of matching genotypes between sample pairs, as provided by bcftools gtcheck.";
 		} else if (arguments$seq_type == 'targeted') {
-		"Top plot: Summary of coverage across target bases. Points indicate mean read depth while red bars show percent of target bases with $>$TARGETx coverage. Right plot: Contamination estimate (as a percent $\\pm$ 95\\% CI if ContEst [available for T/N pairs only] or $\\pm$ error if GATK:Pileup was used). Central heatmap: Spearman's correlation ($\\rho$) of germline variant genotypes across all samples.";
+		"Top plot: Summary of coverage across target bases. Points indicate mean read depth while red bars show percent of target bases with $>$TARGETx coverage. Right plot: Contamination estimate (as a percent $\\pm$ 95\\% CI if ContEst [available for T/N pairs only] or $\\pm$ error if GATK:Pileup was used). Central heatmap: proportion of matching genotypes between sample pairs, as provided by bcftools gtcheck.";
 		} else if (arguments$seq_type == 'exome') {
-		"Top plot: Summary of coverage across target bases. Points indicate median read depth (range from first to third quartiles) while red bars show percent of target bases with $>$TARGETx coverage. Right plot: Contamination estimate (as a percent $\\pm$ 95\\% CI if ContEst [available for T/N pairs only] or $\\pm$ error if GATK:Pileup was used). Central heatmap: Spearman's correlation ($\\rho$) of germline variant genotypes across all samples.";
+		"Top plot: Summary of coverage across target bases. Points indicate median read depth (range from first to third quartiles) while red bars show percent of target bases with $>$TARGETx coverage. Right plot: Contamination estimate (as a percent $\\pm$ 95\\% CI if ContEst [available for T/N pairs only] or $\\pm$ error if GATK:Pileup was used). Central heatmap: proportion of matching genotypes between sample pairs, as provided by bcftools gtcheck.";
 		} else {
 		"Summary of total coverage. Points indicate mean read depth while red bars show percent of bases with $>$TARGETx coverage."
 		}
@@ -1080,9 +1103,23 @@ if (!is.null(arguments$report)) {
 
 		} else {
 
+		# record coverage
+		#write("\\subsection{Coverage}", file = tex.file, append = TRUE);
+		if (nrow(poor.coverage) > 0) {
+			poor.coverage <- xtable(
+				poor.coverage,
+				caption = paste0(coverage.caption, " Low coverage of either a tumour or normal sample may affect variant callablility."),
+				align = rep('c',ncol(poor.coverage)+1),
+				digits = c(0,0,1,1)
+				);
+			print(poor.coverage, file = tex.file, append = TRUE, include.rownames = FALSE, latex.environments = "");
+			} else {
+			write("No samples had unusually low coverage.", file = tex.file, append = TRUE);
+			}
+
 		# add HS efficiency if available
 		if (!is.null(arguments$hscoverage)) {
-			write("\\subsection{HS Efficiency}", file = tex.file, append = TRUE);
+		#	write("\\subsection{HS Efficiency}", file = tex.file, append = TRUE);
 			write("\\begin{figure}[h!]", file = tex.file, append = TRUE);
 			write("\\begin{center}", file = tex.file, append = TRUE);
 			write(paste0(
@@ -1094,20 +1131,6 @@ if (!is.null(arguments$report)) {
 				"\\caption{Fraction of bases aligned to on-target, near-target or off-target regions as determined using Picard's CollectHsMetrics tool.}"
 				), file = tex.file, append = TRUE);
 			write("\\end{figure}\n", file = tex.file, append = TRUE);
-			}
-
-		# record coverage
-		write("\\subsection{Coverage}", file = tex.file, append = TRUE);
-		if (nrow(poor.coverage) > 0) {
-			poor.coverage <- xtable(
-				poor.coverage,
-				caption = paste0(coverage.caption, " Low coverage of either a tumour or normal sample may affect variant callablility."),
-				align = rep('c',ncol(poor.coverage)+1),
-				digits = c(0,0,1,1)
-				);
-			print(poor.coverage, file = tex.file, append = TRUE, include.rownames = FALSE, latex.environments = "");
-			} else {
-			write("No samples had unusually low coverage.", file = tex.file, append = TRUE);
 			}
 		}
 	}
