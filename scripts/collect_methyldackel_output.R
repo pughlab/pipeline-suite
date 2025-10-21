@@ -46,6 +46,7 @@ parser$add_argument('-d', '--directory', type = 'character', help = 'path to dat
 parser$add_argument('-s', '--sample_yaml', type = 'character', help = 'path to sample (BAM) yaml');
 parser$add_argument('-t', '--target_bed', type = 'character', help = 'path to target regions (BED)');
 parser$add_argument('-r', '--ref_type', type = 'character', help = 'reference type', default = 'hg38');
+parser$add_argument('-m', '--mane', type = 'character', help = 'path to tsv containing MANE transcript IDs');
 
 arguments <- parser$parse_args();
 
@@ -160,17 +161,71 @@ if (arguments$ref_type %in% c('hg38','GRCh38')) {
 	}
  
 # extract gene positions and annotations
-gene.positions <- data.frame(genes(txdb));
-gene.annotations <- select(
-	org.Hs.eg.db,
-	keys = gene.positions$gene_id,
-	keytype = 'ENTREZID',
-	columns = c('SYMBOL','GENETYPE')
-	);
+if (!is.null(arguments$target_bed)) {
+	gene.positions <- data.frame(subsetByOverlaps(genes(txdb), target.bed));
+	} else {
+	gene.positions <- data.frame(genes(txdb));
+	}
 
-gene.data <- merge(gene.annotations,gene.positions,by.y = 'gene_id', by.x = 'ENTREZID');
+####
+if (!is.null(arguments$mane)) {
+
+	mane <- read.delim(arguments$mane, comment.char = '#');
+	mane$TXNAME <- mane$Transcript.stable.ID.version;
+	mane$REFSEQ <- sapply(mane$RefSeq.match.transcript..MANE.Select., function(i) {
+		unlist(strsplit(i,'\\.'))[1] } );
+
+	tx.positions <- data.frame(transcripts(txdb, columns = c('GENEID','TXNAME')));
+	promoter.positions <- data.frame(promoters(txdb, columns = c('GENEID','TXNAME')));
+
+	tx.positions$GENEID <- sapply(tx.positions$GENEID, function(i) { unlist(i)[1] } )
+	promoter.positions$GENEID <- sapply(promoter.positions$GENEID, function(i) { unlist(i)[1] } )
+
+	gene.annotations <- select(
+		org.Hs.eg.db,
+		keys = gene.positions$gene_id,
+		keytype = 'ENTREZID',
+		columns = c('SYMBOL','GENETYPE','REFSEQ')
+		);
+
+	gene.data <- merge(gene.annotations, tx.positions, by.x = 'ENTREZID', by.y = 'GENEID');
+	gene.data <- merge(gene.data, mane[,c('TXNAME','REFSEQ')], by = c('TXNAME','REFSEQ'));
+
+	gene.data <- gene.data[,c(3,4,1,2,5,6,7,8)];
+
+	promoter.data <- merge(gene.annotations, promoter.positions, by.x = 'ENTREZID', by.y = 'GENEID');
+	promoter.data <- merge(promoter.data, mane[,c('TXNAME','REFSEQ')], by = c('TXNAME','REFSEQ'));
+
+	promoter.data <- promoter.data[,c(3,4,1,2,5,6,7,8)];
+
+	} else {
+
+	gene.annotations <- select(
+		org.Hs.eg.db,
+		keys = gene.positions$gene_id,
+		keytype = 'ENTREZID',
+		columns = c('SYMBOL','GENETYPE')
+		);
+
+	gene.data <- merge(gene.annotations,gene.positions,by.y = 'gene_id', by.x = 'ENTREZID');
+	gene.data <- gene.data[,1:6];
+
+	promoter.data <- merge(gene.annotations,gene.positions,by.y = 'gene_id', by.x = 'ENTREZID');
+
+	promoter.data$Promoter.start <- promoter.data$start - 2000;
+	promoter.data$Promoter.end <- promoter.data$start + 200;
+
+	rev.idx <- which(promoter.data$strand == '-');
+	promoter.data[rev.idx,]$Promoter.end <- promoter.data[rev.idx,]$end + 2000;
+	promoter.data[rev.idx,]$Promoter.start <- promoter.data[rev.idx,]$end - 200;
+
+	promoter.data <- promoter.data[,c(1:4,9:10)];
+	colnames(promoter.data)[5:6] <- c('start','end');
+	}
+
+# do some additional formatting
 gene.data$seqnames <- factor(gene.data$seqnames, levels = paste0('chr',c(1:22,'X','Y')));
-gene.data <- gene.data[!is.na(gene.data$seqnames),1:6];
+gene.data <- gene.data[!is.na(gene.data$seqnames),];
 gene.data <- gene.data[!is.na(gene.data$SYMBOL),];
 gene.data <- gene.data[order(gene.data$seqnames, gene.data$start),];
 
@@ -180,33 +235,16 @@ colnames(gene.data)[which(colnames(gene.data) == 'seqnames')] <- 'Chromosome';
 colnames(gene.data)[which(colnames(gene.data) == 'start')] <- 'Start';
 colnames(gene.data)[which(colnames(gene.data) == 'end')] <- 'End';
 
-# get promoter annotations
-promoter.data <- merge(gene.annotations,gene.positions,by.y = 'gene_id', by.x = 'ENTREZID');
-
-promoter.data$Promoter.start <- promoter.data$start - 2000;
-promoter.data$Promoter.end <- promoter.data$start + 200;
-
-rev.idx <- which(promoter.data$strand == '-');
-promoter.data[rev.idx,]$Promoter.end <- promoter.data[rev.idx,]$end + 2000;
-promoter.data[rev.idx,]$Promoter.start <- promoter.data[rev.idx,]$end - 200;
-
 promoter.data$seqnames <- factor(promoter.data$seqnames, levels = paste0('chr',c(1:22,'X','Y')));
-promoter.data <- promoter.data[!is.na(promoter.data$seqnames),c(1:4,9:10)];
+promoter.data <- promoter.data[!is.na(promoter.data$seqnames),];
 promoter.data <- promoter.data[!is.na(promoter.data$SYMBOL),];
-promoter.data <- promoter.data[order(promoter.data$seqnames, promoter.data$Promoter.start),];
+promoter.data <- promoter.data[order(promoter.data$seqnames, promoter.data$start),];
 
-promoter.gr <- makeGRangesFromDataFrame(promoter.data,
-	seqnames.field = 'seqnames',
-	start.field = 'Promoter.start',
-	end.field = 'Promoter.end',
-	keep.extra.columns = TRUE
-	);
+promoter.gr <- GRanges(promoter.data);
 
 colnames(promoter.data)[which(colnames(promoter.data) == 'seqnames')] <- 'Chromosome';
 colnames(promoter.data)[which(colnames(promoter.data) == 'Promoter.start')] <- 'Start';
 colnames(promoter.data)[which(colnames(promoter.data) == 'Promoter.end')] <- 'End';
-
-
 
 ### FORMAT DATA ####################################################################################
 # extract per-sample per-base methylation metrics

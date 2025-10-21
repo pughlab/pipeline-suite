@@ -158,7 +158,7 @@ if (arguments$find_drawings) {
 		);
 	colnames(sv.data.full)[which(colnames(sv.data.full) == 'X.tracking_id')] <- 'tracking_id';
 
-	key.fields <- c('event_type','gene1_aliases','gene2_aliases','transcript1','transcript2','gene1_direction','gene2_direction','exon_last_5prime','exon_first_3prime','fusion_splicing_pattern','break1_chromosome','break1_position_start','break1_position_end','break2_chromosome','break2_position_start','break2_position_end','break1_split_reads','break2_split_reads','spanning_reads','flanking_pairs','linking_split_reads','library','tracking_id','tools','protocol');
+	key.fields <- c('event_type','gene1_aliases','gene2_aliases','transcript1','transcript2','gene1_direction','gene2_direction','exon_last_5prime','exon_first_3prime','fusion_splicing_pattern','break1_chromosome','break1_position_start','break1_position_end','break2_chromosome','break2_position_start','break2_position_end','break1_split_reads','break2_split_reads','spanning_reads','flanking_pairs','linking_split_reads','library','tracking_id','tools','protocol','call_method');
 
 	smp.fields <- sort(colnames(sv.data.full)[grep('_genome|_transcriptome',colnames(sv.data.full))]);
 	smp.fields.names <- sapply(smp.fields, function(i) { unlist(strsplit(i,'_'))[1] } );
@@ -183,7 +183,7 @@ if (arguments$find_drawings) {
 			if (any(grepl('fusioncatcher', ids))) { tools <- c(tools,'fusioncatcher'); }
 			if (any(grepl('arriba', ids))) { tools <- c(tools, 'arriba'); }
 
-			toolset <- paste(tools, collapse = ';');
+			toolset <- paste(na.omit(tools), collapse = ';');
 			if (length(tools) > 0) { 
 				return(toolset);
 				} else {

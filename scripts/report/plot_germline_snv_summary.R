@@ -37,6 +37,25 @@ save.session.profile <- function(file.name) {
 
 	}
 
+# function to trim sample IDs
+simplify.ids <- function(x) {
+	match <- TRUE;
+	if (length(x) == 1) {
+		match <- FALSE;
+		new.ids <- x;
+		}
+	index <- 1;
+	while (match) {
+		if (length(unique(sapply(x,function(i) { unlist(strsplit(i,''))[index] } ))) == 1) {
+			index <- index + 1;
+			} else {
+			new.ids <- sapply(x,function(i) { substring(i,index,nchar(i)) } );
+			match <- FALSE;
+			}
+		}
+	return(new.ids);
+	}
+
 ### VARIANT CODING
 # 1 = missense, 2 = stop gain, 3 = stop loss, 4 = splicing, 5 = frameshift, 6 = in frame indel, 7 = tss
 # 8 = RNA, 9 = other (up/downstream, UTR, intergenic, silent, intron), 10 = ITD
@@ -124,6 +143,11 @@ if (length(idx) > 0) {
 	input.data[idx,]$Hugo_Symbol <- 'TERC';
 	input.data[idx,]$Entrez_Gene_Id <- '7012';
 	}
+
+# CPSR pulls out many non-pathogenic variants in TSC1/POLE/PMS2 
+#	(highly repetitive regions + high population frequencies)
+input.data <- input.data[-which(input.data$FLAG.high_pop),];
+
 ##################################
 
 # indicate key fields
@@ -332,7 +356,7 @@ if (nrow(plot.data) > 1) {
 			inside = list(fun = functional.legend, x = 1.02, y = 1)
 			),
 		right.padding = 5,
-		xaxis.lab = rownames(heatmap.data),
+		xaxis.lab = simplify.ids(rownames(heatmap.data)),
 		yaxis.lab = plot.data$Label,
 		xaxis.cex = axis.cex,
 		yaxis.cex = 1,

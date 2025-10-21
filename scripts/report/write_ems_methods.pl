@@ -90,13 +90,13 @@ sub main {
 
 		my $sites = 'CpG sites';
 		if ('Y' eq $tool_data->{methyldackel}->{parameters}->{extract}->{non_cpg}) {
-			$sites = 'CpG|CHG|CHH sites';
+			$sites = 'CpG, CHG and CHH sites';
 			}
 
 		# fill in methods
 		$methods .= "\\subsubsection{MethylDackel (v$methyldackel)}\n";
 
-		$methods .= "Methylation estimates were obtained for all $sites using MethylDackel extract with recommended paramters. MBIAS was evaluated but is not incorporated by default. Methylation levels (% of reads) for each CpG loci were determined using the bsseq package in R.\n";
+		$methods .= "Methylation estimates were obtained for all $sites using MethylDackel extract with recommended paramters. MBIAS was evaluated but is not incorporated by default. Methylation levels (\\% of reads) for each CpG loci were determined using the bsseq package in R.\n";
 		}
 
 	# clean up special characters
