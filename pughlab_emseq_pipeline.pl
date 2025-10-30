@@ -150,7 +150,7 @@ sub main {
 
 			$run_script = write_script(
 				log_dir	=> $log_directory,
-				name	=> 'pughlab_dna_pipeline__run_trim_adapters',
+				name	=> 'pughlab_emseq_pipeline__run_trim_adapters',
 				cmd	=> $trim_command,
 				modules	=> [$perl],
 				mem		=> '256M',
@@ -163,7 +163,7 @@ sub main {
 
 				$trim_command .= " --dry-run";
 				`$trim_command`;
-				$trim_run_id = 'pughlab_dna_pipeline__run_trim_adapters';
+				$trim_run_id = 'pughlab_emseq_pipeline__run_trim_adapters';
 
 				} else {
 
@@ -199,7 +199,7 @@ sub main {
 
 			$run_script = write_script(
 				log_dir	=> $log_directory,
-				name	=> 'pughlab_dna_pipeline__run_fastqc',
+				name	=> 'pughlab_emseq_pipeline__run_fastqc',
 				cmd	=> $fastqc_command,
 				modules	=> [$perl],
 				dependencies	=> $trim_run_id,
@@ -213,7 +213,7 @@ sub main {
 
 				$fastqc_command .= " --dry-run";
 				`$fastqc_command`;
-				$fastqc_run_id = 'pughlab_dna_pipeline__run_fastqc';
+				$fastqc_run_id = 'pughlab_emseq_pipeline__run_fastqc';
 
 				} else {
 
@@ -258,7 +258,7 @@ sub main {
 
 			$run_script = write_script(
 				log_dir	=> $log_directory,
-				name	=> 'pughlab_dna_pipeline__run_bwa',
+				name	=> 'pughlab_emseq_pipeline__run_bwa',
 				cmd	=> $bwa_command,
 				modules	=> [$perl],
 				dependencies	=> $trim_run_id,
@@ -272,7 +272,7 @@ sub main {
 
 				$bwa_command .= " --dry-run";
 				`$bwa_command`;
-				$bwa_run_id = 'pughlab_dna_pipeline__run_bwa';
+				$bwa_run_id = 'pughlab_emseq_pipeline__run_bwa';
 
 				} else {
 
@@ -316,7 +316,7 @@ sub main {
 
 			$run_script = write_script(
 				log_dir	=> $log_directory,
-				name	=> 'pughlab_dna_pipeline__run_qc',
+				name	=> 'pughlab_emseq_pipeline__run_qc',
 				cmd	=> $qc_command,
 				modules	=> [$perl],
 				dependencies	=> $bwa_run_id,
@@ -330,7 +330,7 @@ sub main {
 
 				$qc_command .= " --dry-run";
 				`$qc_command`;
-				$qc_run_id = 'pughlab_dna_pipeline__run_qc';
+				$qc_run_id = 'pughlab_emseq_pipeline__run_qc';
 
 				} else {
 
@@ -371,7 +371,7 @@ sub main {
 
 			$run_script = write_script(
 				log_dir	=> $log_directory,
-				name	=> 'pughlab_dna_pipeline__run_methyldackel',
+				name	=> 'pughlab_emseq_pipeline__run_methyldackel',
 				cmd	=> $md_command,
 				modules	=> [$perl],
 				dependencies	=> $qc_run_id,
@@ -385,7 +385,7 @@ sub main {
 
 				$md_command .= " --dry-run";
 				`$md_command`;
-				$md_run_id = 'pughlab_dna_pipeline__run_methyldackel';
+				$md_run_id = 'pughlab_emseq_pipeline__run_methyldackel';
 
 				} else {
 
@@ -421,7 +421,7 @@ sub main {
 
 		$run_script = write_script(
 			log_dir	=> $log_directory,
-			name	=> 'pughlab_dna_pipeline__summarize_output',
+			name	=> 'pughlab_emseq_pipeline__summarize_output',
 			cmd	=> $report_command,
 			modules	=> [$perl],
 			dependencies	=> join(':', @job_ids),
@@ -432,7 +432,7 @@ sub main {
 			);
 
 		if ($args{dry_run}) {
-			$report_run_id = 'pughlab_dna_pipeline__summarize_output';
+			$report_run_id = 'pughlab_emseq_pipeline__summarize_output';
 			} else {
 			$report_run_id = submit_job(
 				jobname		=> $log_directory,
