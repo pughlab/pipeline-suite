@@ -164,7 +164,9 @@ colnames(cn.calls) <- gsub('CN.','',colnames(cn.calls));
 cn.data$Ratio <- log2(cn.data$RC.norm / cn.data$medRC.norm);
 
 # set minimum ratio to -2 (to deal with -Inf)
-cn.data[which(cn.data$CN == 0),]$Ratio <- -2;
+if (any(na.omit(cn.data$CN == 0))) {
+	cn.data[which(cn.data$CN == 0),]$Ratio <- -2;
+	}
 
 ratio.data <- reshape(
 	cn.data[,c('Chromosome','Gene','Exon','Start','End','Sample','Ratio')],
