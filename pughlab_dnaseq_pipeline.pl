@@ -167,7 +167,7 @@ sub main {
 	# indicate YAML files for processed BAMs
 	my $fastq_trimmed_output_yaml = join('/', 
 		$trim_directory, 
-		'fastq_trimmed_config' . $timestamp . '.yaml'
+		'fastq_trimmed_config_' . $timestamp . '.yaml'
 		);
 	my $bwa_output_yaml = join('/', $bwa_directory, 'bwa_bam_config_' . $timestamp . '.yaml');
 	my $gatk_output_yaml = join('/', $gatk_directory, 'gatk_bam_config_' . $timestamp . '.yaml');
