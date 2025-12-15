@@ -114,6 +114,7 @@ sub main {
 	my $manta_directory = join('/', $output_directory, 'Manta');
 	my $strelka_directory = join('/', $output_directory, 'Strelka');
 	my $msi_directory = join('/', $output_directory, 'MSI');
+	my $panelmsi_directory = join('/', $output_directory, 'panelMSI');
 	my $mutect_directory = join('/', $output_directory, 'MuTect');
 	my $mutect2_directory = join('/', $output_directory, 'MuTect2');
 	my $varscan_directory = join('/', $output_directory, 'VarScan');
@@ -152,7 +153,8 @@ sub main {
 		'svict'	=> defined($tool_data->{svict}->{run}) ? $tool_data->{svict}->{run} : 'N',
 		'mops'	=> defined($tool_data->{panelcn_mops}->{run}) ? $tool_data->{panelcn_mops}->{run} : 'N',
 		'mavis'	=> defined($tool_data->{mavis}->{run}) ? $tool_data->{mavis}->{run} : 'N',
-		'msi'	=> defined($tool_data->{msi_sensor}->{run}) ? $tool_data->{msi_sensor}->{run} : 'N'
+		'msi'	=> defined($tool_data->{msi_sensor}->{run}) ? $tool_data->{msi_sensor}->{run} : 'N',
+		'panel_msi'	=> defined($tool_data->{panel_msi}->{run}) ? $tool_data->{panel_msi}->{run} : 'N'
 		);
 
 	# force manta to run if strelka is requested
@@ -1744,6 +1746,60 @@ sub main {
 					);
 
 				print $log ">>> MSI-Sensor job id: $msi_run_id\n\n";
+				push @job_ids, $msi_run_id;
+				}
+			}
+
+		## panelMSI pipeline
+		if ('Y' eq $tool_set{'panel_msi'}) {
+
+			unless(-e $panelmsi_directory) { make_path($panelmsi_directory); }
+
+			my $msi_command = join(' ',
+				"perl $cwd/scripts/panel_msi.pl",
+				"-o", $panelmsi_directory,
+				"-t", $tool_config,
+				"-d", $gatk_output_yaml,
+				"-c", $args{cluster}
+				);
+
+#			if ($args{cleanup}) {
+#				$msi_command .= " --remove";
+#				}
+
+			# record command (in log directory) and then run job
+			print $log "Submitting job for panel_msi.pl\n";
+			print $log "  COMMAND: $msi_command\n\n";
+
+			$run_script = write_script(
+				log_dir	=> $log_directory,
+				name	=> 'pughlab_dna_pipeline__run_panel_msi',
+				cmd	=> $msi_command,
+				modules	=> [$perl],
+				dependencies	=> $current_dependencies,
+				mem		=> '256M',
+				max_time	=> $max_time,
+				extra_args	=> [$hpc_group],
+				hpc_driver	=> $args{cluster}
+				);
+
+			if ($args{dry_run}) {
+
+				$msi_command .= " --dry-run";
+				`$msi_command`;
+				$msi_run_id = 'pughlab_dna_pipeline__run_panel_msi';
+
+				} else {
+
+				$msi_run_id = submit_job(
+					jobname		=> $log_directory,
+					shell_command	=> $run_script,
+					hpc_driver	=> $args{cluster},
+					dry_run		=> $args{dry_run},
+					log_file	=> $log
+					);
+
+				print $log ">>> panelMSI job id: $msi_run_id\n\n";
 				push @job_ids, $msi_run_id;
 				}
 			}
