@@ -203,6 +203,17 @@ sub error_checking {
 		}
 	}
 
+	# panelMSI
+	if ('panelmsi' eq $pipeline) {
+		unless ('targeted' eq $tool_data->{seq_type}) {
+			die("panelMSI should only be run on targeted-panel data.");
+		}
+
+		if (!defined($tool_data->{targets_bed})) {
+			die("Must provide path to target regions bed file.");
+		}
+	}
+
 	# Strelka, VarScan, SomaticSniper and Delly
 	my @pipeline_list = qw(strelka varscan delly somaticsniper vardict pindel);
 	if ( any { /$pipeline/ } @pipeline_list ) {
@@ -441,6 +452,8 @@ sub write_script {
 			if ('' ne $args{dependencies}) {
 
 				if ($args{name} =~ m/job_metrics/) {
+					$job_params .= "\n#SBATCH --dependency=afterany:" . $args{dependencies};
+				} elsif ($args{name} =~ m/run_mavis_sv_annotator/) {
 					$job_params .= "\n#SBATCH --dependency=afterany:" . $args{dependencies};
 				} else {
 					$job_params .= "\n#SBATCH --dependency=afterok:" . $args{dependencies};
