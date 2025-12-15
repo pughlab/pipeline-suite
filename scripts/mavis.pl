@@ -336,6 +336,7 @@ sub main {
 	my $bwa		= 'bwa/' . $tool_data->{bwa_version};
 	my $manta	= defined($args{manta_dir}) ? 'manta/' . $tool_data->{manta_version} : undef;
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
+	my $perl	= 'perl/' . $tool_data->{perl_version};
 	my $r_version	= 'R/' . $tool_data->{r_version};
 
 	my $mavis_export = join("\n",
@@ -873,7 +874,7 @@ sub main {
 				log_dir	=> $log_directory,
 				name	=> 'run_mavis_sv_annotator_' . $patient,
 				cmd	=> $mavis_cmd,
-				modules	=> [$mavis, $bwa, 'perl', 'R'],
+				modules	=> [$mavis, $bwa, $perl, $r_version],
 				dependencies	=> $dependencies,
 				max_time	=> '5-00:00:00',
 				mem		=> $mavis_memory,

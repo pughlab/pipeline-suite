@@ -141,7 +141,7 @@ sub get_ichor_cna_command {
 
 		$ichor_command .= "\n\n". join(' ',
 			'Rscript', $ichor_path,
-			'--make_pon',
+			'--make_pon TRUE',
 			'--normal_list', $args{normal_list}
 			);
 
@@ -323,7 +323,7 @@ sub main {
 	if ( ('Y' eq $parameters->{create_pon}->{run}) && (scalar(@normal_samples) > 1) ) {
 		$should_run_pon = 1;
 		unless(-e $pon_directory) { make_path($pon_directory); }
-		$pon = join($pon_directory, $date . "_" . $ref_type . "_panelOfNormals_median.rds");
+		$pon = join('/', $pon_directory, $date . "_" . $ref_type . "_panelOfNormals_median.rds");
 		} elsif ( ('Y' eq $parameters->{create_pon}->{run}) && (defined($tool_data->{ichor_cna}->{pon})) ) {
 		$pon = $tool_data->{ichor_cna}->{pon};
 		print $log "Insufficient normals provided to create a Panel of Normals; using $pon instead.\n";

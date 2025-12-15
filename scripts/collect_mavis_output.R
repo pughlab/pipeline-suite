@@ -57,11 +57,11 @@ annotate.with.contig <- function(hugo_symbols) {
 
 # function to extract read counts
 extract.evidence <- function(x) {
-	to.return <- if ('None' == x) { 0 } else {
-		max(as.numeric(unlist(strsplit(as.character(x),';'))), na.rm = TRUE)
-		}
-	return(to.return);
-	}
+	x <- unlist(strsplit(as.character(x),';'));
+	if (any(x == 'None')) { x[which(x == 'None')] <- 0; }
+	x <- as.numeric(x);
+	max(x);
+	};
 
 ### PREPARE SESSION ################################################################################
 # import command line arguments
@@ -272,11 +272,37 @@ if (arguments$find_drawings) {
 	svs <- sv.data.filtered;
 	rm(sv.data, sv.data.filtered);
 
-	# sort by evidence
+	# extract number of tools
 	svs$N.tools <- sapply(svs$tools, function(i) { length(unlist(strsplit(i,';'))) } );
-	svs$Evidence <- apply(svs[,grep('reads|pairs', colnames(svs))],1, function(i) { 
-		sum(sapply(i[which(i != 'None')],function(y) { max(as.numeric(unlist(strsplit(as.character(y),';')))) } ))
-		} );
+
+	# extract number of reads
+	svs$Evidence <- 0;
+
+	spanning.idx <- grepl('spanning', svs$call_method);
+	spanning.counts <- sapply(svs$spanning_reads, extract.evidence);
+	if (any(spanning.idx)) {
+		svs[which(spanning.idx),]$Evidence <- spanning.counts[which(spanning.idx)];
+		}
+
+	flanking.idx <- grepl('flanking', svs$call_method);
+	flanking.counts <- sapply(svs$flanking_pairs, extract.evidence);
+	if (any(flanking.idx)) {
+		svs[which(flanking.idx),]$Evidence <- apply(
+			cbind(flanking.counts[which(flanking.idx)],svs[which(flanking.idx),]$Evidence),1,max
+			);
+		}
+
+	split.idx <- grepl('split', svs$call_method);
+	split1.counts <- sapply(svs$break1_split_reads, extract.evidence);
+	split2.counts <- sapply(svs$break2_split_reads, extract.evidence);
+	linking.counts <- sapply(svs$linking_split_reads, extract.evidence);
+	split.counts <- apply(cbind(split1.counts,split2.counts,linking.counts),1,function(i) { 
+		min(c(i[1] + i[3], i[2] + i[3])) } );
+
+	if (any(split.idx)) {
+		svs[which(split.idx),]$Evidence <- apply(
+			cbind(split.counts[which(split.idx)], svs[which(split.idx),]$Evidence),1,max);
+		}
 
 	svs <- svs[order(svs$library, svs$tracking_id, -svs$N.tools, -svs$Evidence),];
 
@@ -332,7 +358,7 @@ if (arguments$find_drawings) {
 	# add quick recurrence filter (likely false positives/artefacts)
 	if (length(normal.smps) > 0) {
 		germline.recurrence <- aggregate(
-			library ~ break1_chromosome + break1_position_start + break1_position_end + break2_chromosome + break2_position_start + break2_position_end + event_type + Status,
+			library ~ break1_chromosome + break1_position_start + break1_position_end + break2_chromosome + break2_position_start + break2_position_end + event_type,
 			svs[which(svs$library %in% normal.smps),],
 			length
 			);
@@ -343,8 +369,8 @@ if (arguments$find_drawings) {
 
 	if (length(tumour.smps) > 0) {
 		somatic.recurrence <- aggregate(
-			library ~ break1_chromosome + break1_position_start + break1_position_end + break2_chromosome + break2_position_start + break2_position_end + event_type + Status,
-			svs[which(svs$library %in% tumour.smps),],
+			library ~ break1_chromosome + break1_position_start + break1_position_end + break2_chromosome + break2_position_start + break2_position_end + event_type,
+			svs[which(svs$library %in% tumour.smps & svs$Status == 'somatic'),],
 			length
 			);
 		colnames(somatic.recurrence)[ncol(somatic.recurrence)] <- 'TumourCount';
@@ -358,8 +384,8 @@ if (arguments$find_drawings) {
 
 	if (length(rna.smps) > 0) {
 		rna.recurrence <- aggregate(
-			library ~ break1_chromosome + break1_position_start + break1_position_end + break2_chromosome + break2_position_start + break2_position_end + event_type + Status,
-			svs[which(svs$library %in% rna.smps),],
+			library ~ break1_chromosome + break1_position_start + break1_position_end + break2_chromosome + break2_position_start + break2_position_end + event_type,
+			svs[which(svs$library %in% rna.smps & svs$Status == 'somatic'),],
 			length
 			);
 		colnames(rna.recurrence)[ncol(rna.recurrence)] <- 'RNACount';
@@ -372,13 +398,13 @@ if (arguments$find_drawings) {
 		}
 
 	# define thresholds
-	germline.threshold <- if (length(normal.smps) == 1) { 1 } else { length(normal.smps)*0.5 }
+	germline.threshold <- min(if (length(normal.smps) == 1) { 1 } else { length(normal.smps)*0.5 }, 5);
 	somatic.threshold <- if (length(tumour.smps) == 1) { 1 } else { length(tumour.smps)*0.8 }
 	rna.threshold <- if (length(rna.smps) == 1) { 1 } else { length(rna.smps)*0.8 }
 
 	tmp <- merge(svs, recurrence.data, all.x = TRUE);
 	to.remove <- unique(c(
-		which(tmp$Status == 'germline' & tmp$NormalCount > germline.threshold),
+		which(tmp$NormalCount > germline.threshold), # dont specify germline in case of t-only cases
 		which(tmp$Status == 'somatic' & tmp$TumourCount > somatic.threshold),
 		which(tmp$protocol == 'transcriptome' & tmp$RNACount > rna.threshold)
 		));

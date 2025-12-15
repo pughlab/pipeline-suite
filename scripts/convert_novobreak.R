@@ -18,7 +18,6 @@ input.data <- do.call(rbind, input.list);
 # quick input check
 if (nrow(input.data) == 0) {
 	print('No variants detected.');
-	#print('No variants remaining after filtering.');
 
 	write(
 		c('#break1_chromosome','break1_position_start','break1_position_end','break2_chromosome','break2_position_start','break2_position_end'),
@@ -46,43 +45,8 @@ if (nrow(input.data) == 0) {
 	input.data <- input.data[which(input.data$left_chrom %in% keep.chrs & 
 		input.data$right_chrom %in% keep.chrs),];
 
-	# format output data
-	output.data <- data.frame(
-		tracking_id = input.data$ID,
-		event_type = c('deletion','duplication','inversion','translocation')[match(input.data$sv_type, c('DEL','DUP','INV','TRA'))],
-		break1_chromosome = paste0('chr', input.data$left_chrom),
-		break1_position_start = as.integer(input.data$left_position - 10),
-		break1_position_end = as.integer(input.data$left_position + 10),
-	#	break1_orientation = c('R','R','L','L')[match(input.data$connection_type, c('5to3','5to5','3to3','3to5'))],
-	#	break1_strand = '?',
-	#	break1_seq = 'None',
-		break2_chromosome = paste0('chr', input.data$right_chrom),
-		break2_position_start = as.integer(input.data$right_position - 10),
-		break2_position_end = as.integer(input.data$right_position + 10)
-	#	break2_orientation = c('L','R','L','R')[match(input.data$connection_type, c('5to3','5to5','3to3','3to5'))],
-	#	break2_strand = '?',
-	#	break2_seq = 'None',
-	#	opposing_strands = 'False',
-	#	stranded = 'False',
-	#	tools = 'novobreak'
-		);
-
-#	if (any(output.data$break1_orientation == output.data$break2_orientation)) {
-#		output.data$opposing_strands <- as.character(output.data$opposing_strands);
-#		idx <- which(output.data$break1_orientation == output.data$break2_orientation);
-#		output.data[idx,]$opposing_strands <- 'True';
-#		}
-
-	if (any(grepl('chrchr', output.data$break1_chromosome))) {
-		output.data$break1_chromosome <- gsub('chrchr','chr', output.data$break1_chromosome);
-		output.data$break2_chromosome <- gsub('chrchr','chr', output.data$break2_chromosome);
-		}
-
-	# if no variants remain
-	if (nrow(output.data) == 0) {
-
+	if (nrow(input.data) == 0) {
 		print('No variants remaining after filtering.');
-
 		write(
 			c('#break1_chromosome','break1_position_start','break1_position_end','break2_chromosome','break2_position_start','break2_position_end'),
 			ncolumns = 6,
@@ -91,16 +55,48 @@ if (nrow(input.data) == 0) {
 			);
 
 		} else {
-		print(paste0('collapsed to ', nrow(output.data), ' rows'));
 
-		# save to file
-		write.table(
-			output.data,
-			file = output,
-			row.names = FALSE,
-			col.names = TRUE,
-			quote = FALSE,
-			sep = '\t'
+		# format output data
+		output.data <- data.frame(
+			tracking_id = input.data$ID,
+			event_type = c('deletion','duplication','inversion','translocation')[match(input.data$sv_type, c('DEL','DUP','INV','TRA'))],
+			break1_chromosome = paste0('chr', input.data$left_chrom),
+			break1_position_start = as.integer(input.data$left_position - 10),
+			break1_position_end = as.integer(input.data$left_position + 10),
+			break2_chromosome = paste0('chr', input.data$right_chrom),
+			break2_position_start = as.integer(input.data$right_position - 10),
+			break2_position_end = as.integer(input.data$right_position + 10)
 			);
+
+		if (any(grepl('chrchr', output.data$break1_chromosome))) {
+			output.data$break1_chromosome <- gsub('chrchr','chr', output.data$break1_chromosome);
+			output.data$break2_chromosome <- gsub('chrchr','chr', output.data$break2_chromosome);
+			}
+
+		# if no variants remain
+		if (nrow(output.data) == 0) {
+
+			print('No variants remaining after filtering.');
+
+			write(
+				c('#break1_chromosome','break1_position_start','break1_position_end','break2_chromosome','break2_position_start','break2_position_end'),
+				ncolumns = 6,
+				file = output,
+				sep = '\t'
+				);
+
+			} else {
+			print(paste0('collapsed to ', nrow(output.data), ' rows'));
+
+			# save to file
+			write.table(
+				output.data,
+				file = output,
+				row.names = FALSE,
+				col.names = TRUE,
+				quote = FALSE,
+				sep = '\t'
+				);
+			}
 		}
 	}
