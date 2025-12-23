@@ -495,8 +495,8 @@ if ($help) {
 	exit;
 	}
 
-if ( (!$alignment) && (!$analysis) && (!$qc) && (!$create_report) ) {
-	die("Please choose a step to run (at least one of --alignment, --qc, --analysis, --summarize, --create_report )");
+if ( (!$fastq_prep) && (!$alignment) && (!$analysis) && (!$qc) && (!$create_report) ) {
+	die("Please choose a step to run (at least one of --fastq_prep, --alignment, --qc, --analysis, --summarize, --create_report )");
 	}
 if (!defined($tool_config)) {
 	die("No tool config file defined; please provide -t | --tool (ie, tool_config.yaml)");

@@ -441,6 +441,22 @@ ascat:
             mem: 4G
             time: '24:00:00'
             n_cpus: 1
+panel_msi:
+    run: N # use for MultiMMR TS panel
+    pon: 
+    parameters:
+        scan:
+            mem: 1G
+            time: '04:00:00'
+        readcounter:
+            mem: 4G
+            time: '04:00:00'
+        create_pon: 
+            mem: 4G
+            time: '04:00:00'
+        calc_msi: 
+            mem: 4G
+            time: '04:00:00'
 msi_sensor:
     run: Y
     parameters:

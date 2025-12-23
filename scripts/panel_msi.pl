@@ -318,6 +318,7 @@ sub main {
 		my $make_pon_command = get_msi_command(
 			step	=> 'make_pon',
 			intervals	=> $tool_data->{targets_bed},
+			create_pon	=> 'Y',
 			pon_dir		=> $pon_directory,
 			output_file	=> $pon
 			);

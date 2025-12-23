@@ -1,3 +1,11 @@
+2025-12-23: PughLab pipeline-suite (version 0.9.22);
+- MAJOR updates:
+	- added collect_panelMSI_output.R to collect/combine output from panel_msi
+	- added collection of scripts to generate per-sample reports for the MultiMMR panel
+- MINOR updates:
+	- added parameters for panel_msi to example configs
+	- fixed make_pon step in panel_msi
+
 2025-12-15: PughLab pipeline-suite (version 0.9.21);
 - MAJOR updates:
 	- initial add of panelMSI (method to calculate MSI status from targeted-panel data)
