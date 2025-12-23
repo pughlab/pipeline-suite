@@ -167,7 +167,11 @@ tumour.smps <- sample.info[which(sample.info$Type == 'tumour'),]$Sample;
 ### FORMAT DATA ####################################################################################
 # format CNA data
 anno.fields <- c('Chr','Start','End','Gene','Exon');
-cna.data[is.na(cna.data$Gene),]$Gene <- 'region';
+
+if (any(is.na(cna.data$Gene))) {
+	cna.data[is.na(cna.data$Gene),]$Gene <- 'region';
+	}
+
 gene.anno <- unique(cna.data[,anno.fields]);
 target.regions <- makeGRangesFromDataFrame(gene.anno,
 	keep.extra.columns = TRUE,
