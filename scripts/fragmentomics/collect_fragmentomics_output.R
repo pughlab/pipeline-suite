@@ -226,16 +226,16 @@ if (length(insertsize.files) > 0) {
 
 	# calculate some size metrics
 	short.frags <- apply(
-		histogram.data[which(histogram.data$insert_size > 10 & histogram.data < 150),-1],
+		histogram.data[which(histogram.data$insert_size > 10 & histogram.data$insert_size < 150),-1],
 		2, sum, na.rm = TRUE);
 	normal.frags <- apply(
-		histogram.data[which(histogram.data$insert_size >= 150 & histogram.data < 220),-1],
+		histogram.data[which(histogram.data$insert_size >= 150 & histogram.data$insert_size < 220),-1],
 		2, sum, na.rm = TRUE);
 	long.frags <- apply(
-		histogram.data[which(histogram.data$insert_size >= 220 & histogram.data < 600),-1],
+		histogram.data[which(histogram.data$insert_size >= 220 & histogram.data$insert_size < 600),-1],
 		2, sum, na.rm = TRUE);
 	total.frags <- apply(
-		histogram.data[which(histogram.data$insert_size > 10 & histogram.data < 600),-1],
+		histogram.data[which(histogram.data$insert_size > 10 & histogram.data$insert_size < 600),-1],
 		2, sum, na.rm = TRUE);
 
 	tmp.metrics <- data.frame(
