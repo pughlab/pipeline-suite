@@ -114,7 +114,7 @@ sub get_split_mutect_pon_command {
 		'--enable_strand_artifact_filter',
 		'--out', $args{output_stem} . '_$CHROM.vcf',
 		'--intervals', '$CHROM',
-		'--interval_padding 100'
+		'--interval_padding 100 --interval_set_rule INTERSECTION'
 		);
 
 	if (defined($dbsnp)) {
@@ -404,9 +404,7 @@ sub pon {
 
 	# over which intervals should this be run?
 	my $string;
-	if ('targeted' eq $tool_data->{seq_type}) {
-		$string = 'panel';
-		} elsif (defined($tool_data->{mutect2}->{chromosomes})) {
+	if (defined($tool_data->{mutect2}->{chromosomes})) {
 		$string = $tool_data->{mutect2}->{chromosomes}; 
 		} elsif ( ('hg38' eq $tool_data->{ref_type}) || ('hg19' eq $tool_data->{ref_type})) {
 		$string = 'chr' . join(',chr', 1..22) . ',chrX,chrY';
