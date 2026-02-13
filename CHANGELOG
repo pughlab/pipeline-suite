@@ -1,3 +1,13 @@
+2026-02-13: PughLab pipeline-suite (version 0.9.24);
+- MINOR updates:
+	- fixed interval merging in mutect2 to avoid duplicate variants in final VCF
+	- fixed error in panelCN.mops:create_pon resource request
+	- added na.omit to check for low coverage variants in format_ensemble_mutations.R 
+
+2026-01-07: PughLab pipeline-suite (version 0.9.23);
+- MINOR updates:
+	- fixed an issue in collect_fragmentomics_output.R's insert size collection
+
 2025-12-23: PughLab pipeline-suite (version 0.9.22);
 - MAJOR updates:
 	- added collect_panelMSI_output.R to collect/combine output from panel_msi
