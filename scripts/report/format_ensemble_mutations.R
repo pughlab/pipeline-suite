@@ -305,7 +305,7 @@ if (any(na.omit(vaf) < 0.05)) {
 if (any(as.numeric(annotated.data$t_depth) < t_depth)) {
 	annotated.data[which(as.numeric(annotated.data$t_depth) < t_depth),]$FLAG.low_coverage <- TRUE;
 	}
-if (!all(is.na(annotated.data$n_depth)) & (any(as.numeric(annotated.data$n_depth) < n_depth))) {
+if (!all(is.na(annotated.data$n_depth)) & (any(as.numeric(na.omit(annotated.data$n_depth)) < n_depth))) {
 	annotated.data[which(as.numeric(annotated.data$n_depth) < n_depth),]$FLAG.low_coverage <- TRUE;
 	}
 

@@ -282,8 +282,8 @@ sub main {
 				name	=> 'run_panelCN_mops_create_PoN',
 				cmd	=> $mops_pon_command,
 				modules	=> [$cnmops_r],
-				max_time	=> $parameters->{cn_mops}->{time},
-				mem		=> $parameters->{cn_mops}->{mem},
+				max_time	=> $parameters->{create_pon}->{time},
+				mem		=> $parameters->{create_pon}->{mem},
 				hpc_driver	=> $args{hpc_driver},
 				extra_args	=> [$hpc_group]
 				);
