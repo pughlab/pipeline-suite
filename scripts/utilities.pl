@@ -713,37 +713,48 @@ sub check_final_status {
 	print "Final accouting job: $args{job_id} finished successfully.";
 	}
 
-# format command to generate PON
+# format command to create PoN
 sub generate_pon {
 	my %args = (
 		input		=> undef,
 		output		=> undef,
+		minN		=> 2,
 		reference	=> undef,
 		java_mem	=> undef,
 		tmp_dir		=> undef,
-		minN		=> 2,
-		out_type	=> 'full',
+		use_gatk	=> 0,
 		@_
 		);
 
-	my $pon_command = join(' ',
-		'java -Xmx' . $args{java_mem},
-		'-Djava.io.tmpdir=' . $args{tmp_dir},
-		'-jar $gatk_dir/GenomeAnalysisTK.jar -T CombineVariants',
-		'-R', $args{reference},
-		$args{input},
-		'-o', $args{output},
-		'--filteredrecordsmergetype KEEP_IF_ANY_UNFILTERED',
-		'--genotypemergeoption UNSORTED --filteredAreUncalled'
-		);
+	my $pon_command;
+	if ($args{use_gatk}) {
 
-	if ('trimmed' eq $args{out_type}) {
-		$pon_command .= ' -minimalVCF -suppressCommandLineHeader --excludeNonVariants --sites_only';
-		$pon_command .= " -minN $args{minN}";
+		$pon_command = join(' ',
+			'java -Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-jar $gatk_dir/GenomeAnalysisTK.jar -T CombineVariants',
+			'-R', $args{reference},
+			$args{input},
+			'-o', $args{output},
+			'--filteredrecordsmergetype KEEP_IF_ANY_UNFILTERED',
+			'--genotypemergeoption UNSORTED --filteredAreUncalled',
+			'-minimalVCF -suppressCommandLineHeader --excludeNonVariants --sites_only',
+			'-minN', $args{minN}
+			);
+
+		} else {
+
+		$pon_command = join(' ',
+			'bcftools merge',
+			$args{input},
+			'| bcftools view -G -c', $args{minN},
+			'>', $args{output}
+			);
 		}
 
 	return($pon_command);
 	}
+
 
 # find files recursively
 sub _get_files {

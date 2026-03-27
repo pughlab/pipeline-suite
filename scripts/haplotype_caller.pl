@@ -17,7 +17,7 @@ my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
 # define some global variables
-our ($reference, $dbsnp);
+our ($reference, $dbsnp, $gatk_version);
 
 ####################################################################################################
 # version       author		comment
@@ -51,38 +51,72 @@ sub get_haplotype_command {
 		java_mem	=> undef,
 		tmp_dir		=> undef,
 		data_type	=> undef,
+		targets		=> undef,
 		intervals	=> undef,
+		n_cpus		=> 2,
 		@_
 		);
 
-	my $gatk_command = join(' ',
-		'java -Xmx' . $args{java_mem},
-		'-Djava.io.tmpdir=' . $args{tmp_dir},
-		'-jar $gatk_dir/GenomeAnalysisTK.jar -T HaplotypeCaller',
-		'-R', $reference,
-		'-I', $args{bam},
-		'-o', $args{output}
-		);
+	my $gatk_command;
 
-	if ('rna' eq $args{data_type}) {
-		$gatk_command .= ' ' . join(' ',
-			'-dontUseSoftClippedBases',
-			'-stand_call_conf 20.0'
-			);
-		} elsif ('dna' eq $args{data_type}) {
-		$gatk_command .= ' ' . join(' ',
-			'-stand_call_conf 30.0',
-			'--emitRefConfidence GVCF',
-			'-variant_index_type LINEAR -variant_index_parameter 128000',
-			'--dbsnp', $dbsnp
+
+	if (4 == $gatk_version) {
+
+		$gatk_command = join(' ',
+			'gatk',
+			'--java-options "-Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-XX:ParallelGCThreads=2',
+			'-XX:ConcGCThreads=2"',
+			'HaplotypeCaller',
+			'-R', $reference,
+			'-I', $args{bam},
+			'-O', $args{output},
+			'--interval-padding 100 --interval-set-rule INTERSECTION',
+			'--native-pair-hmm-threads', $args{n_cpus}
 			);
 
-		if (defined($args{intervals})) {
+		if ('rna' eq $args{data_type}) {
+			$gatk_command .= ' -stand-call-conf 20.0';
+			} elsif ('dna' eq $args{data_type}) {
 			$gatk_command .= ' ' . join(' ',
-				'--intervals', $args{intervals},
-				'--interval_padding 100'
+				'-ERC GVCF',
+				'--standard-min-confidence-threshold-for-calling 30.0',
+				'--dbsnp', $dbsnp,
 				);
 			}
+
+		} else {
+
+		$gatk_command = join(' ',
+			'java -Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-jar $gatk_dir/GenomeAnalysisTK.jar -T HaplotypeCaller',
+			'-R', $reference,
+			'-I', $args{bam},
+			'-o', $args{output},
+			'--interval_padding 100 --interval_set_rule INTERSECTION'
+			);
+
+		if ('rna' eq $args{data_type}) {
+			$gatk_command .= ' -dontUseSoftClippedBases -stand_call_conf 20.0';
+			} elsif ('dna' eq $args{data_type}) {
+			$gatk_command .= ' ' . join(' ',
+				'-stand_call_conf 30.0',
+				'--emitRefConfidence GVCF',
+				'-variant_index_type LINEAR -variant_index_parameter 128000',
+				'--dbsnp', $dbsnp
+				);
+			}
+		}
+
+
+	if (defined($args{targets})) {
+		$gatk_command .= " --intervals $args{targets}";
+		}
+
+	if (defined($args{intervals})) {
+		$gatk_command .= " --intervals $args{intervals}";
 		}
 
 	return($gatk_command);
@@ -99,18 +133,41 @@ sub get_filter_command {
 		@_
 		);
 
-	my $gatk_command = join(' ',
-		'java -Xmx' . $args{java_mem},
-		'-Djava.io.tmpdir=' . $args{tmp_dir},
-		'-jar $gatk_dir/GenomeAnalysisTK.jar -T VariantFiltration',
-		'-R', $reference,
-		'-V', $args{input},
-		'-window 35',
-		'-cluster 3',
-		'-filterName FS -filter "FS > 30.0"',
-		'-filterName QD -filter "QD < 2.0"',
-		'-o', $args{output}
-		);
+	my $gatk_command; 
+
+	if (4 == $gatk_version) {
+
+		$gatk_command = join(' ',
+			'gatk',
+			'--java-options "-Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-XX:ParallelGCThreads=1',
+			'-XX:ConcGCThreads=1"',
+			'VariantFiltration',
+			'-R', $reference,
+			'-V', $args{input},
+			'-O', $args{output},
+			'-window 35',
+			'-cluster 3',
+			'-filter "FS > 30.0" --filter-name FS30',
+			'-filter "QD < 2.0" --filter-name QD2'
+			);
+
+		} else {
+
+		$gatk_command = join(' ',
+			'java -Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-jar $gatk_dir/GenomeAnalysisTK.jar -T VariantFiltration',
+			'-R', $reference,
+			'-V', $args{input},
+			'-window 35',
+			'-cluster 3',
+			'-filterName FS -filter "FS > 30.0"',
+			'-filterName QD -filter "QD < 2.0"',
+			'-o', $args{output}
+			);
+		}
 
 	return($gatk_command);
 	}
@@ -125,14 +182,63 @@ sub get_combine_gvcf_command {
 		@_
 		);
 
-	my $gatk_command = join(' ',
-		'java -Xmx' . $args{java_mem},
-		'-Djava.io.tmpdir=' . $args{tmp_dir},
-		'-jar $gatk_dir/GenomeAnalysisTK.jar -T CombineGVCFs',
-		'-R', $reference,
-		 $args{input},
-		'-o', $args{output}
+	my $gatk_command;
+
+	if (4 == $gatk_version) {
+
+		$gatk_command = join(' ',
+			'gatk',
+			'--java-options "-Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-XX:ParallelGCThreads=2',
+			'-XX:ConcGCThreads=2"',
+			'CombineGVCFs',
+			'-R', $reference,
+			$args{input},
+			'-O', $args{output}			
+			);
+
+		} else {
+
+		$gatk_command = join(' ',
+			'java -Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-jar $gatk_dir/GenomeAnalysisTK.jar -T CombineGVCFs',
+			'-R', $reference,
+			 $args{input},
+			'-o', $args{output}
+			);
+		}
+
+	return($gatk_command);
+	}
+
+# format command to combine gVCFs
+sub get_genomicsDB_import_command {
+	my %args = (
+		input		=> undef,
+		output		=> undef,
+		intervals	=> undef,
+		java_mem	=> undef,
+		tmp_dir		=> undef,
+		@_
 		);
+
+	my $gatk_command = join(' ',
+		'gatk',
+		'--java-options "-Xmx' . $args{java_mem},
+		'-Djava.io.tmpdir=' . $args{tmp_dir},
+		'-XX:ParallelGCThreads=2',
+		'-XX:ConcGCThreads=2"',
+		'GenomicsDBImport',
+		$args{input},
+		'--genomicsdb-workspace-path', $args{output},
+		'--interval-padding 100 --interval-set-rule INTERSECTION'
+		);
+
+	if (defined($args{intervals})) {
+		$gatk_command .= " --intervals $args{intervals}";
+		}
 
 	return($gatk_command);
 	}
@@ -167,6 +273,13 @@ sub main{
 		pipeline	=> 'gatk',
 		data_type	=> $data_type
 		);
+
+	$gatk_version = 3;
+	my $needed = version->declare('4')->numify;
+	my $given = version->declare($tool_data->{gatk_version})->numify;
+	if ($given >= $needed) {
+		$gatk_version = 4;
+		}
 
 	# organize output and log directories
 	my $output_directory = $args{output_directory};
@@ -330,11 +443,9 @@ sub main{
 
 			print $log "\n  SAMPLE: $sample\n";
 
-			my $type;
+			my $type = 'tumour';
 			if ( (any { $_ =~ m/$sample/ } @normal_ids) ) {
 				$type = 'normal';
-				} else {
-				$type = 'tumour';
 				}
 
 			my $sample_directory = join('/', $patient_directory, $sample);
@@ -344,7 +455,12 @@ sub main{
 			my $hc_vcf = join('/', $sample_directory, $sample . '_HaplotypeCaller.vcf');
 			if ('dna' eq $data_type) {
 				$hc_vcf = join('/', $sample_directory, $sample . '_HaplotypeCaller.g.vcf');
-				push @gvcfs, " -V:$sample $hc_vcf.gz";
+
+				if (4 == $gatk_version) {
+					push @gvcfs, " -V $hc_vcf.gz";
+					} else {
+					push @gvcfs, " -V:$sample $hc_vcf.gz";
+					}
 				}
 
 			# set up HC command
@@ -352,8 +468,9 @@ sub main{
 				bam		=> $smp_data->{$patient}->{$type}->{$sample},
 				output		=> $hc_vcf,
 				data_type	=> $data_type,
-				intervals	=> $tool_data->{targets_bed},
+				targets		=> $tool_data->{targets_bed},
 				java_mem	=> $parameters->{haplotype_call}->{java_mem},
+				n_cpus		=> $parameters->{haplotype_call}->{n_cpus},
 				tmp_dir		=> $tmp_directory
 				);
 
@@ -369,7 +486,7 @@ sub main{
 				);
 
 			# special case if multiple chromosomes and SLURM HPC driver
-			if ( (scalar(@chroms) > 1) && ('slurm' eq $args{hpc_driver}) && ($is_wgs) ) {
+			if ( (scalar(@chroms) > 1) && ('slurm' eq $args{hpc_driver})) {
 
 				my $split_hc_vcf = join('/', $tmp_directory, $sample . '_HC_${CHROM}.g.vcf');
 
@@ -388,7 +505,9 @@ sub main{
 					output		=> $split_hc_vcf,
 					data_type	=> $data_type,
 					intervals	=> '$CHROM',
+					targets         => $tool_data->{targets_bed},
 					java_mem	=> $parameters->{haplotype_call}->{java_mem},
+					n_cpus		=> $parameters->{haplotype_call}->{n_cpus},
 					tmp_dir		=> $tmp_directory
 					);
 
@@ -405,7 +524,7 @@ sub main{
 				# record command (in log directory) and then run job
 				print $log "  >> Submitting job for HaplotypeCaller...\n";
 
-				if ( (scalar(@chroms) > 1) && ('slurm' eq $args{hpc_driver}) && ($is_wgs) ) {
+				if ( (scalar(@chroms) > 1) && ('slurm' eq $args{hpc_driver}) ) {
 					$run_script = write_script(
 						log_dir	=> $log_directory,
 						name	=> 'run_haplotype_caller_' . $sample,
@@ -413,6 +532,7 @@ sub main{
 						modules	=> [$gatk, $samtools],
 						max_time	=> $parameters->{haplotype_call}->{time},
 						mem		=> $parameters->{haplotype_call}->{mem},
+						cpus_per_task	=> $parameters->{haplotype_call}->{n_cpus},
 						hpc_driver	=> $args{hpc_driver},
 						extra_args	=> [$hpc_group, '--array=1-'. scalar(@chroms)]
 						);
@@ -424,6 +544,7 @@ sub main{
 						modules	=> [$gatk, $samtools],
 						max_time	=> $parameters->{haplotype_call}->{time},
 						mem		=> $parameters->{haplotype_call}->{mem},
+						cpus_per_task	=> $parameters->{haplotype_call}->{n_cpus},
 						hpc_driver	=> $args{hpc_driver},
 						extra_args	=> [$hpc_group]
 						);
@@ -444,7 +565,7 @@ sub main{
 				}
 
 			# special case if multiple chromosomes and SLURM HPC driver
-			if ( (scalar(@chroms) > 1) && ('slurm' eq $args{hpc_driver}) && ($is_wgs) ) {
+			if ( (scalar(@chroms) > 1) && ('slurm' eq $args{hpc_driver})) {
 
 				my $merge_command = "cd $tmp_directory";
 				$merge_command .= "\n\n" . join(' ',
@@ -452,6 +573,7 @@ sub main{
 					$sample . '_HC*.g.vcf.gz',
 					'>', $sample . '_HC_merged.g.vcf'
 					);
+
 				$merge_command .= "\n" . join(' ',
 					'vcf-sort -c -t', $tmp_directory,
 					$sample . '_HC_merged.g.vcf',
@@ -690,11 +812,15 @@ sub main{
 
 		foreach my $gvcf ( @gvcfs ) {
 
-			if ($file_count > 15) {
-				$batch_idx++;
-				@batches[$batch_idx] = [];
-				$file_count = 0;
+			unless (4 == $gatk_version) {
+
+				if ($file_count > 15) {
+					$batch_idx++;
+					@batches[$batch_idx] = [];
+					$file_count = 0;
+					}
 				}
+
 			push @{$batches[$batch_idx]}, $gvcf;
 
 			$file_count++;
@@ -703,65 +829,158 @@ sub main{
 
 		$batch_idx = 0;
 
-		my (@combined_gvcfs, @batch_jobs);
+		my (@combined_gvcfs, @batch_jobs, $genomics_db);
+
+		# make cohort-level temp directory
+		my $tmp_directory = join('/', $output_directory, 'TEMP');
+		unless(-e $tmp_directory) { make_path($tmp_directory); }
+		$cleanup_cmd_dna .= "\nrm -rf $tmp_directory";
 
 		foreach my $batch ( @batches ) {
 
 			$batch_idx++;
 
 			# run CombineGVCFs
-			my $combined_gvcf = join('/', $output_directory, 'haplotype_caller_' . $batch_idx . '.g.vcf');
+			if (4 == $gatk_version) { 
 
-			my $combine_cmd = get_combine_gvcf_command(
-				input		=> join(' ', @{$batch}),
-				output		=> $combined_gvcf,
-				java_mem	=> $parameters->{combine_gvcfs}->{java_mem},
-				tmp_dir		=> $output_directory
-				);
+				my ($combine_cmd, $db_complete);
+				my $genomics_db = join('/', $output_directory, 'genomicsDB');
 
-			# this is a java-based command, so run a final check
-			my $extra_cmds = "\n  " . join("\n  ",
-				"md5sum $combined_gvcf > $combined_gvcf.md5",
-				"bgzip $combined_gvcf",
-				"tabix -p vcf $combined_gvcf.gz\n"
-				);
+				# special case if multiple chromosomes and SLURM HPC driver
+				if ( (scalar(@chroms) > 1) && ('slurm' eq $args{hpc_driver}) ) {
 
-			$java_check = "\n" . check_java_output(
-				extra_cmd => $extra_cmds
-				);
+					$combine_cmd = 'CHROM=$(sed -n "$SLURM_ARRAY_TASK_ID"p ' . $chr_file . ')';
+					$combine_cmd .= "\necho Running chromosome: " . '$CHROM';
 
-			$combine_cmd .= "\n$java_check";
+					unless(-e $genomics_db) { make_path($genomics_db); }
 
-			# check if this should be run
-			if ('Y' eq missing_file($combined_gvcf . '.md5')) {
+					$combine_cmd .= "\n\n" . get_genomicsDB_import_command(
+						input		=> join(' ', @{$batch}),
+						output		=> $genomics_db . '/$CHROM',
+						intervals	=> '$CHROM',
+						java_mem	=> $parameters->{combine_gvcfs}->{java_mem},
+						tmp_dir		=> $tmp_directory
+						);
 
-				# record command (in log directory) and then run job
-				print $log ">> Submitting job for CombineGVCFs...\n";
+					$db_complete = join('/', $genomics_db, 'GenomicsDBImport_$CHROM.COMPLETE');
+					$combine_cmd .= "\n\n echo 'done' > $db_complete";
+					push @combined_gvcfs, $db_complete;
 
-				$run_script = write_script(
-					log_dir	=> $log_directory,
-					name	=> 'run_combine_gvcfs_batch_' . $batch_idx,
-					cmd	=> $combine_cmd,
-					modules	=> [$gatk, 'tabix'],
-					dependencies	=> join(':', @all_jobs),
-					max_time	=> $parameters->{combine_gvcfs}->{time},
-					mem		=> $parameters->{combine_gvcfs}->{mem},
-					hpc_driver	=> $args{hpc_driver},
-					extra_args	=> [$hpc_group]
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_genomics_db_import',
+						cmd	=> $combine_cmd,
+						modules	=> [$gatk],
+						dependencies	=> join(':', @all_jobs),
+						max_time	=> $parameters->{combine_gvcfs}->{time},
+						mem		=> $parameters->{combine_gvcfs}->{mem},
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group, '--array=1-'. scalar(@chroms)]
+						);
+
+					} else {
+
+					$combine_cmd = get_genomicsDB_import_command(
+						input		=> join(' ', @{$batch}),
+						output		=> $genomics_db,
+						intervals	=> $tool_data->{targets_bed},
+						java_mem	=> $parameters->{combine_gvcfs}->{java_mem},
+						tmp_dir		=> $tmp_directory
+						);
+
+					$db_complete = join('/', $genomics_db, 'GenomicsDBImport.COMPLETE');
+					$combine_cmd .= "\n\n echo 'done' > $db_complete";
+					push @combined_gvcfs, $db_complete;
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_genomics_db_import',
+						cmd	=> $combine_cmd,
+						modules	=> [$gatk],
+						dependencies	=> join(':', @all_jobs),
+						max_time	=> $parameters->{combine_gvcfs}->{time},
+						mem		=> $parameters->{combine_gvcfs}->{mem},
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group]
+						);
+					}
+
+				# check if this should be run
+				if ('Y' eq missing_file($db_complete)) {
+
+					# record command (in log directory) and then run job
+					print $log ">> Submitting job for GenomicsDBImport...\n";
+
+					$run_id = submit_job(
+						jobname		=> 'run_genomics_db_import',
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @batch_jobs, $run_id;
+					}
+
+				} else {
+
+				# run CombineGVCFs
+				my $combined_gvcf = join('/',
+					$output_directory,
+					'haplotype_caller_' . $batch_idx . '.g.vcf'
 					);
 
-				$run_id = submit_job(
-					jobname		=> 'run_combine_gvcfs_batch_' . $batch_idx,
-					shell_command	=> $run_script,
-					hpc_driver	=> $args{hpc_driver},
-					dry_run		=> $args{dry_run},
-					log_file	=> $log
+				my $combine_cmd = get_combine_gvcf_command(
+					input		=> join(' ', @{$batch}),
+					output		=> $combined_gvcf,
+					java_mem	=> $parameters->{combine_gvcfs}->{java_mem},
+					tmp_dir		=> $output_directory
 					);
 
-				push @batch_jobs, $run_id;
+				# this is a java-based command, so run a final check
+				my $extra_cmds = "\n  " . join("\n  ",
+					"md5sum $combined_gvcf > $combined_gvcf.md5",
+					"bgzip $combined_gvcf",
+					"tabix -p vcf $combined_gvcf.gz\n"
+					);
+
+				$java_check = "\n" . check_java_output(
+					extra_cmd => $extra_cmds
+					);
+
+				$combine_cmd .= "\n$java_check";
+
+				push @combined_gvcfs, "$combined_gvcf.gz";
+
+				# check if this should be run
+				if ('Y' eq missing_file($combined_gvcf . '.md5')) {
+
+					# record command (in log directory) and then run job
+					print $log ">> Submitting job for CombineGVCFs...\n";
+
+					$run_script = write_script(
+						log_dir	=> $log_directory,
+						name	=> 'run_combine_gvcfs_batch_' . $batch_idx,
+						cmd	=> $combine_cmd,
+						modules	=> [$gatk, 'tabix'],
+						dependencies	=> join(':', @all_jobs),
+						max_time	=> $parameters->{combine_gvcfs}->{time},
+						mem		=> $parameters->{combine_gvcfs}->{mem},
+						hpc_driver	=> $args{hpc_driver},
+						extra_args	=> [$hpc_group]
+						);
+
+					$run_id = submit_job(
+						jobname		=> 'run_combine_gvcfs_batch_' . $batch_idx,
+						shell_command	=> $run_script,
+						hpc_driver	=> $args{hpc_driver},
+						dry_run		=> $args{dry_run},
+						log_file	=> $log
+						);
+
+					push @batch_jobs, $run_id;
+					}
 				}
-
-			push @combined_gvcfs, "$combined_gvcf.gz";
 			}
 
 		push @all_jobs, @batch_jobs;

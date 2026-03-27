@@ -279,6 +279,8 @@ if (! is.wgs) {
 		snp_subset <- subset(snp,chrom == chr);
 		cnv_subset <- subset(cnv,chrom == chr);
 
+		#snp_subset <- snp_subset[which(snp_subset$normal_gt %in% c("A", "C", "G","K", "M", "R", "S", "T", "W", "Y")),];
+
 		# prepare sequenza data file
 		print(paste0("Preparing SEQZ data for ", chr, "..."));
 		seqz.list[[chr]] <- VarScan2seqz(

@@ -16,7 +16,7 @@ my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
 # define some global variables
-our ($reference, $dbsnp, $cosmic, $pon) = undef;
+our ($gatk_version, $reference, $dbsnp, $cosmic, $pon) = undef;
 
 ####################################################################################################
 # version       author		comment
@@ -222,6 +222,13 @@ sub pon {
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'gatk');
 	my $date = strftime "%F", localtime;
 
+	$gatk_version = 3;
+	my $needed = version->declare('4')->numify;
+	my $given = version->declare($tool_data->{gatk_version})->numify;
+	if ($given >= $needed) {
+		$gatk_version = 4;
+		}
+
 	# organize output and log directories
 	my $output_directory = $args{output_directory};
 	$output_directory =~ s/\/$//;
@@ -279,8 +286,10 @@ sub pon {
 	print $log "\n---";
 
 	# set tools and versions
+	my $perl	= 'perl/' . $tool_data->{perl_version};
 	my $mutect	= 'mutect/' . $tool_data->{mutect_version};
 	my $gatk	= 'gatk/' . $tool_data->{gatk_version};
+	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
 
 	# get user-specified tool parameters
@@ -469,7 +478,7 @@ sub pon {
 		java_mem	=> $parameters->{create_pon}->{java_mem}, 
 		tmp_dir		=> $tmp_directory,
 		minN		=> $parameters->{create_pon}->{minN},
-		out_type	=> 'trimmed'
+		use_gatk	=> (4 == $gatk_version) ? 0 : 1 
 		);
 
 	my $final_link = join('/', $output_directory, 'panel_of_normals.vcf');
@@ -496,9 +505,9 @@ sub pon {
 		print $log ">> Submitting job for Generate PanelOfNormals...\n";
 		$run_script = write_script(
 			log_dir	=> $log_directory,
-			name	=> 'run_combine_vcfs_and_trim',
+			name	=> 'create_sitesOnly_trimmed_panel_of_normals',
 			cmd	=> $trimmed_merge_command,
-			modules	=> [$gatk],
+			modules	=> [$gatk, $samtools],
 			dependencies	=> join(':', @all_jobs),
 			max_time	=> $parameters->{create_pon}->{time},
 			mem		=> $parameters->{create_pon}->{mem},
@@ -507,7 +516,7 @@ sub pon {
 			);
 
 		$run_id = submit_job(
-			jobname		=> 'run_combine_vcfs_and_trim',
+			jobname		=> 'create_sitesOnly_trimmed_panel_of_normals',
 			shell_command	=> $run_script,
 			hpc_driver	=> $args{hpc_driver},
 			dry_run		=> $args{dry_run},
@@ -699,6 +708,7 @@ sub main {
 	print $log "\n---";
 
 	# set tools and versions
+	my $perl	= 'perl/' . $tool_data->{perl_version};
 	my $mutect	= 'mutect/' . $tool_data->{mutect_version};
 	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
 	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
@@ -955,7 +965,7 @@ sub main {
 					log_dir => $log_directory,
 					name    => 'run_vcf2maf_and_VEP_' . $sample,
 					cmd     => $vcf2maf_cmd,
-					modules => ['perl', $samtools, 'tabix', $vcf2maf],
+					modules => [$perl, $samtools, $vcf2maf],
 					dependencies    => $run_id,
 					cpus_per_task	=> $tool_data->{annotate}->{n_cpus},
 					max_time        => $tool_data->{annotate}->{time},

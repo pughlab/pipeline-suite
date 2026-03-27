@@ -479,15 +479,18 @@ sub main {
 			## Collect artefact metrics on all input BAMs
 			my $output_stem = join('/', $patient_directory, $sample . '_artifact_metrics');
 
-			my $qc_command = get_artefacts_command(
-				input		=> $smp_data->{$patient}->{$type}->{$sample},
-				output_stem	=> $output_stem,
-				intervals	=> $target_intervals,
-				java_mem	=> $parameters->{qc}->{java_mem},
-				tmp_dir		=> $tmp_directory
-				);
+			my $qc_command;
+			if (defined($tool_data->{targets_bed})) {
+				$qc_command = get_artefacts_command(
+					input		=> $smp_data->{$patient}->{$type}->{$sample},
+					output_stem	=> $output_stem,
+					intervals	=> $target_intervals,
+					java_mem	=> $parameters->{qc}->{java_mem},
+					tmp_dir		=> $tmp_directory
+					);
 
-			if ('wgs' eq $tool_data->{seq_type}) {
+				} else {
+
 				$qc_command = get_artefacts_command(
 					input		=> $smp_data->{$patient}->{$type}->{$sample},
 					output_stem	=> $output_stem,

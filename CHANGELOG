@@ -1,3 +1,11 @@
+2026-03-27: PughLab pipeline-suite (version 1.0.0);
+- MAJOR updates:
+	- added compatibility for GATK4
+- MINOR updates:
+	- fixed a minor bug in get_sequencing_metrics.pl (get_artefacts) around target regions
+	- sequenza/prepare_seqz.R: a common error occurs when ambiguous nucleotide codes are present; a potential fix is now included (but not implemented) on line 282 
+	- delly.pl: removed final collection step as this frequently fails and isn't necessary for the pipeline
+
 2026-02-13: PughLab pipeline-suite (version 0.9.24);
 - MINOR updates:
 	- fixed interval merging in mutect2 to avoid duplicate variants in final VCF

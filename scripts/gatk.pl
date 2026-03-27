@@ -18,7 +18,7 @@ my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
 # define some global variables
-our ($data_type, $reference, $known_1000g, $known_indels, $known_mills, $dbsnp);
+our ($gatk_version, $data_type, $reference, $known_1000g, $known_indels, $known_mills, $dbsnp);
 
 ####################################################################################################
 # version	author	  	comment
@@ -52,17 +52,39 @@ sub get_split_command {
 		@_
 		);
 
-	my $split_command = join(' ',
-		'java -Xmx' . $args{java_mem},
-		'-Djava.io.tmpdir=' . $args{tmp_dir},
-		'-jar $gatk_dir/GenomeAnalysisTK.jar -T SplitNCigarReads',
-		'-R', $reference,
-		'-I', $args{input},
-		'-o', $args{output},
-		'-rf ReassignOneMappingQuality -rf UnmappedRead',
-		'-RMQF 255 -RMQT 60 -U ALLOW_N_CIGAR_READS',
-		'--generate_md5'
-		);
+	my $split_command;
+
+	if (4 == $gatk_version) {
+
+		$split_command = join(' ',
+			'gatk',
+			'--java-options "-Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-XX:ParallelGCThreads=1',
+			'-XX:ConcGCThreads=1"',
+			'SplitNCigarReads',
+			'-R', $reference,
+			'-I', $args{input},
+			'-O', $args{output},
+			#'-RF ReassignOneMappingQuality -RF UnmappedRead',
+			#'--skip-mapping-quality-transform',
+			'--create-output-bam-md5'
+			);
+
+		} else {
+
+		$split_command = join(' ',
+			'java -Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-jar $gatk_dir/GenomeAnalysisTK.jar -T SplitNCigarReads',
+			'-R', $reference,
+			'-I', $args{input},
+			'-o', $args{output},
+			'-rf ReassignOneMappingQuality -rf UnmappedRead',
+			'-RMQF 255 -RMQT 60 -U ALLOW_N_CIGAR_READS',
+			'--generate_md5'
+			);
+		}
 
 	return($split_command);
 	}
@@ -163,40 +185,67 @@ sub create_recalibration_table {
 		intervals	=> undef,
 		java_mem	=> undef,
 		tmp_dir		=> undef,
+		n_cpus		=> 8,
 		@_
 		);
 
-	my $bqsr_command = join(' ', 
-		'java -Xmx' . $args{java_mem},
-		'-Djava.io.tmpdir=' . $args{tmp_dir},
-		'-jar $gatk_dir/GenomeAnalysisTK.jar -T BaseRecalibrator',
-		'-I', $args{input},
-		'-R', $reference,
-		'-knownSites', $known_1000g,
-		'-knownSites', $dbsnp,
-		'-o', $args{output}
-		);
+	my $bqsr_command;
 
-	# if this is DNA data, add additional options
-	if ('dna' eq $data_type) {
+	if (4 == $gatk_version) {
 
 		$bqsr_command = join(' ',
-			$bqsr_command,
-			'--disable_auto_index_creation_and_locking_when_reading_rods -nct 8',
-			'-rf BadCigar',
-			'--covariate ReadGroupCovariate',
-			'--covariate QualityScoreCovariate',
-			'--covariate CycleCovariate',
-			'--covariate ContextCovariate',
-			'-dt None'
+			'gatk',
+			'--java-options "-Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-XX:ParallelGCThreads=2',
+			'-XX:ConcGCThreads=2"',
+			'BaseRecalibrator',
+			'-I', $args{input},
+			'-R', $reference,
+			'-O', $args{output},
+			'--known-sites', $known_1000g,
+			'--known-sites', $dbsnp,
+			'--known-sites', $known_indels,
+			'--known-sites', $known_mills,
+			'--interval-padding 100 --interval-set-rule INTERSECTION'
 			);
 
-		if (defined($args{intervals})) {
-			$bqsr_command = join(' ',
-				$bqsr_command,
-				'--intervals', $args{intervals},
-				'--interval_padding 100'
+		# if this is DNA data, add additional options
+		if ( ('dna' eq $data_type) && (defined($args{intervals})) ) {
+			$bqsr_command .=  " --intervals $args{intervals}";
+			}
+
+		} else {
+
+		$bqsr_command = join(' ', 
+			'java -Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-jar $gatk_dir/GenomeAnalysisTK.jar -T BaseRecalibrator',
+			'-R', $reference,
+			'-I', $args{input},
+			'-o', $args{output},
+			'-knownSites', $known_1000g,
+			'-knownSites', $dbsnp,
+			'--interval_padding 100 --interval_set_rule INTERSECTION'
+			);
+
+		# if this is DNA data, add additional options
+		if ('dna' eq $data_type) {
+
+			$bqsr_command .= ' ' . join(' ',
+				'--disable_auto_index_creation_and_locking_when_reading_rods',
+				'-nct', $args{n_cpus},
+				'-rf BadCigar',
+				'--covariate ReadGroupCovariate',
+				'--covariate QualityScoreCovariate',
+				'--covariate CycleCovariate',
+				'--covariate ContextCovariate',
+				'-dt None'
 				);
+
+			if (defined($args{intervals})) {
+				$bqsr_command .=  " --intervals $args{intervals}";
+				}
 			}
 		}
 
@@ -211,28 +260,50 @@ sub create_recalibrated_bam {
 		output		=> undef,
 		java_mem	=> undef,
 		tmp_dir		=> undef,
+		n_cpus		=> 8,
 		@_
 		);
 
-	my $recal_command = join(' ',
-		'java -Xmx' . $args{java_mem},
-		'-Djava.io.tmpdir=' . $args{tmp_dir},
-		'-jar $gatk_dir/GenomeAnalysisTK.jar -T PrintReads',
-		'-I', $args{input},
-		'-R', $reference,
-		'-BQSR', $args{bqsr},
-		'-o', $args{output},
-		'--generate_md5'
-		);
+	my $recal_command;
 
-	# if this is DNA data, add additional options
-	if ('dna' eq $data_type) {
+	if (4 == $gatk_version) {
 
 		$recal_command = join(' ',
-			$recal_command,
-			'--disable_auto_index_creation_and_locking_when_reading_rods -nct 8',
-			'-rf BadCigar -dt None'
+			'gatk',
+			'--java-options "-Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-XX:ParallelGCThreads=2',
+			'-XX:ConcGCThreads=2"',
+			'ApplyBQSR',
+			'-R', $reference,
+			'-I', $args{input},
+			'-O', $args{output},
+			'-bqsr', $args{bqsr},
+			'--create-output-bam-md5'
 			);
+
+		} else {
+
+		$recal_command = join(' ',
+			'java -Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-jar $gatk_dir/GenomeAnalysisTK.jar -T PrintReads',
+			'-R', $reference,
+			'-I', $args{input},
+			'-o', $args{output},
+			'-BQSR', $args{bqsr},
+			'--generate_md5'
+			);
+
+		# if this is DNA data, add additional options
+		if ('dna' eq $data_type) {
+
+			$recal_command .= ' ' . join(' ',
+				'--disable_auto_index_creation_and_locking_when_reading_rods',
+				'-nct', $args{n_cpus},
+				'-rf BadCigar -dt None'
+				);
+			}
 		}
 
 	return($recal_command);
@@ -269,6 +340,14 @@ sub main {
 		pipeline	=> 'gatk',
 		data_type	=> $data_type
 		);
+
+	# check GATK version
+	$gatk_version = 3;
+	my $needed = version->declare('4')->numify;
+	my $given = version->declare($tool_data->{gatk_version})->numify;
+	if ($given >= $needed) {
+		$gatk_version = 4;
+		}
 
 	# organize output and log directories
 	my $output_directory = $args{output_directory};
@@ -371,7 +450,9 @@ sub main {
 		my @tumour_paths = values %{$smp_data->{$patient}->{'tumour'}};
 
 		my @samples = @tumour_ids;
+		my @sample_paths = @tumour_paths;
 		if (scalar(@normal_ids) > 0) { push @samples, @normal_ids; }
+		if (scalar(@normal_ids) > 0) { push @sample_paths, @normal_paths; }
 
 		# initiate some variables
 		my (@final_outputs, @patient_jobs);
@@ -406,22 +487,14 @@ sub main {
 			push @input_bams, $tmp[-1];
 			}
 
-		## for DNA, indel realigner target creation and indel realigner use all patient input files
+		## for GATK 3.x (DNA-Seq), indel realigner target creation and indel realigner use all patient input files
 		my ($input_string, $target_intervals, $stage1_cmd, $stage2_cmd);
 		my @realign_bams_dna;
 
-		if ('dna' eq $data_type) {
+		if ( ('dna' eq $data_type) && (3 == $gatk_version) ) {
 
 			# combine input paths to a single string
-			if (scalar(@normal_paths) > 0) {
-				$input_string .=  join(' -I ', @normal_paths);
-				}
-			if ( (scalar(@normal_paths) > 0) & (scalar(@tumour_paths) > 0) ) {
-				$input_string .= ' -I ';
-				}
-			if (scalar(@tumour_paths) > 0) {
-				$input_string .= join(' -I ', @tumour_paths);
-				}
+			$input_string .=  join(' -I ', @sample_paths);
 
 			## RealignerTargetCreator
 			$target_intervals = join('/', $intermediate_directory, $patient . '_target.intervals');
@@ -476,23 +549,24 @@ sub main {
 				tmp_dir		=> $tmp_directory
 				);
 
-			$stage2_cmd = "cd $intermediate_directory;\n$stage2_cmd;";
+			$stage2_cmd = "cd $intermediate_directory;\n\n$stage2_cmd;";
 
 			my ($outbam, $md5_cmd);
 			foreach my $inbam (@input_bams) {
 				$outbam = $inbam; 
 				$outbam =~ s/.bam/_realigned.bam/; 
 				$md5_cmd .= "\nmd5sum $outbam > $outbam.md5;";
-				push @realign_bams_dna, join('/', $intermediate_directory, $outbam);
 
 				$outbam = join('/', $intermediate_directory, $outbam);
+				push @realign_bams_dna, $outbam;
+
 				my $outbai = $outbam;
 				$outbai =~ s/bam$/bai/;
 				$cleanup_cmd .= ";\nrm " . $outbam;
 				$cleanup_cmd .= ";\nrm " . $outbai;
 				}
 
-			$stage2_cmd .= "\n\n" . $md5_cmd;
+			$stage2_cmd .= "\n" . $md5_cmd;
 
 			# check if this should be run
 			if ('Y' eq missing_file($realign_bams_dna[-1] . '.md5')) {
@@ -537,7 +611,7 @@ sub main {
 			if ( (any { $_ =~ m/$sample/ } @normal_ids) ) { $type = 'normal'; }
 
 			# initiate some variables
-			my ($realigned_bam, $realigned_bai);
+			my ($realigned_bam, $input_bam, $output_bam, $split_bam);
 
 			if ('rna' eq $data_type) {
 
@@ -546,7 +620,7 @@ sub main {
 				my $aligned_bam = $smp_data->{$patient}->{$type}->{$sample};
 
 				## first, split cigar reads
-				my $split_bam = join('/', $intermediate_directory, $sample . '_split.bam');
+				$split_bam = join('/', $intermediate_directory, $sample . '_split.bam');
 				my $split_bai = join('/', $intermediate_directory, $sample . '_split.bai');
 
 				my $split_cmd = get_split_command(
@@ -590,95 +664,99 @@ sub main {
 					print $log "    >> Skipping SplitNCigarReads because this has already been completed!\n";
 					}
 
-				# create target intervals
-				$target_intervals = join('/', $intermediate_directory, $sample . '_target.intervals');
+				# for GATKv3, run indel realignment
+				unless(4 == $gatk_version) {
 
-				$stage1_cmd = get_target_intervals_command(
-					input		=> $split_bam,
-					output		=> $target_intervals,
-					java_mem	=> $parameters->{target_creator}->{java_mem},
-					tmp_dir		=> $tmp_directory
-					);
+					# create target intervals
+					$target_intervals = join('/', $intermediate_directory, $sample . '_target.intervals');
 
-				$stage1_cmd .= ";\nmd5sum " . join(' ', $target_intervals, '>', $target_intervals . '.md5');
-
-				# check if this should be run
-				if ('Y' eq missing_file($target_intervals . '.md5')) {
-
-					# record command (in log directory) and then run job
-					print $log "    >> Submitting job for RealignerTargetCreator...\n";
-
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> 'run_indel_realigner_target_creator_' . $sample,
-						cmd	=> $stage1_cmd,
-						modules	=> [$gatk],
-						dependencies	=> $run_id_sample,
-						max_time	=> $parameters->{target_creator}->{time},
-						mem		=> $parameters->{target_creator}->{mem},
-						hpc_driver	=> $args{hpc_driver},
-						extra_args	=> [$hpc_group]
+					$stage1_cmd = get_target_intervals_command(
+						input		=> $split_bam,
+						output		=> $target_intervals,
+						java_mem	=> $parameters->{target_creator}->{java_mem},
+						tmp_dir		=> $tmp_directory
 						);
 
-					$run_id_sample = submit_job(
-						jobname		=> 'run_indel_realigner_target_creator_' . $sample,
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
+					$stage1_cmd .= ";\nmd5sum " . join(' ', $target_intervals, '>', $target_intervals . '.md5');
+
+					# check if this should be run
+					if ('Y' eq missing_file($target_intervals . '.md5')) {
+
+						# record command (in log directory) and then run job
+						print $log "    >> Submitting job for RealignerTargetCreator...\n";
+
+						$run_script = write_script(
+							log_dir	=> $log_directory,
+							name	=> 'run_indel_realigner_target_creator_' . $sample,
+							cmd	=> $stage1_cmd,
+							modules	=> [$gatk],
+							dependencies	=> $run_id_sample,
+							max_time	=> $parameters->{target_creator}->{time},
+							mem		=> $parameters->{target_creator}->{mem},
+							hpc_driver	=> $args{hpc_driver},
+							extra_args	=> [$hpc_group]
+							);
+
+						$run_id_sample = submit_job(
+							jobname		=> 'run_indel_realigner_target_creator_' . $sample,
+							shell_command	=> $run_script,
+							hpc_driver	=> $args{hpc_driver},
+							dry_run		=> $args{dry_run},
+							log_file	=> $log
+							);
+
+						push @patient_jobs, $run_id_sample;
+						push @all_jobs, $run_id_sample;
+						} else {
+						print $log "    >> Skipping RealignerTargetCreator because this has already been completed!\n";
+						}
+
+					# perform indel realignment
+					$realigned_bam = join('/', $intermediate_directory, $sample . '_split_realigned.bam');
+					my $realigned_bai = join('/', $intermediate_directory, $sample . '_split_realigned.bai');
+
+					$stage2_cmd = get_indelrealign_command(
+						input		=> $split_bam,
+						output		=> $realigned_bam,
+						intervals	=> $target_intervals,
+						java_mem	=> $parameters->{realign}->{java_mem},
+						tmp_dir		=> $tmp_directory
 						);
 
-					push @patient_jobs, $run_id_sample;
-					push @all_jobs, $run_id_sample;
-					} else {
-					print $log "    >> Skipping RealignerTargetCreator because this has already been completed!\n";
-					}
+					$cleanup_cmd .= ";\nrm " . $realigned_bam;
+					$cleanup_cmd .= ";\nrm " . $realigned_bai;
 
-				# perform indel realignment
-				$realigned_bam = join('/', $intermediate_directory, $sample . '_split_realigned.bam');
-				$realigned_bai = join('/', $intermediate_directory, $sample . '_split_realigned.bai');
+					# check if this should be run
+					if ('Y' eq missing_file($realigned_bam . '.md5')) {
 
-				$stage2_cmd = get_indelrealign_command(
-					input		=> $split_bam,
-					output		=> $realigned_bam,
-					intervals	=> $target_intervals,
-					java_mem	=> $parameters->{realign}->{java_mem},
-					tmp_dir		=> $tmp_directory
-					);
+						# record command (in log directory) and then run job
+						print $log "    >> Submitting job for IndelRealigner...\n";
 
-				$cleanup_cmd .= ";\nrm " . $realigned_bam;
-				$cleanup_cmd .= ";\nrm " . $realigned_bai;
+						$run_script = write_script(
+							log_dir	=> $log_directory,
+							name	=> 'run_indel_realigner_' . $sample,
+							cmd	=> $stage2_cmd,
+							modules	=> [$gatk, $samtools],
+							dependencies	=> $run_id_sample,
+							max_time	=> $parameters->{realign}->{time},
+							mem		=> $parameters->{realign}->{mem},
+							hpc_driver	=> $args{hpc_driver},
+							extra_args	=> [$hpc_group]
+							);
 
-				# check if this should be run
-				if ('Y' eq missing_file($realigned_bam . '.md5')) {
+						$run_id_sample = submit_job(
+							jobname		=> 'run_indel_realigner_' . $sample,
+							shell_command	=> $run_script,
+							hpc_driver	=> $args{hpc_driver},
+							dry_run		=> $args{dry_run},
+							log_file	=> $log
+							);
 
-					# record command (in log directory) and then run job
-					print $log "    >> Submitting job for IndelRealigner...\n";
-
-					$run_script = write_script(
-						log_dir	=> $log_directory,
-						name	=> 'run_indel_realigner_' . $sample,
-						cmd	=> $stage2_cmd,
-						modules	=> [$gatk, $samtools],
-						dependencies	=> $run_id_sample,
-						max_time	=> $parameters->{realign}->{time},
-						mem		=> $parameters->{realign}->{mem},
-						hpc_driver	=> $args{hpc_driver},
-						extra_args	=> [$hpc_group]
-						);
-
-					$run_id_sample = submit_job(
-						jobname		=> 'run_indel_realigner_' . $sample,
-						shell_command	=> $run_script,
-						hpc_driver	=> $args{hpc_driver},
-						dry_run		=> $args{dry_run},
-						log_file	=> $log
-						);
-
-					push @patient_jobs, $run_id_sample;
-					push @all_jobs, $run_id_sample;
-					} else {
-					print $log "    >> Skipping IndelRealigner because this has already been completed!\n";
+						push @patient_jobs, $run_id_sample;
+						push @all_jobs, $run_id_sample;
+						} else {
+						print $log "    >> Skipping IndelRealigner because this has already been completed!\n";
+						}
 					}
 				}
 
@@ -687,16 +765,23 @@ sub main {
 
 			my $bqsr_file = join('/', $intermediate_directory, $sample . '.recal_data.grp');
 
-			if ('dna' eq $data_type) {
+			if ( ('dna' eq $data_type) && (4 == $gatk_version) ) {
+				$input_bam = $smp_data->{$patient}->{$type}->{$sample};
+				} elsif ( ('dna' eq $data_type) && (3 == $gatk_version) ) {
 				my @tmp = grep { /$sample/ } @realign_bams_dna;
-				$realigned_bam = $tmp[0];
+				$input_bam = $tmp[0];
+				} elsif ( ('rna' eq $data_type) && (3 == $gatk_version) ) {
+				$input_bam = $realigned_bam;
+				} else {
+				$input_bam = $split_bam;
 				}
  
 			my $stage3_cmd = create_recalibration_table(
-				input		=> $realigned_bam,
+				input		=> $input_bam,
 				output		=> $bqsr_file,
 				intervals	=> $tool_data->{targets_bed},
 				java_mem	=> $parameters->{bqsr}->{java_mem},
+				n_cpus		=> $parameters->{bqsr}->{n_cpus},
 				tmp_dir		=> $tmp_directory
 				);
 
@@ -705,9 +790,6 @@ sub main {
 
 				# record command (in log directory) and then run job
 				print $log "    >> Submitting job for BaseRecalibrator...\n";
-
-				my $n_cpu = 1;
-				if ('dna' eq $data_type) { $n_cpu = 8; }
 
 				my $depends = $run_id_patient;
 				if ('rna' eq $data_type) { $depends = $run_id_sample; }
@@ -718,9 +800,9 @@ sub main {
 					cmd	=> $stage3_cmd,
 					modules	=> [$gatk],
 					dependencies	=> $depends,
-					max_time	=> $parameters->{bqsr}->{time}->{$type},
+					max_time	=> $parameters->{bqsr}->{time},
 					mem		=> $parameters->{bqsr}->{mem},
-					cpus_per_task	=> $n_cpu,
+					cpus_per_task	=> $parameters->{bqsr}->{n_cpus},
 					hpc_driver	=> $args{hpc_driver},
 					extra_args	=> [$hpc_group]
 					);
@@ -740,29 +822,35 @@ sub main {
 				}
 
 			## PrintReads
-			my $recal_bam = join('/', $patient_directory, $sample . '_realigned_recalibrated.bam');
-
+			if (4 == $gatk_version) {
+				$output_bam = join('/',
+					$patient_directory,
+					$sample . '_recalibrated.bam'
+					);
+				} else {
+				$output_bam = join('/',
+					$patient_directory,
+					$sample . '_realigned_recalibrated.bam'
+					);
+				}
+				
 			my $stage4_cmd = create_recalibrated_bam(
-				input		=> $realigned_bam,
+				input		=> $input_bam,
 				bqsr		=> $bqsr_file,
-				output		=> $recal_bam,
+				output		=> $output_bam,
 				java_mem	=> $parameters->{recalibrate}->{java_mem},
+				n_cpus		=> $parameters->{bqsr}->{n_cpus},
 				tmp_dir		=> $tmp_directory
 				);
 
 			# add output file to list
-			if ('normal' eq $type) { $smp_data_out->{$patient}->{normal}->{$sample} = $recal_bam; }
-			if ('tumour' eq $type) { $smp_data_out->{$patient}->{tumour}->{$sample} = $recal_bam; }
+			$smp_data_out->{$patient}->{$type}->{$sample} = $output_bam;
 
 			# check if this should be run
-			if ('Y' eq missing_file($recal_bam . '.md5')) {
+			if ('Y' eq missing_file($output_bam . '.md5')) {
 
 				# record command (in log directory) and then run job
 				print $log "    >> Submitting job for PrintReads (applying base recalibration)...\n";
-
-				# determine number of cpus to request
-				my $n_cpu = 1;
-				if ('dna' eq $data_type) { $n_cpu = 8; }
 
 				$run_script = write_script(
 					log_dir	=> $log_directory,
@@ -770,9 +858,9 @@ sub main {
 					cmd	=> $stage4_cmd,
 					modules	=> [$gatk, $samtools],
 					dependencies	=> $run_id_sample,
-					max_time	=> $parameters->{recalibrate}->{time}->{$type},
+					max_time	=> $parameters->{recalibrate}->{time},
 					mem		=> $parameters->{recalibrate}->{mem},
-					cpus_per_task	=> $n_cpu,
+					cpus_per_task	=> $parameters->{recalibrate}->{n_cpus},
 					hpc_driver	=> $args{hpc_driver},
 					extra_args	=> [$hpc_group]
 					);
@@ -791,7 +879,7 @@ sub main {
 				print $log "    >> Skipping PrintReads (apply base recalibration) because this has already been completed!\n";
 				}
 
-			push @final_outputs, $recal_bam;
+			push @final_outputs, $output_bam;
 			}
 	
 		# clean up/remove intermediate files

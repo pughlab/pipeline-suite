@@ -132,15 +132,13 @@ gatk:
         bqsr:
             java_mem: 11g
             mem: 12G
-            time:
-                normal: '48:00:00'
-                tumour: '72:00:00'
+            time: '72:00:00'
+            n_cpus: 8
         recalibrate:
             java_mem: 11g
             mem: 12G
-            time:
-                normal: '48:00:00'
-                tumour: '72:00:00'
+            time: '72:00:00'
+            n_cpus: 8
 bamqc:
     run: Y
     parameters:
