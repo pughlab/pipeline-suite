@@ -17,7 +17,7 @@ use IO::Handle;
 my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
-our ($reference, $gatk_v4);
+our ($reference, $gatk_version);
 
 ####################################################################################################
 # version	author		comment
@@ -58,12 +58,18 @@ sub get_coverage_command {
 
 	my $coverage_command;
 
-	if ($gatk_v4) {
+	if (4 == $gatk_version) {
 		$coverage_command = join(' ',
-			'gatk DepthOfCoverage',
+			'gatk',
+			'--java-options "-Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-XX:ParallelGCThreads=2',
+			'-XX:ConcGCThreads=2"',
+			'DepthOfCoverage',
 			'-O', $args{output}, '--omit-genes-not-entirely-covered-by-traversal',
 			'--omit-interval-statistics --omit-locus-table --omit-depth-output-at-each-base',
-			'--output-format TABLE --tmp-dir', $args{tmp_dir}
+			'--output-format TABLE --tmp-dir', $args{tmp_dir},
+			'--interval-padding 100 --interval-set-rule INTERSECTION'
 			);
 		} else {
 		$coverage_command = join(' ',
@@ -72,7 +78,8 @@ sub get_coverage_command {
 			'-jar $gatk_dir/GenomeAnalysisTK.jar -T DepthOfCoverage',
 			'-o', $args{output},
 			'-ct', $target_depth,
-			'-nt', $args{n_cpus}
+			'-nt', $args{n_cpus},
+			'--interval_padding 100 --interval_set_rule INTERSECTION'
 			);
 
 		if ('targeted' eq $args{seq_type}) {
@@ -89,10 +96,7 @@ sub get_coverage_command {
 		);
 
 	if (defined($args{intervals})) {
-		$coverage_command .= ' ' . join(' ',
-			'--intervals', $args{intervals},
-			'--interval_padding 100'
-			);
+		$coverage_command .= " --intervals $args{intervals}";
 		}
 
 	return($coverage_command);
@@ -244,12 +248,12 @@ sub main {
 	my $r_version	= 'R/' . $tool_data->{r_version};
 
 	# check gatk version
-	my $threshold = version->declare('4.0')->numify;
+	$gatk_version = 3;
+	my $needed = version->declare('4')->numify;
 	my $given = version->declare($tool_data->{gatk_version})->numify;
-
-	if ($given < $threshold) {
-		$gatk_v4 = 0;
-		} else { $gatk_v4 = 1; }
+	if ($given >= $needed) {
+		$gatk_version = 4;
+		}
 
 	# get user-specified tool parameters
 	my $parameters = $tool_data->{bamqc}->{parameters};
@@ -582,7 +586,7 @@ sub main {
 		# record command (in log directory) and then run job
 		print $log ">> Submitting job to collect callable bases...\n";
 
-		my $tmp_mem = '4G';
+		my $tmp_mem = '8G';
 		if ('wgs' eq $tool_data->{seq_type}) { $tmp_mem = '16G'; }
 
 		$run_script = write_script(

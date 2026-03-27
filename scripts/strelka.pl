@@ -17,7 +17,7 @@ my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
 # define some global variables
-our ($reference, $intervals, $seq_type, $pon) = undef;
+our ($gatk_version, $reference, $intervals, $seq_type, $pon) = undef;
 
 ####################################################################################################
 # version       author		comment
@@ -191,6 +191,13 @@ sub pon {
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'strelka');
 	my $date = strftime "%F", localtime;
 
+	$gatk_version = 3;
+	my $needed = version->declare('4')->numify;
+	my $given = version->declare($tool_data->{gatk_version})->numify;
+	if ($given >= $needed) {
+		$gatk_version = 4;
+		}
+
 	# organize output and log directories
 	my $output_directory = $args{output_directory};
 	$output_directory =~ s/\/$//;
@@ -245,6 +252,7 @@ sub pon {
 	my $strelka	= 'strelka/' . $tool_data->{strelka_version};
 	my $python2	= 'python2/' . $tool_data->{python2_version};
 	my $vcftools	= 'vcftools/' . $tool_data->{vcftools_version};
+	my $samtools	= 'samtools/' . $tool_data->{samtools_version};
 	my $gatk	= 'gatk/' . $tool_data->{gatk_version};
 
 	# get user-specified tool parameters
@@ -529,7 +537,7 @@ sub pon {
 		java_mem	=> $parameters->{create_pon}->{java_mem},
 		tmp_dir		=> $pon_directory,
 		minN		=> $parameters->{create_pon}->{minN},
-		out_type	=> 'trimmed'
+		use_gatk	=> (4 == $gatk_version) ? 0 : 1
 		);
 
 	if (-l $final_pon_link) {
@@ -544,7 +552,7 @@ sub pon {
 		log_dir	=> $log_directory,
 		name	=> 'create_sitesOnly_trimmed_panel_of_normals',
 		cmd	=> $pon_command,
-		modules	=> [$gatk],
+		modules	=> [$gatk, $samtools],
 		dependencies	=> join(':', @all_pon_jobs),
 		max_time	=> $parameters->{create_pon}->{time},
 		mem		=> $parameters->{create_pon}->{mem},

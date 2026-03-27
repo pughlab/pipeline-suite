@@ -17,7 +17,7 @@ my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
 # define some global variables
-our ($reference, $pon, $intervals_bed) = undef;
+our ($gatk_version, $reference, $pon, $intervals_bed) = undef;
 
 ####################################################################################################
 # version       author		comment
@@ -192,6 +192,13 @@ sub main {
 
 	if ('wgs' eq $tool_data->{seq_type}) {
 		die('Please use vardict_wgs.pl for WGS data!');
+		}
+
+	$gatk_version = 3;
+	my $needed = version->declare('4')->numify;
+	my $given = version->declare($tool_data->{gatk_version})->numify;
+	if ($given >= $needed) {
+		$gatk_version = 4;
 		}
 
 	# organize output and log directories
@@ -792,7 +799,7 @@ sub main {
 			java_mem	=> $parameters->{create_pon}->{java_mem},
 			minN		=> $parameters->{create_pon}->{minN},
 			tmp_dir		=> $output_directory,
-			out_type	=> 'trimmed'
+			use_gatk	=> (4 == $gatk_version) ? 0 : 1
 			);
 
 		if (-l $final_pon_link) {
@@ -807,7 +814,7 @@ sub main {
 			log_dir	=> $log_directory,
 			name	=> 'create_sitesOnly_trimmed_panel_of_normals',
 			cmd	=> $pon_command,
-			modules	=> [$gatk],
+			modules	=> [$gatk, $samtools],
 			dependencies	=> join(':', @pon_dependencies),
 			max_time	=> $parameters->{create_pon}->{time},
 			mem		=> $parameters->{create_pon}->{mem},

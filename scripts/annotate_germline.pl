@@ -16,7 +16,7 @@ my $cwd = dirname(__FILE__);
 require "$cwd/utilities.pl";
 
 # define some global variables
-our ($reference, $ref_type, $cpsr_version);
+our ($gatk_version, $reference, $ref_type, $cpsr_version);
 
 ####################################################################################################
 # version	author		comment
@@ -47,18 +47,39 @@ sub create_prepare_vcf_command {
 		@_
 		);
 
-	my $filter_command = join(' ',
-		'java -Xmx' . $args{java_mem},
-		'-Djava.io.tmpdir=' . $args{tmp_dir},
-		'-jar $gatk_dir/GenomeAnalysisTK.jar -T SelectVariants',
-		'-R', $reference,
-		'-V', $args{input},
-		'-sn', $args{sample_id},
-		'--maxIndelSize 1000', #'--max-indel-size 1000',
-		'--excludeNonVariants',
-		'--excludeFiltered',
-		'-o', $args{output}
-		);
+	my $filter_command;
+
+	if (4 == $gatk_version) {
+
+		$filter_command = join(' ',
+			'gatk',
+			'--java-options "-Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir} . '"',
+			'SelectVariants',
+			'-R', $reference,
+			'-V', $args{input},
+			'-O', $args{output},
+			'-sn', $args{sample_id},
+			'--max-indel-size 1000', #'--max-indel-size 1000',
+			'--exclude-non-variants',
+			'--exclude-filtered'
+			);
+
+		} else {
+
+		$filter_command = join(' ',
+			'java -Xmx' . $args{java_mem},
+			'-Djava.io.tmpdir=' . $args{tmp_dir},
+			'-jar $gatk_dir/GenomeAnalysisTK.jar -T SelectVariants',
+			'-R', $reference,
+			'-V', $args{input},
+			'-sn', $args{sample_id},
+			'--maxIndelSize 1000',
+			'--excludeNonVariants',
+			'--excludeFiltered',
+			'-o', $args{output}
+			);
+		}
 
 	return($filter_command);
 	}
@@ -172,6 +193,13 @@ sub main{
 	my $tool_data_orig = LoadFile($tool_config);
 	my $tool_data = error_checking(tool_data => $tool_data_orig, pipeline => 'vep');
 
+	$gatk_version = 3;
+	my $needed = version->declare('4')->numify;
+	my $given = version->declare($tool_data->{gatk_version})->numify;
+	if ($given >= $needed) {
+		$gatk_version = 4;
+		}
+
 	# organize directories
 	my $input_directory = $args{input_directory};
 	my $output_directory = $args{output_directory};
@@ -216,7 +244,6 @@ sub main{
 
 	my $known_positions = $tool_data->{haplotype_caller}->{parameters}->{cpsr}->{known_positions};
 	print $log "\n    Using known variants: $known_positions";
-
 	print $log "\n    Output directory: $output_directory";
 	print $log "\n  Sample config used: $data_config";
 	print $log "\n---\n\n";
